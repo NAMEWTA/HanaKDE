@@ -1,0 +1,112 @@
+---
+id: specdev
+type: workflow
+workflow: specdev
+name: SpecDev Workflow
+description: 软件研发全流程——从初始化设置、设计访谈（带 ADR/LOG/CONTEXT）、spec 编写、ticket 拆分、寻路到 TDD 实现与双轴审查
+keywords: [specdev, 软件研发, 设计, spec, tickets, 寻路, TDD, 实现, 审查]
+---
+
+# SpecDev Workflow
+
+本文件是 `specdev` 的唯一入口——包含运行时根、持久化约定、启动协议、状态字段、路径分配、副作用边界以及 work 条目索引。
+
+## 运行时根
+
+- **workflow 根**（`{roots.workflows}`）解析为 `<Path>{roots.workflows}/specdev/</Path>`，指向 work 入口和子文件所在目录
+- **state 根**（`{roots.state}`）解析为 `<Path>{roots.state}/specdev/</Path>`，指向持久化状态和变更产物所在目录
+
+## 持久化约定
+
+在 state 根下维护以下结构：
+
+| 名称 | 路径 | 说明 |
+|------|------|------|
+| 状态索引 | `<Path>{roots.state}/specdev/status.json</Path>` | workflow 全局状态 |
+| 工作流配置 | `<Path>{roots.state}/specdev/.config/</Path>` | 变更追踪、领域文档布局、状态标签映射等配置约定 |
+| 活跃变更 | `<Path>{roots.state}/specdev/changes/</Path>` | 进行中的 change 产物（ADR、LOG、CONTEXT、spec、tickets、map 等） |
+| 永久 ADR | `<Path>{roots.state}/specdev/adr/</Path>` | changes 中经确认后的 ADR 提升至此，始终反映当前架构决策现状 |
+| 永久词汇表 | `<Path>{roots.state}/specdev/context/</Path>` | changes 中经确认后的 CONTEXT 提升至此，始终反映当前领域术语现状 |
+| 变更归档 | `<Path>{roots.state}/specdev/archive/</Path>` | 已完成并归档的历史 change，按 YYYY-MM/<change>/ 组织 |
+
+`.config/` 目录包含三个由 `I-init-setup` 生成的配置文件，定义 specdev 各 work 的持久化和行为约定：
+
+- **`tracking.md`** — 变更追踪约定：变更目录的命名规范（`<YYYY-MM-DD>-<topic>`）、目录结构、`status.json` 机制、归档规则
+- **`domain-layout.md`** — 领域文档布局：三文件模型（CONTEXT.md / ADR.md / LOG.md）的路径解析规则和读取顺序
+- **`status-labels.md`** — 状态标签映射：五个标准角色（`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`）的标签字符串、状态流转图和自定义方式
+
+`status.json`、`changes/`、`archive/` 为固定骨架，由 `speculo init` 创建。`adr/` 和 `context/` 为确认后创建——当 changes 中的 ADR、CONTEXT 经确认符合当前现状后，提升到这两个目录，始终保持与项目当前状态一致。
+
+## 启动协议
+
+1. **解析运行时** — 解析 workspace 配置和 workflow/state roots。已解析时复用。
+2. **选择 change** — 读取 `<Path>{roots.state}/specdev/status.json</Path>`：
+   - 用户指定 → 在 `active` 数组中查找匹配 `change` 字段的条目
+   - 唯一活跃 change → 直接使用 `active[0]`
+   - 无活跃（`active` 为空数组）→ 创建 `changes/<YYYY-MM-DD>-<kebab-topic>/`，追加条目 `{ change, current_work: null, works_run: [], result: null }` 到 `active`
+   - 多个候选 → 列出 `active` 中各 change，由用户消歧
+
+## 状态字段
+
+`<Path>{roots.state}/specdev/status.json</Path>` 包含以下字段：
+
+- **`schema_version`**（数字）— 状态 schema 版本号，当前为 2
+- **`workflow`**（字符串）— workflow 标识，固定为 `"specdev"`
+- **`active`**（对象数组）— 当前活跃 change 的状态条目，每个条目包含：
+  - `change` — change 目录名，格式 `"YYYY-MM-DD-<topic>"`
+  - `current_work` — 该 change 当前正在执行的 work id，如 `"specdev/grill-with-docs"`。无正在执行的 work 时为 null
+  - `works_run` — 该 change 已执行过的 work id 列表
+  - `result` — 该 change 的整体结果：null（进行中）或 `"completed"`（全部 work 已完成）
+  - `claimed_tickets` —（可选，W-wayfinder 使用）当前被领取的 ticket 名称列表，用于并发会话跳过
+- **`work_history`**（对象数组）— work 调用记录，每条包含：
+  - `change` — 所属 change 目录名
+  - `work_id` — work 标识
+  - `started_at` — 开始时间（ISO 8601）
+  - `completed_at` — 完成时间（ISO 8601），未完成时为 null
+  - `result` — 完成结果，如 `"completed"`、`"aborted"`
+- **`completed`**（对象数组）— 已归档 change 记录，每条包含：
+  - `change` — change 目录名
+  - `path` — 归档前 change 目录的相对路径
+  - `archived_at` — 归档时间（ISO 8601）
+  - `archive_path` — 归档目标路径的相对路径
+
+### Per-change 状态文件
+
+每个 change 目录内维护 `<Path>{roots.state}/specdev/changes/{change}/.status.json</Path>`，追踪该 change 的个体状态：
+
+- **`change_status`**（字符串）— change 生命周期状态：`"active"`（进行中）、`"completed"`（全部 work 完成）、`"archived"`（已归档）
+- **`created_at`**（ISO 8601 字符串）— change 创建时间
+- **`completed_at`**（ISO 8601 字符串或 null）— change 完成时间，进行中时为 null
+- **`archived`**（布尔值）— 是否已归档，默认 false
+- **`archive_path`**（字符串或 null）— 归档目标路径的相对路径，未归档时为 null
+
+创建 change 时由首个 work（如 `T-triage` 步骤 3 或 `G-grill-with-docs` 步骤 1）写入初始 `.status.json`，`change_status` 初始为 `"active"`。change 内所有 work 完成后，由最后一个 work 更新 `change_status` 为 `"completed"`。归档时由 `A-archive-and-consolidate` 更新为 `"archived"`。
+
+## 路径分配
+
+1. 产物写入当前 change 目录（`<Path>{roots.state}/specdev/changes/{change}/</Path>`）
+2. 领域文档（ADR.md、LOG.md、CONTEXT.md）由 `G-grill-with-docs` 维护
+3. Spec、tickets、map 等产物由对应 work 写入当前 change 目录
+4. 项目代码、测试写入项目相对路径，验证指针记录到 change
+5. 所有引用使用 `<Path>{roots.workflows}/specdev/...</Path>` 或 `<Path>{roots.state}/specdev/...</Path>` 格式，不引用外部
+
+## 副作用边界
+
+确认前不得执行：提交代码、合并/删除 worktree、发布/部署。结果记录到 `<Path>{roots.state}/specdev/changes/{change}/LOG.md</Path>`。敏感值不得写入。
+
+## Work 条目
+
+<!-- AUTO-INDEX-START -->
+
+- **A-archive-and-consolidate** — 归档与沉淀：将已完成变更归档至 archive/，并智能评估、提取持久化知识到 adr/、context/、research/ 知识库——与现有知识逐项比对，执行创建/更新/合并/废弃，确保知识始终最新。
+- **D-diagnose-bugs** — 诊断：针对疑难 bug 建立诊断循环——构建紧凑反馈回路、复现最小化、可证伪假设排名、插桩定位根因，确认后移交 I-implement 修复。
+- **G-grill-with-docs** — 设计访谈（带文档）：无情访谈打磨设计，同时持续产出 ADR.md、LOG.md 和 CONTEXT.md 三个领域文档。在设计讨论中捕获术语定义、记录架构决策、保存完整设计轨迹。
+- **I-implement** — 实现：基于 spec 或 tickets 实现工作——以深层模块设计原则指导架构、以 TDD 红绿循环驱动编码、以双轴审查把关质量。
+- **I-init-setup** — 初始化设置：为 specdev workflow 配置变更追踪、领域文档布局、状态标签和语言偏好。首次使用其他 specdev works 前运行一次。
+- **P-goal-plan** — 目标规划：将 spec、tickets 和参考权威综合为一份目标规划文档——编排多 ticket 里程碑的约束、质量门禁和执行协议，桥接"已有 tickets"到"协调执行 20+ tickets"
+- **S-spec** — 编写 Spec：将当前对话综合为一份完整的 spec 文档，包含问题陈述、解决方案、用户故事、实现决策和测试决策，持久化到变更目录。
+- **T-tickets** — 拆分 Tickets：将 spec 或计划拆分为一组曳光弹式垂直切片 tickets，每个声明阻塞边，持久化到变更目录。支持宽重构的扩展-收缩排序。
+- **T-triage** — Issue 分诊：将外部 issue 摄入并分诊为本地 change：深度理解上下文后写入 source-issue.md 与 triage.md，再推荐下一 work（G-grill / S-spec / I-implement / D-diagnose 等）。
+- **W-wayfinder** — 寻路：为超出单次会话容量的大块工作绘制共享地图，逐个解决调查 tickets 直到通往目标的路径清晰可见。支持研究和决策型 ticket 类型。
+
+<!-- AUTO-INDEX-END -->
