@@ -6264,6 +6264,51 @@
       "exemptionId": "sandbox-command-output"
     },
     {
+      "sourceFile": "lib/extract-zip.ts",
+      "line": 142,
+      "kind": "mkdir",
+      "excerpt": "fsp.mkdir(next, { recursive: false, mode: index === segments.length - 1 ? finalMode : undefined, })",
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "storeId": null,
+      "exemptionId": "generic-zip-extractor"
+    },
+    {
+      "sourceFile": "lib/extract-zip.ts",
+      "line": 222,
+      "kind": "write-file",
+      "excerpt": "fs.createWriteStream(tempPath, { flags: \"wx\", mode: extractedMode(entry, false), })",
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "storeId": null,
+      "exemptionId": "generic-zip-extractor"
+    },
+    {
+      "sourceFile": "lib/extract-zip.ts",
+      "line": 234,
+      "kind": "rename",
+      "excerpt": "fsp.rename(tempPath, destination)",
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "storeId": null,
+      "exemptionId": "generic-zip-extractor"
+    },
+    {
+      "sourceFile": "lib/extract-zip.ts",
+      "line": 236,
+      "kind": "remove-path",
+      "excerpt": "fsp.rm(tempPath, { force: true })",
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "storeId": null,
+      "exemptionId": "generic-zip-extractor"
+    },
+    {
+      "sourceFile": "lib/extract-zip.ts",
+      "line": 313,
+      "kind": "mkdir",
+      "excerpt": "fsp.mkdir(destDir, { recursive: true })",
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "storeId": null,
+      "exemptionId": "generic-zip-extractor"
+    },
+    {
       "sourceFile": "lib/file-ref/resource-io.ts",
       "line": 256,
       "kind": "mkdir",
@@ -9531,6 +9576,19 @@
         "truncate-file",
         "atomic-write",
         "persistent-store-constructor"
+      ]
+    },
+    {
+      "id": "generic-zip-extractor",
+      "ownerModule": "lib/extract-zip.ts",
+      "sourceFile": "lib/extract-zip.ts",
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "expiresOn": "2027-01-31",
+      "kinds": [
+        "mkdir",
+        "write-file",
+        "rename",
+        "remove-path"
       ]
     },
     {

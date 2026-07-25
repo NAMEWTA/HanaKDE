@@ -400,6 +400,19 @@
     },
     {
       "expiresOn": "2027-01-31",
+      "id": "generic-zip-extractor",
+      "kinds": [
+        "mkdir",
+        "write-file",
+        "rename",
+        "remove-path"
+      ],
+      "ownerModule": "lib/extract-zip.ts",
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "sourceFile": "lib/extract-zip.ts"
+    },
+    {
+      "expiresOn": "2027-01-31",
       "id": "generic-zip-writer",
       "kinds": [
         "database-open",
@@ -627,7 +640,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:4c9498cfbb60dbbaa1ba468056486b3bba318785d5ebf1fc787d1b6b93897993",
+  "payloadFingerprint": "sha256:cd57abfb19c7884150d9362832f7e7d3886522ec2ae726b6b270f58d7bc6fc62",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2878,8 +2891,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Added SessionCoordinator._metaQuarantines (in-memory runtime bookkeeping) plus listMetaQuarantines(), HanaEngine.getSessionMetadataRecoveryStatus() (read-only aggregation over existing store recovery state, coordinator quarantine list, and legacy-migration scan ledger), and an additive sessionStore field on the /api/health response; no store schema, file layout, or protocol changed, only scanned excerpt line numbers shifted in core/session-coordinator.ts, core/engine.ts, and server/index.ts.",
-    "payloadFingerprint": "sha256:4c9498cfbb60dbbaa1ba468056486b3bba318785d5ebf1fc787d1b6b93897993"
+    "compatibilityReason": "Registering the generic ZIP extractor exemption changes persistence audit metadata only; it does not change any durable store schema or data format.",
+    "payloadFingerprint": "sha256:cd57abfb19c7884150d9362832f7e7d3886522ec2ae726b6b270f58d7bc6fc62"
   },
   "schemas": [
     {
@@ -6943,6 +6956,46 @@
       "line": 244,
       "reason": "Writes command output to an explicit tool-selected path under the active sandbox/workspace.",
       "sourceFile": "lib/exec-command/runner.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "generic-zip-extractor",
+      "kind": "mkdir",
+      "line": 142,
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "sourceFile": "lib/extract-zip.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "generic-zip-extractor",
+      "kind": "write-file",
+      "line": 222,
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "sourceFile": "lib/extract-zip.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "generic-zip-extractor",
+      "kind": "rename",
+      "line": 234,
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "sourceFile": "lib/extract-zip.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "generic-zip-extractor",
+      "kind": "remove-path",
+      "line": 236,
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "sourceFile": "lib/extract-zip.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "generic-zip-extractor",
+      "kind": "mkdir",
+      "line": 313,
+      "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+      "sourceFile": "lib/extract-zip.ts",
       "storeId": null
     },
     {

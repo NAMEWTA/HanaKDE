@@ -1461,6 +1461,14 @@ export const PERSISTENCE_EXEMPTIONS: readonly PersistenceExemption[] = Object.fr
     "2027-01-31",
   ),
   exemption(
+    "generic-zip-extractor",
+    "lib/extract-zip.ts",
+    "lib/extract-zip.ts",
+    "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
+    "2027-01-31",
+    ["mkdir", "write-file", "rename", "remove-path"],
+  ),
+  exemption(
     "sandbox-command-output",
     "lib/exec-command/runner.ts",
     "lib/exec-command/runner.ts",
