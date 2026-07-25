@@ -355,11 +355,19 @@ describe("SilverBullet reference integrity", () => {
     expect(matrix).toContain("禁止移植 Preact UI、Rust Server、Space Lua、plugin runtime");
   });
 
-  it("keeps SilverBullet out of production sources and runtime manifests", () => {
+  it("keeps SilverBullet out of production sources and runtime manifests", async () => {
     for (const relativePath of productionRuntimeFiles()) {
-      const content = readFileSync(path.join(repoRoot, relativePath), "utf8");
+      let content = readFileSync(path.join(repoRoot, relativePath), "utf8");
+      if (relativePath === "vitest.config.js") {
+        const allowedDiscoveryExclude = '"silverbullet/**"';
+        expect(content.split(allowedDiscoveryExclude)).toHaveLength(2);
+        content = content.replace(allowedDiscoveryExclude, '""');
+      }
       expect(content, relativePath).not.toMatch(silverBulletRuntimeReference);
     }
+
+    const vitestConfig = (await import("../vitest.config.js")).default;
+    expect(vitestConfig.test?.exclude).toContain("silverbullet/**");
   });
 
   it("publishes a concise third-party notice without claiming code adoption", () => {
