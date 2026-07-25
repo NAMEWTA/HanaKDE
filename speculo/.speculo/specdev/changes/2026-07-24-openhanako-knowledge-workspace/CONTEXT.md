@@ -185,7 +185,7 @@ _Avoid_: 可热重绑定主根、由挂载提升为 main、在 Markdown 中写 `
 _Avoid_: 子知识库合并、跨来源 Wiki、自动恢复挂载、重叠目录、提升为 main、扁平命名空间
 
 **知识地址**：
-Markdown 中用于 Wikilink、嵌入与内容引用的来源内规范相对路径，例如 `Projects/A.md`。解析根固定为包含该 Markdown 文件的来源；地址不包含 `sourceKey`，也不能越过来源根。应用内部跨层定位另用 ResourceRef 表达 `{sourceKey, relativePath}`。
+Markdown 中用于 Wikilink、嵌入与内容引用的来源内规范相对路径，例如 `Projects/A.md`。解析根固定为包含该 Markdown 文件的来源；地址不包含 `sourceKey`，也不能越过来源根。应用内部跨层定位另用 `KnowledgeResourceAddress` 表达 `{sourceKey, relativePath}`，再由 Server 来源注册表解析为既有 `ResourceRef`。
 规范化关系：核心术语归一到「知识地址」；本词条继续提供完整行为边界与 _Avoid_ 约束。
 _Avoid_: Markdown 中的 `sourceKey:`、绝对路径、跨来源 URI、最短唯一文件名、全局同名猜测
 
@@ -205,7 +205,7 @@ Workbench 本地配置保存的来源根与 `sourceKey`、`displayName` 关系�
 _Avoid_: 自动挂载、启发式根识别、自动 key 后缀、原子 key 交换、正文迁移
 
 **来源身份重新分配**：
-对 Workbench 内部来源路由键的显式修改。V1 只允许在 key 未占用且来源无未保存缓冲区时提交；打开的干净资源同步更新内部 ResourceRef。该操作不扫描或修改文件正文，因为 Markdown 引用从不包含 `sourceKey`。
+对 Workbench 内部来源路由键的显式修改。V1 只允许在 key 未占用且来源无未保存缓冲区时提交；打开的干净资源同步更新内部 `KnowledgeResourceAddress`。该操作不扫描或修改文件正文，因为 Markdown 引用从不包含 `sourceKey`。
 规范化关系：核心术语归一到「sourceKey」；本词条继续提供完整行为边界与 _Avoid_ 约束。
 _Avoid_: 跨来源链接迁移、批量 Wiki 重写、原子交换两个占用 key、修改 Markdown 地址
 
