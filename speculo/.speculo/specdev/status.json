@@ -8,7 +8,8 @@
       "works_run": [
         "specdev/grill-with-docs",
         "specdev/spec",
-        "specdev/tickets"
+        "specdev/tickets",
+        "specdev/goal-plan"
       ],
       "result": null
     }
@@ -33,6 +34,13 @@
       "work_id": "specdev/tickets",
       "started_at": "2026-07-24T23:18:56+08:00",
       "completed_at": "2026-07-24T23:18:56+08:00",
+      "result": "completed"
+    },
+    {
+      "change": "2026-07-24-openhanako-knowledge-workspace",
+      "work_id": "specdev/goal-plan",
+      "started_at": "2026-07-25T23:50:05+08:00",
+      "completed_at": "2026-07-26T00:11:13+08:00",
       "result": "completed"
     }
   ],
