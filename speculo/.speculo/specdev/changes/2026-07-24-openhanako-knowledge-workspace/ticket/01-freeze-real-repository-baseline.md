@@ -1,7 +1,7 @@
 # Ticket 01: 冻结真实仓库基线与兼容契约
 
 - **被阻塞于：** 无
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -65,9 +65,33 @@
 
 ## 验收标准
 
-- [ ] 基线文档记录 commit、调用图、现有能力和命令；公开行为测试不访问 Engine 私有状态。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 基线文档记录 commit、调用图、现有能力和命令；公开行为测试不访问 Engine 私有状态。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **实现提交：** `f5018010`（可执行基线、隔离 fixtures、Node 24 ZIP 回归与安全修复）
+- **集成提交：** `ba45f55b9393`（`@playwright/test@1.62.0`、`yauzl@2.10.0`、scripts、lockfile 与确定性审计产物）
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / Node v24.16.0 / npm 11.13.0（Volta）
+- **隔离：** 测试和 smoke 使用 `mkdtemp` 创建的临时 `HANA_HOME`、HOME、workspace 与临时端口；执行后清理。dirty 工作树仅告警，未执行 cleanup、reset 或 checkout。
+- **依赖偏差：** `extract-zip@2.0.1` 在 Node 24 连续 STORE entry 上发生读取停滞；读取侧改为直接使用已锁定的 `yauzl@2.10.0` positional range stream。ZIP writer 保持标准 STORE/DEFLATE 格式；根依赖移除 `extract-zip`，其仅作为 Electron 的 dev-transitive dependency 保留。
+- **审查：** Standards Review `APPROVE`；Spec Review 的实现部分 `APPROVE`，关闭记录缺口由本节、tickets map 与 release evidence 回写消除。
+
+### 实际执行证据
+
+| 命令 | 结果 |
+|---|---|
+| `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts` | 2 files，17/17 tests 通过；dirty 仅 warning |
+| `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts` | 1 file，5/5 tests 通过，无 skip |
+| `volta run npx vitest run tests/extract-zip-node24.test.ts tests/extract-zip-symlink-defense.test.ts` | 2 files，12/12 tests 通过 |
+| `volta run npx vitest run tests/character-card-import.test.ts` | 1 file，14/14 tests 通过 |
+| `volta run npm run typecheck` | 通过 |
+| `volta run npm run lint:boundary` | 通过；无新增 open→closed 边界债务 |
+| `volta run npm test` | 997 files 通过、1 个 Windows manual file 跳过；9812 tests 通过、6 个 Windows manual tests 跳过 |
+| `volta run npm run build:server:open` | 通过；open whitelist、bundle、native runtime 与依赖裁剪完成 |
+| `volta run npm run smoke:server:open` | 通过；正向 identity HTTP 200，负向缺失 runtime asset 可归因失败 |
+| `volta run npm ci --ignore-scripts --dry-run` | 通过；lockfile 可重建 |

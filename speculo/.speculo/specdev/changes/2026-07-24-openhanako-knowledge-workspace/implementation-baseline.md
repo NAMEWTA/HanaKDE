@@ -16,6 +16,8 @@
 
 2026-07-25 文档 review 的只读审计确认：当前 HEAD 为 `a7ff307c7627`，上表 ancestor/merge-base 成立，关键接缝存在；工作树当时已有 83 个非 clean 条目，属于用户现有工作，不是本 change 可清理的对象。审计 shell 是 Node `v22.22.3`，不满足仓库 `>=24.12.0 <25`，且当前 `better-sqlite3` binary 使用 ABI 137、Node 22 使用 ABI 127，因此本轮**没有**把 typecheck/build/test/FTS 记为已通过证据。Ticket 01 必须先切换 Node 24 并重新安装/重建依赖，再运行门禁。
 
+2026-07-26 Ticket 01 在提交 `ba45f55b9393` 上完成当前仓库复核：`a7ff307c` 仍为 HEAD 祖先；Node `v24.16.0`、npm `11.13.0`；真实 `better-sqlite3` FTS5 查询通过；冻结 baseline/preflight 17/17、全量 Vitest 9812/9812、typecheck、boundary、Open Server build 与正/负 smoke 全部通过。6 项跳过均来自既有 `tests/manual/win32-packaged-smoke.test.ts`，不属于当前 macOS 自动化平台。工作树 dirty 状态只产生警告，执行过程未清理用户修改。
+
 ## 真实调用图
 
 ```text
@@ -69,7 +71,7 @@ Resource events
 9. Desk 的持久 UI 状态与 Knowledge V1 空白状态必须分命名空间。
 10. 现有 link-open 和 HTML/asset 工具必须通过知识安全策略复用，不能直接放开外链。
 11. `js-yaml` 已存在；Frontmatter 投影不得另行选择 YAML 依赖，复杂或不可保真的 YAML 保持源码编辑。
-12. `@playwright/test` 与 Knowledge E2E scripts 当前不存在；Ticket 01 固定引入 `@playwright/test@1.62.0`。
+12. Ticket 01 已固定引入 `@playwright/test@1.62.0`、三项目 Playwright config 与四条 `test:knowledge:e2e:*` scripts；后续 ticket 只能在该冻结框架上增加场景，不得改选 E2E 栈。
 
 ## 实现开始前必须重新验证
 
@@ -87,7 +89,7 @@ Resource events
 
 ## 可执行 Preflight 契约
 
-可读基线即本文。实现开始前在**仓库根**按下列项人工核对（本 change 无独立校验脚本）：
+可读基线即本文。实现开始前在**仓库根**按下列项人工核对，并运行 `tests/knowledge-preflight.test.ts` 与 `tests/knowledge-baseline-contract.test.ts`：
 
 1. 当前 Git 分支为 `hanakde`；`a7ff307c` 仍是 HEAD 祖先（不要求 HEAD 永远等于审计提交）。
 2. Node 满足 `package.json` 的 `engines.node`（基线 `>=24.12.0 <25`）。

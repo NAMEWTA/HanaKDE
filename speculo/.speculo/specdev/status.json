@@ -4,7 +4,7 @@
   "active": [
     {
       "change": "2026-07-24-openhanako-knowledge-workspace",
-      "current_work": null,
+      "current_work": "specdev/implement",
       "works_run": [
         "specdev/grill-with-docs",
         "specdev/spec",
@@ -42,6 +42,13 @@
       "started_at": "2026-07-25T23:50:05+08:00",
       "completed_at": "2026-07-26T00:11:13+08:00",
       "result": "completed"
+    },
+    {
+      "change": "2026-07-24-openhanako-knowledge-workspace",
+      "work_id": "specdev/implement",
+      "started_at": "2026-07-26T00:27:29+08:00",
+      "completed_at": null,
+      "result": null
     }
   ],
   "completed": []

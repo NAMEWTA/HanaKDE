@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `e5257959`（Ticket 02 合并后验证点） |
+| Commit | `ba45f55b9393`（Ticket 01/02 基线验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
-| HANA_HOME | 临时隔离目录（执行时填写脱敏标识） |
+| HANA_HOME | Vitest/Smoke `mkdtemp` 隔离目录（执行后清理，不记录本机绝对路径） |
 
 ## Requirement evidence
 
@@ -232,7 +232,7 @@
 | KW-RULE-DND | 53 | 未执行 | — |
 | KW-RULE-REFACTOR | 54 | 未执行 | — |
 | KW-RULE-RELEASE | 57 | 未执行 | — |
-| KW-RULE-PREFLIGHT | 01 | 未执行 | — |
+| KW-RULE-PREFLIGHT | 01 | 通过 | `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts`（17/17）；Node v24.16.0；真实 SQLite FTS5；dirty 仅 warning |
 | KW-RULE-NATIVE | 17, 51, 56 | 未执行 | — |
 | KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 未执行 | — |
 | KW-RULE-TEST | 01, 13, 14, 57 | 未执行 | — |

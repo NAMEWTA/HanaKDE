@@ -16,7 +16,7 @@
 
 | 编号 | Phase | Ticket | 被阻塞于 | Primary 需求/规则 | Gate | 状态 |
 |---|---|---|---|---|---|---|
-| 01 | 0 基础契约 | [冻结真实仓库基线与兼容契约](./ticket/01-freeze-real-repository-baseline.md) | 无 | KW-RULE-PREFLIGHT, KW-RULE-TEST | P0 | 未开始 |
+| 01 | 0 基础契约 | [冻结真实仓库基线与兼容契约](./ticket/01-freeze-real-repository-baseline.md) | 无 | KW-RULE-PREFLIGHT, KW-RULE-TEST | P0 | 已完成 |
 | 02 | 0 基础契约 | [建立 SilverBullet 可审计参考边界](./ticket/02-audit-silverbullet-reference.md) | 无 | KW-RULE-LICENSE | P0 | 已完成 |
 | 03 | 0 基础契约 | [冻结 Open 知识协议与资源地址命名](./ticket/03-freeze-open-knowledge-contract.md) | 01 | KW-US-004, KW-US-009, KW-US-163, KW-US-164, KW-US-172, KW-US-173, KW-RULE-RESOURCE | P0 | 未开始 |
 | 04 | 0 基础契约 | [建立稳定错误与诊断契约](./ticket/04-define-errors-and-diagnostics.md) | 01, 03 | KW-US-170, KW-RULE-OBS | P0 | 未开始 |
