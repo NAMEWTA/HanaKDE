@@ -6,10 +6,10 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | 未执行 |
-| Branch | 未执行 |
-| Node/npm | 未执行 |
-| OS/CPU/RAM/File system | 未执行 |
+| Commit | `e5257959`（Ticket 02 合并后验证点） |
+| Branch | `hanakde` |
+| Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
+| OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
 | HANA_HOME | 临时隔离目录（执行时填写脱敏标识） |
 
 ## Requirement evidence
@@ -214,7 +214,7 @@
 
 | Rule | Tickets | Status | Artifact/command |
 |---|---|---|---|
-| KW-RULE-LICENSE | 02 | 未执行 | — |
+| KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 未执行 | — |
 | KW-RULE-OBS | 04, 10, 43 | 未执行 | — |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |

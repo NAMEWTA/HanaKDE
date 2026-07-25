@@ -1,7 +1,7 @@
 # Ticket 02: 建立 SilverBullet 可审计参考边界
 
 - **被阻塞于：** 无
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -62,9 +62,18 @@
 
 ## 验收标准
 
-- [ ] 每个参考能力有来源文件、SHA-256、允许采用方式和 HanaKDE 落点；不引入 SilverBullet 运行时。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 每个参考能力有来源文件、SHA-256、允许采用方式和 HanaKDE 落点；不引入 SilverBullet 运行时。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **Commit：** `e5257959`
+- **实现：** 新增 `tests/silverbullet-reference-integrity.test.ts` 与仓库根 `THIRD_PARTY_NOTICES.md`；严格审计覆盖 8 个单文件、3 个目录聚合哈希、9 行能力采用边界、MIT/版本/Node 要求，以及生产源码和 runtime manifest 不引用 SilverBullet。
+- **严格证据：** `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`，5/5 通过、0 skip；严格模式缺失 snapshot 时退出码非零。
+- **共享门禁：** `volta run npm run typecheck` 通过；`volta run npm run lint:boundary` 通过（仅报告 1 条已跟踪既有债务）；`volta run npx eslint tests/silverbullet-reference-integrity.test.ts` 通过。
+- **审查：** standards reviewer 与 spec reviewer 在两轮修复后均 `APPROVED`；已消除 linked-worktree 路径推导、过窄 runtime 证明和 snapshot 缺失仍 0-exit 的伪通过风险。
+- **偏差：** 无。矩阵记录的 8 个单文件与 3 个目录哈希全部一致，未修改 `silverbullet/`，未采用 SilverBullet runtime。
