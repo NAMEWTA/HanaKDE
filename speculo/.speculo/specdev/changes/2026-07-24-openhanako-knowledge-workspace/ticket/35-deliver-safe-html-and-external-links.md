@@ -60,7 +60,7 @@
 - `tests/knowledge-safe-links.test.ts`
 - `desktop/src/react/__tests__/utils/knowledge-safe-rendering.test.ts`
 
-**对应端到端场景：** E2E-KW-011
+**Playwright 用户流程：** 适用；运行 E2E-KW-011
 
 ## 验收标准
 

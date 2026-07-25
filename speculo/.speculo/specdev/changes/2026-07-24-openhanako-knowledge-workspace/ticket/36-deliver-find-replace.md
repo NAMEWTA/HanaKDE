@@ -58,7 +58,7 @@
 
 - `desktop/src/react/__tests__/components/KnowledgeFindBar.test.tsx`
 
-**对应端到端场景：** E2E-KW-012
+**Playwright 用户流程：** 适用；运行 E2E-KW-012
 
 ## 验收标准
 

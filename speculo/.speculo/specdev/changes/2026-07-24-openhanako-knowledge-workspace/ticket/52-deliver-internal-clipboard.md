@@ -58,7 +58,7 @@
 - `tests/knowledge-copy-service.test.ts`
 - `desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts`
 
-**对应端到端场景：** E2E-KW-018
+**Playwright 用户流程：** 适用；运行 E2E-KW-018
 
 ## 验收标准
 

@@ -4057,8 +4057,9 @@ Related: ADR-0304
 
 ## LOG-0305：测试栈与端到端场景在实现开始前冻结
 
-Status: accepted
+Status: superseded
 Related: ADR-0305
+Superseded by: LOG-0309
 
 没有固定 Electron/Web 驱动、临时 HANA_HOME、native dialog 替换和场景 ID，前 56 个 ticket 即使各自“有测试”也无法组成发布证明。Playwright 同时支持浏览器和 Electron，能在现有 Vitest 之外承担主接缝验证。代价是新增一个开发依赖和 CI 浏览器安装，但能在早期建立可重复的完整闭环。
 
@@ -4082,3 +4083,10 @@ Status: accepted
 Related: ADR-0308
 
 把 SQLite、journal 或内部缓存放入用户目录会被 watcher 反复索引、出现在资源树、被同步工具传播，并使用户误认为它们是知识事实。`.trash/` 之所以保留在来源内，是为了让删除和恢复跟随该来源且保持可恢复；它必须由专用服务访问并从正常知识空间排除。代价是 Server 需要管理 HANA_HOME 中的派生目录和 source fingerprint。
+
+## LOG-0309：Ticket 默认使用 Vitest，Playwright 仅验证直接用户流程
+
+Status: accepted
+Related: ADR-0309
+
+此前固定 Playwright 技术栈和 E2E ID 被执行时误解为每个 ticket 都必须启动 Browser/Electron。用户确认这不是必要门禁：每个 ticket 默认运行精确 Vitest 单元、组件、契约或集成测试；只有直接交付真实用户操作流程的 ticket 才运行对应 Playwright 场景。纯逻辑、契约、存储、索引、API、安全、fixture 与文档 ticket 即使被发布级 E2E 间接覆盖，也不在本 ticket 内运行 Playwright。固定 Playwright 基础设施与 Ticket 57 的完整发布回归继续保留。

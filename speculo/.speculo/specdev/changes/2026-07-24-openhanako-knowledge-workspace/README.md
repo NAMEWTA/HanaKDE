@@ -27,14 +27,14 @@ speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/
 - [`spec.md`](./spec.md)：193 条用户故事、22 个冻结规则域与完成定义。
 - [`architecture.md`](./architecture.md)：当前 HanaKDE/OpenHanako 代码投影。
 - [`rules.md`](./rules.md)：工程与 AI 实施纪律；已删除重复的平行规则文件。
-- [`implementation-contracts.md`](./implementation-contracts.md)：preflight、provider identity、native bridge、内部目录和并发。
+- [`implementation-contracts.md`](./implementation-contracts.md)：preflight、provider identity、native bridge、内部目录、多 Renderer context 与资源一致性。
 - [`index-store-contract.md`](./index-store-contract.md)：better-sqlite3 schema、generation、迁移、锁与 rebuild。
 - [`operation-journal-contract.md`](./operation-journal-contract.md)：持久 mutation journal、幂等、rollback 和崩溃恢复。
-- [`test-strategy.md`](./test-strategy.md)：Vitest/Playwright、24 个 E2E 场景、CI 与平台矩阵。
+- [`test-strategy.md`](./test-strategy.md)：默认 Vitest、仅用户流程使用 Playwright、24 个发布级 E2E 场景、CI 与平台矩阵。
 
 ## 执行与证据
 
-- [`goal-plan.md`](./goal-plan.md)：57 个 ticket 的 P0/P1/P2 Gate、21 个建议波次、Lead+Subagent 八步协议、里程碑验收与进度格式；所有 subagent 固定使用 `gpt-5.6-sol`、medium。
+- [`goal-plan.md`](./goal-plan.md)：57 个 ticket 的 P0/P1/P2 Gate、依赖关系、逐票质量门禁、里程碑验收与进度格式；具体执行方式由 Codex 在运行时自行决定。
 - [`requirements-traceability.md`](./requirements-traceability.md)：193 条故事的 Primary Owner、supporting tickets、自动化证据路径与 E2E（可读权威矩阵）。
 - [`tickets-map.md`](./tickets-map.md)、[`ticket/`](./ticket/)：57 个执行切片；各 ticket「需求追踪」行与矩阵一致。
 - [`performance-budget.md`](./performance-budget.md)、[`threat-model.md`](./threat-model.md)：可复现性能与威胁—控制—测试矩阵。

@@ -71,7 +71,7 @@ Resource events
 9. Desk 的持久 UI 状态与 Knowledge V1 空白状态必须分命名空间。
 10. 现有 link-open 和 HTML/asset 工具必须通过知识安全策略复用，不能直接放开外链。
 11. `js-yaml` 已存在；Frontmatter 投影不得另行选择 YAML 依赖，复杂或不可保真的 YAML 保持源码编辑。
-12. Ticket 01 已固定引入 `@playwright/test@1.62.0`、三项目 Playwright config 与四条 `test:knowledge:e2e:*` scripts；后续 ticket 只能在该冻结框架上增加场景，不得改选 E2E 栈。
+12. Ticket 01 已固定引入 `@playwright/test@1.62.0`、三项目 Playwright config 与四条 `test:knowledge:e2e:*` scripts；仅直接交付用户流程的后续 ticket 可在该冻结框架上增加并运行场景，其他 ticket 使用 Vitest，不得把 Playwright 扩大为通用门禁。
 
 ## 实现开始前必须重新验证
 
@@ -101,4 +101,4 @@ Resource events
 
 关键接缝、Node、package 或 SilverBullet 参考漂移会阻止 Ticket 01 完成，须先重新审计并同步本 change 文档。
 
-Ticket 01 同时固定 `@playwright/test@1.62.0` 和 `test:knowledge:e2e:*` scripts，避免发布阶段才选择 E2E 栈。
+Ticket 01 同时固定 `@playwright/test@1.62.0` 和 `test:knowledge:e2e:*` scripts，供后续直接用户流程和 Ticket 57 发布回归使用；这不要求 Ticket 01 或其他非用户流程 ticket 运行 Playwright。

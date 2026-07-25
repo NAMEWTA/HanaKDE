@@ -58,7 +58,7 @@
 
 - `tests/silverbullet-reference-integrity.test.ts`
 
-**对应端到端场景：** 无独立 E2E；由契约/集成测试证明并被下游场景覆盖
+**Playwright 用户流程：** 不适用；本 ticket 使用上述 Vitest 单元、组件、契约或集成测试，不运行 Playwright；下游或发布级用户流程可继续覆盖相关行为
 
 ## 验收标准
 
@@ -75,5 +75,5 @@
 - **实现：** 新增 `tests/silverbullet-reference-integrity.test.ts` 与仓库根 `THIRD_PARTY_NOTICES.md`；严格审计覆盖 8 个单文件、3 个目录聚合哈希、9 行能力采用边界、MIT/版本/Node 要求，以及生产源码和 runtime manifest 不引用 SilverBullet。
 - **严格证据：** `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`，5/5 通过、0 skip；严格模式缺失 snapshot 时退出码非零。
 - **共享门禁：** `volta run npm run typecheck` 通过；`volta run npm run lint:boundary` 通过（仅报告 1 条已跟踪既有债务）；`volta run npx eslint tests/silverbullet-reference-integrity.test.ts` 通过。
-- **审查：** standards reviewer 与 spec reviewer 在两轮修复后均 `APPROVED`；已消除 linked-worktree 路径推导、过窄 runtime 证明和 snapshot 缺失仍 0-exit 的伪通过风险。
+- **审查：** 两轮工程质量与规格符合性检查均已通过；已消除路径推导、过窄 runtime 证明和 snapshot 缺失仍 0-exit 的伪通过风险。
 - **偏差：** 无。矩阵记录的 8 个单文件与 3 个目录哈希全部一致，未修改 `silverbullet/`，未采用 SilverBullet runtime。

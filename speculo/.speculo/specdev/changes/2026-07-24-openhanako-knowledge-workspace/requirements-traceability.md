@@ -1,6 +1,6 @@
 # 需求追踪矩阵
 
-本矩阵是需求 ownership 的可读权威表。每条用户故事只有一个 Primary Owner；supporting ticket 可以复用或提供接缝，但不能替代 owner 实现。Ticket 57 只汇总实际证据。各 `ticket/*` 的「需求追踪」行必须与本表 Primary owner 列一致。
+本矩阵是需求 ownership 的可读权威表。每条用户故事只有一个 Primary Owner；supporting ticket 可以复用或提供接缝，但不能替代 owner 实现。Ticket 57 只汇总实际证据。各 `ticket/*` 的「需求追踪」行必须与本表 Primary owner 列一致。E2E 列表示发布级用户流程的追踪关系，不表示 Primary Owner 或 supporting ticket 必须运行 Playwright；ticket 是否运行 Playwright 以其“Playwright 用户流程”声明为准，其他情况使用 Vitest。
 
 | Requirement ID | 需求 | Primary owner | Supporting tickets | 自动化证据 | E2E |
 |---|---|---:|---|---|---|

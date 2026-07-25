@@ -162,6 +162,6 @@ Server 是 SourceRegistry、journal 与 index 的唯一 owner。现有桌面生�
 
 ## 13. 测试与发布
 
-Vitest 与 Playwright 技术栈、24 个 E2E 场景、临时 HANA_HOME、native dialog stub 和平台矩阵见 `test-strategy.md`。每个用户故事的唯一 owner 与测试路径见 [`requirements-traceability.md`](./requirements-traceability.md)。
+Vitest 与 Playwright 技术栈、Playwright 仅用于直接用户流程的选择规则、24 个发布级 E2E 场景、临时 HANA_HOME、native dialog stub 和平台矩阵见 `test-strategy.md`。每个用户故事的唯一 owner 与测试路径见 [`requirements-traceability.md`](./requirements-traceability.md)。
 
 Ticket 57 只填 `release-evidence.md` 和 `release-checklist.md`，不得修改 `LOG.md` 记录普通执行结果，也不得首次实现功能。

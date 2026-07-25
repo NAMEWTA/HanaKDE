@@ -58,7 +58,9 @@
 
 - `tests/safe-text-index-extractor.test.ts`
 
-**对应端到端场景：** E2E-KW-013
+**Playwright 用户流程：** 不适用；本 ticket 使用上述 Vitest，不运行 Playwright。
+
+**发布级关联场景：** E2E-KW-013（仅追踪，不作为本 ticket Playwright 门禁）
 
 ## 验收标准
 

@@ -82,7 +82,7 @@ desktop/src/react/__tests__/              Renderer/CM6/UI
 
 ## 验证
 
-每个 ticket 至少运行相关 Vitest、`npm run typecheck` 和 `npm run lint:boundary`。涉及 composition 时运行 `npm run build:server:open`；涉及 Renderer/preload/main 时运行对应 build。交付记录只能列实际执行命令。
+每个 ticket 至少运行相关 Vitest、`npm run typecheck` 和 `npm run lint:boundary`。Playwright 不是通用 ticket 门禁：只有 ticket 直接交付需要在真实 Browser/Electron 中串联操作与反馈的用户流程时，才运行该 ticket 标注的 Playwright 场景；纯逻辑、契约、存储、索引、API、安全、fixture、文档和组件级行为使用 Vitest 即可。E2E ID 的需求追踪关系本身不构成该 ticket 必跑 Playwright 的理由。涉及 composition 时运行 `npm run build:server:open`；涉及 Renderer/preload/main 时运行对应 build。交付记录只能列实际执行命令。
 
 ## 第三方参考
 
@@ -91,7 +91,7 @@ desktop/src/react/__tests__/              Renderer/CM6/UI
 
 ## 实施闭环
 
-- Ticket 01 必须通过 implementation-preflight，并引入固定 Playwright 依赖和 scripts。
+- Ticket 01 必须通过 implementation-preflight，并为后续用户流程 ticket 引入固定 Playwright 依赖和 scripts；Ticket 01 自身只需运行其 Vitest/preflight 门禁。
 - Provider 根 identity 不能证明 disjoint 时拒绝来源。
 - Knowledge native IPC 不接受任意绝对路径，只消费一次性 grant；Main-only HTTP route 还必须验证独立 native bridge credential。
 - 每个 KW-US 只由 `requirements-traceability.md`（及 ticket「需求追踪」行）指定的 primary owner 实现；57 不兜底。

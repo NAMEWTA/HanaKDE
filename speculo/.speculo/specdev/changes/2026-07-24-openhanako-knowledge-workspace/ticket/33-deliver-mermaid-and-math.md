@@ -61,7 +61,7 @@
 - `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`
 - `desktop/src/react/__tests__/editor/knowledge-math-field.test.ts`
 
-**对应端到端场景：** E2E-KW-011
+**Playwright 用户流程：** 适用；运行 E2E-KW-011
 
 ## 验收标准
 

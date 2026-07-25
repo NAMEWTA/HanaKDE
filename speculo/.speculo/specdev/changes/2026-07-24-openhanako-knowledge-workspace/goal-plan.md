@@ -2,11 +2,9 @@
 
 **状态：** 已规划，尚未进入实现  
 **规划日期：** 2026-07-25  
-**Change：** `2026-07-24-openhanako-knowledge-workspace`  
-**执行模型：** Lead + Subagent  
-**Subagent 固定配置：** `gpt-5.6-sol`，`reasoning_effort=medium`
+**Change：** `2026-07-24-openhanako-knowledge-workspace`
 
-本计划把已确认的 295 条 accepted LOG、295 条 accepted ADR、CONTEXT、193 条用户故事、22 个规则域、57 个 ticket 及实施契约综合为实现阶段的唯一里程碑编排入口。它不新增产品决定，也不把 ticket 的主要交付物误当作完整范围或文件白名单。
+本计划把已确认的 295 条 accepted LOG、295 条 accepted ADR、CONTEXT、193 条用户故事、22 个规则域、57 个 ticket 及实施契约综合为实现阶段的里程碑规划入口。它不新增产品决定，也不把 ticket 的主要交付物误当作完整范围或文件白名单。
 
 ## 模式检测摘要
 
@@ -16,11 +14,10 @@
 | 冻结实施契约 | 是 | `implementation-contracts.md`、journal/index/test 等契约是唯一可编码方案，但不等同于上述编号合同模式 |
 | 参考权威 | 是 | 当前 HanaKDE 是唯一底座；`silverbullet/` 只按固定矩阵作为可审计技术参考 |
 | 有意偏差 | 否 | 当前没有 `DEV-NN`；任何未来偏差必须先形成并同步正式决定，不能口头接受或静默实现 |
-| Ticket 数量 | 57，复杂模式 | 使用严格 P0→P1→P2 关闭次序、最多 6 个并发 subagent、强制 §9 速查表 |
-| 执行模型 | Lead + Subagent | 每票执行完整八步协议、双轴审查、worktree 隔离、仅 Lead 操作 Git |
+| Ticket 数量 | 57，复杂模式 | 使用严格 P0→P1→P2 关闭次序与 §9 速查表 |
 | ADR / CONTEXT / LOG | 齐全 | 实现前必须读取并保持同一最终设计，不允许选择性忽略 accepted 结论 |
 
-模式结论由本次用户明确要求确认：所有 implementer、standards reviewer、spec reviewer 与 fixer 均固定使用 `gpt-5.6-sol`、medium；不得被工作流中的通用默认模型覆盖。
+本计划只定义产品范围、依赖、门禁、验收和证据，不规定 Codex 的任务编排、执行角色、模型或工作区策略；具体执行方式由 Codex 在运行时自行决定。
 
 ## §1 Goal
 
@@ -77,7 +74,7 @@
 13. **索引与搜索：** 每来源独立 better-sqlite3 schema v1 generation、单 writer 与 manifest 原子切换；连续子串语义、短查询和 Unicode 规则不得自选替代算法。（ADR-0297、0303）
 14. **Native bridge：** 只扩展现有 `window.hana` 的固定表面；资源动作使用 60 秒、owner/window/action/address/version 绑定的一次性 grant；Main-only route 还需独立 credential。（ADR-0304）
 15. **安全默认拒绝：** principal/owner/scope 仅来自认证 Hono context；外部输入以 `unknown` 接收并校验；symlink/junction/UNC/Unicode/TOCTOU/超限/主动内容均需真实恶意工作区证据。（ADR-0298、0301）
-16. **质量与证据 ownership：** 每个 UI ticket 同时交付五语言、键盘、ARIA、主题、窄布局、取消与错误；每条用户故事只有一个非 57 Primary Owner；57 只汇总证据。（ADR-0300、0305—0307）
+16. **质量与证据 ownership：** 每个 UI ticket 同时交付五语言、键盘、ARIA、主题、窄布局、取消与错误；每条用户故事只有一个非 57 Primary Owner；ticket 默认使用 Vitest，只有直接用户流程使用 Playwright；57 只汇总证据。（ADR-0300、0306—0307、0309）
 17. **目录分域：** index、journal、source binding 位于 `<HANA_HOME>/knowledge-workspace/`，不属于来源；来源内唯一内部区域是 `.trash/`，只能由专用服务访问。（ADR-0308）
 18. **第三方适配：** SilverBullet 只能按固定矩阵研究、独立改写或小段适配；采用代码必须同步 provenance、hash 和第三方声明；禁止整体移植其产品/runtime。（ADR-0283、0299）
 
@@ -85,14 +82,14 @@
 
 1. **Ticket 全绿：** 01—57 全部关闭，`tickets-map.md` 状态、每个 ticket checklist、实现交接摘要和实际交付记录一致；57 不首次实现或修补任何业务能力。
 2. **accepted 决策收敛：** ADR 的 295 条稳定条目继续全部为 accepted，同号 accepted LOG、CONTEXT、Spec、architecture 和实施契约表达同一最终设计；不存在未记录偏差、私有例外或静默推翻。
-3. **验证门禁全绿：** `npm run lint`、`npm run typecheck`、`npm test`、`npm run lint:boundary`、Open/Full/Renderer/preload/main/server 构建与 smoke，以及三类 Knowledge E2E 命令按适用范围实际执行并通过；`E2E-KW-001`—`024` 均有规定 project/platform 证据。
+3. **验证门禁全绿：** `npm run lint`、`npm run typecheck`、`npm test`、`npm run lint:boundary`、Open/Full/Renderer/preload/main/server 构建与 smoke，以及发布级三类 Knowledge E2E 命令按适用范围实际执行并通过；普通 ticket 默认使用 Vitest，只有直接用户流程 ticket 才运行其 Playwright 场景；`E2E-KW-001`—`024` 均有规定 project/platform 证据。
 4. **架构、安全、性能与平台不回退：** 无 Renderer→Node、Open→Full、route→manager 私有越界，无第二套基础设施；`TM-001`—`020`、Node 24 production 性能预算、macOS/Windows/Linux 文件系统与原生能力矩阵具有实际证据。
 5. **已锁裁定不松动：** §2.3 的 18 个决策簇及其引用的全部 accepted 决定均满足；尤其守住磁盘唯一事实、来源隔离、Open 核心、跨来源只复制、手动保存/三方冲突、journal、generation 索引、grant native、内部目录分域和 57 不补功能。
 6. **端到端可追溯：** 193 条 `KW-US-*` 均有唯一非 57 Primary Owner、完成 ticket、精确测试和实际结果；22 个 `KW-RULE-*`、24 个 E2E、20 项威胁、性能原始 JSON、五语言/A11y/主题/窄布局和三平台结果均可定位；每票记录 commit SHA 与实际日志、trace 或截图。
 
 `release-evidence.md` 中未执行、失败或 flaky 项必须按事实记录；计划中的测试路径、重试后的单次成功或手写“通过”都不构成完成证据。
 
-## §4 Ticket DAG and Scheduling Order
+## §4 Ticket DAG and Gate Order
 
 ### 4.1 DAG 验证
 
@@ -149,11 +146,11 @@ P0/P1/P2 全部能力
    → 19 → 25 → 26 → 41 → 43 → 44 → 45 → 57
 ```
 
-依赖就绪的后级 ticket 可以提前实现和审查，但 issue 关闭与 Gate 宣告严格遵循 P0→P1→P2；等待 Gate 的 ticket 标记为 `implemented_waiting_gate`。
+ticket 是否可开始只由其显式 blocker 决定；issue 关闭与 Gate 宣告严格遵循 P0→P1→P2，等待 Gate 的 ticket 标记为 `implemented_waiting_gate`。
 
 ### 4.3 拓扑层级
 
-同层只表示 blocker 已就绪，不证明文件可并行写入：
+同层只表示 blocker 已就绪，不规定具体执行方式：
 
 ```text
 L00  01 02
@@ -176,55 +173,21 @@ L16  45 46 56
 L17  57
 ```
 
-### 4.4 建议调度波次
+### 4.4 执行边界
 
-| 波次 | Tickets | 目的与边界 |
-|---:|---|---|
-| 0 | 01, 02 | 真实仓库基线与 SilverBullet provenance 并行 |
-| 1 | 03 | 冻结共享 Open 知识契约 |
-| 2 | 04, 11, 13 | diagnostics、Markdown IR、性能 fixture 三岛并行 |
-| 3 | 05, 12 | 来源注册与 CM6 表面，Server/Core 与 Renderer 分离 |
-| 4 | 06, 14 | ResourceIO transfer 与恶意工作区门禁 |
-| 5 | 07, 10 | 兼容 facade 与 operation journal |
-| 6 | 08, 09 | Renderer client 与 Mobile/LAN，P0 收敛 |
-| 7 | 15, 23, 40 | Knowledge 壳、LinkResolver、index store 三条主干 |
-| 8 | 16, 17, 24 | 资源树、Asset Viewer、链接渲染 |
-| 9 | 18, 42, 47 | 文档 session、安全文本抽取、tree selection reducer |
-| 10 | 19, 48 | 手动保存曳光弹、树键盘与范围 |
-| 11 | 20, 27, 50 | 编辑组、Live Preview、新建资源 |
-| 12 | 25, 38, 49, 51 | Frontmatter、附件复制、树打开、原生导入 |
-| 13 | 21, 26, 52 | 三方冲突、标签/任务、内部剪贴板 |
-| 14 | 22, 41, 53 | 生命周期、Markdown 索引、拖拽 |
-| 15 | 43, 28, 29, 30 | index convergence 与三个隔离 CM6 command |
-| 16 | 44, 54, 31, 34 | query API、原子重构、表格/代码、脚注 |
-| 17 | 45, 55, 32, 37 | 超级搜索、删除/回收站、状态栏、Wikilink 导航 |
-| 18 | 46, 56, 33, 35 | 当前资源视图、恢复清理、Mermaid/math、安全 HTML |
-| 19 | 36, 39 | 查找替换与页面嵌入，P1/P2 功能收敛 |
-| 20 | 57 | 独占发布 Gate，只读汇总证据 |
-
-### 4.5 并发规则
-
-1. 全局最多 6 个活跃 subagent；implementer、reviewer 与 fixer 均占用并发槽位。
-2. 每个并发 implementer 使用独立 worktree 和唯一分支 `speculo/specdev/2026-07-24-openhanako-knowledge-workspace-<nn>`。
-3. 两个活跃 implementer 的 file allowlist 必须无交集；共享文件只由 Lead 修改。
-4. ticket 的“交付物”和“实施时需阅读”均不是 allowlist。Lead 必须依据真实接缝、预期 diff 和测试路径生成明确且完整的 allowlist。
-5. 无法证明 allowlist 互斥时，同一写入岛并发上限为 1。
-6. `package.json`、`package-lock.json`、共享 contract/errors、composition、主 route、extension registry、主 UI composition、change 文档与状态文件默认 Lead-only。
-7. reviewer 只读；fixer 只能写原 implementer allowlist，扩展范围必须退回 Lead 重批。
-8. 所有 blocker 必须已经合并且在目标 worktree 通过基线门禁，才可派发后继 ticket。
-9. ticket 关闭提交在 `hanakde` 合并并通过合并后门禁后，Lead 自动删除该 ticket 的隔离 worktree 与临时分支；此项已获用户常驻授权，无需逐次确认。
+本计划只约束 blocker、Gate、产品契约、验收和证据。Codex 可根据运行时上下文自行组织执行过程，但不得绕过依赖、扩大 ticket 范围、覆盖用户修改或降低质量门禁。
 
 ## §5 Per-Ticket Execution Protocol
 
-以下八步对 01—57 逐 ticket 执行，不得把一个波次合并成“大 ticket”。
+01—57 必须逐 ticket 满足下述要求，不得合并成范围含混的“大 ticket”。本节不规定 Codex 的具体执行方式。
 
 ### 5.1 读取与设计检查
 
-实现者必须按顺序读取：
+开始 ticket 前必须按顺序读取：
 
 | # | 输入 | 用途 |
 |---:|---|---|
-| 1 | `speculo/workflows/specdev/I-implement/I-implement.md` | 设计检查、TDD、双轴审查与提交的实现入口 |
+| 1 | `speculo/workflows/specdev/I-implement/I-implement.md` | 设计检查、TDD 与实现入口 |
 | 2 | 当前 ticket 全文 | 验收、范围、blocker、主要交付物与保留边界 |
 | 3 | 本 `goal-plan.md` | Gate、DAG、DoD、执行与治理约束 |
 | 4 | `ADR.md`、`CONTEXT.md`、accepted `LOG.md` | 架构决定、词义、完整已确认场景和禁止边界 |
@@ -233,55 +196,26 @@ L17  57
 | 7 | ticket“实施时需阅读”的真实代码接缝 | 当前实现基座与预期 diff |
 | 8 | SilverBullet 矩阵对应行和允许文件（如适用） | 受控参考与 provenance |
 
-随后按 I-implement 完成模块、接口、不变量、错误模式、接缝、适配器和依赖类别检查；实现者向 Lead 报告预期 diff、精确测试与共享文件需求，Lead 再冻结 allowlist。
+随后按 I-implement 完成模块、接口、不变量、错误模式、接缝、适配器和依赖类别检查，并确认预期 diff、精确测试及共享文件影响。
 
-### 5.2 派单
-
-Lead 在 blocker 已合并、worktree 基线通过且 allowlist 互斥后派单：
-
-```text
-IMPLEMENTER_DISPATCH <nn>
-  issue=<issue-url-or-repo-relative-ticket>
-  milestone=<M0|M1|M2|M3|M4|M5>
-  gate=<P0|P1|P2>
-  model=gpt-5.6-sol
-  reasoning_effort=medium
-  blockers=<none|nn,...>
-  requirement_ids=<KW-US-*|KW-RULE-*>
-  allowlist=<explicit exhaustive paths/globs>
-  authority_refs=<ADR/LOG/spec/contract/matrix paths>
-  verify=<ticket exact tests + required shared gates>
-```
-
-派单上下文同时包含 ADR、CONTEXT、goal-plan、ticket、固定实施契约、I-implement 和适用参考矩阵行。模型或 effort 不符时本轮结果无效，必须重新派发，不得静默降级。
-
-### 5.3 TDD 实现
-
-implementer 使用 `gpt-5.6-sol`、medium，在 allowlist 内：
+### 5.2 TDD 实现
 
 1. 从公共接口写失败测试并保存红灯证据。
 2. 只写足以通过该垂直切片的实现。
 3. 补齐取消、冲突、权限/不可用、外部变化、清理与故障注入。
 4. 运行 ticket 指定的精确测试。
-5. 不操作 Git、不改 Lead-only 文件、不扩大范围；发现上位文档冲突时停止并回报。
+5. 不扩大范围；发现上位文档冲突时停止实现并先同步权威文档。
 
-### 5.4 双轴审查与修复
+### 5.3 质量与规格检查
 
-实现完成后并行启动两个只读 reviewer，均固定 `gpt-5.6-sol`、medium：
+实现完成后必须覆盖两个检查轴：
 
-```text
-reviewer-standards-<nn>
-  检查：代码质量、模块深度、依赖/架构边界、安全、测试真实性、
-        cleanup、性能和 allowlist 越界
+- **工程质量：** 代码质量、模块深度、依赖/架构边界、安全、测试真实性、清理和性能。
+- **规格符合性：** ticket 验收、KW-US/KW-RULE、spec/ADR/CONTEXT/实施契约、E2E ownership、禁止范围、来源边界和事实源语义。
 
-reviewer-spec-<nn>
-  检查：ticket 验收、KW-US/KW-RULE、spec/ADR/CONTEXT/实施契约、
-        E2E owner、禁止范围、来源边界和事实源语义
-```
+发现的问题必须修复并补回归测试，两个检查轴均无未决问题后才能关闭 ticket。
 
-任一返回 `REQUEST_CHANGES`，Lead 启动 `fixer-<nn>-<round>`，同样使用 `gpt-5.6-sol`、medium。fixer 只处理列明问题并补回归测试；修复后两个 reviewer 都必须重新审查，直到同时 `APPROVED`。reviewer 不得自行改代码。
-
-### 5.5 Ticket 门禁
+### 5.4 Ticket 门禁
 
 每票至少执行并记录：
 
@@ -290,6 +224,8 @@ reviewer-spec-<nn>
 npm run typecheck
 npm run lint:boundary
 ```
+
+`<ticket 指定的精确测试>` 默认是 Vitest 单元、组件、契约或集成测试。仅当 ticket 的“Playwright 用户流程”明确标为适用时，才追加对应 Playwright 场景；“发布级关联场景”不要求该 ticket 运行 Playwright。
 
 按改动范围追加：
 
@@ -307,33 +243,24 @@ npm run smoke:server:open
 
 涉及 composition 必须运行 Open build/smoke；涉及 Renderer/preload/main 必须运行相应 build；涉及本机路径、symlink、trash、大小写或换行必须提供 Windows/macOS/Linux 对应证据。I-implement 的通用示例不得替代本 change 的项目命令和 ticket 精确矩阵。
 
-### 5.6 Lead 回写、handoff 与合并
+### 5.5 回写与证据
 
-1. Lead 审查 diff、allowlist 和双轴结论，只由 Lead 执行提交、合并与推送。
-2. 在合并结果上重跑适用门禁。
-3. 调用 handoff 流程压缩实现上下文，并在 ticket 末尾回写 `## 实现交接摘要`：commit、测试、关键决策、偏差、产物引用与交接文档。
-4. 更新 ticket 状态、实际命令、平台、证据和 requirement/release evidence；普通执行结果不得写入设计 `LOG.md`。
-5. 若实现要求改变 accepted 意图，先同步 LOG/ADR/CONTEXT/spec/契约和受影响 ticket，再继续；当前无编号合同或 DEV 表，不得伪造状态回写。
-6. 合并冲突由 Lead 按冲突解决协议回溯双方 ticket 意图、逐块保留并重跑检查；subagent 不提交冲突解决。
+1. 在最终结果上重跑适用门禁。
+2. 在 ticket 末尾回写 `## 实现交接摘要`：commit、测试、关键决策、偏差与产物引用。
+3. 更新 ticket 状态、实际命令、平台、证据和 requirement/release evidence；普通执行结果不得写入设计 `LOG.md`。
+4. 若实现要求改变 accepted 意图，先同步 LOG/ADR/CONTEXT/spec/契约和受影响 ticket，再继续；当前无编号合同或 DEV 表，不得伪造状态回写。
 
-### 5.7 关闭 Ticket
+### 5.6 关闭 Ticket
 
 仅当以下条件全部满足时关闭：
 
-- 两轴 reviewer 均批准。
+- 工程质量与规格符合性检查均无未决问题。
 - 精确测试、typecheck、boundary 与适用 build 全绿。
-- commit SHA、实际输出、平台证据和 handoff 已回写。
+- commit SHA、实际输出、平台证据和实现交接摘要已回写。
 - Primary ownership 与对应 evidence 完整。
 - 所属 Gate 已开放；否则标记 `implemented_waiting_gate`。
 
-### 5.8 Lead 纪律与收尾
-
-- Lead 不写 ticket 实现代码；若发生，输出 `DELEGATION_VIOLATION` 并重新派单。
-- implementer、reviewer、fixer 不操作 Git。
-- 每个并发 ticket 使用隔离 worktree；合并后由 Lead 验证并自动清理对应 worktree 与临时分支、更新状态，不再逐次请求用户确认。
-- 全部 57 票关闭后执行知识治理收尾，核对 Code、Runtime、Docs、Rules、Memory、Workspace 六个事实面。
-- `silverbullet/` 是用户提供的临时参考源码，任何 agent 不得自动删除；开发完成后由用户自行删除。
-- 上述自动清理授权仅覆盖本 change 已完成 ticket 的隔离 worktree 与临时分支；清理其他临时计划、调试脚本、旧副本或不属于本 change 的孤立 worktree 前，仍须先列出目标并取得用户确认。
+全部 57 个 ticket 关闭后执行知识治理收尾，核对 Code、Runtime、Docs、Rules、Memory、Workspace 六个事实面。`silverbullet/` 是用户提供的临时参考源码，不得自动删除；开发完成后由用户自行删除。
 
 ## §6 Milestone-Level Acceptance
 
@@ -350,7 +277,7 @@ npm run smoke:server:open
 
 ### 6.2 各 Milestone 关闭条件
 
-- **M0：** 01–14 全部通过；Node 24、`better-sqlite3` ABI/FTS5、Playwright 1.62.0、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能和 TM 测试入口均有实际证据；SilverBullet 钉选与许可证审计无漂移。
+- **M0：** 01–14 全部通过；Node 24、`better-sqlite3` ABI/FTS5、供后续用户流程使用的 Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能和 TM 测试入口均有实际证据；01–14 的非用户流程 ticket 使用 Vitest；SilverBullet 钉选与许可证审计无漂移。
 - **M1：** 15–22 全部通过；用户能从空白 main 进入知识壳、浏览真实多来源树、安全打开资源；多视图共享文档而独立视图状态；手动保存、外部变化、三方冲突、关闭/切换/orphan 无数据丢失；相关五语言/A11y/主题/窄布局通过。
 - **M2：** 23–39 全部通过；链接、Frontmatter、tags/tasks、Live Preview、编辑事务、表格/代码、Mermaid/math/footnote、安全 HTML、查找替换、附件和嵌入均服从同源、保真、安全与单一 CM6 transaction 语义。
 - **M3：** 40–46 全部通过；每来源 generation 独立、原子切换、锁/租约/rebuild 取消与旧 generation 可用；saved disk 与当前 buffer 的查询事实边界正确；watcher 乱序/缺口最终收敛；性能达标。
@@ -359,10 +286,10 @@ npm run smoke:server:open
 
 ### 6.3 全里程碑验收仪式
 
-1. **ADR/文档终审：** 核对 accepted LOG、ADR、CONTEXT、Spec、实施契约、requirements ownership、ticket handoff 与代码事实，无未解释冲突或静默偏差。
+1. **ADR/文档终审：** 核对 accepted LOG、ADR、CONTEXT、Spec、实施契约、requirements ownership、ticket 实现交接摘要与代码事实，无未解释冲突或静默偏差。
 2. **整体验证门禁：** 在 Node 24 和隔离环境运行完整 lint/typecheck/test/build/smoke、Playwright 三 project、性能、安全与平台矩阵，只记录实际结果。
 3. **集成回归走查：** 按用户使用顺序执行下述主路径与故障路径，不按 ticket 编号演示。
-4. **关闭里程碑/spec issue：** 57 个 ticket 均有 commit、证据与 handoff 后再关闭关联里程碑。
+4. **关闭里程碑/spec issue：** 57 个 ticket 均有 commit、证据与实现交接摘要后再关闭关联里程碑。
 5. **人工 side-by-side：** 对照 OpenHanako 冻结交互与 SilverBullet 矩阵允许点进行真机手感核对；自动化不替代最终手感环节。
 
 ### 6.4 集成回归用户旅程
@@ -440,48 +367,41 @@ npm run smoke:server:open
 20. **伪完成禁止：** API 可用但真实 workspace、交互、边界、失败或空状态不符合规格，仍视为未完成。
 21. **第三方边界：** SilverBullet 只在矩阵范围内研究、独立改写或小段适配；采用代码同步矩阵与第三方声明；违反即许可证/架构阻断。
 22. **参考差异可追溯：** 与批准参考点的差异必须由 accepted 权威明确支持；当前无 DEV 表，口头偏差视为缺陷。
-23. **模型固定：** implementer、两类 reviewer 和 fixer 统一 `gpt-5.6-sol`、medium；参数不符则该轮产出无效并重派。
-24. **Git 与 Lead：** 仅 Lead 操作 Git，Lead 不实现 ticket 代码；违反时输出 `DELEGATION_VIOLATION` 并重派。
-25. **Worktree 与 allowlist：** 并发 ticket 使用隔离 worktree、allowlist 两两不重叠、共享文件 Lead-only；违反则暂停并发。
-26. **双轴审查：** standards 与 spec 两轴及适用门禁全部通过才可关闭；未清零的 `REQUEST_CHANGES` 阻断关闭。
-27. **证据真实性：** 只记录实际命令、平台和结果；首次失败与 flaky 保留，NOT_RUN 不得写 PASS。
-28. **LOG 语义：** 普通运行结果只写 release evidence；只有新产品决定或 trust boundary 才同步设计文档。
-29. **工作树保护：** preflight 只读记录 dirty 状态，禁止 clean/reset/checkout/覆盖用户修改；违反即停止实施。
-30. **代码风格与沟通：** issue、handoff、commit 和进度报告使用简体中文；代码标识与注释遵循周边仓库惯例，第三方原文和稳定标识保持原样。
-31. **无未决方案：** 交付不得保留“可能/按需/A 或 B”、未选框架、未选 schema 或未定义恢复语义；存在即未完成。
-32. **临时参考保护：** agent 不得删除、移动或清理仓库根 `silverbullet/`；开发完成后由用户自行删除。
+23. **质量检查：** 工程质量、规格符合性与适用门禁全部通过才可关闭；未决问题阻断关闭。
+24. **证据真实性：** 只记录实际命令、平台和结果；首次失败与 flaky 保留，NOT_RUN 不得写 PASS。
+25. **LOG 语义：** 普通运行结果只写 release evidence；只有新产品决定或 trust boundary 才同步设计文档。
+26. **工作树保护：** preflight 只读记录 dirty 状态，禁止 clean/reset/checkout/覆盖用户修改；违反即停止实施。
+27. **代码风格与沟通：** issue、实现交接摘要、commit 和进度报告使用简体中文；代码标识与注释遵循周边仓库惯例，第三方原文和稳定标识保持原样。
+28. **无未决方案：** 交付不得保留“可能/按需/A 或 B”、未选框架、未选 schema 或未定义恢复语义；存在即未完成。
+29. **临时参考保护：** 不得删除、移动或清理仓库根 `silverbullet/`；开发完成后由用户自行删除。
 
 ## §8 Progress Reporting Format
 
-### 8.1 派单
+### 8.1 Ticket 完成
 
 ```text
-IMPLEMENTER_DISPATCH <nn> milestone=<M0|M1|M2|M3|M4|M5> gate=<P0|P1|P2> slice=<...> model=gpt-5.6-sol effort=medium blockers=<none|nn,...> requirements=<KW-US/KW-RULE> allowlist=<paths> authority_refs=<paths>
-```
-
-### 8.2 Ticket 完成
-
-```text
-TICKET_DONE <nn> (<k>/57) milestone=<M0|...|M5> gate=<P0|P1|P2> slice=<...> model=gpt-5.6-sol effort=medium requirements=<...> authority_refs=<...> verify="<cmd>:PASS" e2e=<id:PASS|none> review=standards:PASS,spec:PASS evidence=<path-or-url> commit=<sha>
+TICKET_DONE <nn> (<k>/57) milestone=<M0|...|M5> gate=<P0|P1|P2> slice=<...> requirements=<...> authority_refs=<...> verify="<cmd>:PASS" e2e=<id:PASS|not_applicable> evidence=<path-or-url> commit=<sha>
 ```
 
 示例：
 
 ```text
-TICKET_DONE 24 (24/57) milestone=M2 gate=P1 slice=MARKDOWN model=gpt-5.6-sol effort=medium requirements=KW-US-114,KW-US-177,KW-RULE-MARKDOWN authority_refs=ADR.md,implementation-contracts.md#7 verify="npm run typecheck:PASS" e2e=E2E-KW-009:PASS review=standards:PASS,spec:PASS evidence=<issue-url> commit=<sha>
+TICKET_DONE 24 (24/57) milestone=M2 gate=P1 slice=MARKDOWN requirements=KW-US-114,KW-US-177,KW-RULE-MARKDOWN authority_refs=ADR.md,implementation-contracts.md#7 verify="npm run typecheck:PASS" e2e=E2E-KW-009:PASS evidence=<issue-url> commit=<sha>
 ```
 
-### 8.3 阻塞、等待 Gate 与参考差异
+非用户流程 ticket 使用 `e2e=not_applicable`，并以 Vitest 结果作为 ticket 自动化证据。
+
+### 8.2 阻塞、等待 Gate 与参考差异
 
 ```text
-TICKET_BLOCKED <nn> blocker=<ticket|baseline|security|decision> evidence=<path-or-log> owner=<lead|user|ticket-nn> next=<具体解除动作>
+TICKET_BLOCKED <nn> blocker=<ticket|baseline|security|decision> evidence=<path-or-log> next=<具体解除动作>
 TICKET_IMPLEMENTED_WAITING_GATE <nn> gate=<P0|P1|P2> commit=<sha> waiting_for=<gate-or-ticket>
 REFERENCE_DEVIATION <nn> reference=<matrix-row> behavior=<差异> authority=<spec|LOG|ADR> disposition=<fix|record-before-continue>
 ```
 
 当前没有 DEV 表；确需接受偏差时必须先建立并同步正式偏差记录，进度行不能自批。
 
-### 8.4 Milestone 完成
+### 8.3 Milestone 完成
 
 ```text
 MILESTONE_DONE <M0|M1|M2|M3|M4|M5> tickets_closed=<k>/<N> gate=<P0|P1|P2> requirements_owned=<done/total> verify=GREEN e2e=<passed/required> threats=<passed/required> not_run=<0|N> evidence=<path>
@@ -495,10 +415,10 @@ MILESTONE_DONE M5 tickets_closed=57/57 gate=P2 requirements_owned=193/193 verify
 
 必需平台或项目存在 `not_run>0` 时不得输出完整发布绿灯。
 
-### 8.5 周期汇总
+### 8.4 周期汇总
 
 ```text
-PROGRESS_SUMMARY closed=<k>/57 active=<nn,...> blocked=<nn,...> waiting_gate=<nn,...> gate=P0:<x>/14,P1:<y>/31,P2:<z>/12 milestone=<M?> risk=<一句话> next=<下一批 READY tickets>
+PROGRESS_SUMMARY closed=<k>/57 active=<nn,...> blocked=<nn,...> waiting_gate=<nn,...> gate=P0:<x>/14,P1:<y>/31,P2:<z>/12 milestone=<M?> risk=<一句话> next=<下一项 READY ticket>
 ```
 
 ## §9 Ticket Quick Reference
@@ -563,16 +483,12 @@ PROGRESS_SUMMARY closed=<k>/57 active=<nn,...> blocked=<nn,...> waiting_gate=<nn
 | 56 | TRASH | P1 | 04、10、14、23、44、51、55 | 用户恢复原位置、处理冲突并安全清理到系统废纸篓 |
 | 57 | RELEASE | P2 | 09、13、14、22、33–36、39、45、46、53、54、56 | 汇总 24 E2E、平台、语言、性能、安全与迁移证据 |
 
-### Lead 开篇清单
+### 实施前核对清单
 
 - [ ] 本 goal-plan、57 个 ticket、Gate 和依赖映射一致。
 - [ ] 实际 issue 或本地 ticket 的编号/标签/引用关系已建立。
 - [ ] Ticket 01 已在 Node 24 当场核验 audited ancestor、关键接缝、dirty 工作树、`better-sqlite3` 与 FTS5。
 - [ ] SilverBullet 版本、许可证、8 个单文件和 3 个目录聚合哈希与矩阵一致。
 - [ ] 每票 Primary ownership 唯一且 57 不拥有 KW-US。
-- [ ] 每次派单载荷包含 I-implement、ADR、CONTEXT、goal-plan、ticket 和固定契约。
-- [ ] 并发最多 6；allowlist 两两不重叠；共享文件 Lead-only。
-- [ ] 所有 implementer/reviewer/fixer 都锁定 `gpt-5.6-sol`、medium。
-- [ ] 每个 worktree 基线全绿；仅 Lead 操作 Git。
-- [ ] 每票合并后门禁通过即自动删除对应 worktree 与临时分支。
-- [ ] 每票完成后双轴审查、handoff、实际证据和进度行齐全。
+- [ ] 每个 ticket 的 blocker、权威文档、精确测试和固定契约均已核对。
+- [ ] 每票完成后工程质量、规格符合性、实际证据、实现交接摘要和进度行齐全。

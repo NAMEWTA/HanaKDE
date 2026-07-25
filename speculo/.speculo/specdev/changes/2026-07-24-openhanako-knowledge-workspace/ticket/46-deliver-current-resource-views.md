@@ -56,7 +56,7 @@
 
 - `desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx`
 
-**对应端到端场景：** E2E-KW-013
+**Playwright 用户流程：** 适用；运行 E2E-KW-013
 
 ## 验收标准
 

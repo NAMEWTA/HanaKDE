@@ -60,7 +60,7 @@
 
 - `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`
 
-**对应端到端场景：** E2E-KW-005
+**Playwright 用户流程：** 适用；运行 E2E-KW-005
 
 ## 验收标准
 

@@ -59,7 +59,9 @@
 - `tests/knowledge-index-store.test.ts`
 - `tests/knowledge-index-schema-migration.test.ts`
 
-**对应端到端场景：** E2E-KW-013、E2E-KW-014
+**Playwright 用户流程：** 不适用；本 ticket 使用上述 Vitest，不运行 Playwright。
+
+**发布级关联场景：** E2E-KW-013、E2E-KW-014（仅追踪，不作为本 ticket Playwright 门禁）
 
 ## 验收标准
 

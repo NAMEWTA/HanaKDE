@@ -58,7 +58,7 @@
 - `tests/knowledge-trash-delete.test.ts`
 - `tests/knowledge-trash-crash-recovery.test.ts`
 
-**对应端到端场景：** E2E-KW-020
+**Playwright 用户流程：** 适用；运行 E2E-KW-020
 
 ## 验收标准
 

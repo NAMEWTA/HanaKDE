@@ -63,7 +63,7 @@
 - `tests/knowledge-import.test.ts`
 - `desktop/src/react/__tests__/services/knowledge-native-client.test.ts`
 
-**对应端到端场景：** E2E-KW-017
+**Playwright 用户流程：** 适用；运行 E2E-KW-017
 
 ## 验收标准
 

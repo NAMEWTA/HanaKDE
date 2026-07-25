@@ -4,10 +4,11 @@
 
 ## 执行规则
 
-- 只有全部 blocker 已完成时 ticket 才可开始；01 与 02 可并行。
+- 只有全部 blocker 已完成时 ticket 才可开始。
 - Ticket tracking 只列该 ticket 的 Primary Story ownership 与直接规则域，不使用通配范围。
 - Ticket 57 只运行并汇总证据，不拥有任何 `KW-US-*`，不修改设计 `LOG.md` 记录运行结果。
 - mutation、index、native 与 E2E 不得偏离冻结实施契约。
+- 每个 ticket 默认运行相关 Vitest；只有直接交付真实 Browser/Electron 用户流程、且 ticket 明确标为 Playwright 适用时，才运行对应 E2E。发布级关联 ID 不构成该 ticket 的 Playwright 门禁。
 - Gate 映射以 [`goal-plan.md`](./goal-plan.md) 为权威：P0=`01–14`，P1=`15–27, 38, 40–56`，P2=`28–37, 39, 57`；三层均为 V1 必交付范围。
 - ticket 在 blocker 就绪后即可实现和审查，但 issue 关闭与 Gate 宣告严格按 P0→P1→P2；后级实现等待前级 Gate 时使用 `implemented_waiting_gate`。
 - 本 change 未激活带编号状态表的冻结合同模式，因此不创建空的 Contract ID 列，也不伪造 `todo/done/deviate` 回写。
@@ -145,8 +146,8 @@ P2 = 28–37, 39, 57
 ## 阶段门禁
 
 - Phase 0 完成条件：preflight、root identity、公开 contract、operation journal、IR、Playwright skeleton、性能/安全 fixture 均存在。
-- Phase 1/2 可以按不同公开文件并行，但共享 contract 变更必须先回到 Phase 0 owner。
-- Phase 3 在 index-store-contract 全部测试通过后开始；41/42 可并行，43 后才能做 query/search。
+- Phase 1/2 的共享 contract 变更必须先回到 Phase 0 owner。
+- Phase 3 在 index-store-contract 全部测试通过后开始；41/42 完成后才能进入 43，43 后才能做 query/search。
 - Phase 4 所有 mutation 都复用 Ticket 10 journal；56 必须复用 Ticket 51 native bridge。
 - Phase 5 只读 ownership/evidence，不修补缺失实现。
 

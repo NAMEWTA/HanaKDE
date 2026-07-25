@@ -59,7 +59,7 @@
 - `desktop/src/react/__tests__/editor/knowledge-command-registry.test.ts`
 - `desktop/src/react/__tests__/components/KnowledgeSlashMenu.test.tsx`
 
-**对应端到端场景：** 无独立 E2E；由契约/集成测试证明并被下游场景覆盖
+**Playwright 用户流程：** 不适用；本 ticket 使用上述 Vitest 单元、组件、契约或集成测试，不运行 Playwright；下游或发布级用户流程可继续覆盖相关行为
 
 ## 验收标准
 

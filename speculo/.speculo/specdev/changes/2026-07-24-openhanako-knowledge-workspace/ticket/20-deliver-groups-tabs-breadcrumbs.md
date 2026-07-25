@@ -59,7 +59,7 @@
 - `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`
 - `desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`
 
-**对应端到端场景：** E2E-KW-004
+**Playwright 用户流程：** 适用；运行 E2E-KW-004
 
 ## 验收标准
 

@@ -49,7 +49,7 @@
 | KW-RULE-PREFLIGHT | Git、Node、package、关键接缝与本地参考可实施性 | `implementation-baseline.md`、`implementation-contracts.md` |
 | KW-RULE-NATIVE | picker、文件剪贴板、默认应用、reveal、系统废纸篓与 grant | `implementation-contracts.md`、`architecture.md` |
 | KW-RULE-RECOVERY | 持久 operation journal、幂等、启动恢复和 rollback failure | `operation-journal-contract.md` |
-| KW-RULE-TEST | 精确 owner、Vitest/Playwright、E2E 与平台证据 | `test-strategy.md`、`requirements-traceability.md` |
+| KW-RULE-TEST | 精确 owner、默认 Vitest、仅用户流程使用 Playwright，以及 E2E 与平台证据 | `test-strategy.md`、`requirements-traceability.md` |
 
 ## V1 核心范围与现行规则
 
@@ -525,7 +525,7 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 2. **操作恢复：** 所有复合 mutation 使用 `crypto.randomUUID()` UUIDv4 operationId、确定性 canonical JSON request hash、15 分钟 plan TTL、持久 journal、幂等 commit 与启动 recovery barrier。见 `operation-journal-contract.md`。
 3. **索引：** 每来源 better-sqlite3 schema v1、独立 generation、current manifest、WAL/FULL、单 writer 和无 in-place migration。见 `index-store-contract.md`。
 4. **原生能力：** 复用 `window.hana`，新增两个固定 IPC；resource action 使用 60 秒单次 grant，Main-only route 还要求只存在于 Server/Main 的 `nativeBridgeToken`，Renderer 不获得绝对路径。见 `implementation-contracts.md`。
-5. **E2E：** `@playwright/test@1.62.0`，固定 desktop-full/web-open/web-full projects 与 `E2E-KW-001`—`024`。见 `test-strategy.md`。
+5. **测试选择：** 默认使用 Vitest；只有直接交付真实 Browser/Electron 用户流程的 ticket 才使用 `@playwright/test@1.62.0` 及其适用的 desktop-full/web-open/web-full project。E2E ID 的发布追踪关系不等于每个关联 ticket 都必须运行 Playwright。见 `test-strategy.md`。
 6. **追踪：** 每个用户故事只有一个 primary owner 和至少一个精确测试路径；Ticket 57 不拥有用户故事。见 `requirements-traceability.md`。
 7. **Preflight：** Ticket 01 在真实仓库执行 implementation-preflight；关键契约漂移时先更新 change。
 8. **内部目录：** index/journal/source binding 仅在 HANA_HOME；来源内只有 `.trash/` 是内部区域且从正常知识空间排除。
@@ -658,7 +658,7 @@ npm run smoke:server:open
 - `requirements-traceability.md` 中该 ticket 拥有的每个用户故事已有实现和列出的自动化证据。
 - 该 ticket 拥有的 `KW-RULE-*` 契约测试通过。
 - 失败、取消、冲突、权限和不可用路径已有自动化覆盖。
-- 对应 E2E 场景在适用 project 通过；未适用必须有契约级原因。
+- 默认以该 ticket 列出的 Vitest 单元、组件、契约或集成测试作为自动化证据；只有 ticket 明确标为“Playwright 用户流程：适用”时，才要求对应场景在适用 project 通过。
 - 实际命令与结果写入 ticket 交付记录，发布时汇总到 `release-evidence.md`。
 - 不把普通执行记录写入设计 `LOG.md`。
 
@@ -707,7 +707,8 @@ npm run smoke:server:open
 - `LOG-0302`：持久 operation journal 与启动恢复。
 - `LOG-0303`：better-sqlite3 generation index。
 - `LOG-0304`：grant-based Electron native bridge。
-- `LOG-0305`：固定 Playwright E2E。
+- `LOG-0305`：历史上的固定 Playwright E2E 决定，已由 `LOG-0309` 收窄。
 - `LOG-0306`：真实仓库 preflight。
 - `LOG-0307`：单一 requirement owner 与精确证据。
 - `LOG-0308`：来源、trash 与 Server 内部目录分域。
+- `LOG-0309`：默认 Vitest，Playwright 仅用于直接用户流程。

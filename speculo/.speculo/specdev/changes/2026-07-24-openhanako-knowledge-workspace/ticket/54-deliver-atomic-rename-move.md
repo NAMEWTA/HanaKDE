@@ -59,7 +59,7 @@
 - `tests/knowledge-refactor-rollback.test.ts`
 - `tests/knowledge-refactor-crash-recovery.test.ts`
 
-**对应端到端场景：** E2E-KW-019
+**Playwright 用户流程：** 适用；运行 E2E-KW-019
 
 ## 验收标准
 

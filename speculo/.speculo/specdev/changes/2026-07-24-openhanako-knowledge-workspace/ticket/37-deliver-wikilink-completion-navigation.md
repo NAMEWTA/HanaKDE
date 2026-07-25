@@ -59,7 +59,7 @@
 - `desktop/src/react/__tests__/editor/knowledge-link-completion.test.ts`
 - `desktop/src/react/__tests__/commands/knowledge-link-navigation.test.ts`
 
-**对应端到端场景：** E2E-KW-009
+**Playwright 用户流程：** 适用；运行 E2E-KW-009
 
 ## 验收标准
 

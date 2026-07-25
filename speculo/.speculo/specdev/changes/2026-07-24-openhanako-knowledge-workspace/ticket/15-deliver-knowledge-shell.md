@@ -59,7 +59,7 @@
 - `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`
 - `tests/knowledge-i18n-a11y-contract.test.ts`
 
-**对应端到端场景：** E2E-KW-001、E2E-KW-023
+**Playwright 用户流程：** 适用；运行 E2E-KW-001、E2E-KW-023
 
 ## 验收标准
 

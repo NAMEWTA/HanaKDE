@@ -59,7 +59,7 @@
 
 - `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx`
 
-**对应端到端场景：** E2E-KW-007
+**Playwright 用户流程：** 适用；运行 E2E-KW-007
 
 ## 验收标准
 

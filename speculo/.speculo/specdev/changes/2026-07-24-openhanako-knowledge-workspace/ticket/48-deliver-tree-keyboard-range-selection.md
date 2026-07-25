@@ -58,7 +58,7 @@
 
 - `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx`
 
-**对应端到端场景：** E2E-KW-015
+**Playwright 用户流程：** 适用；运行 E2E-KW-015
 
 ## 验收标准
 

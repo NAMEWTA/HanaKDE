@@ -2,6 +2,13 @@
 
 本文件冻结 `KW-RULE-TEST`。单元、契约、集成、Electron E2E、Web E2E、性能和平台证据使用同一需求 ownership，不再由 Ticket 57 临时决定测试技术栈。
 
+## 0. Ticket 测试选择规则
+
+- **默认使用 Vitest。** 每个 ticket 运行与自身改动直接相关的 Vitest 单元、组件、契约或集成测试。
+- **Playwright 只验证用户流程。** 只有 ticket 直接交付需要在真实 Browser/Electron 中串联用户操作、界面反馈与跨层结果的流程时，才运行该 ticket 标注的 Playwright 场景及适用 project。
+- 纯逻辑、契约、存储、索引、API、安全、fixture、文档和可由 Testing Library 稳定证明的组件级行为，不运行 Playwright；即使它们被某个发布级 E2E 场景间接覆盖，也以 Vitest 作为 ticket 完成证据。
+- ticket 中的“发布级关联场景”以及 `requirements-traceability.md` 的 E2E 列只表示最终回归可追溯关系，不是该 ticket 的 Playwright 门禁。完整用户流程套件仍由 Ticket 57 汇总运行。
+
 ## 1. 固定技术栈
 
 - Unit/contract/integration：现有 Vitest 4。
@@ -52,7 +59,9 @@ tests/knowledge-workspace-e2e/
 
 LAN/Mobile contract 由 integration test 覆盖；至少 E2E-KW-021 在 `web-open` 使用非 loopback client 模式运行。
 
-## 4. 固定 E2E 场景
+## 4. 固定 Playwright 用户流程场景
+
+下表是发布级用户流程回归集。只有 ticket 明确标为“Playwright 用户流程：适用”时，才在该 ticket 内运行对应场景；标为“发布级关联场景”的 ticket 只运行 Vitest，由直接用户流程 ticket 或 Ticket 57 运行 Playwright。
 
 | ID | 场景 | Projects |
 |---|---|---|
@@ -100,6 +109,7 @@ operation/index/native/provider 必须通过显式依赖注入或测试 hook 提
 - E2E CI 最多 retry 1 次；首次失败仍保留 trace/video/log，并在 release evidence 中标记 flaky，不能只记录重试成功。
 - `trace: retain-on-failure`、`screenshot: only-on-failure`、`video: retain-on-failure`。
 - 每个 worker 使用独立临时端口和目录；Desktop project 默认 workers=1，Web project 可 workers=2。
+- 普通 ticket CI 默认只调度 Vitest；只有 ticket 明确标为 Playwright 适用或执行 Ticket 57 发布回归时，才安装浏览器并调度对应 project。
 
 ## 8. 平台矩阵
 

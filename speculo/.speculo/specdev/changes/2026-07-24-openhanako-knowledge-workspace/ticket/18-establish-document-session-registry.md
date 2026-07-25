@@ -58,7 +58,7 @@
 
 - `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`
 
-**对应端到端场景：** E2E-KW-004、E2E-KW-024
+**Playwright 用户流程：** 适用；运行 E2E-KW-004、E2E-KW-024
 
 ## 验收标准
 
