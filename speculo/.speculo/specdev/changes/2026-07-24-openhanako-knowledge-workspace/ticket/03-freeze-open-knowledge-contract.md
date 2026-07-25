@@ -1,7 +1,7 @@
 # Ticket 03: 冻结 Open 知识协议与资源地址命名
 
 - **被阻塞于：** [`01-freeze-real-repository-baseline.md`](./01-freeze-real-repository-baseline.md)
-- **状态：** 未开始
+- **状态：** 实现中
 
 ## 战略与背景
 
