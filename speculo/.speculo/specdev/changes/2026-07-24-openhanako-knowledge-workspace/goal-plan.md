@@ -16,7 +16,7 @@
 | 冻结实施契约 | 是 | `implementation-contracts.md`、journal/index/test 等契约是唯一可编码方案，但不等同于上述编号合同模式 |
 | 参考权威 | 是 | 当前 HanaKDE 是唯一底座；`silverbullet/` 只按固定矩阵作为可审计技术参考 |
 | 有意偏差 | 否 | 当前没有 `DEV-NN`；任何未来偏差必须先形成并同步正式决定，不能口头接受或静默实现 |
-| Ticket 数量 | 57，复杂模式 | 使用严格 P0→P1→P2 关闭次序、最多 4 个并发 subagent、强制 §9 速查表 |
+| Ticket 数量 | 57，复杂模式 | 使用严格 P0→P1→P2 关闭次序、最多 6 个并发 subagent、强制 §9 速查表 |
 | 执行模型 | Lead + Subagent | 每票执行完整八步协议、双轴审查、worktree 隔离、仅 Lead 操作 Git |
 | ADR / CONTEXT / LOG | 齐全 | 实现前必须读取并保持同一最终设计，不允许选择性忽略 accepted 结论 |
 
@@ -204,7 +204,7 @@ L17  57
 
 ### 4.5 并发规则
 
-1. 全局最多 4 个活跃 subagent；implementer、reviewer 与 fixer 均占用并发槽位。
+1. 全局最多 6 个活跃 subagent；implementer、reviewer 与 fixer 均占用并发槽位。
 2. 每个并发 implementer 使用独立 worktree 和唯一分支 `speculo/specdev/2026-07-24-openhanako-knowledge-workspace-<nn>`。
 3. 两个活跃 implementer 的 file allowlist 必须无交集；共享文件只由 Lead 修改。
 4. ticket 的“交付物”和“实施时需阅读”均不是 allowlist。Lead 必须依据真实接缝、预期 diff 和测试路径生成明确且完整的 allowlist。
@@ -212,6 +212,7 @@ L17  57
 6. `package.json`、`package-lock.json`、共享 contract/errors、composition、主 route、extension registry、主 UI composition、change 文档与状态文件默认 Lead-only。
 7. reviewer 只读；fixer 只能写原 implementer allowlist，扩展范围必须退回 Lead 重批。
 8. 所有 blocker 必须已经合并且在目标 worktree 通过基线门禁，才可派发后继 ticket。
+9. ticket 关闭提交在 `hanakde` 合并并通过合并后门禁后，Lead 自动删除该 ticket 的隔离 worktree 与临时分支；此项已获用户常驻授权，无需逐次确认。
 
 ## §5 Per-Ticket Execution Protocol
 
@@ -329,10 +330,10 @@ npm run smoke:server:open
 
 - Lead 不写 ticket 实现代码；若发生，输出 `DELEGATION_VIOLATION` 并重新派单。
 - implementer、reviewer、fixer 不操作 Git。
-- 每个并发 ticket 使用隔离 worktree；合并后由 Lead 验证、清理 worktree 与临时分支并更新状态。
+- 每个并发 ticket 使用隔离 worktree；合并后由 Lead 验证并自动清理对应 worktree 与临时分支、更新状态，不再逐次请求用户确认。
 - 全部 57 票关闭后执行知识治理收尾，核对 Code、Runtime、Docs、Rules、Memory、Workspace 六个事实面。
 - `silverbullet/` 是用户提供的临时参考源码，任何 agent 不得自动删除；开发完成后由用户自行删除。
-- 清理其他临时计划、调试脚本、旧副本或孤立 worktree 前，仍须先列出目标并取得用户确认。
+- 上述自动清理授权仅覆盖本 change 已完成 ticket 的隔离 worktree 与临时分支；清理其他临时计划、调试脚本、旧副本或不属于本 change 的孤立 worktree 前，仍须先列出目标并取得用户确认。
 
 ## §6 Milestone-Level Acceptance
 
@@ -570,7 +571,8 @@ PROGRESS_SUMMARY closed=<k>/57 active=<nn,...> blocked=<nn,...> waiting_gate=<nn
 - [ ] SilverBullet 版本、许可证、8 个单文件和 3 个目录聚合哈希与矩阵一致。
 - [ ] 每票 Primary ownership 唯一且 57 不拥有 KW-US。
 - [ ] 每次派单载荷包含 I-implement、ADR、CONTEXT、goal-plan、ticket 和固定契约。
-- [ ] 并发最多 4；allowlist 两两不重叠；共享文件 Lead-only。
+- [ ] 并发最多 6；allowlist 两两不重叠；共享文件 Lead-only。
 - [ ] 所有 implementer/reviewer/fixer 都锁定 `gpt-5.6-sol`、medium。
 - [ ] 每个 worktree 基线全绿；仅 Lead 操作 Git。
+- [ ] 每票合并后门禁通过即自动删除对应 worktree 与临时分支。
 - [ ] 每票完成后双轴审查、handoff、实际证据和进度行齐全。
