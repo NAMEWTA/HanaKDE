@@ -115,14 +115,18 @@ CREATE TABLE tasks (
 ) STRICT;
 
 CREATE VIRTUAL TABLE content_fts USING fts5(
-  relative_path UNINDEXED,
-  title,
-  body,
-  tokenize = 'unicode61 remove_diacritics 2'
+  resource_id UNINDEXED,
+  title_fold,
+  path_fold,
+  metadata_fold,
+  body_fold,
+  tokenize = 'trigram case_sensitive 1'
 );
 ```
 
 `meta` 必须包含：`schema_version=1`、`generation_id`、`source_fingerprint`、`created_at_ms`、`last_complete_sequence`、`extractor_contract_version`。
+
+`content_fts.rowid = resources.resource_id`，写入时 `resource_id` 列也保存同值。原始 title、path、metadata/body 展示文本仍保存在基础表；FTS 只保存 `foldSearchText` 结果，不作为展示或知识事实。
 
 ## 4. 身份与写入
 
@@ -131,20 +135,38 @@ CREATE VIRTUAL TABLE content_fts USING fts5(
 - 资源变为超限、不可解码、PDF 或二进制时，必须删除旧正文、结构、链接、标签、任务和 FTS 行，只保留 metadata。
 - 删除或移动事件必须重读磁盘确认；event payload 不是索引事实。
 
-## 5. Schema 版本与迁移
+## 5. 连续子串搜索
+
+共享纯函数：
+
+```ts
+function foldSearchText(value: string): string {
+  return value.normalize('NFC').toLocaleLowerCase('und');
+}
+```
+
+- 不移除变音符，不改写真实路径/正文，不使用平台 locale。
+- 查询最多 512 Unicode code points；空查询拒绝。
+- 查询达到 3 个 Unicode code points：对对应 folded 列使用 FTS5 trigram 产生候选，再以 SQLite `instr(column, foldedQuery) > 0` 逐字段确认。FTS rank 只能排序候选，不能改变是否命中。
+- 查询短于 3 个 code points：在目标 folded 列执行有界、分页、可取消的扫描；不得错误地返回空结果。
+- 默认/最大结果为每来源 50/100；每个资源最多 3 个片段，每片最多 240 code points。
+- cursor 至少绑定 sourceKey、generationId、folded query、filter、sort key；generation 变化时返回明确的 stale cursor，客户端重新查询。
+- 多来源搜索分别查询、分别分页并在客户端按来源分组；不得做跨来源 join。
+
+## 6. Schema 版本与迁移
 
 - V1 不执行 in-place schema migration。
 - `schema_version`、`extractor_contract_version` 或完整性检查不匹配时，当前 generation 标为 `stale` 或 `corrupt`，启动新 generation rebuild。
 - 旧 generation 在新 generation ready 前继续只读服务；不存在可用 generation 时状态为 `unavailable`。
 - 迁移失败不修改 `current.json`。
 
-## 6. Full rebuild 与原子切换
+## 7. Full rebuild 与原子切换
 
 1. 获取 source writer lock，创建 `build-<rebuild-id>.sqlite`。
 2. 记录 rebuild 的 root identity、scope token、开始 sequence 与 extractor contract version。
 3. 通过 ResourceIO 遍历并抽取，每 200 个资源或 50ms 主动 yield；支持 AbortSignal。
-4. 完成后运行 `PRAGMA quick_check`、行数不变量和来源 scope 重验。
-5. 关闭 staging 数据库，fsync 数据库与父目录。
+4. 完成后运行 `PRAGMA wal_checkpoint(TRUNCATE)`，验证返回无 busy frame，再运行 `PRAGMA quick_check`、行数不变量和来源 scope 重验。
+5. 关闭 staging 数据库，确认没有必须随主文件发布的 `-wal`/`-shm` 内容，再 fsync 数据库与父目录。
 6. 把 staging 重命名为新的 `generation-<id>.sqlite`。
 7. 以 `current.json.tmp` 写入新 generation manifest，fsync 后原子 rename 为 `current.json`。
 8. 新查询使用新 generation；已开始的查询完成后释放旧 generation lease。
@@ -152,14 +174,14 @@ CREATE VIRTUAL TABLE content_fts USING fts5(
 
 取消、进程退出或任一步失败不得替换 `current.json`。启动时删除超过 24 小时且不在 manifest 中的 `build-*`。
 
-## 7. 增量更新与并发
+## 8. 增量更新与并发
 
 - 每来源一个 FIFO writer queue；同一 relativePath 的待处理事件折叠为最后一次磁盘重读。
 - debounce 窗口 100ms，上限 500ms；5,000 events/10s 或 sequence gap 触发 reconcile scan。
 - operationId 相同的内部事件合并，但不能跳过 commit 后磁盘重读。
 - active generation 增量写入使用事务；full rebuild 期间增量事件进入 replay queue。新 generation 切换前重放开始 sequence 之后的事件，再做一次 scope 和 sequence 检查。
 
-## 8. Writer lock
+## 9. Writer lock
 
 `writer.lock/` 通过原子 `mkdir` 获取，包含 `owner.json`：pid、hostId、startedAt、heartbeatAt、sourceFingerprint。
 
@@ -169,7 +191,7 @@ CREATE VIRTUAL TABLE content_fts USING fts5(
 - 不同 host 的锁在 5 分钟无 heartbeat 后仍不自动抢占，状态为 `locked`，由用户关闭另一实例或显式修复。
 - 锁不可用时查询旧 generation，禁止增量写和 rebuild。
 
-## 9. Health API
+## 10. Health API
 
 ```ts
 type KnowledgeIndexHealth =
@@ -184,7 +206,7 @@ type KnowledgeIndexHealth =
 
 API 不返回数据库路径、绝对来源路径、正文或 SQLite 原始错误。
 
-## 10. 必测故障
+## 11. 必测故障
 
 - staging 构建取消、磁盘满、rename 失败、manifest 写入失败。
 - active generation 损坏、WAL 损坏、schema mismatch。
@@ -192,3 +214,5 @@ API 不返回数据库路径、绝对来源路径、正文或 SQLite 原始错�
 - rebuild 期间 source 消失或 scope token 改变。
 - Windows 上打开句柄与 rename 行为；多进程 writer lock。
 - 旧正文在类型/编码/大小门禁改变后被彻底移除。
+- NFC/case folding、中文、emoji、路径、变音符、1/2 code-point 短查询与 3+ code-point trigram 候选；最终结果必须符合连续子串而非 token 匹配。
+- checkpoint busy、遗漏 WAL sidecar 与关闭前崩溃不得发布不完整 generation。

@@ -6,8 +6,8 @@
 ## 战略与背景
 
 - **战略：** 把 ResourceEvent 当提示，以磁盘重读、sequence、correlation 和 debounce 驱动最终一致索引。
-- **需求追踪：** KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY
-- **当前现状：** 当前实现接缝位于 `lib/resource-io/resource-watch-registry.ts`、`server/resource-events-ws.ts`、`core/knowledge-workspace/knowledge-index-coordinator.ts`；本 ticket 只扩展这些公开边界。
+- **需求追踪：** KW-US-193, KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY
+- **当前现状：** 当前基座接缝是 `lib/resource-io/resource-watch-registry.ts` 与 `server/resource-events-ws.ts`；`core/knowledge-workspace/knowledge-index-coordinator.ts` 由 Ticket 40 交付，开始本 ticket 前必须存在。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,14 +18,18 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `core/knowledge-workspace/knowledge-index-event-coordinator.ts`
 - `tests/knowledge-index-rebuild.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `lib/resource-io/resource-watch-registry.ts`
 - `server/resource-events-ws.ts`
-- `core/knowledge-workspace/knowledge-index-coordinator.ts`
+- `core/knowledge-workspace/knowledge-index-coordinator.ts`（由 Ticket 40 交付）
 
 ## 固定实施契约
 
@@ -48,7 +52,7 @@
 
 ## 自动化证据
 
-**Primary ownership：** 无直接用户故事；按上列规则域交付
+**Primary ownership：** KW-US-193
 
 **必须创建或更新：**
 
@@ -60,7 +64,7 @@
 ## 验收标准
 
 - [ ] 处理 burst、断线回放 stale、删除、移动、来源不可用和内部事务；可取消全量重建。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [ ] KW-US-193 的 health states、旧 generation 降级读取、按来源重建和 unavailable 行为由重建/恢复测试直接证明。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
 - [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。

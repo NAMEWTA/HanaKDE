@@ -6,7 +6,7 @@
 ## 战略与背景
 
 - **战略：** 实现宽容查询词法、来源分组、资源聚合、组内排序、取消和结果打开。
-- **需求追踪：** KW-RULE-SEARCH
+- **需求追踪：** KW-US-188, KW-US-189, KW-US-190, KW-RULE-SEARCH
 - **当前现状：** 当前实现接缝位于 `lib/resource-io/resource-io.ts`（及 provider 内既有 list/search 能力）与 `desktop/src/react/components/` 导航/结果打开模式；本 ticket 新建知识超级搜索词法与 UI，而非依赖不存在的 `lib/resource-io/search.ts`。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
@@ -18,10 +18,14 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `lib/knowledge-workspace/knowledge-search-query.ts`
 - `desktop/src/react/components/knowledge-workspace/KnowledgeSearch.tsx`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `lib/resource-io/resource-io.ts`
 - `lib/resource-io/types.ts`
@@ -49,7 +53,7 @@
 
 ## 自动化证据
 
-**Primary ownership：** 无直接用户故事；按上列规则域交付
+**Primary ownership：** KW-US-188, KW-US-189, KW-US-190
 
 **必须创建或更新：**
 
@@ -61,7 +65,9 @@
 ## 验收标准
 
 - [ ] main 首组、挂载按会话顺序；不跨来源统一排名；搜索不用于 LinkResolver 回退。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [ ] NFC+locale-neutral lowercase 后执行连续子串：3+ code points 用 trigram 候选加 `instr` 确认，1—2 code points 用有界可取消扫描；短查询不能漏结果。
+- [ ] 每来源 default/max limit 50/100，query ≤512 code points，片段 ≤3×240 code points，cursor 绑定 generation。
+- [ ] KW-US-188/189/190 由搜索 API、Unicode/短查询和标签导航 UI 测试直接证明。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
 - [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。

@@ -1,6 +1,6 @@
 # 需求追踪矩阵
 
-本矩阵是需求 ownership 的可读权威表（本 change 包仅含 Markdown）。每条用户故事只有一个 Primary Owner；supporting ticket 可以复用或提供接缝，但不能替代 owner 实现。Ticket 57 只汇总实际证据。各 `ticket/*` 的「需求追踪」行必须与本表 Primary owner 列一致。
+本矩阵是需求 ownership 的可读权威表。每条用户故事只有一个 Primary Owner；supporting ticket 可以复用或提供接缝，但不能替代 owner 实现。Ticket 57 只汇总实际证据。各 `ticket/*` 的「需求追踪」行必须与本表 Primary owner 列一致。
 
 | Requirement ID | 需求 | Primary owner | Supporting tickets | 自动化证据 | E2E |
 |---|---|---:|---|---|---|
@@ -169,7 +169,7 @@
 | KW-US-163 | 作为受限访问用户，我希望在未认证、无 owner、越出来源或路径校验失败时拒绝资源操作，以便其他会话、来源和本地路径不会被越权访问。 | 03 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 |
 | KW-US-164 | 作为独立 Server 用户，我希望让所有知识能力在没有 Electron 内存的 Node Server 中成立，以便LAN、CLI 和非桌面入口不会依赖主进程状态。 | 03 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 |
 | KW-US-165 | 作为Desktop 用户，我希望只在系统文件选择器、系统剪贴板、系统废纸篓或默认应用等必要场景使用 Electron 原生能力，以便普通业务仍可复用 Server API。 | 51 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts`<br>`desktop/src/react/__tests__/services/knowledge-native-client.test.ts` | E2E-KW-017 |
-| KW-US-166 | 作为多窗口用户，我希望让文档会话、资源事件和 UI 状态不假设只有一个 Renderer 入口，以便多个窗口不会产生隐藏单例冲突。 | 18 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 |
+| KW-US-166 | 作为桌面用户，我希望文档会话、资源事件和 UI 状态在现有生命周期出现多个 Renderer context 时保持 owner/window 隔离，以便不会产生隐藏单例冲突；V1 不因此新增独立浮动知识窗口入口。 | 18 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 |
 | KW-US-167 | 作为国际化用户，我希望在中文、英文、日文、韩文和繁体中文中看到完整新增文案，以便不同语言入口获得一致功能。 | 15 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 |
 | KW-US-168 | 作为键盘与辅助技术用户，我希望使用完整键盘路径、可见焦点、语义标签和合理焦点恢复，以便无需鼠标也能操作资源树、编辑器和对话框。 | 15 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 |
 | KW-US-169 | 作为亮色与暗色主题用户，我希望在不同窗口 surface 和主题下获得清晰对比度，以便界面状态与错误提示始终可读。 | 15 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 |
@@ -177,6 +177,26 @@
 | KW-US-171 | 作为跨平台用户，我希望在 Windows、macOS 和 Linux 上得到一致的路径、大小写、符号链接、废纸篓和快捷键结果，以便同一工作区行为可预测。 | 14 | 09, 13, 17, 40, 41, 42, 43, 44, 45, 46 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 |
 | KW-US-172 | 作为开放版用户，我希望在 open composition 中只使用开放实现与稳定协议，以便开放构建不会动态绕过边界。 | 03 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 |
 | KW-US-173 | 作为完整产品用户，我希望通过 composition root 注入完整产品差异而不改变共享契约，以便open/full 版本保持兼容。 | 03 | 09, 13, 14, 17, 40, 41, 42, 43, 44, 45, 46 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 |
+| KW-US-174 | 作为使用页面属性的作者，我希望安全编辑唯一顶层键且值为 JSON 标量或一维 JSON 标量数组的 Frontmatter 字段，并保持未知字段、注释、顺序、换行和复杂 YAML 原文；无法无损投影时回到源码模式。 | 25 | 11, 12, 19, 41 | `tests/frontmatter-roundtrip.test.ts` | 契约/集成 |
+| KW-US-175 | 作为标签用户，我希望页面正文与 Frontmatter 标签按来源解析并在同一页面状态中展示，以便标签不会跨来源合并。 | 26 | 11, 25, 41, 44 | `tests/knowledge-tags-tasks.test.ts` | E2E-KW-013 |
+| KW-US-176 | 作为任务用户，我希望查看并切换当前页面的标准 Markdown task，且每次切换只修改同一文档缓冲区并可单步撤销。 | 26 | 11, 12, 19, 41 | `tests/knowledge-tags-tasks.test.ts` | 契约/集成 |
+| KW-US-177 | 作为标准 Markdown 用户，我希望内部文件链接按包含页面目录解析并被证明仍在同一来源，以便标准链接与 Wikilink 具有一致的安全边界。 | 24 | 11, 23, 37, 54 | `tests/knowledge-link-resolver.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-link-field.test.ts` | E2E-KW-009 |
+| KW-US-178 | 作为作者，我希望在明确的来源和目录中新建 `.md` Page，名称冲突时不静默覆盖。 | 50 | 10, 47, 49 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 |
+| KW-US-179 | 作为文件管理用户，我希望在明确的来源和目录中新建文件夹，非法名称、越界或冲突返回可修正错误。 | 50 | 10, 47, 49 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 |
+| KW-US-180 | 作为 Desktop 用户，我希望通过系统文件/目录选择器把外部资源导入明确目标，而 Renderer 永远不接收本机绝对路径。 | 51 | 03, 06, 10, 14, 50 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts` | E2E-KW-017 |
+| KW-US-181 | 作为批量导入用户，我希望对文件冲突选择跳过、保留两者或替换，对目录确定性合并，并获得资源级成功/失败及仅重试失败项。 | 51 | 06, 10, 14, 50 | `tests/knowledge-import.test.ts` | E2E-KW-017 |
+| KW-US-182 | 作为资源树用户，我希望在当前会话内复制并粘贴文件或目录，冲突时使用确定性后缀且保持每个副本字节原样。 | 52 | 06, 10, 38, 47 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 |
+| KW-US-183 | 作为剪切用户，我希望只在同一来源内粘贴为移动；跨来源剪切明确拒绝或经我确认转为复制，绝不隐式删除原资源。 | 52 | 06, 10, 38, 47 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 |
+| KW-US-184 | 作为拖拽用户，我希望同来源拖拽表达移动、跨来源拖拽表达复制，并在提交前看到目标与动作。 | 53 | 06, 10, 38, 47, 48 | `tests/knowledge-drag-contract.test.ts`<br>`desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 |
+| KW-US-185 | 作为大型树用户，我希望拖拽拥有有效目标提示、800ms 悬停展开、边缘自动滚动、取消和完成后确定的选择/焦点。 | 53 | 47, 48, 49 | `desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 |
+| KW-US-186 | 作为重构用户，我希望同来源 rename/move 对主资源和全部已计划已保存链接形成可回滚事务，post-commit session/index 投影失败不会撤销已提交文件。 | 54 | 10, 11, 23, 43 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 |
+| KW-US-187 | 作为知识检索用户，我希望每个来源索引只从已保存磁盘资源构建并可独立丢弃重建，以便缓存不成为第二事实源。 | 40 | 41, 42, 43 | `tests/knowledge-index-store.test.ts`<br>`tests/knowledge-index-schema-migration.test.ts` | E2E-KW-013, E2E-KW-014 |
+| KW-US-188 | 作为搜索用户，我希望从一个入口搜索全部当前来源，并按 `main`、挂载顺序分组且每来源独立分页。 | 45 | 40, 41, 42, 43, 44 | `tests/knowledge-search-query.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 |
+| KW-US-189 | 作为 Unicode 内容用户，我希望关键词、连续短语与独立 `OR` 按 NFC+大小写折叠后的连续子串匹配，短查询也不因加速器限制而漏结果。 | 45 | 40, 44 | `tests/knowledge-search-query.test.ts` | E2E-KW-013 |
+| KW-US-190 | 作为标签导航用户，我希望点击标签只在当前来源发起预填搜索，并清晰显示不可编辑的来源上下文。 | 45 | 26, 44 | `desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 |
+| KW-US-191 | 作为正在编辑的用户，我希望当前大纲和出站引用实时读取未保存 buffer，以便导航反映眼前内容。 | 46 | 11, 23, 44 | `desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 |
+| KW-US-192 | 作为引用追踪用户，我希望反向引用只读取当前来源已保存索引，以便未保存或其他来源内容不会产生虚假边。 | 46 | 23, 40, 41, 44 | `tests/knowledge-query-api.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 |
+| KW-US-193 | 作为索引故障用户，我希望看到 building/stale/degraded/corrupt/locked/unavailable 状态并可按来源重建，同时在可用时继续读取旧 generation。 | 43 | 40, 44, 45 | `tests/knowledge-index-rebuild.test.ts`<br>`tests/knowledge-index-event-coordinator.test.ts` | E2E-KW-014 |
 
 ## 冻结规则域
 

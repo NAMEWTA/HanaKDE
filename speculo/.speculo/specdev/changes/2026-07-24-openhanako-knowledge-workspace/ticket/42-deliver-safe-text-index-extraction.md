@@ -7,7 +7,7 @@
 
 - **战略：** 按内容门禁抽取确定编码且不超限的安全文本；二进制、PDF 和主动内容只索引元数据。
 - **需求追踪：** KW-US-157, KW-RULE-INDEX
-- **当前现状：** 当前实现接缝位于 `lib/knowledge-workspace/resource-open-policy.ts`、`desktop/src/react/utils/file-kind.ts`；本 ticket 只扩展这些公开边界。
+- **当前现状：** 当前基座接缝是 `desktop/src/react/utils/file-kind.ts`；resource open policy 由 Ticket 17 交付，开始本 ticket 前必须存在。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,12 +18,16 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `lib/knowledge-workspace/safe-text-index-extractor.ts`
 - `tests/safe-text-index-extractor.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
 
-- `lib/knowledge-workspace/resource-open-policy.ts`
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
+
+- `lib/knowledge-workspace/resource-open-policy.ts`（由 Ticket 17 交付）
 - `desktop/src/react/utils/file-kind.ts`
 
 ## 固定实施契约
@@ -43,6 +47,7 @@
 2. Renderer 不访问 Node 文件系统；远程 DTO、日志和 release evidence 不含绝对路径、正文或凭证。
 3. 测试使用隔离临时 HANA_HOME、workspace、来源和端口，不依赖开发机固定路径或网络。
 4. 实现不得引入未在 ADR/实施契约冻结的新存储引擎、IPC path surface、恢复状态或 E2E 框架。
+5. extractor 必须先 stat/content-gate 后 read；10 MiB+1 byte 的 spy provider 测试必须证明未读取正文。
 5. 本 ticket 新增 UI 同时交付 zh-CN、zh-TW、en、ja、ko、键盘、ARIA、focus、亮暗主题和窄布局。
 
 ## 自动化证据

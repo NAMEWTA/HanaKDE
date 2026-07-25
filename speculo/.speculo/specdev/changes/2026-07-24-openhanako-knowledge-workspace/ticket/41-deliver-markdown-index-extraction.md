@@ -7,7 +7,7 @@
 
 - **战略：** 从已保存 Markdown 抽取标题、属性、标签、任务、标题结构和同源链接边。
 - **需求追踪：** KW-RULE-INDEX
-- **当前现状：** 当前实现接缝位于 `lib/knowledge-workspace/markdown-knowledge-ir.ts`、`lib/knowledge-workspace/frontmatter-projection.ts`；本 ticket 只扩展这些公开边界。
+- **当前现状：** Markdown IR 由 Ticket 11、Frontmatter projection 由 Ticket 25 交付；它们是 blocker 产物，不是当前基座文件。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,13 +18,17 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `lib/knowledge-workspace/markdown-index-extractor.ts`
 - `tests/markdown-index-extractor.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
 
-- `lib/knowledge-workspace/markdown-knowledge-ir.ts`
-- `lib/knowledge-workspace/frontmatter-projection.ts`
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
+
+- `lib/knowledge-workspace/markdown-knowledge-ir.ts`（由 Ticket 11 交付）
+- `lib/knowledge-workspace/frontmatter-projection.ts`（由 Ticket 25 交付）
 
 ## 固定实施契约
 

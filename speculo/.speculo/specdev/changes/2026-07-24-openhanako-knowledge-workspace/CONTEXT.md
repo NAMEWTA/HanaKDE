@@ -1,14 +1,15 @@
 # OpenHanako 知识工作区上下文与领域词汇（唯一现行版）
 
-本文件是整个 `speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace` 的基础语义事实层。代码命名、DTO、UI 文案、Spec、架构图和 ticket 必须使用这里定义的概念，不能自行创造同义但边界不同的术语。
+本文件恢复本 change 最终讨论形成的完整领域语义：核心词汇用于跨层命名，细粒度词汇与 `_Avoid_` 保存已经接受的行为边界和禁止项。产品规则见 [`spec.md`](./spec.md)，架构决定见 [`ADR.md`](./ADR.md)，完整结论与理由见 [`LOG.md`](./LOG.md)。
 
 ## 使用与一致性规则
 
 1. “核心规范词汇”提供当前仓库和跨层契约应优先使用的名称。
-2. “完整领域词汇”保留全部 318 个细粒度定义、行为边界和 `_Avoid_`，不是历史附录；它们为核心词汇提供完整产品语义。
-3. 同一概念存在旧称、细分称谓或界面称谓时，`规范化关系` 指向核心名称。名称归一不删除原定义中的行为、限制或错误边界。
-4. `ADR.md` 决定架构与跨领域约束；本文件定义这些决定使用的语义。`LOG.md` 保存理由。三者必须同步修改。
-5. 本地工程路径统一以仓库根目录为基准，SilverBullet 参考固定为 `silverbullet/`。
+2. “完整领域词汇与行为边界”保留 318 个细粒度定义及 320 条 `_Avoid_`；它们不是草稿或已失效过程记录，而是 accepted LOG 的领域投影。
+3. “实现精化术语”补充 2026-07-25 review 中为当前 HanaKDE 基座冻结的身份、事务、搜索、transfer 与原生能力词义；它只收紧编码边界，不推翻原有产品决定。
+4. 同一概念存在旧称、细分称谓或界面称谓时，`规范化关系` 指向核心名称。名称归一不删除原定义中的行为、限制或错误边界。
+5. ADR、CONTEXT、accepted LOG、Spec 与实施契约不得互相覆盖矛盾；发现冲突必须同步修正。具体交互由 accepted LOG/Spec 验收，精确 schema、算法和故障边界由实施契约编码。
+6. 本地工程路径统一以仓库根目录为基准，SilverBullet 参考固定为 `silverbullet/`。
 
 ## 核心规范词汇
 
@@ -88,7 +89,7 @@
 
 **悬空未保存文档**：来源丢失、资源被外部移除或 identity 暂时失效后，仍保留在 Renderer 中且尚未保存的文档会话。
 
-**同源重构**：同一来源内 rename/move 时协调文件、链接、session identity 和索引的事务。
+**同源重构**：同一来源内 rename/move 的单一用户操作。持久事务边界包含主资源与已计划的同源链接文件；session identity、ResourceEvent 与索引是提交后必须幂等收敛、失败可重试的投影。
 
 **跨来源复制**：把正文或字节原样复制到另一来源，不重写副本内部链接。
 
@@ -132,6 +133,29 @@
 **Implementation Preflight**：实现前对 Git、Node、package、关键接缝、依赖和 SilverBullet hashes 的可执行检查。
 
 **Server 内部系统命名空间**：`<HANA_HOME>/knowledge-workspace/` 下的索引、journal、source binding 和证据目录，不属于用户来源或知识内容。
+
+## 实现精化术语
+
+**Provider Root Identity**：provider 在 Server 内给出的 `identityNamespace`、不透明根身份与 scope 证明，用于判定 same、ancestor、descendant、disjoint 或 unknown；不得进入远程 DTO、Renderer 或日志。
+_Avoid_: 用 provider ID、用户输入路径字符串或 displayName 代替真实根关系证明
+
+**文件事实事务边界**：复合 mutation 中必须一起成功或一起回滚的主资源和已计划用户文件写入。COMMITTED 后的 session、事件与索引更新是可重试投影，不反向撤销磁盘事实。
+_Avoid_: 把 Renderer 状态、ResourceEvent 或 SQLite 瞬时更新宣称为跨层全局原子事务
+
+**跨 Provider Transfer**：经 ResourceIO 在两个已授权 provider scope 之间以有界流、目录 staging 和原子发布完成的字节复制；它不向 Renderer 暴露路径，也不建立跨来源知识关系。
+_Avoid_: Renderer 中转文件字节、全文件入内存、跟随 symlink、半目录发布、复制后自动删除源
+
+**搜索折叠文本（foldSearchText）**：只为搜索匹配生成的 NFC 加 locale-neutral lowercase 派生文本；不移除变音符，也不改变真实文件名、地址、正文或展示字符。
+_Avoid_: accent folding、路径身份大小写折叠、把索引折叠文本写回知识文件
+
+**Native Bridge Credential**：Desktop-owned Server 每次启动生成、只在 Electron Main 与本地 Server 之间使用的 Main-only 凭据；它与一次性 NativeResourceGrant 分工，永不进入 Renderer、preload DTO、事件或日志。
+_Avoid_: 复用 Renderer 可见普通 token、把凭据暴露为 IPC getter、用长期凭据替代一次性资源授权
+
+**认证 Principal**：由 Server 已认证 Hono context 提供的 owner/user/studio 身份。公共 body 中同名或近似身份字段必须被 schema 拒绝，不能覆盖认证上下文。
+_Avoid_: 信任客户端提交的 principal、ownerId、userId 或 studioId
+
+**多 Renderer Context 隔离**：Server、session、订阅、异步投影和 native grant 对现有桌面生命周期、异常恢复或自动化产生的多个 Renderer context 保持 owner/window 隔离。
+_Avoid_: 把并发安全要求解释成 V1 新增独立浮动知识窗口、标签脱离窗口或“新建知识窗口”产品入口
 
 ## 完整领域词汇与行为边界
 
@@ -251,7 +275,7 @@ _Avoid_: 书桌、独立工作台、Agent 工作区
 _Avoid_: 工作台文件、知识文件
 
 **资源地址重构**：
-在同一来源内移动或重命名页面、资产或目录，并将该来源内所有受影响资源地址、可确定内部引用、打开会话身份和来源索引作为同一用户操作同步更新。目录操作包含全部后代；不得读取或修改其他来源。
+在同一来源内移动或重命名页面、资产或目录，并把全部后代、可确定内部引用、打开会话身份和来源索引纳入同一操作计划。主资源与全部已计划链接文件构成持久 rollback 边界；COMMITTED 后再幂等收敛会话身份、ResourceEvent 与来源索引，投影失败不得回滚已经提交的用户文件。不得读取或修改其他来源。
 规范化关系：核心术语归一到「同源重构」；本词条继续提供完整行为边界与 _Avoid_ 约束。
 _Avoid_: 跨来源复制、普通复制、仅处理页面、全局字符串替换、其他来源链接修改
 

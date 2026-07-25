@@ -18,11 +18,15 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `lib/knowledge-workspace/knowledge-operation-plan.ts`
 - `core/knowledge-workspace/knowledge-operation-coordinator.ts`
 - `tests/knowledge-operation-tracer.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `lib/resource-io/resource-io.ts`
 - `lib/resource-io/types.ts`
@@ -34,7 +38,7 @@
 
 ## 实施顺序
 
-1. 实现 UUIDv7 operationId、canonical request hash 与 15 分钟 TTL。
+1. 使用 `crypto.randomUUID()` 生成 UUIDv4 operationId；按契约实现递归排序 JSON 的 SHA-256 request hash 与 15 分钟 TTL。
 2. 实现 journal 原子写、状态机、地址锁和幂等 commit。
 3. 在 mutation route 注册前运行 recovery barrier。
 4. 提供命名 failure injection，覆盖 rollback failure 与 RECOVERY_REQUIRED。

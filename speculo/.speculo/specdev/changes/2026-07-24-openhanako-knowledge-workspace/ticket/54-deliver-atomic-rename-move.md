@@ -5,28 +5,32 @@
 
 ## 战略与背景
 
-- **战略：** 扩展操作协调器，预览目录后代、同源引用、打开会话和索引变更并原子提交/回滚。
-- **需求追踪：** KW-US-026, KW-US-027, KW-RULE-OP, KW-RULE-SEC, KW-RULE-REFACTOR, KW-RULE-RECOVERY
-- **当前现状：** 当前实现接缝位于 `lib/resource-io/resource-io.ts`、`core/knowledge-workspace/knowledge-operation-coordinator.ts`、`lib/knowledge-workspace/markdown-knowledge-ir.ts`；本 ticket 只扩展这些公开边界。
+- **战略：** 扩展操作协调器，预览目录后代、同源引用、打开会话和索引影响；原子提交/回滚持久文件事实，并在 COMMITTED 后幂等收敛会话与索引投影。
+- **需求追踪：** KW-US-026, KW-US-027, KW-US-186, KW-RULE-OP, KW-RULE-SEC, KW-RULE-REFACTOR, KW-RULE-RECOVERY
+- **当前现状：** 当前基座接缝是 `lib/resource-io/resource-io.ts`；operation coordinator 由 Ticket 10、Markdown IR 由 Ticket 11 交付，开始本 ticket 前必须存在。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
 
 | IN | REUSE | OUT |
 |---|---|---|
-| 扩展操作协调器，预览目录后代、同源引用、打开会话和索引变更并原子提交/回滚。 | `lib/resource-io/resource-io.ts`<br>`core/knowledge-workspace/knowledge-operation-coordinator.ts`<br>`lib/knowledge-workspace/markdown-knowledge-ir.ts` | 未列入本 ticket 的后续功能；修改生成 bundle；创建平行文件系统、编辑器内核或私有 route 捷径 |
+| 扩展操作协调器，预览目录后代、同源引用、打开会话和索引影响；原子提交/回滚持久文件事实，并在 COMMITTED 后幂等收敛会话与索引投影。 | `lib/resource-io/resource-io.ts`<br>`core/knowledge-workspace/knowledge-operation-coordinator.ts`<br>`lib/knowledge-workspace/markdown-knowledge-ir.ts` | 未列入本 ticket 的后续功能；修改生成 bundle；创建平行文件系统、编辑器内核或私有 route 捷径 |
 
 ## 交付物
+
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
 
 - `lib/knowledge-workspace/markdown-link-rewriter.ts`
 - `core/knowledge-workspace/knowledge-refactor-service.ts`
 - `tests/knowledge-refactor-rollback.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `lib/resource-io/resource-io.ts`
-- `core/knowledge-workspace/knowledge-operation-coordinator.ts`
-- `lib/knowledge-workspace/markdown-knowledge-ir.ts`
+- `core/knowledge-workspace/knowledge-operation-coordinator.ts`（由 Ticket 10 交付）
+- `lib/knowledge-workspace/markdown-knowledge-ir.ts`（由 Ticket 11 交付）
 
 ## 固定实施契约
 
@@ -34,10 +38,10 @@
 
 ## 实施顺序
 
-1. 从 journal PREPARED 状态执行主资源、链接、session、event、index 步骤。
-2. 每个副作用前后持久化 intent/outcome，并支持重启探测。
-3. rollback 逆序执行且不覆盖外部新修改。
-4. 所有 named crash points 在重启后证明 committed/rolled-back/recovery-required。
+1. 从 PREPARED 执行主资源与已保存链接写入；每个文件事实副作用前后持久化 intent/outcome。
+2. 文件事实全部成功后写 COMMITTED，再幂等执行 session rebind、event 与 index invalidation/convergence。
+3. COMMITTED 前 rollback 逆序执行且不覆盖外部新修改；COMMITTED 后投影失败只重试/降级，绝不回滚用户文件。
+4. 所有 named crash points 在重启后证明 committed/rolled-back/recovery-required，并验证 post-commit 投影失败边界。
 
 ## 实现约束
 
@@ -48,7 +52,7 @@
 
 ## 自动化证据
 
-**Primary ownership：** KW-US-026, KW-US-027
+**Primary ownership：** KW-US-026, KW-US-027, KW-US-186
 
 **必须创建或更新：**
 
@@ -59,7 +63,7 @@
 
 ## 验收标准
 
-- [ ] 计划带版本戳；dirty session 先解决；内部 watcher 关联；失败恢复文件、链接、session identity 和索引。
+- [ ] 计划带版本戳；dirty session 先解决；文件/链接失败可回滚；COMMITTED 后 session/event/index 失败不回滚磁盘事实且可恢复收敛。
 - [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。

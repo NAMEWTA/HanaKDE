@@ -5,7 +5,7 @@ Ticket 57 只汇总已实现证据，不首次实现功能，也不把普通运�
 ## 1. 文档与 ownership
 
 - [ ] [`README.md`](./README.md) 文档核对清单完成；包内 md 相对链接无断链。
-- [ ] [`requirements-traceability.md`](./requirements-traceability.md) 的 173 条 story 均有唯一非 57 Primary owner。
+- [ ] [`requirements-traceability.md`](./requirements-traceability.md) 的 193 条 story 均有唯一非 57 Primary owner。
 - [ ] 每个 owner ticket 的状态为已完成，ticket 内实际命令和证据已填写。
 - [ ] 22 个 `KW-RULE-*` 均有 implementing tickets 和实际证据。
 - [ ] 无 wildcard ownership、占位、broken link、依赖环或 map/ticket 差异。
@@ -37,7 +37,7 @@ Ticket 57 只汇总已实现证据，不首次实现功能，也不把普通运�
 - [ ] `E2E-KW-001`—`E2E-KW-024` 均有项目/平台结果。
 - [ ] Desktop Full、独立 Open、独立 Full、LAN/Mobile contract。
 - [ ] macOS、Windows、Linux 文件系统矩阵。
-- [ ] 两个 Renderer window 并发与 native grant 隔离。
+- [ ] 自动化创建两个 Renderer context 验证并发与 native grant 隔离；不验收浮动窗口产品入口。
 
 ## 5. 数据与失败
 
@@ -53,7 +53,7 @@ Ticket 57 只汇总已实现证据，不首次实现功能，也不把普通运�
 - [ ] keyboard、focus、ARIA、screen reader。
 - [ ] light/dark/high contrast/narrow layout。
 - [ ] performance absolute + relative budget 原始 JSON。
-- [ ] TM-001—TM-018 恶意 workspace 矩阵。
+- [ ] TM-001—TM-020 恶意 workspace 矩阵。
 - [ ] 依赖许可证与最终第三方清单。
 
 所有结果写入 `release-evidence.md`；未执行必须保持“未执行”，不能标为通过。

@@ -1,16 +1,15 @@
 # 知识工作区局部工程规则
 
-## 权威顺序
+## 权威关系
 
-1. `ADR.md`：架构、产品边界、安全、事务和事实来源的基础决定。
-2. `CONTEXT.md`：所有文档和代码必须使用的领域语义与禁止混淆项。
-3. `LOG.md`：决定的完整理由、取舍和验收语境；不得被当作运行日志。
-4. `spec.md`：从前三者派生的产品行为、Requirement ID 和验收。
-5. `architecture.md` 与实施契约文档：把基础决定映射到当前代码模块、持久化、恢复和测试。
-6. 本文件与 `OPENHANAKO_AI_RULES.md`：工程实施纪律。
-7. `tickets-map.md` 与 `ticket/`：执行切片，不得反向改变上位事实。
+1. `LOG.md` 中 `Status: accepted` 的条目：用户已确认且当前有效的完整产品决定、具体场景与禁止边界。
+2. `ADR.md`：保留稳定编号的架构、安全、事实来源及已提升决定；不得删除或复用既有编号。
+3. `CONTEXT.md`：所有文档和代码共用的核心词义、细粒度定义与 `_Avoid_`。
+4. `spec.md`：把 accepted 决定规范化为产品行为、Requirement ID 与验收。
+5. `architecture.md` 与实施契约：上述决定的唯一可编码方案；本文件约束工程实施纪律。
+6. `requirements-traceability.md`、`tickets-map.md` 与 `ticket/`：归属和执行切片，不得缩减已确认范围。
 
-若下游文档与基础事实层冲突，应先同步修正 `ADR.md`、`CONTEXT.md`、`LOG.md`，再更新所有派生文档；不得只在 ticket 或代码注释中创造例外。
+上述文件必须表达同一最终设计；不得用抽象“优先级”选择性忽略 accepted LOG。发现冲突时必须同步修正所有受影响文档，不得只在 ticket、代码注释或 PR 描述中创造永久例外。普通执行结果不能写入 LOG。
 
 ## 必须复用
 
@@ -27,7 +26,7 @@
 
 ```text
 shared/knowledge-*.ts                    stable DTO/schema/errors
-lib/knowledge-workspace/                 pure domain/parser/index structures
+lib/knowledge-workspace/                 platform-neutral domain/parser/persistence adapters
 core/knowledge-workspace/                lifecycle/coordinator/facade
 server/routes/knowledge-workspace.ts     HTTP boundary
 desktop/src/react/components/knowledge-workspace/
@@ -44,10 +43,13 @@ desktop/src/react/__tests__/              Renderer/CM6/UI
 
 - 不重定义 `ResourceRef`；知识 DTO 使用 `KnowledgeResourceAddress`。
 - 所有 route body 和 response 有 schema；Server 以 `unknown` 接收外部数据。
+- principal、owner 与 scope 只从认证后的 Hono context 派生；schema 拒绝 body 中的 `principal`、`userId`、`studioId` 等身份字段。
 - DTO、Zustand 和日志不含绝对路径、正文、凭证、EditorView、DOM 或 native handle。
 - 普通 CRUD 走 ResourceIO；复合操作走 KnowledgeOperationCoordinator。
+- 跨 provider copy/import 走 ResourceIO `transfer`：有界流式传输、目标同级 staging、目录整体发布，不经 Renderer 或全量内存 buffer 中转。
 - route 只调用 Engine public facade，不访问 manager 私有字段。
 - Open 代码不得动态 import、路径拼接或反射加载 Full 实现。
+- 新 Knowledge 错误码只用 lowercase snake_case；HTTP status、错误码和 retryable 必须由共享 schema 固定。
 
 ## Markdown 与 CM6
 
@@ -61,19 +63,22 @@ desktop/src/react/__tests__/              Renderer/CM6/UI
 - 地址规范化只执行一次；provider 再做 realpath/scope 校验。
 - 跨来源复制保持正文/字节原样；同源 rename/move 才能重写引用。
 - plan/commit 之间必须检查 expected versions、来源状态和目标冲突；所有复合 mutation 还必须持久化 Operation Journal 并支持启动恢复。
-- watcher 事件携带 correlation；索引在 commit 后重读磁盘。索引只使用 `index-store-contract.md` 的 better-sqlite3 schema/generation，不得自选方案。
+- 同源重构的 rollback 边界只含主资源和已保存链接改写；event、session rebind 与 index 是 `COMMITTED` 后可重试投影，不得因派生投影失败回滚磁盘事实。
+- watcher 事件携带 correlation；索引在 commit 后重读磁盘。索引只使用 `index-store-contract.md` 的 better-sqlite3 schema/generation 和连续子串算法，不得自选方案。
 - 数据变更测试必须有失败注入、rollback/checkpoint 和部分完成断言。
 
 ## 安全
 
 - symlink/junction、UNC/盘符、大小写、Unicode normalization、控制字符、TOCTOU 和超大资源使用真实临时目录测试。
-- HTML/SVG/Mermaid/URI 不执行主动内容；外链只允许明确协议和用户动作。
+- 打开、embed 与索引必须先 stat 再读取；超过 10 MiB 的文本不得先整体载入内存后才拒绝。
+- HTML/SVG/Mermaid/URI 不执行主动内容；Mermaid 丢弃 `bindFunctions`、消毒 SVG、阻止 stale result；外链只允许明确协议和用户动作。
 - `.trash`、索引目录和 manifest 必须防外部替换和越界。
 - 日志只允许稳定错误码和脱敏地址。
+- Main-only route 使用只存在于 Server/Main 的 `nativeBridgeToken`，不能使用 Renderer 已知的普通 loopback token 证明 Main 身份。
 
 ## UI
 
-每个 UI ticket 同时完成 zh-CN、zh-TW、en、ja、ko，键盘路径、ARIA、focus、亮暗主题、窄布局和取消/错误状态。最终发布 ticket 不补做遗漏。
+每个 UI ticket 同时完成 zh-CN、zh-TW、en、ja、ko，键盘路径、ARIA、focus、亮暗主题、窄布局和取消/错误状态。每个 ticket 的“交付物”只列主要交付物；同范围的实现、类型、schema、fixture、测试、i18n 与文档即使未逐项列名，也必须随该 ticket 完成。最终发布 ticket 不补做遗漏。
 
 ## 验证
 
@@ -88,6 +93,6 @@ desktop/src/react/__tests__/              Renderer/CM6/UI
 
 - Ticket 01 必须通过 implementation-preflight，并引入固定 Playwright 依赖和 scripts。
 - Provider 根 identity 不能证明 disjoint 时拒绝来源。
-- Knowledge native IPC 不接受任意绝对路径，只消费一次性 grant。
+- Knowledge native IPC 不接受任意绝对路径，只消费一次性 grant；Main-only HTTP route 还必须验证独立 native bridge credential。
 - 每个 KW-US 只由 `requirements-traceability.md`（及 ticket「需求追踪」行）指定的 primary owner 实现；57 不兜底。
 - 发布证据写 `release-evidence.md`，普通执行结果不写设计 `LOG.md`。

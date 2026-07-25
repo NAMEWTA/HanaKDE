@@ -6,7 +6,7 @@
 ## 战略与背景
 
 - **战略：** 解析可安全编辑的顶层属性，同时原样保留未知嵌套 YAML、注释、顺序和换行。
-- **需求追踪：** KW-RULE-MARKDOWN
+- **需求追踪：** KW-US-174, KW-RULE-MARKDOWN
 - **当前现状：** 当前实现接缝位于 `package.json`、`desktop/src/react/editor/md-decorations.ts`；本 ticket 只扩展这些公开边界。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
@@ -18,11 +18,15 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `lib/knowledge-workspace/frontmatter-projection.ts`
 - `desktop/src/react/editor/frontmatter-field.ts`
 - `tests/frontmatter-roundtrip.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `package.json`
 - `desktop/src/react/editor/md-decorations.ts`
@@ -46,10 +50,11 @@
 3. 测试使用隔离临时 HANA_HOME、workspace、来源和端口，不依赖开发机固定路径或网络。
 4. 实现不得引入未在 ADR/实施契约冻结的新存储引擎、IPC path surface、恢复状态或 E2E 框架。
 5. 本 ticket 新增 UI 同时交付 zh-CN、zh-TW、en、ja、ko、键盘、ARIA、focus、亮暗主题和窄布局。
+6. 复用现有 `js-yaml` 仅做语义校验；可视属性仅接受唯一顶层字符串键及 JSON 标量/一维 JSON 标量数组值，并以源码范围 patch 保留未触及字节。directive、多文档、重复键、merge、custom tag、anchor/alias、嵌套结构、block scalar、无效 YAML 或范围不确定时，整个属性区回到源码模式。
 
 ## 自动化证据
 
-**Primary ownership：** 无直接用户故事；按上列规则域交付
+**Primary ownership：** KW-US-174
 
 **必须创建或更新：**
 
@@ -60,7 +65,8 @@
 ## 验收标准
 
 - [ ] round-trip 矩阵覆盖注释、anchors、嵌套、重复键和无效 YAML；无法安全编辑时退回源码。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [ ] KW-US-174 由 IR 与编辑器投影测试直接证明；复杂/未知 YAML 无法无损投影时保留原文并回到源码模式。
+- [ ] 新增、修改和删除可投影字段分别只形成一个 CM6 transaction；该 transaction 保持未触及字段、独立注释、顺序、现有 LF/CRLF 序列和正文，删除字段不连带删除相邻独立注释；最终保存对混合换行只执行 LOG-0065 的统一规范化。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
 - [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。

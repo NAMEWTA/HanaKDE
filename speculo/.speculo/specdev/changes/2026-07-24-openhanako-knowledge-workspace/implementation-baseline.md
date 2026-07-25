@@ -14,6 +14,8 @@
 
 本表是本 change 的审计基线，不替代真实仓库检查。当前分支、HEAD、版本、关键接缝与工作树状态必须在 Ticket 01 开始时于仓库根当场人工确认；检查只读，绝不清理、reset、checkout 或覆盖用户修改。
 
+2026-07-25 文档 review 的只读审计确认：当前 HEAD 为 `a7ff307c7627`，上表 ancestor/merge-base 成立，关键接缝存在；工作树当时已有 83 个非 clean 条目，属于用户现有工作，不是本 change 可清理的对象。审计 shell 是 Node `v22.22.3`，不满足仓库 `>=24.12.0 <25`，且当前 `better-sqlite3` binary 使用 ABI 137、Node 22 使用 ABI 127，因此本轮**没有**把 typecheck/build/test/FTS 记为已通过证据。Ticket 01 必须先切换 Node 24 并重新安装/重建依赖，再运行门禁。
+
 ## 真实调用图
 
 ```text
@@ -43,7 +45,7 @@ Resource events
 
 | 领域 | 已有能力 | 本 change 必须补齐 |
 |---|---|---|
-| ResourceIO | stat/read/write/expected-version/edit/mkdir/delete/list/search/materialize/copy/rename/move/trash/watch | HTTP copy/mkdir/delete；知识地址适配；operation correlation |
+| ResourceIO | stat/read/write/expected-version/edit/mkdir/delete/list/search/materialize/copy/rename/move/trash/watch | HTTP copy/mkdir/delete；provider-neutral bounded-stream transfer；知识地址适配；operation correlation；route principal 只来自认证 context |
 | Mount | Studio registry、MountProvider、scope/capabilities | main/附加来源会话模型；根不重叠；历史 key |
 | Desk | 真树、排序、筛选、多选、拖拽、rename/move/create/safeDelete、watch refresh | 兼容 facade；Knowledge 独立状态 |
 | UI persistence | tabs、expanded paths、selection、reading positions 按 workspace 保存 | 保留 Desk；Knowledge 明确不恢复 |
@@ -59,11 +61,15 @@ Resource events
 1. `ResourceRef` 已存在，不能再用于 `{sourceKey, relativePath}`。
 2. `/api/desk/*` 是 Full-only；`/api/mobile/workbench/*` 仍为 evidence-needed。
 3. `ResourceIO.copy` 对不同 kind 拒绝，local-file → mount 不能作为跨来源复制实现。
-4. `MountProvider.copy` 可在 mount kind 内复制；rename/move 强制同 mount。
-5. ResourceIO HTTP 未暴露 copy/mkdir/delete。
-6. `workspaceMountId` 表示可替代 cwd 的活动根，不等同于 Knowledge 附加来源。
-7. Desk 的持久 UI 状态与 Knowledge V1 空白状态必须分命名空间。
-8. 现有 link-open 和 HTML/asset 工具必须通过知识安全策略复用，不能直接放开外链。
+4. `MountAwareFileService.copyLocalPathIntoDirectory` 当前尝试 local-file → mount，受上一条限制不能成为可用跨来源复制；必须由 ResourceIO transfer 接缝替代。
+5. `MountProvider.copy` 可在 mount kind 内复制；rename/move 强制同 mount。
+6. 当前 `server/routes/resource-io.ts` 接受 body principal/user/studio 等字段，并可能返回本地路径字段；本 change 触及的 route 必须改为认证 context 身份和按客户端边界脱敏。
+7. ResourceIO HTTP 未暴露 copy/mkdir/delete/transfer。
+8. `workspaceMountId` 表示可替代 cwd 的活动根，不等同于 Knowledge 附加来源。
+9. Desk 的持久 UI 状态与 Knowledge V1 空白状态必须分命名空间。
+10. 现有 link-open 和 HTML/asset 工具必须通过知识安全策略复用，不能直接放开外链。
+11. `js-yaml` 已存在；Frontmatter 投影不得另行选择 YAML 依赖，复杂或不可保真的 YAML 保持源码编辑。
+12. `@playwright/test` 与 Knowledge E2E scripts 当前不存在；Ticket 01 固定引入 `@playwright/test@1.62.0`。
 
 ## 实现开始前必须重新验证
 
@@ -81,7 +87,7 @@ Resource events
 
 ## 可执行 Preflight 契约
 
-可读基线即本文。实现开始前在**仓库根**按下列项人工核对（本 change 包仅含 Markdown，无独立校验脚本）：
+可读基线即本文。实现开始前在**仓库根**按下列项人工核对（本 change 无独立校验脚本）：
 
 1. 当前 Git 分支为 `hanakde`；`a7ff307c` 仍是 HEAD 祖先（不要求 HEAD 永远等于审计提交）。
 2. Node 满足 `package.json` 的 `engines.node`（基线 `>=24.12.0 <25`）。

@@ -18,11 +18,15 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `shared/knowledge-workspace-errors.ts`
 - `shared/knowledge-diagnostics.ts`
 - `tests/knowledge-diagnostics.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `lib/resource-io/errors.ts`
 - `lib/resource-io/types.ts`
@@ -46,6 +50,7 @@
 2. Renderer 不访问 Node 文件系统；远程 DTO、日志和 release evidence 不含绝对路径、正文或凭证。
 3. 测试使用隔离临时 HANA_HOME、workspace、来源和端口，不依赖开发机固定路径或网络。
 4. 实现不得引入未在 ADR/实施契约冻结的新存储引擎、IPC path surface、恢复状态或 E2E 框架。
+5. 新 Knowledge 错误码统一 lowercase snake_case，并由共享表固定 HTTP status 与 retryable；message 不参与客户端控制流。
 
 ## 自动化证据
 

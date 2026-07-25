@@ -18,10 +18,14 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `desktop/src/react/editor/knowledge-mermaid-field.ts`
 - `desktop/src/react/editor/knowledge-math-field.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `desktop/src/react/editor/mermaid-field.ts`
 - `desktop/src/react/utils/mermaid-renderer.ts`
@@ -46,6 +50,7 @@
 3. 测试使用隔离临时 HANA_HOME、workspace、来源和端口，不依赖开发机固定路径或网络。
 4. 实现不得引入未在 ADR/实施契约冻结的新存储引擎、IPC path surface、恢复状态或 E2E 框架。
 5. 本 ticket 新增 UI 同时交付 zh-CN、zh-TW、en、ja、ko、键盘、ARIA、focus、亮暗主题和窄布局。
+6. 复用现有 Mermaid renderer 的固定 strict 配置，但丢弃 `bindFunctions`，对返回 SVG 再消毒，并用 cancellation/stale-result guard 阻止旧任务覆盖；不假设不存在的 worker 隔离。
 
 ## 自动化证据
 
@@ -60,7 +65,7 @@
 
 ## 验收标准
 
-- [ ] 源码不执行脚本；过期渲染不能覆盖新结果；单块错误不破坏文档。
+- [ ] 恶意 Mermaid 配置、事件绑定与 SVG 不执行；过期渲染不能覆盖新结果；单块错误不破坏文档。
 - [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。

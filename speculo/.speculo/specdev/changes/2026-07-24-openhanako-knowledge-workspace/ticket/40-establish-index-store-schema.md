@@ -6,7 +6,7 @@
 ## 战略与背景
 
 - **战略：** 建立可丢弃、版本化、来源分区的索引存储、健康状态、迁移和原子重建交换。
-- **需求追踪：** KW-RULE-INDEX
+- **需求追踪：** KW-US-187, KW-RULE-INDEX
 - **当前现状：** 当前不存在来源分区的知识索引；ResourceIO search 不是标签/引用/结构索引。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
@@ -18,11 +18,15 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `lib/knowledge-workspace/knowledge-index-store.ts`
 - `core/knowledge-workspace/knowledge-index-coordinator.ts`
 - `tests/knowledge-index-store.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `package.json`
 - `core/`
@@ -48,7 +52,7 @@
 
 ## 自动化证据
 
-**Primary ownership：** 无直接用户故事；按上列规则域交付
+**Primary ownership：** KW-US-187
 
 **必须创建或更新：**
 
@@ -60,7 +64,8 @@
 ## 验收标准
 
 - [ ] 每来源独立损坏/重建；磁盘内容是唯一事实；取消重建不破坏旧可用分区。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [ ] KW-US-187 由 per-source generation、磁盘重建与来源隔离测试直接证明。
+- [ ] FTS 使用 folded trigram 候选列；发布前 WAL checkpoint/close，不能遗漏 sidecar 内容。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
 - [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。

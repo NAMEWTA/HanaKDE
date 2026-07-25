@@ -7,7 +7,7 @@
 
 - **战略：** 基于共享 IR 实现脚注定义/引用、同文档导航、悬停预览和补全。
 - **需求追踪：** KW-US-088, KW-US-089, KW-US-090, KW-RULE-MARKDOWN
-- **当前现状：** 当前实现接缝位于 `silverbullet/client/codemirror/footnote.ts`、`lib/knowledge-workspace/markdown-knowledge-ir.ts`；本 ticket 只扩展这些公开边界。
+- **当前现状：** SilverBullet footnote 文件是临时审计参考；Markdown IR 由 Ticket 11 交付，不能把两者误写为当前基座已有实现。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,13 +18,17 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `desktop/src/react/editor/knowledge-footnote-field.ts`
 - `desktop/src/react/__tests__/editor/knowledge-footnote-field.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `silverbullet/client/codemirror/footnote.ts`
-- `lib/knowledge-workspace/markdown-knowledge-ir.ts`
+- `lib/knowledge-workspace/markdown-knowledge-ir.ts`（由 Ticket 11 交付）
 
 ## 固定实施契约
 

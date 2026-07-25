@@ -46,7 +46,7 @@ tests/knowledge-workspace-e2e/
 
 | Project | 启动 | 必须证明 |
 |---|---|---|
-| `desktop-full` | build preload/main/renderer/server 后由 `_electron.launch` 启动 `desktop/bootstrap.cjs` | Electron bridge、Full composition、真实多窗口 |
+| `desktop-full` | build preload/main/renderer/server 后由 `_electron.launch` 启动 `desktop/bootstrap.cjs` | Electron bridge、Full composition、多个隔离 Renderer context（不新增浮动窗口产品入口） |
 | `web-open` | `build:server:open` + 独立临时 server | 无 Electron 状态；Open boundary；native unavailable |
 | `web-full` | full server + browser renderer | Full 注入不改变共享 DTO |
 
@@ -79,7 +79,7 @@ LAN/Mobile contract 由 integration test 覆盖；至少 E2E-KW-021 在 `web-ope
 | E2E-KW-021 | LAN/Mobile 不接收绝对路径，owner/scope fail-closed | web-open |
 | E2E-KW-022 | malicious workspace：symlink/junction/URI/HTML/TOCTOU/limits | platform matrix |
 | E2E-KW-023 | 五语言、主题、窄布局、键盘和 screen-reader smoke | desktop-full |
-| E2E-KW-024 | 两个 Renderer window 同时打开、保存、冲突与 native grant 隔离 | desktop-full |
+| E2E-KW-024 | 自动化创建两个 Renderer context，验证同时打开、保存、冲突与 native grant 隔离；不验收浮动窗口产品入口 | desktop-full |
 
 ## 5. Requirement Evidence
 

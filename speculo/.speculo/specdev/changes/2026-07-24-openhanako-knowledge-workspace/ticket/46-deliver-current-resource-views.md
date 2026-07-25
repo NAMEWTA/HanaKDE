@@ -6,8 +6,8 @@
 ## 战略与背景
 
 - **战略：** 交付当前 buffer outline/outbound 与已保存索引 backlinks，并明确保存状态差异。
-- **需求追踪：** KW-RULE-QUERY, KW-RULE-VIEW
-- **当前现状：** 当前实现接缝位于 `desktop/src/react/components/knowledge-workspace/KnowledgeWorkspace.tsx`、`lib/knowledge-workspace/knowledge-query.ts`；本 ticket 只扩展这些公开边界。
+- **需求追踪：** KW-US-191, KW-US-192, KW-RULE-QUERY, KW-RULE-VIEW
+- **当前现状：** `KnowledgeWorkspace.tsx` 由 Ticket 15 交付，`knowledge-query.ts` 由 Ticket 44 交付；两者是本 ticket 的 blocker 产物，不是当前基座文件。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,12 +18,16 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `desktop/src/react/components/knowledge-workspace/KnowledgeCurrentResourceViews.tsx`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
 
-- `desktop/src/react/components/knowledge-workspace/KnowledgeWorkspace.tsx`
-- `lib/knowledge-workspace/knowledge-query.ts`
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
+
+- `desktop/src/react/components/knowledge-workspace/KnowledgeWorkspace.tsx`（由 Ticket 15 交付）
+- `lib/knowledge-workspace/knowledge-query.ts`（由 Ticket 44 交付）
 
 ## 固定实施契约
 
@@ -46,7 +50,7 @@
 
 ## 自动化证据
 
-**Primary ownership：** 无直接用户故事；按上列规则域交付
+**Primary ownership：** KW-US-191, KW-US-192
 
 **必须创建或更新：**
 
@@ -57,7 +61,7 @@
 ## 验收标准
 
 - [ ] 大纲/出站实时跟随 buffer；反向引用跟随保存索引；点击结果复用正常打开策略。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [ ] KW-US-191/192 由 buffer 派生大纲/出站和 saved-index backlinks 的差异测试直接证明。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
 - [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。

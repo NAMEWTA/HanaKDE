@@ -1,6 +1,6 @@
 # Tickets Map: OpenHanako 知识工作区
 
-本地图是 57 个实施切片的唯一索引。需求 ownership 以 [`requirements-traceability.md`](./requirements-traceability.md) 与各 ticket「需求追踪」行为权威；产品、架构与设计依据为 `ADR.md`、`CONTEXT.md`、`LOG.md`、`spec.md` 和实施契约。
+本地图是 57 个实施切片的唯一索引。需求 ownership 以 [`requirements-traceability.md`](./requirements-traceability.md) 与各 ticket「需求追踪」行为权威；实施范围必须同时服从 accepted `LOG.md`、`ADR.md`、`CONTEXT.md`、`spec.md` 和实施契约，不得因切片交付物或简述未逐项复写而缩减已确认结论。
 
 ## 执行规则
 
@@ -36,9 +36,9 @@
 | 21 | 1 Workspace/文档 | [交付外部变化与显式三方冲突](./ticket/21-deliver-external-change-conflicts.md) | 04, 06, 19 | KW-US-133, KW-US-134, KW-US-135 | 未开始 |
 | 22 | 1 Workspace/文档 | [交付关闭、Workspace 切换与悬空文档](./ticket/22-deliver-close-switch-orphan-flow.md) | 05, 18, 19, 20, 21 | KW-US-045, KW-US-046, KW-US-047, KW-US-048, KW-US-050, KW-US-051, KW-US-052, KW-US-136, KW-US-137, KW-US-138, KW-US-139, KW-US-140, KW-US-141, KW-US-142 | 未开始 |
 | 23 | 2 Markdown | [建立知识地址与同源 LinkResolver](./ticket/23-define-knowledge-address-resolver.md) | 05, 11 | KW-US-003, KW-US-119, KW-RULE-MARKDOWN | 未开始 |
-| 24 | 2 Markdown | [交付 Wikilink 与 Markdown Link 解析渲染](./ticket/24-deliver-wikilink-markdown-links.md) | 11, 12, 23 | KW-US-114, KW-RULE-MARKDOWN | 未开始 |
-| 25 | 2 Markdown | [交付 YAML Frontmatter 保真投影](./ticket/25-deliver-frontmatter-roundtrip.md) | 11, 12, 19 | KW-RULE-MARKDOWN | 未开始 |
-| 26 | 2 Markdown | [交付标签与页面内任务](./ticket/26-deliver-tags-and-page-tasks.md) | 11, 12, 19, 25 | KW-RULE-MARKDOWN | 未开始 |
+| 24 | 2 Markdown | [交付 Wikilink 与 Markdown Link 解析渲染](./ticket/24-deliver-wikilink-markdown-links.md) | 11, 12, 23 | KW-US-114, KW-US-177, KW-RULE-MARKDOWN | 未开始 |
+| 25 | 2 Markdown | [交付 YAML Frontmatter 保真投影](./ticket/25-deliver-frontmatter-roundtrip.md) | 11, 12, 19 | KW-US-174, KW-RULE-MARKDOWN | 未开始 |
+| 26 | 2 Markdown | [交付标签与页面内任务](./ticket/26-deliver-tags-and-page-tasks.md) | 11, 12, 19, 25 | KW-US-175, KW-US-176, KW-RULE-MARKDOWN | 未开始 |
 | 27 | 2 Markdown | [交付 Live Preview 与源码模式状态](./ticket/27-deliver-live-preview-modes.md) | 12, 18, 24 | KW-US-055, KW-US-056, KW-RULE-MARKDOWN | 未开始 |
 | 28 | 2 Markdown | [交付列表、引用与任务 Enter 事务](./ticket/28-deliver-enter-transactions.md) | 27 | KW-US-059, KW-US-060, KW-RULE-MARKDOWN | 未开始 |
 | 29 | 2 Markdown | [交付 Tab 与 Shift+Tab 行级事务](./ticket/29-deliver-tab-transactions.md) | 27 | KW-US-061, KW-US-062, KW-US-063, KW-RULE-MARKDOWN | 未开始 |
@@ -52,21 +52,21 @@
 | 37 | 2 Markdown | [交付 Wikilink 补全、导航与延迟建页](./ticket/37-deliver-wikilink-completion-navigation.md) | 20, 23, 24, 27 | KW-US-113, KW-US-121, KW-RULE-MARKDOWN | 未开始 |
 | 38 | 2 Markdown | [交付附件与跨来源复制后引用](./ticket/38-deliver-attachments-cross-source-copy.md) | 10, 23, 27 | KW-US-005, KW-US-006, KW-US-115, KW-US-116, KW-US-117, KW-US-118, KW-RULE-MARKDOWN, KW-RULE-COPY | 未开始 |
 | 39 | 2 Markdown | [交付同源页面与章节嵌入](./ticket/39-deliver-page-section-embeds.md) | 24, 33, 35, 37 | KW-US-120, KW-RULE-MARKDOWN | 未开始 |
-| 40 | 3 索引/查询 | [建立来源分区索引 Store 与 Schema](./ticket/40-establish-index-store-schema.md) | 01, 04, 05, 10, 13, 14 | KW-RULE-INDEX | 未开始 |
+| 40 | 3 索引/查询 | [建立来源分区索引 Store 与 Schema](./ticket/40-establish-index-store-schema.md) | 01, 04, 05, 10, 13, 14 | KW-US-187, KW-RULE-INDEX | 未开始 |
 | 41 | 3 索引/查询 | [交付 Markdown 页面抽取管线](./ticket/41-deliver-markdown-index-extraction.md) | 11, 23, 25, 26, 40 | KW-RULE-INDEX | 未开始 |
 | 42 | 3 索引/查询 | [交付非 Markdown 安全文本抽取](./ticket/42-deliver-safe-text-index-extraction.md) | 17, 40 | KW-US-157, KW-RULE-INDEX | 未开始 |
-| 43 | 3 索引/查询 | [交付 watcher 增量协调与 rebuild](./ticket/43-deliver-watcher-index-rebuild.md) | 06, 10, 40, 41, 42 | KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY | 未开始 |
+| 43 | 3 索引/查询 | [交付 watcher 增量协调与 rebuild](./ticket/43-deliver-watcher-index-rebuild.md) | 06, 10, 40, 41, 42 | KW-US-193, KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY | 未开始 |
 | 44 | 3 索引/查询 | [交付标签与引用查询 API](./ticket/44-deliver-knowledge-query-apis.md) | 23, 41, 43 | KW-RULE-QUERY | 未开始 |
-| 45 | 3 索引/查询 | [交付超级搜索](./ticket/45-deliver-super-search.md) | 20, 40, 43, 44 | KW-RULE-SEARCH | 未开始 |
-| 46 | 3 索引/查询 | [交付当前大纲与引用视图](./ticket/46-deliver-current-resource-views.md) | 20, 24, 44 | KW-RULE-QUERY, KW-RULE-VIEW | 未开始 |
+| 45 | 3 索引/查询 | [交付超级搜索](./ticket/45-deliver-super-search.md) | 20, 40, 43, 44 | KW-US-188, KW-US-189, KW-US-190, KW-RULE-SEARCH | 未开始 |
+| 46 | 3 索引/查询 | [交付当前大纲与引用视图](./ticket/46-deliver-current-resource-views.md) | 20, 24, 44 | KW-US-191, KW-US-192, KW-RULE-QUERY, KW-RULE-VIEW | 未开始 |
 | 47 | 4 资源操作 | [建立资源树选择状态机](./ticket/47-define-resource-tree-selection-reducer.md) | 16 | KW-US-019, KW-US-020, KW-US-021, KW-US-022, KW-US-028 | 未开始 |
 | 48 | 4 资源操作 | [交付资源树键盘导航与范围选择](./ticket/48-deliver-tree-keyboard-range-selection.md) | 47 | KW-US-015, KW-US-016, KW-US-017, KW-US-018 | 未开始 |
 | 49 | 4 资源操作 | [交付排序、打开、临时预览与标签复用](./ticket/49-deliver-tree-sort-open-preview.md) | 20, 48 | KW-US-014, KW-US-023, KW-US-024, KW-US-025, KW-US-029, KW-US-031, KW-US-032, KW-US-033, KW-US-034 | 未开始 |
-| 50 | 4 资源操作 | [交付新建 Page 与文件夹](./ticket/50-deliver-create-page-folder.md) | 06, 10, 16, 48 | KW-RULE-OP, KW-RULE-CREATE | 未开始 |
-| 51 | 4 资源操作 | [交付外部导入与原生 Picker](./ticket/51-deliver-import-native-picker.md) | 01, 03, 04, 06, 10, 14, 48 | KW-US-165, KW-RULE-OP, KW-RULE-SEC, KW-RULE-IMPORT, KW-RULE-NATIVE | 未开始 |
-| 52 | 4 资源操作 | [交付会话内复制、剪切与粘贴](./ticket/52-deliver-internal-clipboard.md) | 10, 14, 48 | KW-RULE-OP, KW-RULE-CLIPBOARD | 未开始 |
-| 53 | 4 资源操作 | [交付资源树与编辑器拖拽协议](./ticket/53-deliver-resource-drag-drop.md) | 38, 48, 50, 51, 52 | KW-RULE-OP, KW-RULE-DND | 未开始 |
-| 54 | 4 资源操作 | [交付同源原子重命名与移动](./ticket/54-deliver-atomic-rename-move.md) | 10, 18, 21, 23, 43, 48 | KW-US-026, KW-US-027, KW-RULE-OP, KW-RULE-SEC, KW-RULE-REFACTOR, KW-RULE-RECOVERY | 未开始 |
+| 50 | 4 资源操作 | [交付新建 Page 与文件夹](./ticket/50-deliver-create-page-folder.md) | 06, 10, 16, 48 | KW-US-178, KW-US-179, KW-RULE-OP, KW-RULE-CREATE | 未开始 |
+| 51 | 4 资源操作 | [交付外部导入与原生 Picker](./ticket/51-deliver-import-native-picker.md) | 01, 03, 04, 06, 10, 14, 48 | KW-US-165, KW-US-180, KW-US-181, KW-RULE-OP, KW-RULE-SEC, KW-RULE-IMPORT, KW-RULE-NATIVE | 未开始 |
+| 52 | 4 资源操作 | [交付会话内复制、剪切与粘贴](./ticket/52-deliver-internal-clipboard.md) | 10, 14, 38, 48 | KW-US-182, KW-US-183, KW-RULE-OP, KW-RULE-CLIPBOARD | 未开始 |
+| 53 | 4 资源操作 | [交付资源树与编辑器拖拽协议](./ticket/53-deliver-resource-drag-drop.md) | 38, 48, 50, 51, 52 | KW-US-184, KW-US-185, KW-RULE-OP, KW-RULE-DND | 未开始 |
+| 54 | 4 资源操作 | [交付同源原子重命名与移动](./ticket/54-deliver-atomic-rename-move.md) | 10, 18, 21, 23, 43, 48 | KW-US-026, KW-US-027, KW-US-186, KW-RULE-OP, KW-RULE-SEC, KW-RULE-REFACTOR, KW-RULE-RECOVERY | 未开始 |
 | 55 | 4 资源操作 | [交付删除确认与来源级回收站](./ticket/55-deliver-workspace-trash-delete.md) | 10, 18, 22, 43, 47 | KW-US-144, KW-US-145, KW-US-146, KW-US-147, KW-US-148, KW-RULE-OP, KW-RULE-SEC, KW-RULE-RECOVERY | 未开始 |
 | 56 | 4 资源操作 | [交付回收站恢复、清理与系统废纸篓](./ticket/56-deliver-trash-restore-cleanup.md) | 04, 10, 14, 23, 44, 51, 55 | KW-US-149, KW-US-150, KW-US-151, KW-US-152, KW-US-153, KW-US-154, KW-US-155, KW-RULE-OP, KW-RULE-SEC, KW-RULE-NATIVE, KW-RULE-RECOVERY | 未开始 |
 | 57 | 5 发布 | [执行集成、迁移与发布 Gate](./ticket/57-release-knowledge-workspace.md) | 09, 13, 14, 22, 33, 34, 35, 36, 39, 45, 46, 53, 54, 56 | KW-RULE-RELEASE, KW-RULE-TEST | 未开始 |
@@ -125,7 +125,7 @@
 49-deliver-tree-sort-open-preview <- 20, 48
 50-deliver-create-page-folder <- 06, 10, 16, 48
 51-deliver-import-native-picker <- 01, 03, 04, 06, 10, 14, 48
-52-deliver-internal-clipboard <- 10, 14, 48
+52-deliver-internal-clipboard <- 10, 14, 38, 48
 53-deliver-resource-drag-drop <- 38, 48, 50, 51, 52
 54-deliver-atomic-rename-move <- 10, 18, 21, 23, 43, 48
 55-deliver-workspace-trash-delete <- 10, 18, 22, 43, 47
@@ -159,7 +159,9 @@
 - Ticket 21: 3 条用户故事。
 - Ticket 22: 14 条用户故事。
 - Ticket 23: 2 条用户故事。
-- Ticket 24: 1 条用户故事。
+- Ticket 24: 2 条用户故事。
+- Ticket 25: 1 条用户故事。
+- Ticket 26: 2 条用户故事。
 - Ticket 27: 2 条用户故事。
 - Ticket 28: 2 条用户故事。
 - Ticket 29: 3 条用户故事。
@@ -173,11 +175,18 @@
 - Ticket 37: 2 条用户故事。
 - Ticket 38: 6 条用户故事。
 - Ticket 39: 1 条用户故事。
+- Ticket 40: 1 条用户故事。
 - Ticket 42: 1 条用户故事。
+- Ticket 43: 1 条用户故事。
+- Ticket 45: 3 条用户故事。
+- Ticket 46: 2 条用户故事。
 - Ticket 47: 5 条用户故事。
 - Ticket 48: 4 条用户故事。
 - Ticket 49: 9 条用户故事。
-- Ticket 51: 1 条用户故事。
-- Ticket 54: 2 条用户故事。
+- Ticket 50: 2 条用户故事。
+- Ticket 51: 3 条用户故事。
+- Ticket 52: 2 条用户故事。
+- Ticket 53: 2 条用户故事。
+- Ticket 54: 3 条用户故事。
 - Ticket 55: 5 条用户故事。
 - Ticket 56: 7 条用户故事。

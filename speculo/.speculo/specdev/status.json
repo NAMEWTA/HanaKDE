@@ -6,8 +6,9 @@
       "change": "2026-07-24-openhanako-knowledge-workspace",
       "current_work": null,
       "works_run": [
-        "specdev/S-spec",
-        "specdev/T-tickets"
+        "specdev/grill-with-docs",
+        "specdev/spec",
+        "specdev/tickets"
       ],
       "result": null
     }
@@ -15,15 +16,24 @@
   "work_history": [
     {
       "change": "2026-07-24-openhanako-knowledge-workspace",
-      "work": "specdev/S-spec",
-      "status": "completed",
-      "completed_at": "2026-07-24T23:09:36+08:00"
+      "work_id": "specdev/grill-with-docs",
+      "started_at": "2026-07-24T23:09:36+08:00",
+      "completed_at": "2026-07-24T23:09:36+08:00",
+      "result": "completed"
     },
     {
       "change": "2026-07-24-openhanako-knowledge-workspace",
-      "work": "specdev/T-tickets",
-      "status": "completed",
-      "completed_at": "2026-07-24T23:18:56+08:00"
+      "work_id": "specdev/spec",
+      "started_at": "2026-07-24T23:09:36+08:00",
+      "completed_at": "2026-07-24T23:09:36+08:00",
+      "result": "completed"
+    },
+    {
+      "change": "2026-07-24-openhanako-knowledge-workspace",
+      "work_id": "specdev/tickets",
+      "started_at": "2026-07-24T23:18:56+08:00",
+      "completed_at": "2026-07-24T23:18:56+08:00",
+      "result": "completed"
     }
   ],
   "completed": []

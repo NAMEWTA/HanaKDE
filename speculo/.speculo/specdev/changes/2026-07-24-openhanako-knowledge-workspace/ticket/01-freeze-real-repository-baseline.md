@@ -7,7 +7,7 @@
 
 - **战略：** 把当前 hanakde、upstream、公开路由、ResourceIO、Desk、CM6 和构建接缝固化为可执行基线。
 - **需求追踪：** KW-RULE-PREFLIGHT, KW-RULE-TEST
-- **当前现状：** 当前分支 hanakde 与 upstream/main 只有 Speculo 文档差异；相关类型检查、boundary、Open build 和 155 个目标测试已通过。
+- **当前现状：** 2026-07-25 只读审计确认 HEAD `a7ff307c7627`、merge-base `ef8a6f700191` 与关键接缝存在；当时工作树已有 83 个非 clean 条目。审计 shell 是 Node `v22.22.3`，不满足仓库 Node 24 engine，且 `better-sqlite3` ABI 不匹配，因此当前没有可声称通过的 typecheck/build/test/FTS 证据。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,10 +18,14 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `implementation-baseline.md`
 - `tests/knowledge-baseline-contract.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `server/composition/open-root.ts`
 - `server/composition/full-root.ts`
@@ -31,15 +35,15 @@
 ## 固定实施契约
 
 - [`implementation-baseline.md`](../implementation-baseline.md)
-- [`implementation-baseline.md`](../implementation-baseline.md)
 - [`test-strategy.md`](../test-strategy.md)
 
 ## 实施顺序
 
-1. 按 `README.md` 文档核对清单与 `implementation-baseline.md` preflight 项在仓库根当场核对，记录所有检查结果。
-2. 确认 audited commit 为 HEAD 祖先；关键接缝漂移时先更新 change。
-3. 安装并锁定 @playwright/test@1.62.0，增加固定 scripts/config skeleton。
-4. 建立 requirements ownership 与 release evidence contract tests。
+1. 按 `README.md` 与 `implementation-baseline.md` 在仓库根只读核对，记录分支、HEAD、dirty 明细数量与漂移；不得清理用户修改。
+2. 切换到满足 `>=24.12.0 <25` 的 Node 24，并在该环境重新安装或重建 native dependencies；先证明 `better-sqlite3` 与 FTS5 可加载。
+3. 确认 audited commit 为 HEAD 祖先；关键接缝漂移时先更新 change。
+4. 安装并锁定 `@playwright/test@1.62.0`，增加固定 scripts/config skeleton。
+5. 运行并只记录实际通过/失败的基线命令，建立 requirements ownership 与 release evidence contract tests。
 
 ## 实现约束
 

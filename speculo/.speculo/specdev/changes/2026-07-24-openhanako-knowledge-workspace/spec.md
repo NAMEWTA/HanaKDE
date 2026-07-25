@@ -5,18 +5,18 @@
 **基线日期：** 2026-07-24  
 **唯一开发底座：** 当前项目仓库（HanaKDE，OpenHanako fork）的当前工作树  
 **技术实现参考：** `silverbullet/` 中的 CodeMirror 6、Live Preview、受控文件空间与解析/索引能力单元  
-**上位工程规范：** `OPENHANAKO_AI_RULES.md`、`rules.md`  
-**基础事实层：** `ADR.md`、`CONTEXT.md`、`LOG.md`；本文件的 `KW-US-*` 与 `KW-RULE-*` 从该基础派生  
+**上位工程规范：** `rules.md`<br>
+**最终决策、架构与词义：** accepted `LOG.md`、`ADR.md`、`CONTEXT.md`；本文件直接冻结 `KW-US-*` 与 `KW-RULE-*` 产品验收<br>
 **架构收敛来源：** `architecture.md`  
-**完整基础决策：** `ADR-0001`—`ADR-0283`，全部直接保存在 `ADR.md`<br>
-**仓库与实施细化决策：** `ADR-0284`—`ADR-0308`，全部直接保存在 `ADR.md`<br>
+**稳定决策记录：** 295 条 ADR，沿用既有非连续编号 `ADR-0001`—`ADR-0308`，并与同号 LOG 双向关联<br>
+**完整讨论记录：** `LOG-0001`—`LOG-0308`（编号有保留空位），全部直接保存在 `LOG.md`<br>
 **Spec 编写规则：** `speculo/workflows/specdev/S-spec/S-spec.md`
 
-> 本 Spec 是产品行为与验收的直接权威，但它从 `ADR.md`、`CONTEXT.md`、`LOG.md` 派生，不能改变三者的设计意图。若发现冲突，必须先在三份基础文档中完成语义一致的合并或修正，再同步更新本 Spec、架构和 tickets。SilverBullet 只按 reference matrix 选择性研究或审计式适配能力单元。
+> 本 Spec 把 accepted LOG 的完整结论规范化为产品行为与验收，并服从 `ADR.md` 的架构边界与 `CONTEXT.md` 的词义。accepted LOG、ADR、CONTEXT、Spec 与实施契约必须表达同一最终设计；发现冲突时必须同步修正，不能把任何 accepted 结论降为“仅供参考”。SilverBullet 只按 reference matrix 选择性研究或审计式适配能力单元。
 
 ## 需求标识与实现基线
 
-- 173 条用户故事使用稳定 ID `KW-US-001`—`KW-US-173`。
+- 193 条用户故事使用稳定 ID `KW-US-001`—`KW-US-193`；2026-07-25 review 保留 001—173 不变，以 174—193 补齐原来只有规则、没有直接用户故事的关键闭环。
 - 非故事冻结规则使用 `KW-RULE-*`，由 `requirements-traceability.md` 与完整 `ADR.md` 追踪。
 - 真实代码、路由、测试与 commit 见 `implementation-baseline.md`；本文不再把建议文件名当作当前事实。
 - 架构已确认：Knowledge 核心属于 Open composition；既有 ResourceRef 保持不变，知识 DTO 使用 KnowledgeResourceAddress。
@@ -81,12 +81,12 @@
 
 ## 文档边界与优先级
 
-1. `ADR.md`、`CONTEXT.md`、`LOG.md` 共同构成基础事实层：分别约束决定、语义和设计理由，必须同步且不得互相冲突。
-2. 本文件把基础事实转成产品行为、Requirement ID 和验收；`requirements-traceability.md` 负责映射 tickets 与测试。
-3. `architecture.md` 把基础决定映射到当前项目模块、调用、状态和数据流；`rules.md` 与项目级 AI 规则约束代码放置、依赖、安全、类型和测试纪律。
+1. `ADR.md` 冻结架构决定，`CONTEXT.md` 冻结项目词义，本文件冻结产品行为、Requirement ID 和验收。
+2. `LOG.md` 是完整设计轨迹；其中 `accepted` 是当前有效结论，`deferred` 不进入实现，`superseded` 只保留历史。它不是运行日志；`requirements-traceability.md` 负责映射 tickets 与测试。
+3. `architecture.md` 把上位决定映射到当前项目模块、调用、状态和数据流；`rules.md` 约束代码放置、依赖、安全、类型和测试纪律。
 4. `tickets-map.md` 与 `ticket/` 只负责执行切片和状态，不得为方便实现而改变上位行为或语义。
 5. 当前项目仓库是唯一实现底座；现有 Workbench、ResourceIO、ResourceEventBus、独立 Server、Engine 公开 Facade、Renderer 与 Electron 原生边界必须继续复用。
-6. 发现冲突时不新增覆盖层：在保持原意和信息覆盖的前提下直接修正基础三文档，再同步所有派生文档和追踪矩阵。
+6. 发现冲突时不新增覆盖层：直接修正所有受影响的 ADR/CONTEXT/spec/契约/追踪；需要保留讨论理由时同步 LOG。
 
 ## 问题陈述
 
@@ -323,7 +323,7 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 163. **KW-US-163** — 作为受限访问用户，我希望在未认证、无 owner、越出来源或路径校验失败时拒绝资源操作，以便其他会话、来源和本地路径不会被越权访问。
 164. **KW-US-164** — 作为独立 Server 用户，我希望让所有知识能力在没有 Electron 内存的 Node Server 中成立，以便LAN、CLI 和非桌面入口不会依赖主进程状态。
 165. **KW-US-165** — 作为Desktop 用户，我希望只在系统文件选择器、系统剪贴板、系统废纸篓或默认应用等必要场景使用 Electron 原生能力，以便普通业务仍可复用 Server API。
-166. **KW-US-166** — 作为多窗口用户，我希望让文档会话、资源事件和 UI 状态不假设只有一个 Renderer 入口，以便多个窗口不会产生隐藏单例冲突。
+166. **KW-US-166** — 作为桌面用户，我希望文档会话、资源事件和 UI 状态在现有生命周期出现多个 Renderer context 时保持 owner/window 隔离，以便不会产生隐藏单例冲突；V1 不因此新增独立浮动知识窗口入口。
 167. **KW-US-167** — 作为国际化用户，我希望在中文、英文、日文、韩文和繁体中文中看到完整新增文案，以便不同语言入口获得一致功能。
 168. **KW-US-168** — 作为键盘与辅助技术用户，我希望使用完整键盘路径、可见焦点、语义标签和合理焦点恢复，以便无需鼠标也能操作资源树、编辑器和对话框。
 169. **KW-US-169** — 作为亮色与暗色主题用户，我希望在不同窗口 surface 和主题下获得清晰对比度，以便界面状态与错误提示始终可读。
@@ -332,35 +332,58 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 172. **KW-US-172** — 作为开放版用户，我希望在 open composition 中只使用开放实现与稳定协议，以便开放构建不会动态绕过边界。
 173. **KW-US-173** — 作为完整产品用户，我希望通过 composition root 注入完整产品差异而不改变共享契约，以便open/full 版本保持兼容。
 
+### 关键闭环补齐（稳定追加 ID）
+
+174. **KW-US-174** — 作为使用页面属性的作者，我希望安全编辑唯一顶层键且值为 JSON 标量或一维 JSON 标量数组的 Frontmatter 字段，并保持未知字段、注释、顺序、换行和复杂 YAML 原文；无法无损投影时回到源码模式。
+175. **KW-US-175** — 作为标签用户，我希望页面正文与 Frontmatter 标签按来源解析并在同一页面状态中展示，以便标签不会跨来源合并。
+176. **KW-US-176** — 作为任务用户，我希望查看并切换当前页面的标准 Markdown task，且每次切换只修改同一文档缓冲区并可单步撤销。
+177. **KW-US-177** — 作为标准 Markdown 用户，我希望内部文件链接按包含页面目录解析并被证明仍在同一来源，以便标准链接与 Wikilink 具有一致的安全边界。
+178. **KW-US-178** — 作为作者，我希望在明确的来源和目录中新建 `.md` Page，名称冲突时不静默覆盖。
+179. **KW-US-179** — 作为文件管理用户，我希望在明确的来源和目录中新建文件夹，非法名称、越界或冲突返回可修正错误。
+180. **KW-US-180** — 作为 Desktop 用户，我希望通过系统文件/目录选择器把外部资源导入明确目标，而 Renderer 永远不接收本机绝对路径。
+181. **KW-US-181** — 作为批量导入用户，我希望对文件冲突选择跳过、保留两者或替换，对目录确定性合并，并获得资源级成功/失败及仅重试失败项。
+182. **KW-US-182** — 作为资源树用户，我希望在当前会话内复制并粘贴文件或目录，冲突时使用确定性后缀且保持每个副本字节原样。
+183. **KW-US-183** — 作为剪切用户，我希望只在同一来源内粘贴为移动；跨来源剪切明确拒绝或经我确认转为复制，绝不隐式删除原资源。
+184. **KW-US-184** — 作为拖拽用户，我希望同来源拖拽表达移动、跨来源拖拽表达复制，并在提交前看到目标与动作。
+185. **KW-US-185** — 作为大型树用户，我希望拖拽拥有有效目标提示、800ms 悬停展开、边缘自动滚动、取消和完成后确定的选择/焦点。
+186. **KW-US-186** — 作为重构用户，我希望同来源 rename/move 对主资源和全部已计划已保存链接形成可回滚事务，post-commit session/index 投影失败不会撤销已提交文件。
+187. **KW-US-187** — 作为知识检索用户，我希望每个来源索引只从已保存磁盘资源构建并可独立丢弃重建，以便缓存不成为第二事实源。
+188. **KW-US-188** — 作为搜索用户，我希望从一个入口搜索全部当前来源，并按 `main`、挂载顺序分组且每来源独立分页。
+189. **KW-US-189** — 作为 Unicode 内容用户，我希望关键词、连续短语与独立 `OR` 按 NFC+大小写折叠后的连续子串匹配，短查询也不因加速器限制而漏结果。
+190. **KW-US-190** — 作为标签导航用户，我希望点击标签只在当前来源发起预填搜索，并清晰显示不可编辑的来源上下文。
+191. **KW-US-191** — 作为正在编辑的用户，我希望当前大纲和出站引用实时读取未保存 buffer，以便导航反映眼前内容。
+192. **KW-US-192** — 作为引用追踪用户，我希望反向引用只读取当前来源已保存索引，以便未保存或其他来源内容不会产生虚假边。
+193. **KW-US-193** — 作为索引故障用户，我希望看到 building/stale/degraded/corrupt/locked/unavailable 状态并可按来源重建，同时在可用时继续读取旧 generation。
+
 ## 实现决策
 
 ### 1. 需求优先级与产品边界
 
-1. V1 的绝对核心是文件资源管理器与 Markdown 编辑器；基础超级搜索保留，搜索筛选器、任务高级元数据和其他知识增强工具不扩张 V1 范围。（ADR-0033、ADR-0283）
-2. “知识”是与“聊天”“频道”同级的一级入口；聊天中的工作台是同一知识工作区的紧凑视图，不建立第二套目录或副本。（基础 `ADR-0001`；仓库级细化 `ADR-0284`）
-3. 知识工作区由一个主根目录和零个或多个具名挂载源组成；来源身份不扁平合并。（基础 `ADR-0002`；仓库级细化 `ADR-0285`）
-4. 页面身份与知识地址采用“来源身份 + 规范化相对路径”；页面、资产或目录移动及重命名会改变受影响资源身份，不引入隐藏 UUID。（基础 `ADR-0003`；仓库级细化 `ADR-0286`、`ADR-0289`）
-5. 磁盘页面与资产是唯一知识事实；索引、反向引用、标签、任务和属性视图全部可丢弃、可重建。（基础 `ADR-0006`；仓库级细化 `ADR-0288`、`ADR-0297`）
-6. 当前项目工作树是唯一开发底座；本地 SilverBullet 源码 `./silverbullet/` 仅提供可独立研究和适配的 CM6、Live Preview、受控空间、解析和索引思路，不移植 Preact 产品 UI、Rust Server、Lua/查询语言、插件运行时或对象数据库。（基础 `ADR-0262`、`ADR-0283`；仓库级细化 `ADR-0299`）
+1. V1 的绝对核心是文件资源管理器与 Markdown 编辑器；基础超级搜索保留，搜索筛选器、任务高级元数据和其他知识增强工具不扩张 V1 范围。（LOG-0033、LOG-0283）
+2. “知识”是与“聊天”“频道”同级的一级入口；聊天中的工作台是同一知识工作区的紧凑视图，不建立第二套目录或副本。（基础 `LOG-0001`；仓库级细化 `LOG-0284`）
+3. 知识工作区由一个主根目录和零个或多个具名挂载源组成；来源身份不扁平合并。（基础 `LOG-0002`；仓库级细化 `LOG-0285`）
+4. 页面身份与知识地址采用“来源身份 + 规范化相对路径”；页面、资产或目录移动及重命名会改变受影响资源身份，不引入隐藏 UUID。（基础 `LOG-0003`；仓库级细化 `LOG-0286`、`LOG-0289`）
+5. 磁盘页面与资产是唯一知识事实；索引、反向引用、标签、任务和属性视图全部可丢弃、可重建。（基础 `LOG-0006`；仓库级细化 `LOG-0288`、`LOG-0297`）
+6. 当前项目工作树是唯一开发底座；本地 SilverBullet 源码 `./silverbullet/` 仅提供可独立研究和适配的 CM6、Live Preview、受控空间、解析和索引思路，不移植 Preact 产品 UI、Rust Server、Lua/查询语言、插件运行时或对象数据库。（基础 `LOG-0262`、`LOG-0283`；仓库级细化 `LOG-0299`）
 
 ### 2. 架构分层与依赖方向
 
 1. Renderer 负责 React UI、CM6 表面、前端 service、文档会话投影和视图状态；不得直接访问 Node 文件系统、Server 私有实现或 Engine 私有状态。
 2. 普通输入和编辑事务完全留在 Renderer；它们不得产生 HTTP、WebSocket、IPC 或 Hub 往返。
-3. Workbench 继续负责工作目录、挂载来源与现有兼容入口；ResourceIO 继续负责通用资源读取、列举、搜索、expected-version 写入、移动、重命名、回收和 watcher。
-4. 只有单次 ResourceIO 无法表达的复合知识事务进入知识工作区领域编排，包括操作预览/提交、原子链接重构、跨来源复制、索引编排和工作区回收站恢复。
+3. Workbench 继续负责工作目录、挂载来源与现有兼容入口；ResourceIO 继续负责通用资源读取、列举、搜索、expected-version 写入、移动、重命名、回收、watcher，以及 provider-neutral bounded-stream transfer。
+4. 只有单次 ResourceIO 无法表达的复合知识事务进入知识工作区领域编排，包括操作预览/提交、同源链接重构、批量跨来源复制、索引编排和工作区回收站恢复。
 5. Engine 保持薄 Facade，仅公开委托、组合和生命周期能力；可变领域状态由明确 Manager、Coordinator、Registry 或 Store 持有。
 6. Server route 只负责认证、schema 校验、scope/owner 检查、调用 Engine 公开 API、状态码和稳定错误映射；不得实现解析、索引、事务算法或直接访问私有字段。
 7. `shared` 只承载可序列化 DTO、schema、协议版本和稳定错误码；不得引入 React、CM6、Hono、Electron、Manager 或不可序列化对象。
-8. `lib` 领域模块只承载可复用纯算法与数据结构，包括知识地址、Markdown 链接解析与重写、Frontmatter、操作计划、搜索索引、索引存储和回收站 manifest。
+8. `lib` 领域模块承载平台无关的领域算法、解析器和 persistence adapter；不得依赖 React、CM6、Hono、Electron 或 `core` lifecycle。状态协调与生命周期属于 `core`。
 9. Electron main/preload 只补充系统文件选择器、系统文件剪贴板、系统废纸篓、默认应用和“在文件管理器中显示”等必须由本机完成的能力；普通文件 CRUD 不走 IPC。
 10. 不新增顶级知识应用、独立知识 Server、第二套文件系统、第二条资源事件 WebSocket、第二个 watcher 或与现有目录平行的大型 Renderer 根目录。
 
 ### 3. 状态真相与生命周期
 
 1. 磁盘中的页面和资产内容属于持久知识事实；Renderer 中未保存源码只属于当前页面编辑会话。
-2. 同一 Markdown 文档的共享会话持有源码、最近成功读取/保存基线、版本、未保存状态、撤销历史、保存中状态、冲突状态和视图引用计数。（ADR-0212、ADR-0225—ADR-0233）
-3. 每个文档视图独立持有光标、选区、滚动、视口、实时预览/源码模式、Live Preview 语法显隐和当前文档查找状态。（ADR-0213—ADR-0216、ADR-0219—ADR-0224）
+2. 同一 Markdown 文档的共享会话持有源码、最近成功读取/保存基线、版本、未保存状态、撤销历史、保存中状态、冲突状态和视图引用计数。（LOG-0212、LOG-0225—LOG-0233）
+3. 每个文档视图独立持有光标、选区、滚动、视口、实时预览/源码模式、Live Preview 语法显隐和当前文档查找状态。（LOG-0213—LOG-0216、LOG-0219—LOG-0224）
 4. V1 不持久化 workspace 界面状态；每次打开工作目录使用单个空编辑组、空标签和折叠资源树。当前会话内的标签、布局、选择与展开仅存在于内存。
 5. 资源树展开状态和排序模式/方向只在当前 workspace 会话内存在；关闭或重新打开后不恢复。
 6. ResourceIO version/mtime 是磁盘并发事实；资源事件总线与既有 WebSocket 是外部变化的唯一实时通知链路。
@@ -372,28 +395,28 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 1. 从现有 PreviewEditor 渐进抽取单一 MarkdownEditorSurface 和稳定 extension factory；Preview 与知识编辑器必须组合同一 CM6 内核，禁止复制第二套完整编辑器。
 2. CM6 生命周期、EditorState、EditorView、transaction、Compartment、事件监听和销毁集中管理；组件卸载必须释放所有 view、listener、observer 和 subscription。
 3. 每个 extension 只承担一个清晰职责；视图装饰与纯 Markdown 解析分离；extension 不直接调用 Server、Zustand 全局实例或 Electron。
-4. Live Preview 仅隐藏未被光标或选区触及的语法；实时预览与源码模式共享同一 Markdown 文本和撤销历史。（ADR-0009、ADR-0067）
-5. Markdown 解析基线为 CommonMark、GFM 与已确认扩展；页面应用内编辑只接受严格 UTF-8，原始文件大小上限为 10 MiB。（ADR-0063、ADR-0064、ADR-0139）
-6. 保存保留单一既有换行风格；混合换行按确定性规则规范化，避免平台噪声 diff。（ADR-0065）
-7. 列表、任务、引用延续、Tab 行级缩进、有序列表编号延续、围栏代码块 Tab 和普通 Markdown Tab 行为按 ADR-0068—ADR-0072 实现。
-8. V1 基础格式快捷键与斜杠命令共享同一编辑语义；命令任意位置触发、查询止于第一个空白、采用固定单层列表与最小模板。（ADR-0073—ADR-0076、ADR-0078—ADR-0085）
+4. Live Preview 仅隐藏未被光标或选区触及的语法；实时预览与源码模式共享同一 Markdown 文本和撤销历史。（LOG-0009、LOG-0067）
+5. Markdown 解析基线为 CommonMark、GFM 与已确认扩展；页面应用内编辑只接受严格 UTF-8，原始文件大小上限为 10 MiB。（LOG-0063、LOG-0064、LOG-0139）
+6. 保存保留单一既有换行风格；混合换行按确定性规则规范化，避免平台噪声 diff。（LOG-0065）
+7. 列表、任务、引用延续、Tab 行级缩进、有序列表编号延续、围栏代码块 Tab 和普通 Markdown Tab 行为按 LOG-0068—LOG-0072 实现。
+8. V1 基础格式快捷键与斜杠命令共享同一编辑语义；命令任意位置触发、查询止于第一个空白、采用固定单层列表与最小模板。（LOG-0073—LOG-0076、LOG-0078—LOG-0085）
 9. Mermaid、数学、脚注、净化 HTML、本地资产、外链打开、附件、Wikilink 补全、页面嵌入、表格和代码块按对应 ADR 实现；任何预览错误以内联状态呈现，不替换或破坏源码。
-10. 视觉软换行只影响显示，所有方向键、Home/End、Shift 选择、坐标和编辑行为按真实源码位置执行。（ADR-0142—ADR-0147）
-11. 全局底部状态栏只读显示活动 Markdown 视图的 1 基行列与源码 Unicode 字符总数；不显示保存状态，非 Markdown 视图保留空单行，空间不足时整组隐藏。（ADR-0148—ADR-0159）
-12. 当前文档查找替换严格冻结 ADR-0161—ADR-0205、ADR-0207—ADR-0211：匹配真实源码、默认忽略大小写、可切换全词、不支持正则、循环导航、单一右上角弹窗、全部匹配高亮、替换全部为单一撤销步骤、无历史与 F3 快捷键。
+10. 视觉软换行只影响显示，所有方向键、Home/End、Shift 选择、坐标和编辑行为按真实源码位置执行。（LOG-0142—LOG-0147）
+11. 全局底部状态栏只读显示活动 Markdown 视图的 1 基行列与源码 Unicode 字符总数；不显示保存状态，非 Markdown 视图保留空单行，空间不足时整组隐藏。（LOG-0148—LOG-0159）
+12. 当前文档查找替换严格冻结 LOG-0161—LOG-0205、LOG-0207—LOG-0211：匹配真实源码、默认忽略大小写、可切换全词、不支持正则、循环导航、单一右上角弹窗、全部匹配高亮、替换全部为单一撤销步骤、无历史与 F3 快捷键。
 13. 大文档解析和索引请求必须可取消、分阶段或增量；不得在每次 transaction 中全量扫描整个工作区，也不得在 React render 中反复重建 extension 集。
 
 ### 5. 资源树、标签与布局
 
-1. 资源树一比一呈现真实来源根、文件夹、页面和资产；文件节点始终显示完整原始文件名及扩展名。（ADR-0005、ADR-0045、ADR-0046）
-2. 文件夹单击只选择，独立箭头或双击切换展开；文件夹不创建编辑器标签或内容页。（ADR-0035）
-3. 页面和资产普通打开先在所有编辑组全局查找既有标签；单击使用/激活临时预览，双击固定；只有显式侧边打开或分屏才创建额外视图。（ADR-0034）
+1. 资源树一比一呈现真实来源根、文件夹、页面和资产；文件节点始终显示完整原始文件名及扩展名。（LOG-0005、LOG-0045、LOG-0046）
+2. 文件夹单击只选择，独立箭头或双击切换展开；文件夹不创建编辑器标签或内容页。（LOG-0035）
+3. 页面和资产普通打开先在所有编辑组全局查找既有标签；单击使用/激活临时预览，双击固定；只有显式侧边打开或分屏才创建额外视图。（LOG-0034）
 4. 每个编辑组最多一个临时预览标签；开始编辑、明确固定或拖动即原地转为固定标签。
-5. 编辑器标签使用完整文件名；每个编辑组在标签栏下显示一条来源相对路径面包屑，路径段只负责显式定位资源树。（ADR-0046—ADR-0048）
-6. 资源树选择支持单选、Ctrl/Cmd 非连续选择、Shift 连续选择和完整键盘导航；一次选择集限制在一个来源，执行操作前删除被已选祖先覆盖的后代。（ADR-0036、ADR-0258—ADR-0261）
-7. F2/右键只允许单项行内重命名；来源根不可行内重命名，V1 不支持批量重命名。（ADR-0264）
-8. 资源树不自动跟随活动文档；只有树操作、面包屑或显式“在资源树中显示”才展开祖先并单选目标。（ADR-0048）
-9. 排序提供名称、mtime、扩展名及方向；文件夹始终优先且自然名称升序，当前模式只作用于文件组，状态按来源记忆。（ADR-0037）
+5. 编辑器标签使用完整文件名；每个编辑组在标签栏下显示一条来源相对路径面包屑，路径段只负责显式定位资源树。（LOG-0046—LOG-0048）
+6. 资源树选择支持单选、Ctrl/Cmd 非连续选择、Shift 连续选择和完整键盘导航；一次选择集限制在一个来源，执行操作前删除被已选祖先覆盖的后代。（LOG-0036、LOG-0258—LOG-0261）
+7. F2/右键只允许单项行内重命名；来源根不可行内重命名，V1 不支持批量重命名。（LOG-0264）
+8. 资源树不自动跟随活动文档；只有树操作、面包屑或显式“在资源树中显示”才展开祖先并单选目标。（LOG-0048）
+9. 排序提供名称、mtime、扩展名及方向；文件夹始终优先且自然名称升序，当前模式只作用于文件组，状态按来源记忆。（LOG-0037）
 10. V1 不恢复编辑布局、固定标签或来源展开状态；来源在当前会话中丢失时，干净页面占位等待重载，脏页面转为悬空未保存文档。
 
 ### 6. 页面、资产、链接与嵌入
@@ -407,16 +430,16 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 
 ### 7. 保存、并发、冲突与关闭
 
-1. V1 使用显式手动保存；Ctrl/Cmd+S 只保存当前活动 Markdown 文档，不自动保存、不提供“保存全部”。（ADR-0251、ADR-0253）
-2. 保存使用当前共享源码与最近成功版本执行 expected-version 写入；成功静默且不清空撤销历史。（ADR-0225、ADR-0228）
-3. 保存失败不回滚源码，所有视图保持未保存；同一文档复用一条非模态、持久、可手动关闭的错误通知，后续成功自动清除。（ADR-0227—ADR-0232）
-4. 外部变化在本地干净时自动重载；本地脏时保留基线、本地、磁盘三方并要求用户明确合并、使用本地或使用磁盘。（ADR-0011）
+1. V1 使用显式手动保存；Ctrl/Cmd+S 只保存当前活动 Markdown 文档，不自动保存、不提供“保存全部”。（LOG-0251、LOG-0253）
+2. 保存使用当前共享源码与最近成功版本执行 expected-version 写入；成功静默且不清空撤销历史。（LOG-0225、LOG-0228）
+3. 保存失败不回滚源码，所有视图保持未保存；同一文档复用一条非模态、持久、可手动关闭的错误通知，后续成功自动清除。（LOG-0227—LOG-0232）
+4. 外部变化在本地干净时自动重载；本地脏时保留基线、本地、磁盘三方并要求用户明确合并、使用本地或使用磁盘。（LOG-0011）
 5. 来源丢失后，脏页面不可逆地转为悬空未保存文档；来源恢复也不自动重新绑定。
 6. 悬空文档保存严格按新建页面处理：在当前 workspace 的可用可写来源内选择新 Page 路径并绑定新身份，不改写任何指向旧地址的引用；工作区外路径不属于该保存流程。
 7. 不建立后台等待重连、自动迁移、三方恢复或普通未保存缓冲区恢复机制。
-8. 关闭非最后视图直接完成；关闭最后一个未保存视图提供保存、放弃、取消。（ADR-0240—ADR-0241）
-9. 退出或关闭工作区按文档逐个执行同一流程；任何取消或保存失败立即终止整体关闭，已完成结果不回滚。（ADR-0240—ADR-0250）
-10. 普通未保存输入不建立定时恢复副本；只在同源资源地址重构、Agent 修改、冲突覆盖、恢复和删除前建立高风险本地检查点。（ADR-0257）
+8. 关闭非最后视图直接完成；关闭最后一个未保存视图提供保存、放弃、取消。（LOG-0240—LOG-0241）
+9. 退出或关闭工作区按文档逐个执行同一流程；任何取消或保存失败立即终止整体关闭，已完成结果不回滚。（LOG-0240—LOG-0250）
+10. 普通未保存输入不建立定时恢复副本；只在同源资源地址重构、Agent 修改、冲突覆盖、恢复和删除前建立高风险本地检查点。（LOG-0257）
 
 ### 8. 文件操作、事务与失败模型
 
@@ -426,15 +449,18 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 - 编辑器复制并插入链接时，复制必须先成功，随后才修改 Markdown 缓冲区。
 - 删除与恢复继续限定在单一来源的回收站和索引边界内。
 - 多资源操作保持资源级原子、批次级部分完成。
+- 同源 rename/move 的 rollback 边界只包含主资源和全部已计划、已保存链接；成功提交后 session rebind、event 和 index convergence 是可重试投影。
+- 跨 provider copy/import 使用 ResourceIO 有界流式 transfer 和目标同级 staging；目录整体发布，Renderer 不接收绝对路径。
+- 每个顶层 transfer/import 在 plan 阶段限制为 100,000 entries、128 层和 100 GiB 已知 aggregate size；不跟随符号链接，不接受 device/socket/FIFO，V1 不提供绕过开关。
 
 ### 9. 回收站
 
-1. 主根和每个挂载源在来源根级维护独立工作区回收站；正常资源树、索引、搜索、标签、任务和引用解析必须排除其内容。（ADR-0015）
+1. 主根和每个挂载源在来源根级维护独立工作区回收站；正常资源树、索引、搜索、标签、任务和引用解析必须排除其内容。（LOG-0015）
 2. 删除始终确认，并在删除前逐个解决受影响未保存 Markdown 文档。
 3. 删除批次记录来源、原相对路径、删除时间和恢复所需 manifest；删除、恢复、清理均采用资源级原子和批次级部分完成。
 4. 恢复固定返回原位置，缺失父目录可安全重建；名称冲突用 `_2`、`_3`，目录作为整体避让。
 5. 只修复同一删除批次内部且双方都恢复的可确定引用；工作区其他断裂引用保持原文。
-6. 默认保留 30 天；到期或手动清理只移入系统废纸篓，应用不提供不可恢复永久删除。（ADR-0015）
+6. 默认保留 30 天；到期或手动清理只移入系统废纸篓，应用不提供不可恢复永久删除。（LOG-0015）
 
 ### 10. 索引与超级搜索
 
@@ -443,13 +469,15 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 - 超级搜索并行查询来源分区，结果按来源顶层分组；来源内部按相关性和规范路径排序。
 - 搜索结果不能被 LinkResolver 用于跨来源目标猜测。
 - 标签、Frontmatter、Markdown 正文和安全文本资产均只属于其真实来源分区。
+- `foldSearchText` 固定为 Unicode NFC 与 locale-neutral lowercase，不移除变音符。3+ code-point 查询用 FTS5 trigram 取候选并用 `instr` 验证连续子串；1—2 code-point 查询使用受限、分页、可取消扫描，不能漏结果。
+- 查询最多 512 code points；默认/最大每来源 50/100 条，每资源最多 3 个、每个最多 240 code points 的片段；cursor 绑定 generation。
 
 ### 11. 非 Markdown 资产
 
-1. V1 不提供非 Markdown 可写缓冲区；安全文本只读预览、专用媒体/PDF 预览和文件信息视图均复用统一资产身份。（ADR-0057）
-2. 无 BOM 文件仅在严格 UTF-8 完整解码时视为文本；带 BOM 的 UTF-8/16/32 按 BOM 解码，不猜测 GBK、Big5、Shift-JIS、ANSI 或系统代码页。（ADR-0060）
-3. 非 Markdown 文本预览与正文索引共享 10 MiB 原始大小上限；超限时只保留资源身份搜索和系统默认应用入口。（ADR-0062）
-4. 资产外部变化自动刷新只读预览并尽量恢复稳定上下文；失败时保留标签和手动重新加载，路径消失时显示“资源不存在”且不猜测新位置。（ADR-0058）
+1. V1 不提供非 Markdown 可写缓冲区；安全文本只读预览、专用媒体/PDF 预览和文件信息视图均复用统一资产身份。（LOG-0057）
+2. 无 BOM 文件仅在严格 UTF-8 完整解码时视为文本；带 BOM 的 UTF-8/16/32 按 BOM 解码，不猜测 GBK、Big5、Shift-JIS、ANSI 或系统代码页。（LOG-0060）
+3. 非 Markdown 文本预览与正文索引共享 10 MiB 原始大小上限；必须先 stat 再决定是否读取，超限时不得整体读入内存，只保留资源身份搜索和系统默认应用入口。（LOG-0062）
+4. 资产外部变化自动刷新只读预览并尽量恢复稳定上下文；失败时保留标签和手动重新加载，路径消失时显示“资源不存在”且不猜测新位置。（LOG-0058）
 5. 是否可预览不影响导入、复制、移动、重命名、删除、引用和当前会话中的资源失效占位能力。
 
 ### 12. API 契约与错误模型
@@ -458,9 +486,10 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 2. 知识资源 DTO 只传递稳定来源身份、规范化相对路径、资源类型、名称、版本、mtime、大小和必要能力标记；不传递任意绝对路径、DOM、EditorView 或文件句柄。
 3. 复合操作采用“预览计划—用户确认—带计划标识和前置版本提交”的两阶段语义；提交必须重新验证 owner、scope、版本、资源存在性和目标冲突。
 4. 批次结果使用每项判别联合或结构化 successes/failures，不能以一个含义不明的布尔值掩盖部分完成。
-5. 客户端分支只能依赖稳定错误码，不依赖异常文案。至少保留：`knowledge-resource-not-found`、`knowledge-resource-conflict`、`knowledge-version-conflict`、`knowledge-resource-out-of-scope`、`knowledge-operation-plan-expired`、`knowledge-operation-precondition-failed`、`knowledge-link-rewrite-failed`、`knowledge-index-unavailable`、`knowledge-trash-entry-not-found`、`knowledge-trash-parent-blocked`、`knowledge-native-capability-unavailable`。
+5. 客户端分支只能依赖 lowercase snake_case 稳定错误码，不依赖异常文案。至少保留：`knowledge_resource_not_found`、`knowledge_resource_conflict`、`knowledge_version_conflict`、`knowledge_resource_out_of_scope`、`knowledge_operation_plan_expired`、`knowledge_operation_precondition_failed`、`knowledge_link_rewrite_failed`、`knowledge_index_unavailable`、`knowledge_transfer_limit_exceeded`、`knowledge_transfer_entry_unsupported`、`knowledge_trash_entry_not_found`、`knowledge_trash_parent_blocked`、`knowledge_native_capability_unavailable`。
 6. HTTP、WebSocket、preload、配置、磁盘旧数据和 Provider 返回值一律先视为 `unknown`，经 schema 校验后进入领域类型；新代码不使用 `any` 或双重断言隐藏协议不兼容。
 7. WebSocket 事件必须版本化；断线重连后通过快照、事件回放或重新查询恢复，而不是假定页面持续打开。
+8. principal、owner 和 scope 只从认证后的 Hono context 派生；客户端 body 中的身份或绝对路径字段被拒绝，不能覆盖 context。
 
 ### 13. 安全、兼容、性能与国际化
 
@@ -471,7 +500,7 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 5. Open/Full 差异只在 composition root 注入；开放代码不得动态 import 或路径拼接私有实现。
 6. 保持现有 Workbench、ResourceIO、资源事件、Desktop、Mobile、LAN、CLI 和旧客户端兼容；已有兼容路由不因知识工作区引入而删除或改变含义。
 7. V1 不新增 workspace UI 状态持久化；索引格式、回收站 manifest 或协议变化仍必须有幂等、可恢复迁移和旧数据读取测试。
-8. 新 UI 必须覆盖中文、英文、日文、韩文和繁体中文，支持亮/暗主题、多窗口、键盘访问、焦点管理和辅助技术语义。
+8. 新 UI 必须覆盖中文、英文、日文、韩文和繁体中文，支持亮/暗主题、键盘访问、焦点管理和辅助技术语义；跨层状态必须对多个 Renderer context 安全，但 V1 不新增独立浮动知识窗口入口。
 9. 文件名大小写、Unicode、符号链接、换行、废纸篓和原生能力必须覆盖 Windows、macOS、Linux 差异。
 10. 解析、搜索、预览和复制必须有大小、超时、取消与并发限制；性能优化不得绕过状态真相、安全边界或事务正确性。
 
@@ -493,9 +522,9 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 以下内容不是开发者可重新选择的建议：
 
 1. **根身份：** provider 必须实现 `ProviderRootIdentityResolver`；只有明确 `disjoint` 的来源可共存，`unknown` 拒绝。见 `implementation-contracts.md`。
-2. **操作恢复：** 所有复合 mutation 使用 UUIDv7 operationId、15 分钟 plan TTL、持久 journal、幂等 commit 与启动 recovery barrier。见 `operation-journal-contract.md`。
+2. **操作恢复：** 所有复合 mutation 使用 `crypto.randomUUID()` UUIDv4 operationId、确定性 canonical JSON request hash、15 分钟 plan TTL、持久 journal、幂等 commit 与启动 recovery barrier。见 `operation-journal-contract.md`。
 3. **索引：** 每来源 better-sqlite3 schema v1、独立 generation、current manifest、WAL/FULL、单 writer 和无 in-place migration。见 `index-store-contract.md`。
-4. **原生能力：** 复用 `window.hana`，新增两个固定 IPC；resource action 使用 60 秒单次 grant，Renderer 不获得绝对路径。见 `implementation-contracts.md`。
+4. **原生能力：** 复用 `window.hana`，新增两个固定 IPC；resource action 使用 60 秒单次 grant，Main-only route 还要求只存在于 Server/Main 的 `nativeBridgeToken`，Renderer 不获得绝对路径。见 `implementation-contracts.md`。
 5. **E2E：** `@playwright/test@1.62.0`，固定 desktop-full/web-open/web-full projects 与 `E2E-KW-001`—`024`。见 `test-strategy.md`。
 6. **追踪：** 每个用户故事只有一个 primary owner 和至少一个精确测试路径；Ticket 57 不拥有用户故事。见 `requirements-traceability.md`。
 7. **Preflight：** Ticket 01 在真实仓库执行 implementation-preflight；关键契约漂移时先更新 change。
@@ -543,7 +572,7 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 15. 验证删除确认、未保存文档预处理、来源级回收站、30 天清理、恢复冲突和系统废纸篓边界。
 16. 验证超级搜索的来源顶层分组、组内资源聚合与排序、关键词/短语/OR 词法、Unicode 子串、定位和分区索引重建。
 17. 验证资产只读预览、安全解码、超限、PDF 无正文搜索、外部刷新、资源消失和系统默认应用入口。
-18. 在亮/暗主题、五种语言、键盘-only、多窗口和最窄支持宽度下执行关键流程。
+18. 在亮/暗主题、五种语言、键盘-only、多个隔离 Renderer context 和最窄支持宽度下执行关键流程；不把自动化测试窗口变成 V1 浮动窗口产品功能。
 
 ### API 与领域测试重点
 
@@ -556,7 +585,7 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 7. 回收站 manifest 旧版本兼容、父目录重建、目录整体避让、批次内部引用调整和到期清理。
 8. 索引全量重建与事件增量最终一致、损坏恢复、取消、超限和索引不可用降级。
 9. auth、owner、scope、PathGuard、Provider sandbox、错误映射、日志净化和 fail-closed。
-10. Renderer 异步 effect 取消、旧请求覆盖、新 WS 快照恢复、subscription/EditorView cleanup 和多窗口隔离。
+10. Renderer 异步 effect 取消、旧请求覆盖、新 WS 快照恢复、subscription/EditorView cleanup 和多 Renderer context 隔离。
 
 ### 必须执行的检查
 
@@ -646,39 +675,39 @@ npm run smoke:server:open
 7. open/full boundary、独立 Server、Desktop、LAN、Mobile、五种语言、亮暗主题、键盘访问和三平台构建/测试通过。
 8. 实际交付说明列出修改文件、分层理由、公开协议/持久化影响、安全与多平台影响、实际检查、未执行检查和残余风险。
 
-### 基础决策来源追踪概览
+### 讨论来源追踪概览
 
-下表汇总完整基础 ADR 对产品行为的来源覆盖；全部原文均位于 `ADR.md`。
+下表汇总 accepted 讨论结论对产品行为的覆盖；全部原文位于 `LOG.md`。它既用于追溯理由，也用于防止 Spec 压缩时遗漏已确认边界；若表述不一致必须同步修正，而不是任选其一。
 
-| 规格主题 | 基础 ADR 范围 |
+| 规格主题 | LOG 范围 |
 |---|---|
-| 工作区、来源、身份、事实 | ADR-0001—ADR-0008、ADR-0283 |
-| 编辑模式、页面属性、标签、任务、搜索 | ADR-0009、ADR-0011—ADR-0013、ADR-0015—ADR-0033 |
-| 资源树、创建、导入、文件身份 | ADR-0034—ADR-0053 |
-| 资产预览、编码、大小与实现参考 | ADR-0055—ADR-0065、ADR-0067、ADR-0262 |
-| 编辑基础行为、斜杠命令与扩展渲染 | ADR-0068—ADR-0076、ADR-0078—ADR-0100、ADR-0103 |
-| 附件、Wikilink 补全与页面嵌入 | ADR-0104—ADR-0109、ADR-0111—ADR-0112、ADR-0114—ADR-0117、ADR-0119—ADR-0139 |
-| 软换行、状态栏、查找替换 | ADR-0140—ADR-0205、ADR-0207—ADR-0211 |
-| 多视图、保存、关闭、恢复 | ADR-0212—ADR-0216、ADR-0219—ADR-0257 |
-| 资源树键盘、剪贴、复制、拖拽与底座 | ADR-0258—ADR-0283 |
+| 工作区、来源、身份、事实 | LOG-0001—LOG-0008、LOG-0283 |
+| 编辑模式、页面属性、标签、任务、搜索 | LOG-0009、LOG-0011—LOG-0013、LOG-0015—LOG-0033 |
+| 资源树、创建、导入、文件身份 | LOG-0034—LOG-0053 |
+| 资产预览、编码、大小与实现参考 | LOG-0055—LOG-0065、LOG-0067、LOG-0262 |
+| 编辑基础行为、斜杠命令与扩展渲染 | LOG-0068—LOG-0076、LOG-0078—LOG-0100、LOG-0103 |
+| 附件、Wikilink 补全与页面嵌入 | LOG-0104—LOG-0109、LOG-0111—LOG-0112、LOG-0114—LOG-0117、LOG-0119—LOG-0139 |
+| 软换行、状态栏、查找替换 | LOG-0140—LOG-0205、LOG-0207—LOG-0211 |
+| 多视图、保存、关闭、恢复 | LOG-0212—LOG-0216、LOG-0219—LOG-0257 |
+| 资源树键盘、剪贴、复制、拖拽与底座 | LOG-0258—LOG-0283 |
 
-### 仓库与实施细化架构决策概览
+### 仓库与实施细化讨论概览
 
-| 架构主题 | 补充 ADR |
+| 架构主题 | 补充 LOG |
 |---|---|
-| Workspace、来源、资源地址与 Open/Full composition | ADR-0284—ADR-0287 |
-| 磁盘事实、同源链接、Markdown IR 与 CM6 表面 | ADR-0288—ADR-0291 |
-| 文档会话、冲突与复合操作事务 | ADR-0292—ADR-0296 |
-| 索引、安全、SilverBullet 适配与垂直质量门禁 | ADR-0297—ADR-0300 |
+| Workspace、来源、资源地址与 Open/Full composition | LOG-0284—LOG-0287 |
+| 磁盘事实、同源链接、Markdown IR 与 CM6 表面 | LOG-0288—LOG-0291 |
+| 文档会话、冲突与复合操作事务 | LOG-0292—LOG-0296 |
+| 索引、安全、SilverBullet 适配与垂直质量门禁 | LOG-0297—LOG-0300 |
 
 
-### 实施闭环补充决策
+### 实施闭环讨论记录
 
-- `ADR-0301`：provider 根身份与不重叠证明。
-- `ADR-0302`：持久 operation journal 与启动恢复。
-- `ADR-0303`：better-sqlite3 generation index。
-- `ADR-0304`：grant-based Electron native bridge。
-- `ADR-0305`：固定 Playwright E2E。
-- `ADR-0306`：真实仓库 preflight。
-- `ADR-0307`：单一 requirement owner 与精确证据。
-- `ADR-0308`：来源、trash 与 Server 内部目录分域。
+- `LOG-0301`：provider 根身份与不重叠证明。
+- `LOG-0302`：持久 operation journal 与启动恢复。
+- `LOG-0303`：better-sqlite3 generation index。
+- `LOG-0304`：grant-based Electron native bridge。
+- `LOG-0305`：固定 Playwright E2E。
+- `LOG-0306`：真实仓库 preflight。
+- `LOG-0307`：单一 requirement owner 与精确证据。
+- `LOG-0308`：来源、trash 与 Server 内部目录分域。

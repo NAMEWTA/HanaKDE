@@ -18,10 +18,14 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `core/knowledge-workspace/knowledge-copy-service.ts`
 - `desktop/src/react/editor/knowledge-attachment-policy.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `desktop/src/react/utils/markdown-attachments.ts`
 - `lib/resource-io/resource-io.ts`
@@ -46,6 +50,7 @@
 3. 测试使用隔离临时 HANA_HOME、workspace、来源和端口，不依赖开发机固定路径或网络。
 4. 实现不得引入未在 ADR/实施契约冻结的新存储引擎、IPC path surface、恢复状态或 E2E 框架。
 5. 本 ticket 新增 UI 同时交付 zh-CN、zh-TW、en、ja、ko、键盘、ARIA、focus、亮暗主题和窄布局。
+6. 所有跨 provider copy 使用 Ticket 06 的 ResourceIO transfer；不得通过 Renderer、绝对路径或全量内存 buffer 中转。
 
 ## 自动化证据
 

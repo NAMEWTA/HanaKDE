@@ -18,10 +18,14 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `desktop/src/react/components/knowledge-workspace/KnowledgeAssetViewer.tsx`
 - `lib/knowledge-workspace/resource-open-policy.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `desktop/src/react/components/shared/MediaViewer/`
 - `desktop/src/react/utils/file-preview.ts`
@@ -46,6 +50,7 @@
 3. 测试使用隔离临时 HANA_HOME、workspace、来源和端口，不依赖开发机固定路径或网络。
 4. 实现不得引入未在 ADR/实施契约冻结的新存储引擎、IPC path surface、恢复状态或 E2E 框架。
 5. 本 ticket 新增 UI 同时交付 zh-CN、zh-TW、en、ja、ko、键盘、ARIA、focus、亮暗主题和窄布局。
+6. 打开任何正文前先 stat；超过 10 MiB、不可安全解码或不允许的类型不得先整体 read 再拒绝。
 
 ## 自动化证据
 
@@ -60,7 +65,7 @@
 
 ## 验收标准
 
-- [ ] 超限或不安全内容不进入编辑器；图片/PDF/安全文本无需等待索引即可打开。
+- [ ] spy provider 证明超限或不安全内容在 stat 后不发生正文 read；允许的图片/PDF/安全文本无需等待索引即可打开。
 - [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
 - [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
 - [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。

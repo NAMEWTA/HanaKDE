@@ -7,7 +7,7 @@
 
 - **战略：** 只汇总已实现能力的 Open/Full、Desktop、Server、LAN/Mobile、三平台、五语言、a11y、主题、性能、安全与迁移证据。
 - **需求追踪：** KW-RULE-RELEASE, KW-RULE-TEST
-- **当前现状：** 当前实现接缝位于 `spec.md`、`requirements-traceability.md`、`package.json`、`tickets-map.md`；本 ticket 只扩展这些公开边界。
+- **当前现状：** change 文档位于本 ticket 的父目录，代码根的 `package.json` 位于仓库根；本 ticket 只汇总 blocker 已产生的证据。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,16 +18,20 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `tests/knowledge-workspace-e2e/`
 - `release-checklist.md`
 - `release-evidence.md`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
 
-- `spec.md`
-- `requirements-traceability.md`
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
+
+- `../spec.md`
+- `../requirements-traceability.md`
 - `package.json`
-- `tickets-map.md`
+- `../tickets-map.md`
 
 ## 固定实施契约
 
@@ -37,7 +41,7 @@
 
 ## 实施顺序
 
-1. 运行 ownership validator，确认 173 条 story 的非 57 owner 全部完成。
+1. 运行 ownership validator，确认 193 条 story 的非 57 owner 全部完成。
 2. 执行 24 个 E2E 场景及三 project/平台矩阵。
 3. 填写 release-evidence.md 的实际命令、artifact、失败与未执行项。
 4. 不得修改 LOG.md 记录普通测试运行，不得首次实现功能。

@@ -189,6 +189,26 @@
 | KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 未执行 | — |
 | KW-US-172 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
 | KW-US-173 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
+| KW-US-174 | 25 | `tests/frontmatter-roundtrip.test.ts` | 契约/集成 | 未执行 | — |
+| KW-US-175 | 26 | `tests/knowledge-tags-tasks.test.ts` | E2E-KW-013 | 未执行 | — |
+| KW-US-176 | 26 | `tests/knowledge-tags-tasks.test.ts` | 契约/集成 | 未执行 | — |
+| KW-US-177 | 24 | `tests/knowledge-link-resolver.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-link-field.test.ts` | E2E-KW-009 | 未执行 | — |
+| KW-US-178 | 50 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 | 未执行 | — |
+| KW-US-179 | 50 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 | 未执行 | — |
+| KW-US-180 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts` | E2E-KW-017 | 未执行 | — |
+| KW-US-181 | 51 | `tests/knowledge-import.test.ts` | E2E-KW-017 | 未执行 | — |
+| KW-US-182 | 52 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 | 未执行 | — |
+| KW-US-183 | 52 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 | 未执行 | — |
+| KW-US-184 | 53 | `tests/knowledge-drag-contract.test.ts`<br>`desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 未执行 | — |
+| KW-US-185 | 53 | `desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 未执行 | — |
+| KW-US-186 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 未执行 | — |
+| KW-US-187 | 40 | `tests/knowledge-index-store.test.ts`<br>`tests/knowledge-index-schema-migration.test.ts` | E2E-KW-013, E2E-KW-014 | 未执行 | — |
+| KW-US-188 | 45 | `tests/knowledge-search-query.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 | 未执行 | — |
+| KW-US-189 | 45 | `tests/knowledge-search-query.test.ts` | E2E-KW-013 | 未执行 | — |
+| KW-US-190 | 45 | `desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 | 未执行 | — |
+| KW-US-191 | 46 | `desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 | 未执行 | — |
+| KW-US-192 | 46 | `tests/knowledge-query-api.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 | 未执行 | — |
+| KW-US-193 | 43 | `tests/knowledge-index-rebuild.test.ts`<br>`tests/knowledge-index-event-coordinator.test.ts` | E2E-KW-014 | 未执行 | — |
 
 ## Rule evidence
 

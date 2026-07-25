@@ -7,7 +7,7 @@
 
 - **战略：** 提供来源内标签、出站、反向引用、outline 和 index health 查询，不建立跨来源边。
 - **需求追踪：** KW-RULE-QUERY
-- **当前现状：** 当前实现接缝位于 `server/routes/knowledge-workspace.ts`、`core/knowledge-workspace/knowledge-index-coordinator.ts`；本 ticket 只扩展这些公开边界。
+- **当前现状：** `core/knowledge-workspace/knowledge-index-coordinator.ts` 由 Ticket 40 交付；Knowledge route 由本 ticket 在 Ticket 03 的共享协议和 Open composition 接缝上创建或扩展。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,13 +18,18 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `lib/knowledge-workspace/knowledge-query.ts`
+- `server/routes/knowledge-workspace.ts`
 - `tests/knowledge-query-api.test.ts`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
 
-- `server/routes/knowledge-workspace.ts`
-- `core/knowledge-workspace/knowledge-index-coordinator.ts`
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
+
+- `server/routes/knowledge-workspace.ts`（本 ticket 创建或更新）
+- `core/knowledge-workspace/knowledge-index-coordinator.ts`（由 Ticket 40 交付）
 
 ## 固定实施契约
 

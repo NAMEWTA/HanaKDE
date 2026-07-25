@@ -7,7 +7,7 @@
 
 - **战略：** 在统一 reducer 上实现方向键、Home/End、Page、连续/非连续范围和可访问焦点。
 - **需求追踪：** KW-US-015, KW-US-016, KW-US-017, KW-US-018
-- **当前现状：** 当前实现接缝位于 `desktop/src/react/components/desk/DeskTree.tsx`、`desktop/src/react/components/knowledge-workspace/resource-tree-selection.ts`；本 ticket 只扩展这些公开边界。
+- **当前现状：** 当前基座接缝是 `desktop/src/react/components/desk/DeskTree.tsx`；`resource-tree-selection.ts` 由 Ticket 47 交付，开始本 ticket 前必须存在。
 - **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
 
 ## 范围边界
@@ -18,13 +18,17 @@
 
 ## 交付物
 
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
 - `desktop/src/react/components/knowledge-workspace/KnowledgeResourceTree.tsx`
 - `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx`
 
-## 需阅读的真实文件
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
 
 - `desktop/src/react/components/desk/DeskTree.tsx`
-- `desktop/src/react/components/knowledge-workspace/resource-tree-selection.ts`
+- `desktop/src/react/components/knowledge-workspace/resource-tree-selection.ts`（由 Ticket 47 交付）
 
 ## 固定实施契约
 
