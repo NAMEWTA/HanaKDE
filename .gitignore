@@ -12,8 +12,8 @@ user/
 # 文档 / 参考文件
 # ═══════════════════════════════════════════
 .docs/
-CLAUDE.md
-AGENTS.md
+# CLAUDE.md
+# AGENTS.md
 docs/superpowers/
 .superpowers/
 archived/
@@ -96,3 +96,5 @@ reviews/
 
 # Codex environments
 .codex/
+build/
+silverbullet/*

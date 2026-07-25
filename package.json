@@ -254,5 +254,8 @@
       "icon": "desktop/src/icon.png",
       "artifactName": "${productName}-${version}-Linux-${arch}.${ext}"
     }
+  },
+  "volta": {
+    "node": "24.16.0"
   }
 }
