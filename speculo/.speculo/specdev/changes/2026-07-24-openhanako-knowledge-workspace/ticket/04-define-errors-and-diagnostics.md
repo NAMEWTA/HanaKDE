@@ -1,7 +1,7 @@
 # Ticket 04: 建立稳定错误与诊断契约
 
 - **被阻塞于：** [`01-freeze-real-repository-baseline.md`](./01-freeze-real-repository-baseline.md)、[`03-freeze-open-knowledge-contract.md`](./03-freeze-open-knowledge-contract.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,21 @@
 
 ## 验收标准
 
-- [ ] 日志不记录正文、凭证或绝对路径；相同失败跨 Desktop/Server 返回同一稳定错误码。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 日志不记录正文、凭证或绝对路径；相同失败跨 Desktop/Server 返回同一稳定错误码。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `71c900d6`（隔离 worktree 原始提交 `64563da8`）。
+- **平台：** macOS 26.5（Darwin 25.5.0，arm64）、Node `v24.16.0`、npm `11.13.0`。
+- **实现范围：** 冻结 18 个知识错误码的 HTTP status/retryable 表与 legacy 映射；建立只导出安全标量的诊断摘要；ResourceIO 事件贯通 operation correlation；远程 WebSocket 只投影无路径 `resource.resync_required`，Renderer 推进 cursor 并失效根与全部展开树节点、刷新全部打开预览。
+- **安全回归：** unknown code/status、非法 details、accessor/Proxy/symbol、原型链键、绝对路径和正文均 fail-closed；plain `Error` legacy catch-up 映射为稳定 `knowledge_resource_unavailable`；真实 ResourceIO → bus → WS → Renderer 恢复链有契约/组件回归。
+- **自动化：** 22 files、249/249 相关 Vitest 通过；target ESLint 0 error（21 条既存 warning）；`volta run npm run typecheck`、`volta run npm run lint:boundary`、`git diff --check` 通过。
+- **构建：** `volta run npm run build:renderer` 通过。首次 `build:server:open` 因网络无法下载 Node v24.15.0 失败；复用主工作树同版本只读缓存后 Vite/CLI bundle 成功。隔离产物依赖安装因网络长期无响应被中止；复用主工作树相同 `package.json` 的已缓存依赖后，`smoke:server:open` 正向 200 与缺失必需资源的负向失败均通过；脚本打印全部通过后存在既有悬挂句柄，Lead 手动结束进程。
+- **质量与规格检查：** 两轴均无未决问题。先前攻击式检查发现的任意 status/code、unknown 降级、plain Error、Proxy/getter、原型污染、unsafe details 二次抛出、嵌套树漏刷和 cursor 不推进均已修复并补回归。
+- **Playwright：** 本票明确不适用；未把 Vitest 证据登记为发布级 E2E。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-26-openhanako-knowledge-workspace-implementation-02.md`。

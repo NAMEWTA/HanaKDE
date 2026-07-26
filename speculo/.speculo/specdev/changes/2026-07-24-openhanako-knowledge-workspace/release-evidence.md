@@ -185,7 +185,7 @@
 | KW-US-167 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
 | KW-US-168 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
 | KW-US-169 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
-| KW-US-170 | 04 | `tests/knowledge-diagnostics.test.ts` | 契约/集成 | 未执行 | — |
+| KW-US-170 | 04 | `tests/knowledge-diagnostics.test.ts` | 契约/集成 | 通过 | `volta run npx vitest run tests/knowledge-diagnostics.test.ts tests/resource-events-ws.test.ts tests/resource-io-route.test.ts` 及相关 ResourceIO/Renderer 回归（22 files、249/249）；稳定错误码/HTTP/retryable、诊断脱敏、恶意对象安全拒绝与无路径 resync 恢复链均通过 |
 | KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 未执行 | — |
 | KW-US-172 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | Ticket 03 精确命令（135/135，契约/集成）及 Open export 回归（52/52）；`build:server:open`、`smoke:server:open` 通过 |
 | KW-US-173 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 共享协议相同且 Full-only 差异仅由 composition 注入；一次性测试签名下 full build 通过 |
@@ -216,7 +216,7 @@
 |---|---|---|---|
 | KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 部分通过（Ticket 03） | Ticket 03 契约/route/composition 135/135；后续 owner Tickets 05–09 尚未执行 |
-| KW-RULE-OBS | 04, 10, 43 | 未执行 | — |
+| KW-RULE-OBS | 04, 10, 43 | 部分通过（Ticket 04） | Ticket 04 相关回归 249/249；稳定错误/诊断、operation correlation、watch sequence/cursor 与无路径 resync 已验证；Tickets 10、43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 未执行 | — |
 | KW-RULE-PERF | 13 | 未执行 | — |

@@ -20,7 +20,7 @@
 | 01 | 0 基础契约 | [冻结真实仓库基线与兼容契约](./ticket/01-freeze-real-repository-baseline.md) | 无 | KW-RULE-PREFLIGHT, KW-RULE-TEST | P0 | 已完成 |
 | 02 | 0 基础契约 | [建立 SilverBullet 可审计参考边界](./ticket/02-audit-silverbullet-reference.md) | 无 | KW-RULE-LICENSE | P0 | 已完成 |
 | 03 | 0 基础契约 | [冻结 Open 知识协议与资源地址命名](./ticket/03-freeze-open-knowledge-contract.md) | 01 | KW-US-004, KW-US-009, KW-US-163, KW-US-164, KW-US-172, KW-US-173, KW-RULE-RESOURCE | P0 | 已完成 |
-| 04 | 0 基础契约 | [建立稳定错误与诊断契约](./ticket/04-define-errors-and-diagnostics.md) | 01, 03 | KW-US-170, KW-RULE-OBS | P0 | 未开始 |
+| 04 | 0 基础契约 | [建立稳定错误与诊断契约](./ticket/04-define-errors-and-diagnostics.md) | 01, 03 | KW-US-170, KW-RULE-OBS | P0 | 已完成 |
 | 05 | 0 基础契约 | [适配 main 与会话级来源注册表](./ticket/05-adapt-workspace-source-registry.md) | 03, 04 | KW-US-001, KW-US-002, KW-US-007, KW-US-008, KW-RULE-RESOURCE | P0 | 未开始 |
 | 06 | 0 基础契约 | [补齐 ResourceIO HTTP 变更接缝](./ticket/06-complete-resource-io-http-seams.md) | 03, 04, 05 | KW-RULE-RESOURCE | P0 | 未开始 |
 | 07 | 0 基础契约 | [迁移 Server、Desk 与 Workbench 兼容入口](./ticket/07-migrate-server-desk-workbench.md) | 05, 06 | KW-RULE-RESOURCE | P0 | 未开始 |
