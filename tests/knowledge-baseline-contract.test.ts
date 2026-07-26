@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { normalizePrincipal } from "../core/security-principal.ts";
 import { ResourceIO } from "../lib/resource-io/resource-io.ts";
 import type {
   ResourceDescriptor,
@@ -21,6 +22,21 @@ const changeRoot = path.join(
   repositoryRoot,
   "speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace",
 );
+
+function useBaselineLocalOwnerAuth(app: Hono): void {
+  app.use("*", async (c, next) => {
+    c.set("authPrincipal", normalizePrincipal({
+      kind: "local_user",
+      userId: "baseline-user",
+      studioId: "baseline-studio",
+      connectionKind: "local",
+      credentialKind: "loopback_token",
+      scopes: ["chat", "resources", "tools"],
+    }));
+    c.set("transportConnectionKind", "local");
+    await next();
+  });
+}
 
 function readPackageContract(): {
   devDependencies?: Record<string, string>;
@@ -367,6 +383,7 @@ describe("real ResourceIO/provider seam baseline", () => {
     expect(Buffer.from(direct.content).toString("utf8")).toBe("# Baseline\n");
 
     const app = new Hono();
+    useBaselineLocalOwnerAuth(app);
     app.route(
       "/api",
       createResourceIoRoute({
@@ -407,6 +424,7 @@ describe("real ResourceIO/provider seam baseline", () => {
 
   it("reports an unavailable ResourceIO through the public HTTP response instead of reaching Engine state", async () => {
     const app = new Hono();
+    useBaselineLocalOwnerAuth(app);
     app.route("/api", createResourceIoRoute({ getResourceIO: () => null }));
 
     const response = await app.request("/api/resource-io/stat", {

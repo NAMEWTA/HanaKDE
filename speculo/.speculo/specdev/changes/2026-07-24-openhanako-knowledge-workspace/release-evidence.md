@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `ba45f55b9393`（Ticket 01/02 基线验证点） |
+| Commit | `93de5ecf`（Ticket 03 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -19,12 +19,12 @@
 | KW-US-001 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
 | KW-US-002 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
 | KW-US-003 | 23 | `tests/knowledge-link-resolver.test.ts` | E2E-KW-009 | 未执行 | — |
-| KW-US-004 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
+| KW-US-004 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成） |
 | KW-US-005 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
 | KW-US-006 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
 | KW-US-007 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
 | KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
-| KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
+| KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成）；远程 DTO/错误无本地绝对路径 |
 | KW-US-010 | 09 | `tests/mobile-workbench-route.test.ts`<br>`desktop/src/react/__tests__/mobile/knowledge-access.test.ts` | E2E-KW-021 | 未执行 | — |
 | KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
 | KW-US-012 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
@@ -178,8 +178,8 @@
 | KW-US-160 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
 | KW-US-161 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
 | KW-US-162 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
-| KW-US-163 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
-| KW-US-164 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
+| KW-US-163 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；未认证、伪造 authority、无 owner/scope、越出来源均被安全拒绝 |
+| KW-US-164 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 均由隔离临时环境中的真实 Node Server 验证 |
 | KW-US-165 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts`<br>`desktop/src/react/__tests__/services/knowledge-native-client.test.ts` | E2E-KW-017 | 未执行 | — |
 | KW-US-166 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 未执行 | — |
 | KW-US-167 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
@@ -187,8 +187,8 @@
 | KW-US-169 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
 | KW-US-170 | 04 | `tests/knowledge-diagnostics.test.ts` | 契约/集成 | 未执行 | — |
 | KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 未执行 | — |
-| KW-US-172 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
-| KW-US-173 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 未执行 | — |
+| KW-US-172 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | Ticket 03 精确命令（135/135，契约/集成）及 Open export 回归（52/52）；`build:server:open`、`smoke:server:open` 通过 |
+| KW-US-173 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 共享协议相同且 Full-only 差异仅由 composition 注入；一次性测试签名下 full build 通过 |
 | KW-US-174 | 25 | `tests/frontmatter-roundtrip.test.ts` | 契约/集成 | 未执行 | — |
 | KW-US-175 | 26 | `tests/knowledge-tags-tasks.test.ts` | E2E-KW-013 | 未执行 | — |
 | KW-US-176 | 26 | `tests/knowledge-tags-tasks.test.ts` | 契约/集成 | 未执行 | — |
@@ -215,7 +215,7 @@
 | Rule | Tickets | Status | Artifact/command |
 |---|---|---|---|
 | KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
-| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 未执行 | — |
+| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 部分通过（Ticket 03） | Ticket 03 契约/route/composition 135/135；后续 owner Tickets 05–09 尚未执行 |
 | KW-RULE-OBS | 04, 10, 43 | 未执行 | — |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 未执行 | — |
