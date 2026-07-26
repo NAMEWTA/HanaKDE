@@ -1,7 +1,7 @@
 # Ticket 11: 建立 Markdown 知识语义 IR
 
 - **被阻塞于：** [`02-audit-silverbullet-reference.md`](./02-audit-silverbullet-reference.md)、[`03-freeze-open-knowledge-contract.md`](./03-freeze-open-knowledge-contract.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,21 @@
 
 ## 验收标准
 
-- [ ] Renderer 与 Server 对同一语料得到相同知识 token；CM6 parse tree 不跨进程序列化。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] Renderer 与 Server 对同一语料得到相同知识 token；CM6 parse tree 不跨进程序列化。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `b0331575`（隔离 worktree 原始提交 `42c15276`）。
+- **平台：** macOS 26.5（Darwin 25.5.0，arm64）、Node `v24.16.0`、npm `11.13.0`。
+- **实现范围：** 使用直接精确依赖 `@lezer/markdown@1.6.3` 的 CommonMark/GFM step parser，投影纯 JSON 可序列化的共享 Markdown Knowledge IR；覆盖 Frontmatter、代码、标题、Wikilink、Markdown link/image、标签和 GFM task 的 UTF-16 半开原始范围及精确子范围。
+- **边界与复杂度：** 不导出 Lezer/CM6 tree，不依赖 EditorState、DOM 或文件系统；BOM、LF/CRLF/CR/mixed、Unicode/NFC、合法 containment 与无 partial overlap 均冻结。HTML block/comment/tag 属性、script/style、code、URL、目标地址不误抽正文语义。
+- **规模与取消：** Lezer step、预处理、escape、tree projection、wikilink/tag 与 line-ending 扫描均周期检查 `AbortSignal`；130,000 个高密度 token 不再通过参数 spread 触发栈溢出，规模倍增回归保持线性。
+- **自动化：** `volta run npx vitest run tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`，2 files、29/29；target ESLint 0 warning；`volta run npm run typecheck`、`volta run npm run lint:boundary`、`npm ls @lezer/markdown --depth=0` 与 `git diff --check` 通过。
+- **质量与规格检查：** 两轴均无未决问题；已修复手写近似解析、O(n²) 扫描、子范围不精确、标签语法缺口、HTML 误抽、CRLF 切分、数组展开栈溢出及不可取消线性阶段。
+- **Playwright：** 本票明确不适用；无直接用户故事，不替下游 resolver/editor ticket 兜底。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-26-openhanako-knowledge-workspace-implementation-03.md`。
