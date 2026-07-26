@@ -23,9 +23,21 @@ const changeRoot = path.join(
   "speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace",
 );
 
+function setHonoContext(
+  context: unknown,
+  key: string,
+  value: unknown,
+): void {
+  (
+    context as {
+      set(contextKey: string, contextValue: unknown): void;
+    }
+  ).set(key, value);
+}
+
 function useBaselineLocalOwnerAuth(app: Hono): void {
   app.use("*", async (c, next) => {
-    c.set("authPrincipal", normalizePrincipal({
+    setHonoContext(c, "authPrincipal", normalizePrincipal({
       kind: "local_user",
       userId: "baseline-user",
       studioId: "baseline-studio",
@@ -33,7 +45,7 @@ function useBaselineLocalOwnerAuth(app: Hono): void {
       credentialKind: "loopback_token",
       scopes: ["chat", "resources", "tools"],
     }));
-    c.set("transportConnectionKind", "local");
+    setHonoContext(c, "transportConnectionKind", "local");
     await next();
   });
 }
