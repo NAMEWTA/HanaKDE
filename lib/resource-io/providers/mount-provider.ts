@@ -3,6 +3,7 @@ import path from "path";
 import { loadStudioMountRegistry } from "../../../core/studio-mounts.ts";
 import { capabilityDenied, providerNotAvailable, ResourceIOError } from "../errors.ts";
 import { resourceKeyForRef } from "../resource-refs.ts";
+import { resolveLocalFsRootIdentity } from "../root-identity.ts";
 import type {
   MaterializeResult,
   ResourceDescriptor,
@@ -64,6 +65,11 @@ export class MountProvider {
       delete: local && has("write"),
       mkdir: local && has("write"),
     };
+  }
+
+  async getRootIdentity(ref: ResourceRef) {
+    const resolved = this.resolveLocalMount(ref, "read");
+    return resolveLocalFsRootIdentity(this.id, resolved.path);
   }
 
   async stat(ref: ResourceRef): Promise<ResourceStat> {

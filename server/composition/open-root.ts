@@ -47,6 +47,7 @@ import { createUsageRoute } from "../routes/usage.ts";
 import { createWebAuthRoute } from "../routes/web-auth.ts";
 import { createWebSocketAuthRoute } from "../routes/ws-auth.ts";
 import { createStudioWorkspacesRoute } from "../routes/studio-workspaces.ts";
+import { createKnowledgeWorkspaceRoute } from "../routes/knowledge-workspace.ts";
 import { createMobileStaticRoute, resolveMobileStaticRouteOptions } from "../routes/mobile-static.ts";
 import { createHtmlPreviewRoute } from "../routes/html-preview.ts";
 import { createAccessRoute } from "../routes/access.ts";
@@ -102,6 +103,7 @@ export function registerOpenRoutes(app: Hono, ctx: CompositionContext): void {
   app.route("/api", createAgentsRoute(engine));
   app.route("/api", createDevicesRoute(engine));
   app.route("/api", createStudioWorkspacesRoute(engine));
+  app.route("/api", createKnowledgeWorkspaceRoute(engine));
   app.route("/api", createSkillsRoute(engine));
   app.route("/api", createChannelsRoute(engine, hub));
   app.route("/api", createDmRoute(engine, hub));

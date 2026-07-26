@@ -3,6 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import { ResourceIOError, resourceAccessDenied, resourceNotFound, targetAlreadyExists } from "../errors.ts";
 import { normalizeResourceRef, resourceKeyForRef } from "../resource-refs.ts";
+import { resolveLocalFsRootIdentity } from "../root-identity.ts";
 import type {
   MaterializeResult,
   ResourceDescriptor,
@@ -71,6 +72,12 @@ export class LocalFsProvider {
       delete: true,
       mkdir: true,
     };
+  }
+
+  async getRootIdentity(ref: ResourceRef | unknown) {
+    const filePath = this.resolvePath(ref);
+    this.assertAllowed(filePath, "read");
+    return resolveLocalFsRootIdentity(this.id, filePath);
   }
 
   async stat(ref: ResourceRef | unknown): Promise<ResourceStat> {

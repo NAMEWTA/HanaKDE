@@ -16,6 +16,7 @@ import type {
   ResourceProvider,
   ResourceProviderCapability,
   ResourceProviderId,
+  ProviderRootIdentity,
   ResourceReadResult,
   ResourceRef,
   ResourceSearchResult,
@@ -199,6 +200,27 @@ export class ResourceIO {
     const provider = this.providers[id];
     if (!provider) throw providerNotAvailable(id);
     return provider;
+  }
+
+  capabilitiesFor(input: unknown) {
+    const ref = normalizeResourceRef(input);
+    const provider = this.providerFor(ref);
+    return provider.capabilities?.(ref) || {};
+  }
+
+  async getRootIdentity(
+    input: unknown,
+    options: ResourceOperationContext = {},
+  ): Promise<ProviderRootIdentity> {
+    const ref = normalizeResourceRef(input);
+    const provider = this.providerFor(ref);
+    if (typeof provider.getRootIdentity !== "function") {
+      const error: any = new Error("provider root identity is unavailable");
+      error.code = "source_root_identity_unprovable";
+      error.status = 422;
+      throw error;
+    }
+    return provider.getRootIdentity(ref, options);
   }
 
   async callProvider<T>(ref: ResourceRef, capability: ResourceProviderCapability, context: ResourceOperationContext, ...args: unknown[]): Promise<T> {

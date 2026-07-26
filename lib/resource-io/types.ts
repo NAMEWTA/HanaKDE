@@ -103,6 +103,21 @@ export type ResourceProviderCapabilities = {
   mkdir?: boolean;
 };
 
+export type ProviderRootIdentity = Readonly<{
+  providerId: string;
+  identityNamespace: string;
+  opaqueRootId: string;
+  scopeToken: string;
+  caseMode: "sensitive" | "insensitive" | "unknown";
+}>;
+
+export type RootRelation =
+  | "same"
+  | "ancestor"
+  | "descendant"
+  | "disjoint"
+  | "unknown";
+
 export type ResourceProviderCapability = keyof ResourceProviderCapabilities;
 
 export type ResourceProviderId =
@@ -241,6 +256,10 @@ export type ResourceWatchTarget = {
 export type ResourceProvider = {
   id: ResourceProviderId;
   capabilities?: (ref: ResourceRef) => ResourceProviderCapabilities;
+  getRootIdentity?: (
+    ref: ResourceRef,
+    context?: ResourceOperationContext,
+  ) => Promise<ProviderRootIdentity>;
   watchTarget?: (ref: ResourceRef) => ResourceWatchTarget;
   stat?: (ref: ResourceRef) => Promise<ResourceStat>;
   read?: (ref: ResourceRef) => Promise<ResourceReadResult>;
