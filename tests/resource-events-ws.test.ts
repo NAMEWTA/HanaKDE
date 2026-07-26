@@ -20,7 +20,14 @@ describe("toResourceEventWsMessage", () => {
       occurredAt: "2026-06-21T09:00:00.000Z",
     };
 
-    expect(toResourceEventWsMessage(event, null)).toEqual(event);
+    expect(toResourceEventWsMessage(event, null)).toEqual({
+      type: "resource.resync_required",
+      stale: true,
+      resync: "resource-stat-required",
+      source: "provider_watch",
+      sequence: 7,
+      occurredAt: "2026-06-21T09:00:00.000Z",
+    });
   });
 
   it("uses the hub session path when a resource event is session-scoped by the bus", () => {
@@ -38,10 +45,13 @@ describe("toResourceEventWsMessage", () => {
       occurredAt: "2026-06-21T09:01:00.000Z",
     };
 
-    expect(toResourceEventWsMessage(event, "/sessions/a.jsonl")).toMatchObject({
-      type: "resource.changed",
-      sessionPath: "/sessions/a.jsonl",
-      resourceKey: "local_fs:/workspace/notes/new.md",
+    expect(toResourceEventWsMessage(event, "/sessions/a.jsonl")).toEqual({
+      type: "resource.resync_required",
+      stale: true,
+      resync: "resource-stat-required",
+      source: "agent_tool",
+      sequence: 8,
+      occurredAt: "2026-06-21T09:01:00.000Z",
     });
   });
 
@@ -53,7 +63,7 @@ describe("toResourceEventWsMessage", () => {
       source: "provider_watch",
       sequence: 9,
       occurredAt: "2026-06-21T09:02:00.000Z",
-    }, null)).toMatchObject({ type: "resource.deleted" });
+    }, null)).toMatchObject({ type: "resource.resync_required", stale: true });
 
     expect(toResourceEventWsMessage({
       type: "resource.renamed",
@@ -64,10 +74,21 @@ describe("toResourceEventWsMessage", () => {
       source: "provider_watch",
       sequence: 10,
       occurredAt: "2026-06-21T09:03:00.000Z",
-    }, null)).toMatchObject({ type: "resource.renamed" });
+    }, null)).toMatchObject({ type: "resource.resync_required", stale: true });
   });
 
   it("ignores non-resource events", () => {
     expect(toResourceEventWsMessage({ type: "demo_event" }, "/sessions/a.jsonl")).toBeNull();
+  });
+
+  it("never executes getters or proxy traps and rejects oversized/symbol input", () => {
+    let getterRuns = 0;
+    const accessor = Object.create(null);
+    Object.defineProperty(accessor, "type", { enumerable: true, get() { getterRuns += 1; return "resource.deleted"; } });
+    expect(toResourceEventWsMessage(accessor)).toBeNull();
+    expect(getterRuns).toBe(0);
+    expect(toResourceEventWsMessage(new Proxy({}, { ownKeys() { throw new Error("trap"); } }))).toBeNull();
+    expect(toResourceEventWsMessage({ type: "resource.deleted", source: "api", sequence: 1, occurredAt: "2026-01-01T00:00:00Z", [Symbol("secret")]: "token" })).toBeNull();
+    expect(toResourceEventWsMessage({ type: "resource.deleted", source: "api", sequence: 1, occurredAt: "2026-01-01T00:00:00Z", ...Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`x${i}`, i])) })).toBeNull();
   });
 });

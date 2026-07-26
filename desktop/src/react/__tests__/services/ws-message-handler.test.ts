@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const previewRefreshMocks = vi.hoisted(() => ({
   changeOptions: { retryMissing: true, retryUnchanged: true },
   refreshOpenPreviewDocumentsForResourceChange: vi.fn(async () => undefined),
+  refreshOpenPreviewDocuments: vi.fn(async () => undefined),
   markDeskTreeDirtyForResourceChange: vi.fn(),
+  invalidateAllDeskTreePaths: vi.fn(),
 }));
 
 vi.mock('../../hooks/use-stream-buffer', () => ({
@@ -34,7 +36,9 @@ vi.mock('../../services/app-event-actions', () => ({
 vi.mock('../../utils/preview-document-refresh', () => ({
   PREVIEW_DOCUMENT_CHANGE_REFRESH_OPTIONS: previewRefreshMocks.changeOptions,
   refreshOpenPreviewDocumentsForResourceChange: previewRefreshMocks.refreshOpenPreviewDocumentsForResourceChange,
+  refreshOpenPreviewDocuments: previewRefreshMocks.refreshOpenPreviewDocuments,
   markDeskTreeDirtyForResourceChange: previewRefreshMocks.markDeskTreeDirtyForResourceChange,
+  invalidateAllDeskTreePaths: previewRefreshMocks.invalidateAllDeskTreePaths,
 }));
 
 vi.mock('../../services/stream-resume', () => ({
@@ -1223,6 +1227,19 @@ describe('ws-message-handler app events', () => {
     );
     expect(previewRefreshMocks.refreshOpenPreviewDocumentsForResourceChange).toHaveBeenCalledWith(
       renamedMsg,
+      previewRefreshMocks.changeOptions,
+    );
+  });
+
+  it('resource.resync_required 会刷新整棵树和全部打开预览', () => {
+    handleServerMessage({
+      type: 'resource.resync_required',
+      stale: true,
+      resync: 'resource-stat-required',
+      sequence: 9,
+    });
+    expect(previewRefreshMocks.invalidateAllDeskTreePaths).toHaveBeenCalled();
+    expect(previewRefreshMocks.refreshOpenPreviewDocuments).toHaveBeenCalledWith(
       previewRefreshMocks.changeOptions,
     );
   });

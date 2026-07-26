@@ -842,4 +842,14 @@ describe('DeskSection workspace watching', () => {
     expect(mocks.loadDeskTreeFiles).toHaveBeenCalledWith('archive', { force: true });
     expect(useStore.getState().deskDirtyTreePaths).toEqual([]);
   });
+
+  it('marks the root and every expanded directory dirty for a safe full resync', async () => {
+    useStore.setState({
+      deskExpandedPaths: ['notes', 'notes/deep'],
+      deskDirtyTreePaths: [],
+    } as never);
+    const { invalidateAllDeskTreePaths } = await import('../../utils/preview-document-refresh');
+    invalidateAllDeskTreePaths();
+    expect(useStore.getState().deskDirtyTreePaths).toEqual(['', 'notes', 'notes/deep']);
+  });
 });

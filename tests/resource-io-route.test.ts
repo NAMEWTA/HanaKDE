@@ -9,6 +9,7 @@ import { ResourceIO } from "../lib/resource-io/resource-io.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import { MountProvider } from "../lib/resource-io/providers/mount-provider.ts";
 import { createResourceIoRoute } from "../server/routes/resource-io.ts";
+import { ResourceIOError, toKnowledgeResourceIOError } from "../lib/resource-io/errors.ts";
 
 function setHonoContext(
   context: unknown,
@@ -54,6 +55,72 @@ function useRemoteOwnerAuth(app: Hono): void {
 }
 
 describe("resource-io route", () => {
+  it("projects the same stable unavailable error for direct and route adapters", async () => {
+    const direct = toKnowledgeResourceIOError(new ResourceIOError("provider /private/path unavailable", {
+      code: "provider_not_available",
+    }));
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      resourceEventsSince: () => { throw new ResourceIOError("provider /private/path unavailable", { code: "provider_not_available" }); },
+    }));
+    const response = await app.request("/api/resource-io/events?since=0");
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: direct.code,
+      httpStatus: direct.httpStatus,
+      retryable: direct.retryable,
+    });
+    expect(JSON.stringify(body)).not.toContain("/private/path");
+  });
+
+  it("fails closed when an unknown route error uses hostile property traps", async () => {
+    let getRuns = 0;
+    const hostile = new Proxy({ safeMessage: "/private/leak", status: 200 }, {
+      get(target, key, receiver) { getRuns += 1; return Reflect.get(target, key, receiver); },
+    });
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({ resourceEventsSince: () => { throw hostile; } }));
+    const response = await app.request("/api/resource-io/events?since=0");
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "Resource operation failed",
+      code: "resource_operation_failed",
+      safeMessage: "Resource operation failed",
+    });
+    expect(getRuns).toBe(0);
+  });
+
+  it.each(["__proto__", "constructor", "prototype"])("never treats prototype key %s as a compatibility error", async (code) => {
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      resourceEventsSince: () => { throw Object.assign(new Error("unsafe"), { code, status: 200, safeMessage: "unsafe" }); },
+    }));
+    const response = await app.request("/api/resource-io/events?since=0");
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "Resource operation failed",
+      code: "resource_operation_failed",
+      safeMessage: "Resource operation failed",
+    });
+  });
+
+  it("returns fixed 500 for a known code carrying unsafe accessor details", async () => {
+    let getterRuns = 0;
+    const details = {};
+    Object.defineProperty(details, "field", { enumerable: true, get() { getterRuns += 1; return "token"; } });
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      resourceEventsSince: () => { throw Object.assign(new Error("unsafe"), { code: "knowledge_resource_not_found", details }); },
+    }));
+    const response = await app.request("/api/resource-io/events?since=0");
+    expect(response.status).toBe(500);
+    expect(getterRuns).toBe(0);
+  });
   it("returns retained resource events for catch-up by cursor", async () => {
     const resourceEventsSince = vi.fn(() => ({
       stale: false,
@@ -627,9 +694,9 @@ describe("resource-io route", () => {
 
     expect(readRes.status).toBe(400);
     expect(await readRes.json()).toEqual({
-      error: "Resource content is not valid UTF-8; request encoding \"base64\" for binary content",
+      error: "Resource content encoding is invalid",
       code: "invalid_resource_encoding",
-      safeMessage: "Resource content is not valid UTF-8; request encoding \"base64\" for binary content",
+      safeMessage: "Resource content encoding is invalid",
     });
   });
 
@@ -706,9 +773,9 @@ describe("resource-io route", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
-      error: "Resource content is not valid base64",
+      error: "Resource content encoding is invalid",
       code: "invalid_resource_encoding",
-      safeMessage: "Resource content is not valid base64",
+      safeMessage: "Resource content encoding is invalid",
     });
     expect(resourceIO.write).not.toHaveBeenCalled();
   });
@@ -1107,10 +1174,10 @@ describe("resource-io route", () => {
       });
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({
-        error: "Remote resource requests cannot use local-file references",
+        error: "Remote resource request is not allowed",
         code: "resource_path_not_remote_safe",
         safeMessage:
-          "Remote resource requests cannot use local-file references",
+          "Remote resource request is not allowed",
       });
     }
     expect(write).not.toHaveBeenCalled();
@@ -1247,9 +1314,10 @@ describe("resource-io route", () => {
 
     expect(res.status).toBe(403);
     expect(body).toEqual({
-      error: "Resource access denied by authority policy",
-      code: "resource_access_denied",
-      safeMessage: "Resource access denied by authority policy",
+      error: "Knowledge resource operation failed",
+      code: "knowledge_resource_out_of_scope",
+      httpStatus: 403,
+      retryable: false,
     });
     expect(JSON.stringify(body)).not.toContain("/tmp/hana-fixture");
   });

@@ -41,6 +41,7 @@ export type ResourceChangedEvent = {
   sessionPath?: string | null;
   sequence: number;
   occurredAt: string;
+  operationId?: string;
 };
 
 export type ResourceDeletedEvent = {
@@ -51,6 +52,7 @@ export type ResourceDeletedEvent = {
   sessionPath?: string | null;
   sequence: number;
   occurredAt: string;
+  operationId?: string;
 };
 
 export type ResourceRenamedEvent = {
@@ -63,6 +65,7 @@ export type ResourceRenamedEvent = {
   sessionPath?: string | null;
   sequence: number;
   occurredAt: string;
+  operationId?: string;
 };
 
 export type ResourceEvent =
@@ -278,6 +281,7 @@ export type ResourceOperationContext = {
   requestId?: string | null;
   emit?: boolean;
   auditRead?: boolean;
+  operationId?: string;
 };
 
 export type ResourceAuditOutcome = "allowed" | "denied" | "conflict";
@@ -296,6 +300,7 @@ export type ResourceAuditEvent = {
   sessionId?: string | null;
   sessionPath?: string | null;
   requestId?: string | null;
+  operationId?: string;
   sequence: number;
   occurredAt: string;
 };

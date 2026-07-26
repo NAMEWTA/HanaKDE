@@ -520,6 +520,13 @@ export function markDeskTreeDirtyForResourceChange(event: ResourceChangeEvent | 
   }
 }
 
+export function invalidateAllDeskTreePaths(): void {
+  const state = useStore.getState();
+  for (const subdir of new Set(['', ...(state.deskExpandedPaths || [])])) {
+    state.markDeskTreeDirty(subdir);
+  }
+}
+
 export async function refreshOpenPreviewDocumentsForResourceChange(
   event: ResourceChangeEvent | null | undefined,
   options: PreviewDocumentRefreshOptions = PREVIEW_DOCUMENT_CHANGE_REFRESH_OPTIONS,

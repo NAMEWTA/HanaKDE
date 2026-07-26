@@ -198,7 +198,11 @@ async function resubscribeActiveWatches(): Promise<void> {
 }
 
 function isResourceEvent(event: ResourceEvent | null | undefined): event is ResourceEvent {
-  return event?.type === 'resource.changed' || event?.type === 'resource.deleted' || event?.type === 'resource.renamed';
+  if (!event || !Number.isSafeInteger(event.sequence) || Number(event.sequence) < 0) return false;
+  if (event.type === 'resource.resync_required') {
+    return event.stale === true && event.resync === 'resource-stat-required';
+  }
+  return event.type === 'resource.changed' || event.type === 'resource.deleted' || event.type === 'resource.renamed';
 }
 
 export function recordResourceEventCursor(event: ResourceEvent | null | undefined): void {

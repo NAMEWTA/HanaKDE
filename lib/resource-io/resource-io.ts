@@ -1,4 +1,5 @@
 import type { ResourceEventBus } from "./resource-event-bus.ts";
+import { isOperationCorrelationId } from "../../shared/knowledge-diagnostics.ts";
 import { capabilityDenied, crossProviderCopyUnsupported, crossProviderMoveUnsupported, providerNotAvailable } from "./errors.ts";
 import { normalizeResourceRef, providerIdForResourceRef } from "./resource-refs.ts";
 import type {
@@ -111,6 +112,7 @@ export class ResourceIO {
         resource: result.resource,
         source: options.source || "api",
         sessionPath: options.sessionPath ?? this.getSessionPath?.() ?? null,
+        ...operationCorrelation(options),
       } satisfies Omit<ResourceDeletedEvent, "type" | "sequence" | "occurredAt">);
     }
     return result;
@@ -233,6 +235,7 @@ export class ResourceIO {
       source: options.source || "api",
       reason: options.reason,
       sessionPath: options.sessionPath ?? this.getSessionPath?.() ?? null,
+      ...operationCorrelation(options),
     });
   }
 
@@ -244,6 +247,7 @@ export class ResourceIO {
       source: options.source || "api",
       reason: options.reason,
       sessionPath: options.sessionPath ?? this.getSessionPath?.() ?? null,
+      ...operationCorrelation(options),
     } as any);
   }
 
@@ -257,6 +261,7 @@ export class ResourceIO {
       source: options.source || "api",
       reason: options.reason,
       sessionPath: options.sessionPath ?? this.getSessionPath?.() ?? null,
+      ...operationCorrelation(options),
     } as any);
   }
 
@@ -304,6 +309,12 @@ function isWriteConflict(result: ResourceWriteExpectedVersionResult): result is 
   return Boolean((result as any)?.ok === false && (result as any)?.conflict === true);
 }
 
+function operationCorrelation(context: ResourceOperationContext): { operationId?: string } {
+  return isOperationCorrelationId(context.operationId)
+    ? { operationId: context.operationId }
+    : {};
+}
+
 function auditContext(context: ResourceOperationContext, getSessionPath: () => string | null) {
   return {
     ...(context.reason ? { reason: context.reason } : {}),
@@ -311,6 +322,7 @@ function auditContext(context: ResourceOperationContext, getSessionPath: () => s
     sessionId: context.sessionId ?? context.principal?.sessionId ?? null,
     sessionPath: context.sessionPath ?? context.principal?.sessionPath ?? getSessionPath?.() ?? null,
     requestId: context.requestId ?? context.principal?.requestId ?? null,
+    ...operationCorrelation(context),
   };
 }
 

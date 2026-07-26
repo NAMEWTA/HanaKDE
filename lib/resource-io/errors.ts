@@ -1,3 +1,9 @@
+import {
+  KnowledgeWorkspaceError,
+  mapLegacyKnowledgeErrorCode,
+  snapshotOwnData,
+} from "../../shared/knowledge-workspace-errors.ts";
+
 export class ResourceIOError extends Error {
   declare code: string;
   declare status: number;
@@ -8,6 +14,12 @@ export class ResourceIOError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+export function toKnowledgeResourceIOError(input: unknown): KnowledgeWorkspaceError | undefined {
+  const code = mapLegacyKnowledgeErrorCode(snapshotOwnData(input, 20)?.code);
+  if (!code) return undefined;
+  return new KnowledgeWorkspaceError(code, "Knowledge resource operation failed");
 }
 
 export function capabilityDenied(capability: string, providerId: string): ResourceIOError {

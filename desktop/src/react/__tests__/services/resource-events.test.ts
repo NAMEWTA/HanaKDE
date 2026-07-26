@@ -113,6 +113,24 @@ describe('resource-events', () => {
     expect(client.lastSeenSequence()).toBe(6);
   });
 
+  it('accepts a safe resync cursor event and advances the sequence without paths', async () => {
+    const { createResourceEventClient } = await import('../../services/resource-events');
+    const client = createResourceEventClient();
+    const event = {
+      type: 'resource.resync_required',
+      stale: true,
+      resync: 'resource-stat-required',
+      source: 'provider_watch',
+      sequence: 12,
+      occurredAt: '2026-07-26T00:00:00.000Z',
+    };
+    client.handleEvent(event);
+    expect(client.lastSeenSequence()).toBe(12);
+    expect(JSON.stringify(event)).not.toMatch(/[/\\\\](?:Users|private|tmp)[/\\\\]/);
+    client.handleEvent({ ...event, sequence: 13, stale: false });
+    expect(client.lastSeenSequence()).toBe(12);
+  });
+
   it('requests ResourceIO catch-up when the renderer returns to the foreground', async () => {
     const listeners = new Map<string, () => void>();
     const windowObj = {

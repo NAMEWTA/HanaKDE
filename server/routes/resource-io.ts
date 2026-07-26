@@ -3,6 +3,7 @@ import { TextDecoder } from "util";
 import { Hono } from "hono";
 import { principalOwnsLocalConnection } from "../../core/security-principal.ts";
 import { parseKnowledgeResourceAddress } from "../../shared/knowledge-workspace-contract.ts";
+import { snapshotOwnData, toKnowledgeErrorEnvelope, toPublicKnowledgeErrorEnvelope } from "../../shared/knowledge-workspace-errors.ts";
 import { safeJson } from "../hono-helpers.ts";
 import { createHonoResourceOperationContext } from "../http/resource-operation-context.ts";
 
@@ -291,23 +292,50 @@ function resourceEventsSince(engine, sequence) {
   );
 }
 
-function errorJson(c, err, fallbackStatus = 500) {
-  const safeMessage = typeof err?.safeMessage === "string" && err.safeMessage
-    ? err.safeMessage
-    : null;
-  if (!safeMessage) {
+function errorJson(c, err, _fallbackStatus = 500) {
+  const envelope = toKnowledgeErrorEnvelope(err);
+  if (envelope) {
     return c.json({
-      error: "Resource operation failed",
-      code: "resource_operation_failed",
-      safeMessage: "Resource operation failed",
-    }, fallbackStatus);
+      error: "Knowledge resource operation failed",
+      ...envelope,
+    }, envelope.httpStatus);
   }
+  const publicContractError = toPublicKnowledgeErrorEnvelope(err);
+  if (publicContractError) {
+    return c.json({
+      error: "Invalid knowledge contract value",
+      ...publicContractError,
+    }, publicContractError.httpStatus);
+  }
+  const snapshot = snapshotOwnData(err, 20);
+  const compatibility = compatibilityRouteError(snapshot);
+  if (compatibility) return c.json(compatibility.body, compatibility.status);
   return c.json({
-    error: safeMessage,
-    ...(err?.code ? { code: err.code } : {}),
-    ...(safeMessage ? { safeMessage } : {}),
-    ...(isSafeErrorDetails(err?.details) ? { details: err.details } : {}),
-  }, err?.status || fallbackStatus);
+    error: "Resource operation failed",
+    code: "resource_operation_failed",
+    safeMessage: "Resource operation failed",
+  }, 500);
+}
+
+function compatibilityRouteError(snapshot) {
+  const definitions = new Map([
+    ["forbidden_resource_authority_field", [400, "Resource mutation authority must come from authenticated context"]],
+    ["resource_path_not_remote_safe", [403, "Remote resource request is not allowed"]],
+    ["invalid_resource_encoding", [400, "Resource content encoding is invalid"]],
+    ["resource_auth_context_invalid", [403, "Authenticated resource owner and scope required"]],
+  ]);
+  const definition = snapshot && typeof snapshot.code === "string" ? definitions.get(snapshot.code) : null;
+  if (!definition) return null;
+  const details = safeErrorDetails(snapshot.details);
+  return {
+    status: definition[0],
+    body: {
+      error: definition[1],
+      code: snapshot.code,
+      safeMessage: definition[1],
+      ...(details ? { details } : {}),
+    },
+  };
 }
 
 function projectResourceResponse(c, result, responseKind) {
@@ -568,15 +596,14 @@ function isRemoteSafeResourceRef(value) {
   return false;
 }
 
-function isSafeErrorDetails(details) {
-  return Boolean(
-    details
-      && typeof details === "object"
-      && !Array.isArray(details)
-      && Object.keys(details).length === 1
-      && typeof details.field === "string"
-      && MUTATION_AUTHORITY_FIELDS.has(details.field),
-  );
+function safeErrorDetails(details) {
+  const snapshot = snapshotOwnData(details, 1);
+  return snapshot
+    && Object.keys(snapshot).length === 1
+    && typeof snapshot.field === "string"
+    && MUTATION_AUTHORITY_FIELDS.has(snapshot.field)
+    ? { field: snapshot.field }
+    : undefined;
 }
 
 function resourceContentEncodingError(message) {
