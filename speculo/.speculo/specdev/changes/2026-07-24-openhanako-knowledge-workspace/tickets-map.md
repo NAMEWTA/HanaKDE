@@ -22,7 +22,7 @@
 | 03 | 0 基础契约 | [冻结 Open 知识协议与资源地址命名](./ticket/03-freeze-open-knowledge-contract.md) | 01 | KW-US-004, KW-US-009, KW-US-163, KW-US-164, KW-US-172, KW-US-173, KW-RULE-RESOURCE | P0 | 已完成 |
 | 04 | 0 基础契约 | [建立稳定错误与诊断契约](./ticket/04-define-errors-and-diagnostics.md) | 01, 03 | KW-US-170, KW-RULE-OBS | P0 | 已完成 |
 | 05 | 0 基础契约 | [适配 main 与会话级来源注册表](./ticket/05-adapt-workspace-source-registry.md) | 03, 04 | KW-US-001, KW-US-002, KW-US-007, KW-US-008, KW-RULE-RESOURCE | P0 | 已完成 |
-| 06 | 0 基础契约 | [补齐 ResourceIO HTTP 变更接缝](./ticket/06-complete-resource-io-http-seams.md) | 03, 04, 05 | KW-RULE-RESOURCE | P0 | 未开始 |
+| 06 | 0 基础契约 | [补齐 ResourceIO HTTP 变更接缝](./ticket/06-complete-resource-io-http-seams.md) | 03, 04, 05 | KW-RULE-RESOURCE | P0 | 已完成 |
 | 07 | 0 基础契约 | [迁移 Server、Desk 与 Workbench 兼容入口](./ticket/07-migrate-server-desk-workbench.md) | 05, 06 | KW-RULE-RESOURCE | P0 | 未开始 |
 | 08 | 0 基础契约 | [迁移 Renderer 资源客户端与 Desk 兼容状态](./ticket/08-migrate-renderer-resource-client.md) | 05, 06, 07 | KW-RULE-RESOURCE | P0 | 未开始 |
 | 09 | 0 基础契约 | [迁移 Mobile 与 LAN 知识契约](./ticket/09-migrate-mobile-lan-contract.md) | 05, 06, 07 | KW-US-010, KW-RULE-RESOURCE | P0 | 未开始 |

@@ -1,7 +1,7 @@
 # Ticket 06: 补齐 ResourceIO HTTP 变更接缝
 
 - **被阻塞于：** [`03-freeze-open-knowledge-contract.md`](./03-freeze-open-knowledge-contract.md)、[`04-define-errors-and-diagnostics.md`](./04-define-errors-and-diagnostics.md)、[`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -69,10 +69,27 @@
 
 ## 验收标准
 
-- [ ] HTTP 能力与 provider capability 一致；跨 provider transfer 覆盖大文件、目录、symlink no-follow/unsupported、1MiB/4/8MiB 上限、取消、staging 清理和 provider-pair matrix。
-- [ ] 伪造 principal/user/studio 无法越权；LAN/Mobile/Knowledge response 不泄露绝对路径。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] HTTP 能力与 provider capability 一致；跨 provider transfer 覆盖大文件、目录、symlink no-follow/unsupported、1MiB/4/8MiB 上限、取消、staging 清理和 provider-pair matrix。
+- [x] 伪造 principal/user/studio 无法越权；LAN/Mobile/Knowledge response 不泄露绝对路径。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `ea588e77`。
+- **平台：** macOS Darwin arm64、Node `v24.16.0`、npm `11.13.0`。
+- **公开接缝：** Open `/api/resource-io` 新增 `mkdir`、`delete`、`copy` 与 provider-neutral `transfer`；mutation 只从认证 Hono context 获取 principal，严格拒绝外部 authority/path 字段和非闭合 `ResourceRef`，operationId 使用 UUIDv4 correlation，mkdir/copy/delete 传递 expected-version。
+- **传输协议：** `exportTree`/`importTreeAtomically` 覆盖 local_fs 与本地 backing mount 四种 provider pair；完整计划在副作用前验证 100,000 entries、128 层、100 GiB，file chunk 最大 1 MiB、file stream 最大 4、所有 ResourceIO 实例共享 8 MiB 进程预算且在拉取 chunk 前预留。
+- **原子性与外部变化：** 目标同级 staging、文件 fsync/close、来源与目标 scope/identity commit-time 复验后发布；新文件和 symlink 使用 no-replace link/symlink，目录只走单次同文件系统 rename；不支持原子目录替换的平台能力稳定拒绝。取消、版本冲突、mount 撤权/同路径换根、目标目录跨父目录移动、特殊文件、symlink unsupported 与 sibling stream 失败均不留下正式半成品。
+- **隐私：** remote response 只返回 provider-neutral ref/version/bytes；transfer 审计不记录 resource/resourceKey，并清除顶层及 principal 内的 sessionPath。
+- **持久化基线修复：** 将既有 `knowledge-workspace/source-bindings/v1.json` 登记为 `knowledge-source-bindings` store，修复 scanner 对无 initializer 顶层声明的崩溃并以 compatible review 重钉 schema fingerprint；同步修复 Ticket 05 release-evidence 的冻结状态/证据字段和 Open composition route inventory。
+- **自动化：** `npm exec -- vitest run tests/resource-io-transfer.test.ts tests/resource-io-route.test.ts tests/knowledge-source-registry.test.ts tests/resource-io-mount-provider.test.ts tests/resource-io-local-fs-provider.test.ts tests/resource-io-resource-provider.test.ts tests/resource-io-session-file-resolver.test.ts tests/resource-io-url-provider.test.ts tests/knowledge-baseline-contract.test.ts tests/persistence-store-registry.test.ts tests/persistence-startup-receipt.test.ts tests/persistence-schema-tripwire.test.ts tests/server-composition-boundary.test.ts tests/knowledge-performance-fixtures.test.ts`，14 files、172/172；`npm run typecheck`、`npm run lint:boundary`、目标 ESLint（0 errors）与 `git diff --check` 通过。
+- **全仓回归：** `npm test -- --reporter=dot` 最终 1007 files passed、1 skipped，10077 tests passed、6 skipped。前两次全仓运行均只剩 10 秒性能夹具超时；该 10,000 文件 smoke 在定向运行持续通过，显式改为 30 秒 test timeout 后全仓通过。
+- **Lint：** 全仓 `npm run lint` 仍报告 SilverBullet reference tree 的既有 13 errors/8659 warnings；本 ticket 修改文件目标 ESLint 为 0 errors、32 个既有 warning，未新增硬错误。
+- **构建：** `npm run build:packages` 通过；未设置 `HANA_SIGN_KEY` 的首次 Full build按安全契约拒绝。使用 `scripts/artifact-keygen.mjs` 生成并在验证后删除的一次性本地密钥后，`npm run build:server`、`npm run build:server:open` 与 Open whitelist assertion 均通过。
+- **Smoke：** `npm run smoke:server:open` 正向 identity 与负向闭源依赖 smoke 均输出通过；脚本在 `all smoke checks passed` 后保留既有句柄，随后手动中断。
+- **质量与规格检查：** 两轴复审推动修复来源/目标 scope 复验、mount root identity、预算预留、审计路径、严格 expected-version、no-replace 发布与有界 staging 清理。纯 Node 对被外部权限主体移出 provider scope 的目录不越权追踪；该情形 fail-closed，清理只在仍授权的 provider scope 内按 inode 执行。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-26-openhanako-knowledge-workspace-implementation-06.md`。
