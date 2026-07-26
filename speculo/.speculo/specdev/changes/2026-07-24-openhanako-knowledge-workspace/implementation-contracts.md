@@ -222,6 +222,7 @@ knowledge_resource_not_found
 knowledge_resource_conflict
 knowledge_version_conflict
 knowledge_resource_out_of_scope
+knowledge_resource_unavailable
 knowledge_operation_plan_expired
 knowledge_operation_precondition_failed
 knowledge_link_rewrite_failed
@@ -237,7 +238,30 @@ operation_id_reused
 source_recovery_in_progress
 ```
 
-共享 schema 为每个错误固定 HTTP status、`retryable` 和可选安全 details；message 只用于展示，不作为控制流。
+`shared/knowledge-workspace-contract.ts` 中的 contract issue 是输入校验命名空间，统一为 HTTP 400、`retryable: false`；它们不得被改写为领域错误。知识运行时领域错误由共享 schema 按下表冻结：
+
+| Code | HTTP | Retryable |
+|---|---:|---|
+| `knowledge_resource_not_found` | 404 | false |
+| `knowledge_resource_conflict` | 409 | false |
+| `knowledge_version_conflict` | 409 | true |
+| `knowledge_resource_out_of_scope` | 403 | false |
+| `knowledge_resource_unavailable` | 503 | true |
+| `knowledge_operation_plan_expired` | 410 | true |
+| `knowledge_operation_precondition_failed` | 412 | false |
+| `knowledge_link_rewrite_failed` | 409 | true |
+| `knowledge_index_unavailable` | 503 | true |
+| `knowledge_transfer_limit_exceeded` | 413 | false |
+| `knowledge_transfer_entry_unsupported` | 422 | false |
+| `knowledge_trash_entry_not_found` | 404 | false |
+| `knowledge_trash_parent_blocked` | 409 | false |
+| `knowledge_native_capability_unavailable` | 501 | false |
+| `source_root_not_disjoint` | 409 | false |
+| `source_root_identity_unprovable` | 422 | false |
+| `operation_id_reused` | 409 | false |
+| `source_recovery_in_progress` | 503 | true |
+
+公开错误投影只能原样使用上述两个共享命名空间中的 metadata，不能按 message、任意 status 或调用端猜测控制流。可选 details 只允许共享 schema 明示的安全标量；message 只用于展示，不作为控制流。
 
 ## 12. 契约变更
 

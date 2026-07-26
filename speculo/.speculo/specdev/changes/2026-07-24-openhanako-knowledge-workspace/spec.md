@@ -486,7 +486,7 @@ OpenHanako 当前具备工作目录、资源访问、预览编辑、挂载与资
 2. 知识资源 DTO 只传递稳定来源身份、规范化相对路径、资源类型、名称、版本、mtime、大小和必要能力标记；不传递任意绝对路径、DOM、EditorView 或文件句柄。
 3. 复合操作采用“预览计划—用户确认—带计划标识和前置版本提交”的两阶段语义；提交必须重新验证 owner、scope、版本、资源存在性和目标冲突。
 4. 批次结果使用每项判别联合或结构化 successes/failures，不能以一个含义不明的布尔值掩盖部分完成。
-5. 客户端分支只能依赖 lowercase snake_case 稳定错误码，不依赖异常文案。至少保留：`knowledge_resource_not_found`、`knowledge_resource_conflict`、`knowledge_version_conflict`、`knowledge_resource_out_of_scope`、`knowledge_operation_plan_expired`、`knowledge_operation_precondition_failed`、`knowledge_link_rewrite_failed`、`knowledge_index_unavailable`、`knowledge_transfer_limit_exceeded`、`knowledge_transfer_entry_unsupported`、`knowledge_trash_entry_not_found`、`knowledge_trash_parent_blocked`、`knowledge_native_capability_unavailable`。
+5. 客户端分支只能依赖 lowercase snake_case 稳定错误码，不依赖异常文案。至少保留：`knowledge_resource_not_found`、`knowledge_resource_conflict`、`knowledge_version_conflict`、`knowledge_resource_out_of_scope`、`knowledge_resource_unavailable`、`knowledge_operation_plan_expired`、`knowledge_operation_precondition_failed`、`knowledge_link_rewrite_failed`、`knowledge_index_unavailable`、`knowledge_transfer_limit_exceeded`、`knowledge_transfer_entry_unsupported`、`knowledge_trash_entry_not_found`、`knowledge_trash_parent_blocked`、`knowledge_native_capability_unavailable`。
 6. HTTP、WebSocket、preload、配置、磁盘旧数据和 Provider 返回值一律先视为 `unknown`，经 schema 校验后进入领域类型；新代码不使用 `any` 或双重断言隐藏协议不兼容。
 7. WebSocket 事件必须版本化；断线重连后通过快照、事件回放或重新查询恢复，而不是假定页面持续打开。
 8. principal、owner 和 scope 只从认证后的 Hono context 派生；客户端 body 中的身份或绝对路径字段被拒绝，不能覆盖 context。
