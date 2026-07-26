@@ -257,6 +257,8 @@ export type ResourceProvider = {
 
 export type ResourcePrincipal = {
   kind: "agent" | "plugin" | "api" | "watch" | "system";
+  principalId?: string | null;
+  scopes?: string[];
   userId?: string | null;
   studioId?: string | null;
   sessionId?: string | null;
