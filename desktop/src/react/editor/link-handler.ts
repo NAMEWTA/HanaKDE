@@ -1,37 +1,39 @@
 import { EditorView } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
-import { openInternalLink } from '../utils/link-open';
-import { markdownImageContextFacet } from './md-decorations';
 
-export const linkClickHandler = EditorView.domEventHandlers({
-  click(event, view) {
-    if (!(event.metaKey || event.ctrlKey)) return false;
+export type MarkdownLinkOpenHandler = (request: Readonly<{
+  url: string;
+  event: MouseEvent;
+  view: EditorView;
+}>) => boolean | void;
 
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-    if (pos == null) return false;
+export function createLinkClickHandler(
+  openLink: MarkdownLinkOpenHandler,
+) {
+  return EditorView.domEventHandlers({
+    click(event, view) {
+      if (!(event.metaKey || event.ctrlKey)) return false;
 
-    const found = { url: '' };
-    syntaxTree(view.state).iterate({
-      from: pos, to: pos,
-      enter(node) {
-        if (node.name === 'URL') {
-          found.url = view.state.doc.sliceString(node.from, node.to);
-        }
-      },
-    });
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (pos == null) return false;
 
-    if (!found.url) return false;
+      const found = { url: '' };
+      syntaxTree(view.state).iterate({
+        from: pos, to: pos,
+        enter(node) {
+          if (node.name === 'URL') {
+            found.url = view.state.doc.sliceString(node.from, node.to);
+          }
+        },
+      });
 
-    let url = found.url;
-    // Remove surrounding parentheses if present
-    if (url.startsWith('(') && url.endsWith(')')) {
-      url = url.slice(1, -1);
-    }
-    const context = view.state.facet(markdownImageContextFacet);
-    void openInternalLink(url, {
-      origin: 'desk',
-      baseFilePath: context.filePath,
-    });
-    return true;
-  },
-});
+      if (!found.url) return false;
+
+      let url = found.url;
+      if (url.startsWith('(') && url.endsWith(')')) {
+        url = url.slice(1, -1);
+      }
+      return openLink({ url, event, view }) !== false;
+    },
+  });
+}

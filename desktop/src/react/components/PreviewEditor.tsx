@@ -12,33 +12,18 @@
  * - 文件系统 source of truth，直接对接文件读写
  */
 
-import { forwardRef, useEffect, useRef, useCallback, useImperativeHandle, useLayoutEffect, useState, Fragment } from 'react';
+import { forwardRef, useEffect, useRef, useCallback, useImperativeHandle, useState, Fragment } from 'react';
 import { EditorContextMenu } from './preview/EditorContextMenu';
+import { MarkdownEditorSurface } from './preview/MarkdownEditorSurface';
 import { isContextMenuButton } from '../stores/selection-actions';
+import { EditorView } from '@codemirror/view';
+import { EditorState, Transaction, EditorSelection } from '@codemirror/state';
+import type { MarkdownBlockMenuRequest } from '../editor/markdown-block-handles';
 import {
-  EditorView, keymap, highlightActiveLine, drawSelection,
-  lineNumbers,
-} from '@codemirror/view';
-import { EditorState, Compartment, Transaction, EditorSelection } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import {
-  syntaxHighlighting, bracketMatching,
-} from '@codemirror/language';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { languages } from '@codemirror/language-data';
-import { markdownHighlight, codeHighlight } from '../editor/highlight';
-import { markdownTheme, codeTheme } from '../editor/theme';
-import { markdownBlockDecoField, markdownDecoPlugin, markdownImageContextFacet } from '../editor/md-decorations';
-import { markdownCoverField } from '../editor/cover-field';
-import {
-  markdownBlockHandlePlugin,
-  type MarkdownBlockMenuRequest,
-} from '../editor/markdown-block-handles';
-import { markdownBlockSelectionPlugin } from '../editor/markdown-block-selection';
-import { mermaidDecoField } from '../editor/mermaid-field';
-import { linkClickHandler } from '../editor/link-handler';
-import { tableDecoField } from '../editor/table-field';
-import { csvTableField } from '../editor/csv-field';
+  createMarkdownEditorExtensions,
+  type MarkdownEditorAttachmentPolicy,
+  type MarkdownEditorCompartments,
+} from '../editor/create-markdown-editor-extensions';
 import { requestUserEditCheckpoint, type UserEditCheckpointReason } from '../utils/checkpoints';
 import {
   arrayBufferToBase64,
@@ -59,6 +44,7 @@ import {
   hasMarkdownCoverDropImage,
 } from '../utils/markdown-cover-drop';
 import { isRemoteWorkbenchContentRef } from '../utils/remote-file-preview';
+import { openInternalLink } from '../utils/link-open';
 import type { FileVersion, RemoteWorkbenchContentRef, VersionedWriteResult } from '../types';
 import type { PreviewScrollSnapshot } from '../../../../shared/preview-reading-position.ts';
 
@@ -118,7 +104,6 @@ export interface PreviewEditorProps {
 
 const SAVE_DELAY = 600;
 const CHECKPOINT_INTERVAL = 5 * 60 * 1000;
-const EDITOR_HOST_MIN_SIZE_PX = 1;
 
 interface SaveJob {
   text: string;
@@ -233,24 +218,6 @@ function restoreScrollPosition(view: EditorView, scrollTop: number, scrollLeft: 
   window.requestAnimationFrame?.(restore);
 }
 
-function editorHostBoxSize(el: HTMLElement): { width: number; height: number } {
-  const rect = el.getBoundingClientRect();
-  return {
-    width: Math.max(rect.width, el.clientWidth, el.offsetWidth),
-    height: Math.max(rect.height, el.clientHeight, el.offsetHeight),
-  };
-}
-
-function isEditorHostReady(el: HTMLElement): boolean {
-  if (!el.isConnected) return false;
-  const doc = el.ownerDocument;
-  const win = doc.defaultView;
-  if (!win || win.closed) return false;
-  if (doc.visibilityState === 'hidden') return false;
-  const { width, height } = editorHostBoxSize(el);
-  return width >= EDITOR_HOST_MIN_SIZE_PX && height >= EDITOR_HOST_MIN_SIZE_PX;
-}
-
 function replaceDocumentPreservingSelection(view: EditorView, content: string): boolean {
   const current = view.state.doc.toString();
   if (current === content) return false;
@@ -264,18 +231,6 @@ function replaceDocumentPreservingSelection(view: EditorView, content: string): 
   });
   restoreScrollPosition(view, scrollTop, scrollLeft);
   return true;
-}
-
-function syncEditorRootToDom(view: EditorView): void {
-  const root = view.dom.getRootNode();
-  const currentRoot: unknown = view.root;
-  if (root === currentRoot) return;
-  const nodeType = (root as Node).nodeType;
-  const isDocument = nodeType === 9;
-  const isShadowRoot = nodeType === 11 && 'host' in root;
-  if (isDocument || isShadowRoot) {
-    view.setRoot(root as Document | ShadowRoot);
-  }
 }
 
 interface MarkdownAttachmentSource {
@@ -404,8 +359,6 @@ export const PreviewEditor = forwardRef<PreviewEditorHandle, PreviewEditorProps>
           : request
       ));
     }, []);
-    const [editorHostReadySignal, setEditorHostReadySignal] = useState(0);
-    const lastEditorHostReadyRef = useRef(false);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const saveInFlightRef = useRef(false);
     const pendingSaveRef = useRef<SaveJob | null>(null);
@@ -444,88 +397,6 @@ export const PreviewEditor = forwardRef<PreviewEditorHandle, PreviewEditorProps>
         diskVersionRef.current = fileVersion;
       }
     }, [fileVersion]);
-
-    // Per-instance compartments for dynamic reconfiguration
-    const cRef = useRef({
-      lang: new Compartment(),
-      highlight: new Compartment(),
-      gutter: new Compartment(),
-      conceal: new Compartment(),
-      theme: new Compartment(),
-    });
-
-    useLayoutEffect(() => {
-      const host = containerRef.current;
-      if (!host) return undefined;
-      const doc = host.ownerDocument;
-      const win = doc.defaultView ?? window;
-      let disposed = false;
-      let rafId: number | null = null;
-      let retryTimer: ReturnType<typeof setTimeout> | null = null;
-      let resizeObserver: ResizeObserver | null = null;
-
-      const clearPending = () => {
-        if (rafId !== null) {
-          win.cancelAnimationFrame?.(rafId);
-          rafId = null;
-        }
-        if (retryTimer) {
-          clearTimeout(retryTimer);
-          retryTimer = null;
-        }
-      };
-
-      const check = () => {
-        rafId = null;
-        retryTimer = null;
-        if (disposed) return;
-        const ready = isEditorHostReady(host);
-        if (ready && !lastEditorHostReadyRef.current && !viewRef.current) {
-          setEditorHostReadySignal(signal => signal + 1);
-        }
-        lastEditorHostReadyRef.current = ready;
-        if (!ready) {
-          retryTimer = setTimeout(() => {
-            retryTimer = null;
-            scheduleCheck();
-          }, 250);
-        }
-      };
-
-      const scheduleCheck = () => {
-        if (disposed || rafId !== null || retryTimer) return;
-        if (typeof win.requestAnimationFrame === 'function') {
-          rafId = win.requestAnimationFrame(check);
-        } else {
-          retryTimer = setTimeout(check, 0);
-        }
-      };
-
-      const requestCheck = () => {
-        if (disposed) return;
-        if (retryTimer) {
-          clearTimeout(retryTimer);
-          retryTimer = null;
-        }
-        scheduleCheck();
-      };
-
-      if (typeof win.ResizeObserver === 'function') {
-        resizeObserver = new win.ResizeObserver(requestCheck);
-        resizeObserver.observe(host);
-      }
-      doc.addEventListener('visibilitychange', requestCheck);
-      win.addEventListener('resize', requestCheck);
-      check();
-
-      return () => {
-        disposed = true;
-        clearPending();
-        resizeObserver?.disconnect();
-        doc.removeEventListener('visibilitychange', requestCheck);
-        win.removeEventListener('resize', requestCheck);
-      };
-    }, []);
 
     useImperativeHandle(ref, () => ({
       getView: () => viewRef.current,
@@ -753,118 +624,97 @@ export const PreviewEditor = forwardRef<PreviewEditorHandle, PreviewEditorProps>
       }
     }, [mode, readOnly, saveToFile]);
 
-    // Create editor
-    useLayoutEffect(() => {
-      if (!containerRef.current) return;
-      if (!editorHostReadySignal || !isEditorHostReady(containerRef.current)) return;
-      const c = cRef.current;
-      const isMd = mode === 'markdown';
-      const isCsv = mode === 'csv';
+    const createSurfaceExtensions = useCallback((
+      compartments: MarkdownEditorCompartments,
+    ) => {
+      let attachmentPolicy: MarkdownEditorAttachmentPolicy | undefined;
+      if (mode === 'markdown' && !readOnly) {
+        attachmentPolicy = {
+          onDragOver(event) {
+            const appSources = attachmentSourcesFromAppDrag(event.dataTransfer);
+            if (!filePathRef.current || (!appSources && !dataTransferHasFiles(event.dataTransfer))) return false;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+            return true;
+          },
+          onDrop(event, view) {
+            const payload = readAppFileDragPayload(event.dataTransfer);
+            const appSources = payload
+              ? attachmentSourcesFromAppDrag(event.dataTransfer)
+              : null;
+            const sources = appSources ?? attachmentSourcesFromFiles(filesFromDataTransfer(event.dataTransfer));
+            if (!filePathRef.current || sources.length === 0) return false;
+            event.preventDefault();
+            event.stopPropagation();
+            if (payload) clearAppFileDragPayload(payload.dragId);
+            const position = dropPosition(view, event);
+            void insertMarkdownAttachments(view, sources, position)
+              .catch(err => showSaveError('preview.markdownAttachmentInsertFailed', err));
+            return true;
+          },
+          onPaste(event, view) {
+            const sources = attachmentSourcesFromFiles(filesFromDataTransfer(event.clipboardData));
+            if (!filePathRef.current || sources.length === 0) return false;
+            event.preventDefault();
+            event.stopPropagation();
+            void insertMarkdownAttachments(view, sources)
+              .catch(err => showSaveError('preview.markdownAttachmentInsertFailed', err));
+            return true;
+          },
+        };
+      }
 
-      const extensions = [
-        ...(isMd ? [] : [drawSelection()]),
-        history(),
-        bracketMatching(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
-        EditorView.contentAttributes.of({ spellcheck: 'false' }),
-        EditorView.lineWrapping,
-        ...(isMd && !readOnly ? [
-          EditorView.domEventHandlers({
-            dragover(event) {
-              const appSources = attachmentSourcesFromAppDrag(event.dataTransfer);
-              if (!filePathRef.current || (!appSources && !dataTransferHasFiles(event.dataTransfer))) return false;
-              event.preventDefault();
-              if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-              return true;
-            },
-            drop(event, view) {
-              const payload = readAppFileDragPayload(event.dataTransfer);
-              const appSources = payload
-                ? attachmentSourcesFromAppDrag(event.dataTransfer)
-                : null;
-              const sources = appSources ?? attachmentSourcesFromFiles(filesFromDataTransfer(event.dataTransfer));
-              if (!filePathRef.current || sources.length === 0) return false;
-              event.preventDefault();
-              event.stopPropagation();
-              if (payload) clearAppFileDragPayload(payload.dragId);
-              const position = dropPosition(view, event);
-              void insertMarkdownAttachments(view, sources, position)
-                .catch(err => showSaveError('preview.markdownAttachmentInsertFailed', err));
-              return true;
-            },
-            paste(event, view) {
-              const sources = attachmentSourcesFromFiles(filesFromDataTransfer(event.clipboardData));
-              if (!filePathRef.current || sources.length === 0) return false;
-              event.preventDefault();
-              event.stopPropagation();
-              void insertMarkdownAttachments(view, sources)
-                .catch(err => showSaveError('preview.markdownAttachmentInsertFailed', err));
-              return true;
-            },
-          }),
-        ] : []),
-        // 只读模式：禁用编辑 + 关闭 autosave；不挂 file watch（调用方自理）
-        ...(readOnly
-          ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
-          : [
-              EditorView.updateListener.of((update) => {
-                if (!update.docChanged) return;
-                if (update.transactions.some((tr) => tr.annotation(Transaction.remote))) return;
-                const text = update.state.doc.toString();
-                docRevisionRef.current += 1;
-                const revision = docRevisionRef.current;
-                contentCbRef.current?.(text);
-                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                saveTimerRef.current = setTimeout(() => {
-                  saveTimerRef.current = null;
-                  saveToFile(text, revision);
-                }, SAVE_DELAY);
-              }),
-            ]),
-        EditorView.updateListener.of((update) => {
+      return createMarkdownEditorExtensions({
+        mode,
+        compartments,
+        filePath,
+        getFileUrl: window.platform?.getFileUrl,
+        contentPolicy: { readOnly },
+        savePolicy: readOnly ? undefined : {
+          onDocumentChange(update) {
+            const text = update.state.doc.toString();
+            docRevisionRef.current += 1;
+            const revision = docRevisionRef.current;
+            contentCbRef.current?.(text);
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => {
+              saveTimerRef.current = null;
+              saveToFile(text, revision);
+            }, SAVE_DELAY);
+          },
+        },
+        attachmentPolicy,
+        openLinkPolicy: {
+          open({ url }) {
+            void openInternalLink(url, {
+              origin: 'desk',
+              baseFilePath: filePathRef.current,
+            });
+            return true;
+          },
+        },
+        onOpenBlockMenu: toggleBlockMenu,
+        onViewUpdate(update) {
           if (update.selectionSet && selectionCbRef.current) {
             selectionCbRef.current(update.view);
           }
           if (update.docChanged || update.selectionSet) {
             emitStatsIfChanged(update.view);
           }
-        }),
-        // Dynamic compartments
-        c.gutter.of(isMd || isCsv ? [] : lineNumbers()),
-        c.lang.of(
-          isMd ? markdown({ base: markdownLanguage, codeLanguages: languages }) : [],
-        ),
-        c.highlight.of(
-          syntaxHighlighting(isMd ? markdownHighlight : codeHighlight),
-        ),
-        c.conceal.of(isMd ? [
-          markdownImageContextFacet.of({
-            filePath,
-            getFileUrl: window.platform?.getFileUrl,
-          }),
-          markdownDecoPlugin,
-          markdownCoverField,
-          markdownBlockDecoField,
-          mermaidDecoField,
-        ] : []),
-        ...(isMd && !readOnly ? [
-          markdownBlockSelectionPlugin(),
-          markdownBlockHandlePlugin({
-            onOpenMenu: toggleBlockMenu,
-          }),
-        ] : []),
-        ...(isMd ? [tableDecoField] : []),
-        ...(isCsv ? [csvTableField] : []),
-        c.theme.of(isMd || isCsv ? markdownTheme : codeTheme),
-        linkClickHandler,
-      ];
+        },
+      });
+    }, [
+      emitStatsIfChanged,
+      filePath,
+      insertMarkdownAttachments,
+      mode,
+      readOnly,
+      saveToFile,
+      toggleBlockMenu,
+    ]);
 
-      // 代码模式保留行高亮，markdown / csv 模式不要
-      if (!isMd && !isCsv) extensions.push(highlightActiveLine());
-
-      const state = EditorState.create({ doc: content, extensions });
-      const view = new EditorView({ state, parent: containerRef.current });
-      const selectionCommitWindow = containerRef.current.ownerDocument.defaultView ?? window;
+    const handleSurfaceViewCreated = useCallback((view: EditorView) => {
+      const selectionCommitWindow = view.dom.ownerDocument.defaultView ?? window;
       const handledSelectionCommitEvents = new WeakSet<Event>();
       const onSelectionCommitEvent = (event: Event) => {
         if (handledSelectionCommitEvents.has(event)) return;
@@ -945,7 +795,6 @@ export const PreviewEditor = forwardRef<PreviewEditorHandle, PreviewEditorProps>
       view.dom.addEventListener('dragover', onCoverDragOver, true);
       view.dom.addEventListener('dragleave', onCoverDragLeave, true);
       view.dom.addEventListener('drop', onCoverDrop, true);
-      viewRef.current = view;
       lastStatsRef.current = null;
       emitStatsIfChanged(view);
       restoreEditorScrollSnapshot(view, initialScrollSnapshotRef.current);
@@ -970,16 +819,25 @@ export const PreviewEditor = forwardRef<PreviewEditorHandle, PreviewEditorProps>
         view.dom.removeEventListener('dragover', onCoverDragOver, true);
         view.dom.removeEventListener('dragleave', onCoverDragLeave, true);
         view.dom.removeEventListener('drop', onCoverDrop, true);
-        view.destroy();
-        viewRef.current = null;
       };
-    }, [editorHostReadySignal, mode, language, readOnly, filePath, remoteContentRef, emitStatsIfChanged, insertMarkdownAttachments]); // eslint-disable-line react-hooks/exhaustive-deps -- 仅在 host 可测量以及 mode/language/readOnly/filePath/remoteContentRef 变化时重建 CodeMirror，content/refs 故意省略以避免销毁重建
+    }, [emitStatsIfChanged, saveToFile]);
 
-    useEffect(() => {
-      const view = viewRef.current;
-      if (!view) return;
-      syncEditorRootToDom(view);
-    });
+    const handleSurfaceViewChange = useCallback((view: EditorView | null) => {
+      viewRef.current = view;
+    }, []);
+
+    const editorConfigurationKey = [
+      mode,
+      language ?? '',
+      readOnly ? 'readonly' : 'editable',
+      filePath ?? '',
+      remoteContentRef?.kind ?? '',
+      remoteContentRef?.mountId ?? '',
+      remoteContentRef?.rootId ?? '',
+      remoteContentRef?.subdir ?? '',
+      remoteContentRef?.name ?? '',
+      remoteContentRef?.contentPath ?? '',
+    ].join('\0');
 
     useEffect(() => {
       const view = viewRef.current;
@@ -1003,7 +861,16 @@ export const PreviewEditor = forwardRef<PreviewEditorHandle, PreviewEditorProps>
 
     return (
       <Fragment>
-        <div className={`preview-editor mode-${mode}`} ref={containerRef} />
+        <MarkdownEditorSurface
+          className={`preview-editor mode-${mode}`}
+          configurationKey={editorConfigurationKey}
+          containerRef={containerRef}
+          initialContent={content}
+          mode={mode}
+          createExtensions={createSurfaceExtensions}
+          onViewChange={handleSurfaceViewChange}
+          onViewCreated={handleSurfaceViewCreated}
+        />
         <EditorContextMenu
           getView={getViewForMenu}
           containerRef={containerRef}
