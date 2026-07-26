@@ -219,7 +219,7 @@
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Ticket 04） | Ticket 04 相关回归 249/249；稳定错误/诊断、operation correlation、watch sequence/cursor 与无路径 resync 已验证；Tickets 10、43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Ticket 11） | `volta run npx vitest run tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`（29/29）；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证；后续 owner tickets 尚未执行 |
-| KW-RULE-PERF | 13 | 未执行 | — |
+| KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 未执行 | — |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
 | KW-RULE-QUERY | 44, 46 | 未执行 | — |
@@ -235,7 +235,7 @@
 | KW-RULE-PREFLIGHT | 01 | 通过 | `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts`（17/17）；Node v24.16.0；真实 SQLite FTS5；dirty 仅 warning |
 | KW-RULE-NATIVE | 17, 51, 56 | 未执行 | — |
 | KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 未执行 | — |
-| KW-RULE-TEST | 01, 13, 14, 57 | 未执行 | — |
+| KW-RULE-TEST | 01, 13, 14, 57 | 部分通过（Tickets 01、13） | Ticket 01 preflight/baseline 17/17；Ticket 13 性能 fixture/evidence 31/31；Tickets 14、57 尚未执行 |
 
 ## E2E projects
 

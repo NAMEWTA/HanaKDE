@@ -1,7 +1,7 @@
 # Ticket 13: 建立性能预算与基准夹具
 
 - **被阻塞于：** [`01-freeze-real-repository-baseline.md`](./01-freeze-real-repository-baseline.md)、[`03-freeze-open-knowledge-contract.md`](./03-freeze-open-knowledge-contract.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -65,9 +65,22 @@
 
 ## 验收标准
 
-- [ ] 预算包含测量环境、p50/p95、取消上限和回归阈值；CI 使用缩小夹具，完整基准可独立运行。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 预算包含测量环境、p50/p95、取消上限和回归阈值；CI 使用缩小夹具，完整基准可独立运行。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `424088c4`（隔离 worktree 原始提交 `3f1b97f1`）。
+- **平台：** macOS 26.5（Darwin 25.5.0，arm64）、Node `v24.16.0`、npm `11.13.0`。
+- **实现范围：** 建立固定 seed `20260725` 的 full/smoke 数据集、12 场景 reference runner、预算评估、baseline 比较、闭合 evidence schema 与原子证据写入。smoke 对可缩放维度严格为 full 的 `0.1`。
+- **真实夹具：** 惰性资源流精确覆盖 10k/100k、4 来源 `Shared/SameName.md`、深度 1–12、10 MiB/+1、50k Wikilinks、10k broken links、20k tags、20k tasks、5k headings-heavy、5k/500 watch burst、100 tabs 与 1k recovery records；物化 smoke 实测 10,000 个不覆盖文件。
+- **预算与安全：** Node 24、最低 CPU/RAM、production/devtools/debug 在任何 adapter/目录写入前闭合校验；baseline 必须为相同 dataset identity 的 latest passing same-runner 结果；never-resolving adapter 通过 `AbortSignal` race 受控取消；accessor/Proxy/symbol/路径泄漏/NaN/Infinity/额外字段均拒绝；mkdir/write/rename 故障清理 `.tmp`。
+- **自动化：** `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts tests/knowledge-baseline-contract.test.ts`，3 files、42/42；target ESLint 0 warning；`volta run npm run typecheck`、`volta run npm run lint:boundary`、`git diff --check` 通过。
+- **质量与规格检查：** 两轴均无未决问题；已修复 manifest-only 数据、错误 smoke 比例、无效 UUID/时间窗口、证据缺字段、不可取消 adapter、stream 外同名文件、路径碰撞、不同 fixture baseline 和生产者/validator schema 不一致。
+- **证据边界：** 本票只证明预算、夹具与 runner 契约，没有运行真实产品性能基准，也没有把 harness 测试登记为产品性能通过或发布级 E2E。
+- **Playwright：** 本票明确不适用。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-26-openhanako-knowledge-workspace-implementation-04.md`。
