@@ -1,14 +1,21 @@
 import type { ResourceEventBus } from "./resource-event-bus.ts";
 import { isOperationCorrelationId } from "../../shared/knowledge-diagnostics.ts";
 import { capabilityDenied, crossProviderCopyUnsupported, crossProviderMoveUnsupported, providerNotAvailable } from "./errors.ts";
-import { normalizeResourceRef, providerIdForResourceRef } from "./resource-refs.ts";
+import { childResourceRef, normalizeResourceRef, providerIdForResourceRef } from "./resource-refs.ts";
+import {
+  TransferPlanTracker,
+  encodeResourceTransferVersion,
+  guardedTransferEntries,
+  isTransferNameSegment,
+  processTransferBudget,
+  transferEntryUnsupported,
+} from "./transfer.ts";
 import type {
   MaterializeResult,
   ResourceAuditSink,
   ResourceDescriptor,
   ResourceDeletedEvent,
   ResourceEdit,
-  ResourceEventSource,
   ResourceListResult,
   ResourceMutationResult,
   ResourceMoveResult,
@@ -23,6 +30,8 @@ import type {
   ResourceStat,
   ResourceTrashOptions,
   ResourceTrashResult,
+  ResourceTransferRequest,
+  ResourceTransferResult,
   ResourceVersion,
   ResourceWriteConflictResult,
   ResourceWriteExpectedVersionResult,
@@ -97,7 +106,13 @@ export class ResourceIO {
 
   async mkdir(input: unknown, options: ResourceOperationContext = {}): Promise<ResourceMutationResult> {
     const ref = normalizeResourceRef(input);
-    const result = await this.callProvider<ResourceMutationResult>(ref, "mkdir", options, ref);
+    const result = await this.callProvider<ResourceMutationResult>(
+      ref,
+      "mkdir",
+      options,
+      ref,
+      mutationPreconditions(options),
+    );
     this.auditAllowed("mkdir", result, options);
     this.emitChanged(result, options);
     return result;
@@ -105,7 +120,13 @@ export class ResourceIO {
 
   async delete(input: unknown, options: ResourceOperationContext = {}): Promise<ResourceMutationResult> {
     const ref = normalizeResourceRef(input);
-    const result = await this.callProvider<ResourceMutationResult>(ref, "delete", options, ref);
+    const result = await this.callProvider<ResourceMutationResult>(
+      ref,
+      "delete",
+      options,
+      ref,
+      mutationPreconditions(options),
+    );
     this.auditAllowed("delete", result, options);
     if (options.emit !== false && this.eventBus) {
       this.eventBus.deleted({
@@ -158,10 +179,99 @@ export class ResourceIO {
     if (fromRef.kind !== toRef.kind) {
       throw crossProviderCopyUnsupported(providerIdForResourceRef(fromRef), providerIdForResourceRef(toRef));
     }
-    const result = await this.callProvider<ResourceMutationResult>(toRef, "copy", options, fromRef, toRef);
+    const result = await this.callProvider<ResourceMutationResult>(
+      toRef,
+      "copy",
+      options,
+      fromRef,
+      toRef,
+      mutationPreconditions(options),
+    );
     this.auditAllowed("copy", result, options);
     this.emitChanged(result, options);
     return result;
+  }
+
+  async transfer(
+    input: ResourceTransferRequest | unknown,
+    options: ResourceOperationContext = {},
+  ): Promise<ResourceTransferResult> {
+    const request = normalizeTransferRequest(input);
+    const context = { ...options, operationId: request.operationId };
+    const sourceProviderId = providerIdForResourceRef(request.source);
+    const targetProviderId = providerIdForResourceRef(request.targetDirectory);
+    const sourceProvider = this.providerFor(request.source);
+    const targetProvider = this.providerFor(request.targetDirectory);
+    const target = childResourceRef(request.targetDirectory, request.targetName);
+    if (!target) throw transferEntryUnsupported("unsupported_target_address");
+    const transferAbort = createTransferAbort(request.signal);
+
+    try {
+      assertTransferProviderCapability(
+        sourceProvider,
+        request.source,
+        "exportTree",
+        sourceProviderId,
+      );
+      assertTransferProviderCapability(
+        targetProvider,
+        request.targetDirectory,
+        "importTree",
+        targetProviderId,
+      );
+      let revalidateSourceScope: (() => void | Promise<void>) | null = null;
+      const exported = sourceProvider.exportTree!(request.source, {
+        signal: transferAbort.signal,
+        registerScopeRevalidator: (revalidate) => {
+          revalidateSourceScope = revalidate;
+        },
+      });
+      const entries = guardedTransferEntries(
+        exported,
+        new TransferPlanTracker(),
+        processTransferBudget,
+        transferAbort.signal,
+      );
+      const result = await targetProvider.importTreeAtomically!(
+        request.targetDirectory,
+        request.targetName,
+        entries,
+        {
+          signal: transferAbort.signal,
+          expectedTargetVersion: request.expectedTargetVersion,
+          operationId: request.operationId,
+          abortTransfer: transferAbort.abort,
+          revalidateSourceScope: async () => {
+            if (revalidateSourceScope) await revalidateSourceScope();
+          },
+        },
+      );
+      this.recordAudit({
+        outcome: "allowed",
+        operation: "transfer",
+        providerId: targetProviderId,
+        ...transferAuditContext(context),
+      });
+      this.emitChanged(result, context);
+      return {
+        target,
+        version: encodeResourceTransferVersion(result.version),
+        bytesTransferred: result.bytesTransferred,
+      };
+    } catch (error) {
+      transferAbort.abort();
+      this.recordAudit({
+        outcome: transferErrorOutcome(error),
+        operation: "transfer",
+        providerId: targetProviderId,
+        code: errorCode(error),
+        safeMessage: "Resource transfer failed",
+        ...transferAuditContext(context),
+      });
+      throw error;
+    } finally {
+      transferAbort.dispose();
+    }
   }
 
   async rename(from: unknown, to: unknown, options: ResourceOperationContext = {}): Promise<ResourceMoveResult> {
@@ -327,6 +437,88 @@ export class ResourceIO {
   }
 }
 
+function normalizeTransferRequest(input: ResourceTransferRequest | unknown): ResourceTransferRequest {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw transferEntryUnsupported("invalid_transfer_request");
+  }
+  const value = input as Partial<ResourceTransferRequest>;
+  const source = normalizeResourceRef(value.source);
+  const targetDirectory = normalizeResourceRef(value.targetDirectory);
+  if (!isTransferNameSegment(value.targetName)) {
+    throw transferEntryUnsupported("invalid_target_name");
+  }
+  if (targetDirectory.kind === "mount" && value.targetName.includes("\\")) {
+    throw transferEntryUnsupported("target_provider_cannot_address_name");
+  }
+  if (!isOperationCorrelationId(value.operationId)) {
+    throw transferEntryUnsupported("invalid_operation_id");
+  }
+  if (
+    value.expectedTargetVersion !== undefined
+    && value.expectedTargetVersion !== null
+    && (typeof value.expectedTargetVersion !== "string" || value.expectedTargetVersion.length === 0)
+  ) {
+    throw transferEntryUnsupported("invalid_expected_target_version");
+  }
+  return {
+    source,
+    targetDirectory,
+    targetName: value.targetName,
+    expectedTargetVersion: value.expectedTargetVersion,
+    signal: value.signal,
+    operationId: value.operationId,
+  };
+}
+
+function assertTransferProviderCapability(
+  provider: ResourceProvider,
+  ref: ResourceRef,
+  capability: "exportTree" | "importTree",
+  providerId: ResourceProviderId,
+): void {
+  const capabilities = provider.capabilities?.(ref) || {};
+  const implementation = capability === "exportTree"
+    ? provider.exportTree
+    : provider.importTreeAtomically;
+  if (capabilities[capability] === false || typeof implementation !== "function") {
+    throw capabilityDenied(capability, providerId);
+  }
+}
+
+function transferErrorOutcome(error: unknown): "denied" | "conflict" {
+  const code = errorCode(error);
+  return code === "knowledge_resource_conflict" || code === "knowledge_version_conflict"
+    ? "conflict"
+    : "denied";
+}
+
+function createTransferAbort(parentSignal?: AbortSignal): {
+  signal: AbortSignal;
+  abort: () => void;
+  dispose: () => void;
+} {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (parentSignal?.aborted) {
+    abort();
+  } else {
+    parentSignal?.addEventListener("abort", abort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    abort,
+    dispose: () => parentSignal?.removeEventListener("abort", abort),
+  };
+}
+
+function mutationPreconditions(
+  context: ResourceOperationContext,
+): { expectedVersion?: ResourceVersion | null } {
+  return context.expectedVersion === undefined
+    ? {}
+    : { expectedVersion: context.expectedVersion };
+}
+
 function isWriteConflict(result: ResourceWriteExpectedVersionResult): result is ResourceWriteConflictResult {
   return Boolean((result as any)?.ok === false && (result as any)?.conflict === true);
 }
@@ -344,6 +536,20 @@ function auditContext(context: ResourceOperationContext, getSessionPath: () => s
     sessionId: context.sessionId ?? context.principal?.sessionId ?? null,
     sessionPath: context.sessionPath ?? context.principal?.sessionPath ?? getSessionPath?.() ?? null,
     requestId: context.requestId ?? context.principal?.requestId ?? null,
+    ...operationCorrelation(context),
+  };
+}
+
+function transferAuditContext(context: ResourceOperationContext) {
+  const principal = context.principal
+    ? { ...context.principal, sessionPath: undefined }
+    : undefined;
+  return {
+    ...(context.reason ? { reason: context.reason } : {}),
+    ...(principal ? { principal } : {}),
+    sessionId: context.sessionId ?? principal?.sessionId ?? null,
+    sessionPath: null,
+    requestId: context.requestId ?? principal?.requestId ?? null,
     ...operationCorrelation(context),
   };
 }

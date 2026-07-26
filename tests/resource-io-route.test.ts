@@ -1285,6 +1285,567 @@ describe("resource-io route", () => {
     expect(JSON.stringify(body)).not.toContain(privatePath);
   });
 
+  it("routes mkdir, delete, and copy through engine ResourceIO with API principal context", async () => {
+    const resourceIO = {
+      mkdir: vi.fn(async () => ({ changeType: "created", resourceKey: "a", version: { mtimeMs: 1, size: null } })),
+      delete: vi.fn(async () => ({ changeType: "modified", resourceKey: "a" })),
+      copy: vi.fn(async () => ({ changeType: "created", resourceKey: "b", version: { mtimeMs: 2, size: 5 } })),
+    };
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({ resourceIO }));
+    const headers = { "Content-Type": "application/json" };
+
+    const mkdirRes = await app.request("/api/resource-io/mkdir", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        resource: { kind: "local-file", path: "/tmp/new-dir" },
+        reason: "route_mkdir",
+      }),
+    });
+    expect(mkdirRes.status).toBe(200);
+    expect(await mkdirRes.json()).toMatchObject({ changeType: "created" });
+    expect(resourceIO.mkdir).toHaveBeenCalledWith(
+      { kind: "local-file", path: "/tmp/new-dir" },
+      expect.objectContaining({
+        source: "api",
+        reason: "route_mkdir",
+        principal: expect.objectContaining({ kind: "api" }),
+      }),
+    );
+
+    const deleteRes = await app.request("/api/resource-io/delete", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        resource: { kind: "local-file", path: "/tmp/new-dir" },
+      }),
+    });
+    expect(deleteRes.status).toBe(200);
+    expect(resourceIO.delete).toHaveBeenCalledWith(
+      { kind: "local-file", path: "/tmp/new-dir" },
+      expect.objectContaining({
+        source: "api",
+        reason: "resource_io_route",
+        principal: expect.objectContaining({ kind: "api" }),
+      }),
+    );
+
+    const copyRes = await app.request("/api/resource-io/copy", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        from: { kind: "local-file", path: "/tmp/a.md" },
+        to: { kind: "local-file", path: "/tmp/b.md" },
+      }),
+    });
+    expect(copyRes.status).toBe(200);
+    expect(resourceIO.copy).toHaveBeenCalledWith(
+      { kind: "local-file", path: "/tmp/a.md" },
+      { kind: "local-file", path: "/tmp/b.md" },
+      expect.objectContaining({
+        source: "api",
+        principal: expect.objectContaining({ kind: "api" }),
+      }),
+    );
+  });
+
+  it.each([
+    ["mkdir", { resource: { kind: "mount", mountId: "safe", path: "Notes" } }],
+    ["delete", { resource: { kind: "mount", mountId: "safe", path: "Notes/a.md" } }],
+    ["copy", {
+      from: { kind: "mount", mountId: "safe", path: "Notes/a.md" },
+      to: { kind: "mount", mountId: "safe", path: "Notes/b.md" },
+    }],
+  ])("rejects forged authority fields on %s before ResourceIO", async (endpoint, base) => {
+    const handler = vi.fn(async () => ({ changeType: "created", resourceKey: "x" }));
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      resourceIO: { [endpoint]: handler },
+    }));
+
+    for (const field of ["principal", "userId", "studioId", "owner", "scopeToken", "resolvedPath"]) {
+      const res = await app.request(`/api/resource-io/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          [field]: field === "principal" ? { userId: "attacker" } : "attacker",
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe("forbidden_resource_authority_field");
+    }
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("projects remote mkdir, delete, and copy results without local paths", async () => {
+    const privatePath = "/private/mount/root/Notes";
+    const resourceIO = {
+      mkdir: vi.fn(async () => ({
+        changeType: "created",
+        resourceKey: `local_fs:${privatePath}`,
+        resource: { kind: "mount", mountId: "safe", path: "Notes", filePath: privatePath },
+        version: { mtimeMs: 4, size: null },
+        filePath: privatePath,
+      })),
+      delete: vi.fn(async () => ({
+        changeType: "modified",
+        resourceKey: `local_fs:${privatePath}`,
+        resource: { kind: "mount", mountId: "safe", path: "Notes", filePath: privatePath },
+        filePath: privatePath,
+      })),
+      copy: vi.fn(async () => ({
+        changeType: "created",
+        resourceKey: `local_fs:${privatePath}`,
+        resource: { kind: "mount", mountId: "safe", path: "Notes/b.md", filePath: privatePath },
+        version: { mtimeMs: 5, size: 5 },
+        filePath: privatePath,
+      })),
+    };
+    const app = new Hono();
+    useRemoteOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({ resourceIO }));
+    const headers = { "Content-Type": "application/json" };
+
+    const mkdir = await (await app.request("/api/resource-io/mkdir", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ resource: { kind: "mount", mountId: "safe", path: "Notes" } }),
+    })).json();
+    expect(mkdir).toEqual({
+      ok: true,
+      changeType: "created",
+      version: { mtimeMs: 4, size: null },
+    });
+
+    const deleted = await (await app.request("/api/resource-io/delete", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ resource: { kind: "mount", mountId: "safe", path: "Notes/a.md" } }),
+    })).json();
+    expect(deleted).toEqual({ ok: true, changeType: "modified" });
+
+    const copied = await (await app.request("/api/resource-io/copy", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        from: { kind: "mount", mountId: "safe", path: "Notes/a.md" },
+        to: { kind: "mount", mountId: "safe", path: "Notes/b.md" },
+      }),
+    })).json();
+    expect(copied).toEqual({
+      ok: true,
+      changeType: "created",
+      version: { mtimeMs: 5, size: 5 },
+    });
+
+    expect(JSON.stringify({ mkdir, deleted, copied })).not.toContain(privatePath);
+  });
+
+  it("rejects remote local-file refs on mkdir, delete, and copy before ResourceIO", async () => {
+    const mkdir = vi.fn(async () => ({ changeType: "created" }));
+    const del = vi.fn(async () => ({ changeType: "modified" }));
+    const copy = vi.fn(async () => ({ changeType: "created" }));
+    const app = new Hono();
+    useRemoteOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      resourceIO: { mkdir, delete: del, copy },
+    }));
+    const headers = { "Content-Type": "application/json" };
+    const requests = [
+      ["/api/resource-io/mkdir", { resource: { kind: "local-file", path: "/private/dir" } }],
+      ["/api/resource-io/delete", { resource: { kind: "local-file", path: "/private/a.md" } }],
+      ["/api/resource-io/copy", {
+        from: { kind: "mount", mountId: "safe", path: "Notes/a.md" },
+        to: { kind: "local-file", path: "/private/b.md" },
+      }],
+    ] as const;
+
+    for (const [endpoint, body] of requests) {
+      const res = await app.request(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("resource_path_not_remote_safe");
+    }
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+    expect(copy).not.toHaveBeenCalled();
+  });
+
+  it("keeps HTTP mkdir and delete consistent with denied provider capabilities", async () => {
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      resourceIO: new ResourceIO({
+        providers: {
+          resource: {
+            id: "resource",
+            capabilities: () => ({ mkdir: false, delete: false }),
+          },
+        },
+      }),
+    }));
+    const headers = { "Content-Type": "application/json" };
+
+    for (const endpoint of ["mkdir", "delete"]) {
+      const res = await app.request(`/api/resource-io/${endpoint}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ resource: { kind: "resource", resourceId: "res_1" } }),
+      });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({
+        code: "knowledge_resource_out_of_scope",
+        httpStatus: 403,
+        retryable: false,
+      });
+    }
+  });
+
+  it("creates and deletes real directories through the HTTP seam with event correlation", async () => {
+    const sandbox = fs.mkdtempSync(
+      path.join(os.tmpdir(), "hana-resource-route-mkdir-"),
+    );
+    try {
+      const events: unknown[] = [];
+      const resourceIO = new ResourceIO({
+        providers: { local_fs: new LocalFsProvider({ cwd: sandbox }) },
+        eventBus: {
+          changed: (event: unknown) => { events.push(event); return event; },
+          deleted: (event: unknown) => { events.push(event); return event; },
+          renamed: (event: unknown) => { events.push(event); return event; },
+        } as never,
+      });
+      const app = new Hono();
+      useLocalOwnerAuth(app);
+      app.route("/api", createResourceIoRoute({ resourceIO }));
+      const headers = { "Content-Type": "application/json" };
+      const dirPath = path.join(sandbox, "notes");
+      const operationId = "6f0d2f1a-4d5e-4a5b-9b6a-1f2e3d4c5b6a";
+
+      const mkdirRes = await app.request("/api/resource-io/mkdir", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          resource: { kind: "local-file", path: dirPath },
+          operationId,
+        }),
+      });
+      expect(mkdirRes.status).toBe(200);
+      expect(fs.statSync(dirPath).isDirectory()).toBe(true);
+
+      const deleteRes = await app.request("/api/resource-io/delete", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          resource: { kind: "local-file", path: dirPath },
+          operationId,
+        }),
+      });
+      expect(deleteRes.status).toBe(200);
+      expect(fs.existsSync(dirPath)).toBe(false);
+      expect(events).toHaveLength(2);
+      for (const event of events) {
+        expect((event as { operationId?: string }).operationId).toBe(operationId);
+      }
+    } finally {
+      fs.rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("applies expected-version preconditions to HTTP mkdir, copy, and delete", async () => {
+    const sandbox = fs.mkdtempSync(
+      path.join(os.tmpdir(), "hana-resource-route-expected-"),
+    );
+    try {
+      const resourceIO = new ResourceIO({
+        providers: { local_fs: new LocalFsProvider({ cwd: sandbox }) },
+      });
+      const app = new Hono();
+      useLocalOwnerAuth(app);
+      app.route("/api", createResourceIoRoute({ resourceIO }));
+      const headers = { "Content-Type": "application/json" };
+      const existingDirectory = path.join(sandbox, "existing");
+      fs.mkdirSync(existingDirectory);
+
+      const mkdirConflict = await app.request("/api/resource-io/mkdir", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          resource: { kind: "local-file", path: existingDirectory },
+          expectedVersion: null,
+        }),
+      });
+      expect(mkdirConflict.status).toBe(409);
+      expect((await mkdirConflict.json()).code).toBe("knowledge_resource_conflict");
+
+      const source = path.join(sandbox, "source.md");
+      const target = path.join(sandbox, "target.md");
+      fs.writeFileSync(source, "new");
+      fs.writeFileSync(target, "old");
+      const staleCopy = await app.request("/api/resource-io/copy", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          from: { kind: "local-file", path: source },
+          to: { kind: "local-file", path: target },
+          expectedVersion: { mtimeMs: 0, size: 3 },
+        }),
+      });
+      expect(staleCopy.status).toBe(409);
+      expect((await staleCopy.json()).code).toBe("knowledge_version_conflict");
+      expect(fs.readFileSync(target, "utf-8")).toBe("old");
+
+      const targetStat = fs.lstatSync(target);
+      const copied = await app.request("/api/resource-io/copy", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          from: { kind: "local-file", path: source },
+          to: { kind: "local-file", path: target },
+          expectedVersion: {
+            mtimeMs: targetStat.mtime.getTime(),
+            size: targetStat.size,
+          },
+        }),
+      });
+      expect(copied.status).toBe(200);
+      expect(fs.readFileSync(target, "utf-8")).toBe("new");
+
+      const staleDelete = await app.request("/api/resource-io/delete", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          resource: { kind: "local-file", path: target },
+          expectedVersion: { mtimeMs: 0, size: 3 },
+        }),
+      });
+      expect(staleDelete.status).toBe(409);
+      expect(fs.existsSync(target)).toBe(true);
+
+      const deleteStat = fs.lstatSync(target);
+      const deleted = await app.request("/api/resource-io/delete", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          resource: { kind: "local-file", path: target },
+          expectedVersion: {
+            mtimeMs: deleteStat.mtime.getTime(),
+            size: deleteStat.size,
+          },
+        }),
+      });
+      expect(deleted.status).toBe(200);
+      expect(fs.existsSync(target)).toBe(false);
+    } finally {
+      fs.rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed mutation expected versions instead of silently dropping them", async () => {
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    const copy = vi.fn();
+    app.route("/api", createResourceIoRoute({
+      resourceIO: {
+        copy,
+      },
+    }));
+
+    for (const expectedVersion of ["opaque", true, []]) {
+      const response = await app.request("/api/resource-io/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: { kind: "resource", resourceId: "from" },
+          to: { kind: "resource", resourceId: "to" },
+          expectedVersion,
+        }),
+      });
+      expect(response.status).toBe(412);
+      expect((await response.json()).code)
+        .toBe("knowledge_operation_precondition_failed");
+    }
+    expect(copy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed mutation operationId before ResourceIO", async () => {
+    const resourceIO = {
+      mkdir: vi.fn(async () => ({ changeType: "created", resourceKey: "a" })),
+    };
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({ resourceIO }));
+
+    const res = await app.request("/api/resource-io/mkdir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        resource: { kind: "local-file", path: "/tmp/dir" },
+        operationId: "not-a-uuid",
+      }),
+    });
+
+    expect(res.status).toBe(412);
+    expect(await res.json()).toMatchObject({
+      code: "knowledge_operation_precondition_failed",
+      httpStatus: 412,
+      retryable: false,
+      details: { field: "operationId" },
+    });
+    expect(resourceIO.mkdir).not.toHaveBeenCalled();
+  });
+
+  it("routes provider-neutral transfer with authenticated context and correlation", async () => {
+    const operationId = "6f0d2f1a-4d5e-4a5b-9b6a-1f2e3d4c5b6a";
+    const transfer = vi.fn(async () => ({
+      target: { kind: "mount", mountId: "target", path: "Notes/copy.md" },
+      version: "v1:10:5",
+      bytesTransferred: 5,
+    }));
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({ resourceIO: { transfer } }));
+
+    const response = await app.request("/api/resource-io/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: { kind: "mount", mountId: "source", path: "Notes/a.md" },
+        targetDirectory: { kind: "mount", mountId: "target", path: "Notes" },
+        targetName: "copy.md",
+        operationId,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      target: { kind: "mount", mountId: "target", path: "Notes/copy.md" },
+      version: "v1:10:5",
+      bytesTransferred: 5,
+    });
+    expect(transfer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetName: "copy.md",
+        operationId,
+        signal: expect.any(AbortSignal),
+      }),
+      expect.objectContaining({
+        source: "api",
+        operationId,
+        principal: expect.objectContaining({ kind: "api" }),
+      }),
+    );
+  });
+
+  it("projects remote transfer responses without native paths or private provider data", async () => {
+    const privatePath = "/private/workspace/Notes/copy.md";
+    const transfer = vi.fn(async () => ({
+      target: {
+        kind: "mount",
+        mountId: "target",
+        path: "Notes/copy.md",
+        filePath: privatePath,
+        resolvedPath: privatePath,
+      },
+      version: "v1:10:5",
+      bytesTransferred: 5,
+      filePath: privatePath,
+      resourceKey: `mount:target:${privatePath}`,
+    }));
+    const app = new Hono();
+    useRemoteOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({ resourceIO: { transfer } }));
+
+    const response = await app.request("/api/resource-io/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: { kind: "mount", mountId: "source", path: "Notes/a.md" },
+        targetDirectory: { kind: "mount", mountId: "target", path: "Notes" },
+        targetName: "copy.md",
+        operationId: "6f0d2f1a-4d5e-4a5b-9b6a-1f2e3d4c5b6a",
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      ok: true,
+      target: { kind: "mount", mountId: "target", path: "Notes/copy.md" },
+      version: "v1:10:5",
+      bytesTransferred: 5,
+    });
+    expect(JSON.stringify(body)).not.toContain(privatePath);
+  });
+
+  it("rejects nested forged authority and remote local-file transfer refs before ResourceIO", async () => {
+    const transfer = vi.fn();
+    const localApp = new Hono();
+    useLocalOwnerAuth(localApp);
+    localApp.route("/api", createResourceIoRoute({ resourceIO: { transfer } }));
+    const forged = await localApp.request("/api/resource-io/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: {
+          kind: "mount",
+          mountId: "source",
+          path: "a.md",
+          principal: { userId: "attacker" },
+        },
+        targetDirectory: { kind: "mount", mountId: "target", path: "" },
+        targetName: "copy.md",
+        operationId: "6f0d2f1a-4d5e-4a5b-9b6a-1f2e3d4c5b6a",
+      }),
+    });
+    expect(forged.status).toBe(400);
+    expect(await forged.json()).toMatchObject({
+      code: "forbidden_resource_authority_field",
+      details: { field: "principal" },
+    });
+
+    const remoteApp = new Hono();
+    useRemoteOwnerAuth(remoteApp);
+    remoteApp.route("/api", createResourceIoRoute({ resourceIO: { transfer } }));
+    const remote = await remoteApp.request("/api/resource-io/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: { kind: "local-file", path: "/private/a.md" },
+        targetDirectory: { kind: "mount", mountId: "target", path: "" },
+        targetName: "copy.md",
+        operationId: "6f0d2f1a-4d5e-4a5b-9b6a-1f2e3d4c5b6a",
+      }),
+    });
+    expect(remote.status).toBe(403);
+    expect((await remote.json()).code).toBe("resource_path_not_remote_safe");
+
+    const privateAlias = await localApp.request("/api/resource-io/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: { kind: "local-file", filePath: "/private/a.md" },
+        targetDirectory: { kind: "mount", mountId: "target", path: "" },
+        targetName: "copy.md",
+        operationId: "6f0d2f1a-4d5e-4a5b-9b6a-1f2e3d4c5b6a",
+      }),
+    });
+    expect(privateAlias.status).toBe(400);
+    expect(await privateAlias.json()).toMatchObject({
+      code: "forbidden_resource_authority_field",
+      details: { field: "filePath" },
+    });
+    expect(transfer).not.toHaveBeenCalled();
+  });
+
   it("returns sanitized ResourceIO denial errors", async () => {
     const resourceIO = {
       write: vi.fn(async () => {

@@ -46,6 +46,8 @@ export class ResourceProvider {
       trash: false,
       delete: false,
       mkdir: false,
+      exportTree: false,
+      importTree: false,
     };
   }
 

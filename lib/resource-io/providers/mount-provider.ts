@@ -8,8 +8,13 @@ import type {
   MaterializeResult,
   ResourceDescriptor,
   ResourceEdit,
+  ResourceExportEntry,
+  ResourceExportTreeOptions,
+  ResourceImportTreeOptions,
+  ResourceImportTreeResult,
   ResourceListResult,
   ResourceMutationResult,
+  ResourceMutationPreconditions,
   ResourceReadResult,
   ResourceRef,
   ResourceSearchResult,
@@ -64,6 +69,8 @@ export class MountProvider {
       trash: local && has("write"),
       delete: local && has("write"),
       mkdir: local && has("write"),
+      exportTree: local && has("read"),
+      importTree: local && has("write"),
     };
   }
 
@@ -101,14 +108,26 @@ export class MountProvider {
     return this.mapResult(ref, await resolved.provider.edit({ kind: "local-file", path: resolved.path }, edits));
   }
 
-  async mkdir(ref: ResourceRef): Promise<ResourceMutationResult> {
+  async mkdir(
+    ref: ResourceRef,
+    options: ResourceMutationPreconditions = {},
+  ): Promise<ResourceMutationResult> {
     const resolved = this.resolveLocalMount(ref, "write");
-    return this.mapResult(ref, await resolved.provider.mkdir({ kind: "local-file", path: resolved.path }));
+    return this.mapResult(ref, await resolved.provider.mkdir(
+      { kind: "local-file", path: resolved.path },
+      options,
+    ));
   }
 
-  async delete(ref: ResourceRef): Promise<ResourceMutationResult> {
+  async delete(
+    ref: ResourceRef,
+    options: ResourceMutationPreconditions = {},
+  ): Promise<ResourceMutationResult> {
     const resolved = this.resolveLocalMount(ref, "write");
-    return this.mapResult(ref, await resolved.provider.delete({ kind: "local-file", path: resolved.path }));
+    return this.mapResult(ref, await resolved.provider.delete(
+      { kind: "local-file", path: resolved.path },
+      options,
+    ));
   }
 
   async list(ref: ResourceRef): Promise<ResourceListResult> {
@@ -124,6 +143,45 @@ export class MountProvider {
   async materialize(ref: ResourceRef): Promise<MaterializeResult> {
     const resolved = this.resolveLocalMount(ref, "materialize");
     return this.mapResult(ref, await resolved.provider.materialize({ kind: "local-file", path: resolved.path }));
+  }
+
+  async *exportTree(
+    ref: ResourceRef,
+    options: ResourceExportTreeOptions = {},
+  ): AsyncIterable<ResourceExportEntry> {
+    const resolved = this.resolveLocalMount(ref, "read");
+    yield* resolved.provider.exportTree(
+      { kind: "local-file", path: resolved.path },
+      options,
+    );
+  }
+
+  async importTreeAtomically(
+    targetDirectory: ResourceRef,
+    targetName: string,
+    entries: AsyncIterable<ResourceExportEntry>,
+    options: ResourceImportTreeOptions,
+  ): Promise<ResourceImportTreeResult> {
+    const resolved = this.resolveLocalMount(targetDirectory, "write");
+    const result = await resolved.provider.importTreeAtomically(
+      { kind: "local-file", path: resolved.path },
+      targetName,
+      entries,
+      options,
+    );
+    if (targetDirectory.kind !== "mount") return result;
+    const targetPath = joinMountPath(
+      normalizeMountPath(targetDirectory.path),
+      targetName,
+    );
+    return this.mapResult(
+      {
+        kind: "mount",
+        mountId: targetDirectory.mountId,
+        path: targetPath,
+      },
+      result,
+    );
   }
 
   watchTarget(ref: ResourceRef) {
@@ -156,12 +214,17 @@ export class MountProvider {
     };
   }
 
-  async copy(from: ResourceRef, to: ResourceRef): Promise<ResourceMutationResult> {
+  async copy(
+    from: ResourceRef,
+    to: ResourceRef,
+    options: ResourceMutationPreconditions = {},
+  ): Promise<ResourceMutationResult> {
     const source = this.resolveLocalMount(from, "read");
     const target = this.resolveLocalMount(to, "write");
     return this.mapResult(to, await target.provider.copy(
       { kind: "local-file", path: source.path },
       { kind: "local-file", path: target.path },
+      options,
     ));
   }
 
@@ -246,6 +309,12 @@ export class MountProvider {
     const mountPath = normalizeMountPath(ref.path);
     const targetPath = mountPath ? path.join(rootPath, ...mountPath.split("/")) : rootPath;
     const rootReal = realOrResolved(rootPath);
+    const rootStat = fs.statSync(rootReal);
+    const rootIdentity = {
+      device: rootStat.dev,
+      inode: rootStat.ino,
+      birthtimeMs: rootStat.birthtimeMs,
+    };
     const targetReal = realOrResolved(targetPath);
     if (!isInside(rootReal, targetReal)) {
       throw new ResourceIOError("mount path escapes root", {
@@ -257,10 +326,37 @@ export class MountProvider {
       cwd: rootReal,
       guard: {
         check: (filePath, operation) => {
+          let activeMount;
+          try {
+            activeMount = this.mountForRef(ref);
+          } catch {
+            return { allowed: false, reason: "mount scope is no longer active" };
+          }
+          const activeRootPath = activeMount.rootLocator?.path;
+          if (
+            typeof activeRootPath !== "string"
+            || !path.isAbsolute(activeRootPath)
+            || realOrResolved(activeRootPath) !== rootReal
+          ) {
+            return { allowed: false, reason: "mount root identity changed" };
+          }
+          let activeRootStat: fs.Stats | null = null;
+          try {
+            activeRootStat = fs.statSync(rootReal);
+          } catch {
+            return { allowed: false, reason: "mount root identity unavailable" };
+          }
+          if (
+            activeRootStat.dev !== rootIdentity.device
+            || activeRootStat.ino !== rootIdentity.inode
+            || activeRootStat.birthtimeMs !== rootIdentity.birthtimeMs
+          ) {
+            return { allowed: false, reason: "mount root identity changed" };
+          }
           const candidate = realOrResolved(filePath);
           if (!isInside(rootReal, candidate)) return { allowed: false, reason: "mount path escapes root" };
-          if (operation === "read" && !mount.capabilities?.includes("read")) return { allowed: false, reason: "mount read denied" };
-          if ((operation === "write" || operation === "delete") && !mount.capabilities?.includes("write")) {
+          if (operation === "read" && !activeMount.capabilities?.includes("read")) return { allowed: false, reason: "mount read denied" };
+          if ((operation === "write" || operation === "delete") && !activeMount.capabilities?.includes("write")) {
             return { allowed: false, reason: "mount write denied" };
           }
           return { allowed: true };

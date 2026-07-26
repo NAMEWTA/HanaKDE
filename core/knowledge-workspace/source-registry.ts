@@ -433,7 +433,10 @@ function capabilityAvailable(
   capability: KnowledgeSourceCapability,
   provider: ResourceProviderCapabilities,
 ): boolean {
-  if (capability === "restore" || capability === "transfer") return false;
+  if (capability === "restore") return false;
+  if (capability === "transfer") {
+    return provider.exportTree === true && provider.importTree === true;
+  }
   return provider[capability as keyof ResourceProviderCapabilities] === true;
 }
 

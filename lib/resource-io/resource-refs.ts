@@ -84,6 +84,21 @@ export function resourceKeyForRef(ref: ResourceRef): string {
   }
 }
 
+export function childResourceRef(parent: ResourceRef, name: string): ResourceRef | null {
+  if (parent.kind === "local-file") {
+    return { kind: "local-file", path: path.join(parent.path, name) };
+  }
+  if (parent.kind === "mount") {
+    const base = normalizeSlashPath(parent.path);
+    return {
+      kind: "mount",
+      mountId: parent.mountId,
+      path: base ? `${base}/${name}` : name,
+    };
+  }
+  return null;
+}
+
 export function providerIdForResourceRef(ref: ResourceRef): ResourceProviderId {
   switch (ref.kind) {
     case "local-file":

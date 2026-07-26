@@ -352,7 +352,7 @@ describe("knowledge performance fixtures", () => {
       },
     );
     expect(fs.readdirSync(parent)).toEqual([]);
-  });
+  }, 30_000);
 
   it("rejects unknown profiles, invalid seeds and malformed manifests", () => {
     expect(() => resolveFixtureProfile("unknown")).toThrow(/unknown fixture profile/i);

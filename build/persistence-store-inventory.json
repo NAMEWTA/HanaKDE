@@ -911,6 +911,42 @@
       "exemption": null
     },
     {
+      "id": "knowledge-source-bindings",
+      "ownerModule": "core/knowledge-workspace/source-registry.ts",
+      "pathPattern": "knowledge-workspace/source-bindings/v1.json",
+      "pathPatterns": [
+        "knowledge-workspace/source-bindings/v1.json"
+      ],
+      "pathExclusions": [],
+      "pathKind": "file",
+      "format": "json",
+      "schemaSource": {
+        "kind": "runtime-contract",
+        "module": "core/knowledge-workspace/source-registry.ts",
+        "contract": "schemaVersion 1 source binding history validator and atomic serializer"
+      },
+      "schemaContract": {
+        "kind": "runtime-source",
+        "source": "core/knowledge-workspace/source-registry.ts",
+        "compatibility": "The named runtime reader is canonical; this inventory does not imply stricter validation than runtime currently performs."
+      },
+      "openEntry": [
+        "SourceRegistry.create"
+      ],
+      "migrationEntry": [],
+      "protocolModules": [],
+      "firstPossibleOpenPhase": "runtime_ready",
+      "firstPossibleWritePhase": "runtime_ready",
+      "epochPolicy": "epoch-managed",
+      "checkpointPolicy": "Checkpoint with the workspace source configuration whose opaque root identities it remembers.",
+      "restorePolicy": "Restore atomically, then revalidate every selected provider root before reusing a historical sourceKey.",
+      "affectedByEpochMigration": true,
+      "bootstrapSafety": null,
+      "preCoordinatorReadProjection": null,
+      "identityContract": "A binding is scoped by workspaceOpaqueRootId and sourceOpaqueRootId; stored paths are never authoritative.",
+      "exemption": null
+    },
+    {
       "id": "legacy-pi-search-cache",
       "ownerModule": "lib/pi-sdk/search-tools.ts",
       "pathPattern": ".pi/agent/bin/{toolName}",
@@ -3147,6 +3183,24 @@
       "excerpt": "atomicWriteSync(this._path, JSON.stringify(this._cache))",
       "reason": "Owns session drafts or project associations.",
       "storeId": "session-drafts-and-projects",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/source-registry.ts",
+      "line": 502,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
+      "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
+      "storeId": "knowledge-source-bindings",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/source-registry.ts",
+      "line": 503,
+      "kind": "atomic-write",
+      "excerpt": "atomicWriteSync(filePath, `${JSON.stringify(data, null, 2)}\\n`)",
+      "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
+      "storeId": "knowledge-source-bindings",
       "exemptionId": null
     },
     {
@@ -6895,7 +6949,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 117,
+      "line": 143,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6904,7 +6958,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 118,
+      "line": 144,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6913,7 +6967,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 153,
+      "line": 179,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, text, \"utf-8\")",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6922,7 +6976,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 161,
+      "line": 193,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(filePath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6931,7 +6985,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 169,
+      "line": 205,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(filePath, { recursive: true, force: false })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6940,7 +6994,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 179,
+      "line": 222,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6949,7 +7003,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 182,
+      "line": 225,
       "kind": "copy-file",
       "excerpt": "fs.cpSync(sourcePath, targetPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6958,7 +7012,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 184,
+      "line": 227,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6967,7 +7021,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 200,
+      "line": 243,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6976,7 +7030,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 201,
+      "line": 244,
       "kind": "rename",
       "excerpt": "fs.renameSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6985,7 +7039,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 218,
+      "line": 261,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(trashPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6994,7 +7048,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 220,
+      "line": 263,
       "kind": "rename",
       "excerpt": "fs.renameSync(filePath, payloadPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7003,7 +7057,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 221,
+      "line": 264,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(path.join(trashPath, \"metadata.json\"), JSON.stringify({ schemaVersion: 1, trashId, originalPath: filePath, originalName: path.basename(filePath), deletedAt: new Date().toISOString(), ...(options.metadata && typeof options.m",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7011,8 +7065,89 @@
       "exemptionId": "external-resource-io"
     },
     {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 406,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(entryPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 906,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 907,
+      "kind": "write-file",
+      "excerpt": "fs.promises.open(filePath, \"wx\", 0o600)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 940,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 971,
+      "kind": "remove-path",
+      "excerpt": "fs.unlinkSync(stagingPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 985,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(stagingPath, finalPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1007,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(stagingPath, finalPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1093,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(path.join(originalDirectoryPath, stagingName), { recursive: true, force: true, })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1108,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(path.join(movedDirectory, stagingName), { recursive: true, force: true, })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
       "sourceFile": "lib/resource-io/providers/url-provider.ts",
-      "line": 103,
+      "line": 105,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(this.materializeRoot, { recursive: true })",
       "reason": "Writes a bounded network download to the caller-selected resource destination.",
@@ -7021,7 +7156,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/url-provider.ts",
-      "line": 109,
+      "line": 111,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, read.content)",
       "reason": "Writes a bounded network download to the caller-selected resource destination.",

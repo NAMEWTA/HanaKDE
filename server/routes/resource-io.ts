@@ -2,8 +2,9 @@ import crypto from "crypto";
 import { TextDecoder } from "util";
 import { Hono } from "hono";
 import { principalOwnsLocalConnection } from "../../core/security-principal.ts";
+import { isOperationCorrelationId } from "../../shared/knowledge-diagnostics.ts";
 import { parseKnowledgeResourceAddress } from "../../shared/knowledge-workspace-contract.ts";
-import { snapshotOwnData, toKnowledgeErrorEnvelope, toPublicKnowledgeErrorEnvelope } from "../../shared/knowledge-workspace-errors.ts";
+import { KnowledgeWorkspaceError, snapshotOwnData, toKnowledgeErrorEnvelope, toPublicKnowledgeErrorEnvelope } from "../../shared/knowledge-workspace-errors.ts";
 import { safeJson } from "../hono-helpers.ts";
 import { createHonoResourceOperationContext } from "../http/resource-operation-context.ts";
 
@@ -23,7 +24,33 @@ const MUTATION_AUTHORITY_FIELDS = new Set([
   "sessionPath",
   "connectionKind",
   "credentialKind",
+  "resolvedPath",
+  "filePath",
+  "file_path",
+  "rootPath",
+  "absolutePath",
+  "rootIdentity",
+  "providerRootIdentity",
+  "identityNamespace",
+  "opaqueRootId",
+  "nativeCredential",
+  "nativeBridgeCredential",
 ]);
+
+const RESOURCE_REF_FIELDS = Object.freeze({
+  "local-file": new Set(["kind", "path"]),
+  mount: new Set(["kind", "mountId", "path"]),
+  resource: new Set(["kind", "resourceId"]),
+  "session-file": new Set(["kind", "fileId"]),
+  url: new Set(["kind", "url"]),
+});
+
+const MUTATION_ROUTE_FIELDS = Object.freeze({
+  mkdir: new Set(["resource", "ref", "target", "reason", "operationId", "expectedVersion"]),
+  delete: new Set(["resource", "ref", "target", "reason", "operationId", "expectedVersion"]),
+  copy: new Set(["from", "to", "oldResource", "newResource", "reason", "operationId", "expectedVersion"]),
+  transfer: new Set(["source", "targetDirectory", "targetName", "reason", "operationId", "expectedTargetVersion"]),
+});
 
 export function createResourceIoRoute(engine) {
   const route = new Hono();
@@ -168,13 +195,62 @@ export function createResourceIoRoute(engine) {
     return resourceIO.trash(resource, body?.trash || {}, operationContextFromBody(body, c));
   }, { rejectMutationAuthority: true, responseKind: "trash" }));
 
+  route.post("/resource-io/mkdir", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
+    const resource = strictMutationResourceRef(body?.resource || body?.ref || body?.target, "resource");
+    return resourceIO.mkdir(resource, operationContextFromBody(body, c));
+  }, { rejectMutationAuthority: true, responseKind: "mutation", allowedFields: MUTATION_ROUTE_FIELDS.mkdir }));
+
+  route.post("/resource-io/delete", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
+    const resource = strictMutationResourceRef(body?.resource || body?.ref || body?.target, "resource");
+    return resourceIO.delete(resource, operationContextFromBody(body, c));
+  }, { rejectMutationAuthority: true, responseKind: "mutation", allowedFields: MUTATION_ROUTE_FIELDS.delete }));
+
+  route.post("/resource-io/copy", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
+    return resourceIO.copy(
+      strictMutationResourceRef(body?.from || body?.oldResource, "from"),
+      strictMutationResourceRef(body?.to || body?.newResource, "to"),
+      operationContextFromBody(body, c),
+    );
+  }, { rejectMutationAuthority: true, responseKind: "mutation", allowedFields: MUTATION_ROUTE_FIELDS.copy }));
+
+  route.post("/resource-io/transfer", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
+    const context = operationContextFromBody(body, c);
+    return resourceIO.transfer({
+      source: strictMutationResourceRef(body?.source, "source"),
+      targetDirectory: strictMutationResourceRef(body?.targetDirectory, "targetDirectory"),
+      targetName: body?.targetName,
+      expectedTargetVersion: body?.expectedTargetVersion,
+      operationId: body?.operationId,
+      signal: c.req.raw?.signal,
+    }, context);
+  }, { rejectMutationAuthority: true, responseKind: "transfer", allowedFields: MUTATION_ROUTE_FIELDS.transfer }));
+
   return route;
 }
 
 function operationContextFromBody(body, c) {
-  return createHonoResourceOperationContext(c, {
+  const context = createHonoResourceOperationContext(c, {
     reason: body?.reason || "resource_io_route",
   });
+  const operationId = mutationOperationId(body);
+  const expectedVersion = mutationExpectedVersion(body);
+  return {
+    ...context,
+    ...(operationId ? { operationId } : {}),
+    ...(expectedVersion.present ? { expectedVersion: expectedVersion.value } : {}),
+  };
+}
+
+function mutationOperationId(body) {
+  if (body?.operationId === undefined) return null;
+  if (!isOperationCorrelationId(body.operationId)) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource mutation operationId must be a UUIDv4 correlation id",
+      { field: "operationId" },
+    );
+  }
+  return body.operationId;
 }
 
 function encodeReadResult(result, body) {
@@ -243,15 +319,17 @@ function decodeBase64Content(content) {
 async function resourceJson(c, engine, handler, {
   rejectMutationAuthority = false,
   responseKind = null,
+  allowedFields = null,
 } = {}) {
   try {
     const body = await safeJson(c);
     if (rejectMutationAuthority) {
-      rejectMutationAuthorityFields(body);
+      rejectMutationAuthorityFields(body, { recursive: true });
       createHonoResourceOperationContext(c, {
         reason: body?.reason || "resource_io_route",
       });
     }
+    if (allowedFields) rejectUnexpectedFields(body, allowedFields);
     rejectUnsafeRemoteResourceRefs(c, body);
     const resourceIO = engine.resourceIO || engine.getResourceIO?.();
     if (!resourceIO) return c.json({ error: "resource io unavailable" }, 500);
@@ -266,6 +344,131 @@ async function resourceJson(c, engine, handler, {
   } catch (err) {
     return errorJson(c, err, 500);
   }
+}
+
+function rejectUnexpectedFields(body, allowedFields) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource mutation body must be an object",
+      { field: "body" },
+    );
+  }
+  for (const field of Object.keys(body)) {
+    if (!allowedFields.has(field)) {
+      throw new KnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "Resource mutation body contains an unexpected field",
+        { field },
+      );
+    }
+  }
+}
+
+function strictMutationResourceRef(value, field) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource mutation requires a resource reference",
+      { field },
+    );
+  }
+  const kind = value.kind;
+  const allowed = typeof kind === "string"
+    && Object.prototype.hasOwnProperty.call(RESOURCE_REF_FIELDS, kind)
+    ? RESOURCE_REF_FIELDS[kind]
+    : null;
+  if (!allowed) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource mutation reference kind is unsupported",
+      { field },
+    );
+  }
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new KnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "Resource mutation reference contains an unexpected field",
+        { field: `${field}.${key}` },
+      );
+    }
+  }
+  const valid = kind === "local-file"
+    ? nonEmptyString(value.path)
+    : kind === "mount"
+      ? nonEmptyString(value.mountId) && typeof value.path === "string"
+      : kind === "resource"
+        ? nonEmptyString(value.resourceId)
+        : kind === "session-file"
+          ? nonEmptyString(value.fileId)
+          : nonEmptyString(value.url);
+  if (!valid) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource mutation reference is incomplete",
+      { field },
+    );
+  }
+  return value;
+}
+
+function mutationExpectedVersion(body) {
+  const present = body?.expectedVersion !== undefined;
+  if (!present) return { present: false, value: undefined };
+  const value = body?.expectedVersion;
+  if (value === null) return { present: true, value: null };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource expected version must be an object",
+      { field: "expectedVersion" },
+    );
+  }
+  const allowed = new Set(["mtimeMs", "size", "sha256", "etag", "sequence"]);
+  const keys = Object.keys(value);
+  if (keys.length === 0) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource expected version must not be empty",
+      { field: "expectedVersion" },
+    );
+  }
+  for (const key of keys) {
+    if (!allowed.has(key)) {
+      throw new KnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "Resource expected version contains an unexpected field",
+        { field: `expectedVersion.${key}` },
+      );
+    }
+  }
+  if (
+    ("mtimeMs" in value && !finiteNumber(value.mtimeMs))
+    || (
+      "size" in value
+      && value.size !== null
+      && (!finiteNumber(value.size) || value.size < 0)
+    )
+    || ("sequence" in value && (!finiteNumber(value.sequence) || value.sequence < 0))
+    || ("sha256" in value && !nonEmptyString(value.sha256))
+    || ("etag" in value && !nonEmptyString(value.etag))
+  ) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource expected version is invalid",
+      { field: "expectedVersion" },
+    );
+  }
+  return { present: true, value };
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isConflictResult(result) {
@@ -341,7 +544,7 @@ function compatibilityRouteError(snapshot) {
 function projectResourceResponse(c, result, responseKind) {
   const authPrincipal = honoAuthPrincipal(c);
   if (authPrincipal && principalOwnsLocalConnection(authPrincipal)) {
-    return result;
+    return responseKind === "transfer" ? { ok: true, ...result } : result;
   }
   const version = safeResourceVersion(result?.version);
   switch (responseKind) {
@@ -394,9 +597,25 @@ function projectResourceResponse(c, result, responseKind) {
         trashId:
           typeof result?.trashId === "string" ? result.trashId : undefined,
       });
+    case "transfer":
+      return compactObject({
+        ok: true,
+        target: safeRemoteTransferTarget(result?.target),
+        version:
+          typeof result?.version === "string" ? result.version : undefined,
+        bytesTransferred: finiteNumberOrUndefined(result?.bytesTransferred),
+      });
     default:
       return {};
   }
+}
+
+function safeRemoteTransferTarget(target) {
+  if (!isRemoteSafeResourceRef(target)) return undefined;
+  if (target.kind === "mount") {
+    return { kind: "mount", mountId: target.mountId, path: target.path };
+  }
+  return { kind: "resource", resourceId: target.resourceId };
 }
 
 function honoAuthPrincipal(c) {
@@ -557,6 +776,8 @@ function rejectUnsafeRemoteResourceRefs(c, body, {
     body?.to,
     body?.oldResource,
     body?.newResource,
+    body?.source,
+    body?.targetDirectory,
   ];
   if (subscription && Array.isArray(body?.resources)) {
     candidates.push(...body.resources);

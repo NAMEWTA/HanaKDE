@@ -389,6 +389,7 @@
     "lib/resource-io/resource-watch-registry.ts",
     "lib/resource-io/sandbox-resource-io.ts",
     "lib/resource-io/session-file-resolver.ts",
+    "lib/resource-io/transfer.ts",
     "lib/resource-io/types.ts",
     "lib/resources/resource-envelope.ts",
     "lib/sandbox/bwrap.ts",

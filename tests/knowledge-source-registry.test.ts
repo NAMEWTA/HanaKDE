@@ -102,7 +102,7 @@ describe("knowledge SourceRegistry", () => {
       displayName: "Research",
       role: "mounted",
       availability: "available",
-      capabilities: expect.arrayContaining(["read", "write", "list", "watch"]),
+      capabilities: expect.arrayContaining(["read", "write", "list", "watch", "transfer"]),
     });
     const serialized = JSON.stringify(registry.list());
     expect(serialized).not.toContain("opaqueRootId");

@@ -49,6 +49,8 @@ export class SessionFileResolverProvider {
       trash: false,
       delete: false,
       mkdir: false,
+      exportTree: false,
+      importTree: false,
     };
   }
 

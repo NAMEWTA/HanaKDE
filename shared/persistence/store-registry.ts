@@ -314,6 +314,26 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     siteRules: rules(["core/studio-mounts.ts"], "Writes the studio mount registry."),
   }),
   defineStore({
+    id: "knowledge-source-bindings",
+    ownerModule: "core/knowledge-workspace/source-registry.ts",
+    pathPatterns: ["knowledge-workspace/source-bindings/v1.json"],
+    format: "json",
+    schemaSource: runtimeSource(
+      "core/knowledge-workspace/source-registry.ts",
+      "schemaVersion 1 source binding history validator and atomic serializer",
+    ),
+    openEntry: ["SourceRegistry.create"],
+    firstPossibleOpenPhase: "runtime_ready",
+    firstPossibleWritePhase: "runtime_ready",
+    checkpointPolicy: "Checkpoint with the workspace source configuration whose opaque root identities it remembers.",
+    restorePolicy: "Restore atomically, then revalidate every selected provider root before reusing a historical sourceKey.",
+    identityContract: "A binding is scoped by workspaceOpaqueRootId and sourceOpaqueRootId; stored paths are never authoritative.",
+    siteRules: rules(
+      ["core/knowledge-workspace/source-registry.ts"],
+      "Reads and atomically writes Knowledge Workspace source binding history.",
+    ),
+  }),
+  defineStore({
     id: "web-session-registry",
     ownerModule: "core/web-session-store.ts",
     pathPatterns: ["web-sessions.json"],

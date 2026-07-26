@@ -21,6 +21,8 @@ const CAPABILITY_KEYS = [
   "trash",
   "delete",
   "mkdir",
+  "exportTree",
+  "importTree",
 ].sort();
 
 describe("LocalFsProvider", () => {

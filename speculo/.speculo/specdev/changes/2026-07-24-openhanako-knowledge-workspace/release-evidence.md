@@ -16,14 +16,14 @@
 
 | Requirement | Owner | Automated evidence | E2E | Status | Artifact/command |
 |---|---:|---|---|---|---|
-| KW-US-001 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | Ticket 05 定向 Vitest 40/40；cwd/活动 workspaceMountId 均映射为不可卸载 main，附加来源为会话态 |
-| KW-US-002 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | Provider root identity/broker 对 same/ancestor/descendant/unknown 全部拒绝，只允许可证明 disjoint |
+| KW-US-001 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；cwd/活动 workspaceMountId 均映射为不可卸载 main，附加来源为会话态 |
+| KW-US-002 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；Provider root identity/broker 对 same/ancestor/descendant/unknown 全部拒绝，只允许可证明 disjoint |
 | KW-US-003 | 23 | `tests/knowledge-link-resolver.test.ts` | E2E-KW-009 | 未执行 | — |
 | KW-US-004 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成） |
 | KW-US-005 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
 | KW-US-006 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
-| KW-US-007 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | realpath/dev/ino/scope token；symlink retarget 重验、alias/nested root、跨 namespace unknown 均 fail-closed |
-| KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | 相同历史 opaqueRootId 可显式复用空闲 key；不同根、活动冲突、workspace 切回自动恢复均拒绝/不发生 |
+| KW-US-007 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；realpath/dev/ino/scope token；symlink retarget 重验、alias/nested root、跨 namespace unknown 均被拒绝 |
+| KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；相同历史 opaqueRootId 可显式复用空闲 key；不同根、活动冲突、workspace 切回自动恢复均拒绝/不发生 |
 | KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成）；远程 DTO/错误无本地绝对路径 |
 | KW-US-010 | 09 | `tests/mobile-workbench-route.test.ts`<br>`desktop/src/react/__tests__/mobile/knowledge-access.test.ts` | E2E-KW-021 | 未执行 | — |
 | KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |

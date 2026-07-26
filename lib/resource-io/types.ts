@@ -101,6 +101,8 @@ export type ResourceProviderCapabilities = {
   trash?: boolean;
   delete?: boolean;
   mkdir?: boolean;
+  exportTree?: boolean;
+  importTree?: boolean;
 };
 
 export type ProviderRootIdentity = Readonly<{
@@ -179,6 +181,10 @@ export type ResourceTrashOptions = {
   metadata?: Record<string, unknown>;
 };
 
+export type ResourceMutationPreconditions = {
+  expectedVersion?: ResourceVersion | null;
+};
+
 export type ResourceTrashResult = {
   resourceKey: string;
   resource: ResourceDescriptor;
@@ -231,6 +237,69 @@ export type MaterializeResult = {
   version?: ResourceVersion;
 };
 
+export type ResourceExportDirectoryEntry = {
+  kind: "directory";
+  path: string[];
+};
+
+export type ResourceExportFileEntry = {
+  kind: "file";
+  path: string[];
+  sizeBytes: number;
+  version: ResourceVersion;
+  body: AsyncIterable<Uint8Array>;
+};
+
+export type ResourceExportSymbolicLinkEntry = {
+  kind: "symbolic_link";
+  path: string[];
+  linkTarget: string;
+};
+
+export type ResourceExportEntry =
+  | ResourceExportDirectoryEntry
+  | ResourceExportFileEntry
+  | ResourceExportSymbolicLinkEntry;
+
+export type ResourceExportTreeOptions = {
+  signal?: AbortSignal;
+  registerScopeRevalidator?: (
+    revalidate: () => void | Promise<void>,
+  ) => void;
+};
+
+export type ResourceImportTreeOptions = {
+  signal?: AbortSignal;
+  expectedTargetVersion?: string | null;
+  operationId: string;
+  abortTransfer?: () => void;
+  revalidateSourceScope?: () => void | Promise<void>;
+};
+
+export type ResourceImportTreeResult = {
+  changeType: "created" | "modified";
+  resourceKey: string;
+  resource: ResourceDescriptor;
+  version?: ResourceVersion;
+  bytesTransferred: number;
+  filePath?: string;
+};
+
+export type ResourceTransferRequest = {
+  source: ResourceRef;
+  targetDirectory: ResourceRef;
+  targetName: string;
+  expectedTargetVersion?: string | null;
+  signal?: AbortSignal;
+  operationId: string;
+};
+
+export type ResourceTransferResult = {
+  target: ResourceRef;
+  version: string;
+  bytesTransferred: number;
+};
+
 export type SessionFileResolution = {
   ref: Extract<ResourceRef, { kind: "session-file" }>;
   entry: Record<string, any>;
@@ -266,15 +335,22 @@ export type ResourceProvider = {
   write?: (ref: ResourceRef, content: string | Buffer) => Promise<ResourceMutationResult>;
   writeExpectedVersion?: (ref: ResourceRef, content: string | Buffer, expectedVersion: ResourceVersion) => Promise<ResourceWriteExpectedVersionResult>;
   edit?: (ref: ResourceRef, edits: ResourceEdit[]) => Promise<ResourceMutationResult>;
-  mkdir?: (ref: ResourceRef) => Promise<ResourceMutationResult>;
-  delete?: (ref: ResourceRef) => Promise<ResourceMutationResult>;
+  mkdir?: (ref: ResourceRef, options?: ResourceMutationPreconditions) => Promise<ResourceMutationResult>;
+  delete?: (ref: ResourceRef, options?: ResourceMutationPreconditions) => Promise<ResourceMutationResult>;
   list?: (ref: ResourceRef) => Promise<ResourceListResult>;
   search?: (ref: ResourceRef, options?: Record<string, unknown>) => Promise<ResourceSearchResult>;
   materialize?: (ref: ResourceRef) => Promise<MaterializeResult>;
-  copy?: (from: ResourceRef, to: ResourceRef) => Promise<ResourceMutationResult>;
+  copy?: (from: ResourceRef, to: ResourceRef, options?: ResourceMutationPreconditions) => Promise<ResourceMutationResult>;
   rename?: (from: ResourceRef, to: ResourceRef) => Promise<ResourceMoveResult>;
   move?: (from: ResourceRef, to: ResourceRef) => Promise<ResourceMoveResult>;
   trash?: (ref: ResourceRef, options?: ResourceTrashOptions) => Promise<ResourceTrashResult>;
+  exportTree?: (ref: ResourceRef, options?: ResourceExportTreeOptions) => AsyncIterable<ResourceExportEntry>;
+  importTreeAtomically?: (
+    targetDirectory: ResourceRef,
+    targetName: string,
+    entries: AsyncIterable<ResourceExportEntry>,
+    options: ResourceImportTreeOptions,
+  ) => Promise<ResourceImportTreeResult>;
 };
 
 export type ResourcePrincipal = {
@@ -301,14 +377,17 @@ export type ResourceOperationContext = {
   emit?: boolean;
   auditRead?: boolean;
   operationId?: string;
+  expectedVersion?: ResourceVersion | null;
 };
 
 export type ResourceAuditOutcome = "allowed" | "denied" | "conflict";
 
+export type ResourceAuditOperation = ResourceProviderCapability | "transfer";
+
 export type ResourceAuditEvent = {
   type: "resource.audit";
   outcome: ResourceAuditOutcome;
-  operation: ResourceProviderCapability;
+  operation: ResourceAuditOperation;
   providerId?: ResourceProviderId;
   resourceKey?: string;
   resource?: ResourceDescriptor;

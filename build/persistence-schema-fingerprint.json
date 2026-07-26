@@ -640,7 +640,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:cd57abfb19c7884150d9362832f7e7d3886522ec2ae726b6b270f58d7bc6fc62",
+  "payloadFingerprint": "sha256:83379d1781e0ce8a4368b3893a79854c2558ceea0a5f5e395499ecb0dd8585f3",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -1504,6 +1504,42 @@
         "contract": "installed manifest, install receipt, backup, and source-package directory protocols",
         "kind": "directory-contract",
         "module": "core/plugin-manager.ts"
+      }
+    },
+    {
+      "affectedByEpochMigration": true,
+      "bootstrapSafety": null,
+      "checkpointPolicy": "Checkpoint with the workspace source configuration whose opaque root identities it remembers.",
+      "epochPolicy": "epoch-managed",
+      "exemption": null,
+      "firstPossibleOpenPhase": "runtime_ready",
+      "firstPossibleWritePhase": "runtime_ready",
+      "format": "json",
+      "id": "knowledge-source-bindings",
+      "identityContract": "A binding is scoped by workspaceOpaqueRootId and sourceOpaqueRootId; stored paths are never authoritative.",
+      "migrationEntry": [],
+      "openEntry": [
+        "SourceRegistry.create"
+      ],
+      "ownerModule": "core/knowledge-workspace/source-registry.ts",
+      "pathExclusions": [],
+      "pathKind": "file",
+      "pathPattern": "knowledge-workspace/source-bindings/v1.json",
+      "pathPatterns": [
+        "knowledge-workspace/source-bindings/v1.json"
+      ],
+      "preCoordinatorReadProjection": null,
+      "protocolModules": [],
+      "restorePolicy": "Restore atomically, then revalidate every selected provider root before reusing a historical sourceKey.",
+      "schemaContract": {
+        "compatibility": "The named runtime reader is canonical; this inventory does not imply stricter validation than runtime currently performs.",
+        "kind": "runtime-source",
+        "source": "core/knowledge-workspace/source-registry.ts"
+      },
+      "schemaSource": {
+        "contract": "schemaVersion 1 source binding history validator and atomic serializer",
+        "kind": "runtime-contract",
+        "module": "core/knowledge-workspace/source-registry.ts"
       }
     },
     {
@@ -2891,8 +2927,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Registering the generic ZIP extractor exemption changes persistence audit metadata only; it does not change any durable store schema or data format.",
-    "payloadFingerprint": "sha256:cd57abfb19c7884150d9362832f7e7d3886522ec2ae726b6b270f58d7bc6fc62"
+    "compatibilityReason": "Registering the existing schemaVersion 1 Knowledge source-binding store is an additive persistence inventory correction; no existing durable reader or writer format changes.",
+    "payloadFingerprint": "sha256:83379d1781e0ce8a4368b3893a79854c2558ceea0a5f5e395499ecb0dd8585f3"
   },
   "schemas": [
     {
@@ -3098,6 +3134,13 @@
       "module": "core/plugin-manager.ts",
       "sourceHash": "sha256:7c71fc376b3ef75df9d454bc57fca096ff6de4df20e29a834047976112649206",
       "storeId": "installed-plugins"
+    },
+    {
+      "contract": "schemaVersion 1 source binding history validator and atomic serializer",
+      "kind": "runtime-contract",
+      "module": "core/knowledge-workspace/source-registry.ts",
+      "sourceHash": "sha256:f69dea7c958513cccb731e63cde112dad0d9adb6c2002e28f1a11c39a21a7a48",
+      "storeId": "knowledge-source-bindings"
     },
     {
       "contract": "read-only known-binary legacy copy source",
@@ -4189,6 +4232,22 @@
       "reason": "Owns session drafts or project associations.",
       "sourceFile": "core/input-drafts-store.ts",
       "storeId": "session-drafts-and-projects"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 502,
+      "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
+      "sourceFile": "core/knowledge-workspace/source-registry.ts",
+      "storeId": "knowledge-source-bindings"
+    },
+    {
+      "exemptionId": null,
+      "kind": "atomic-write",
+      "line": 503,
+      "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
+      "sourceFile": "core/knowledge-workspace/source-registry.ts",
+      "storeId": "knowledge-source-bindings"
     },
     {
       "exemptionId": null,
@@ -7521,7 +7580,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 117,
+      "line": 143,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7529,7 +7588,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 118,
+      "line": 144,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7537,30 +7596,6 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 153,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "line": 161,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "remove-path",
-      "line": 169,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
       "line": 179,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
@@ -7568,16 +7603,16 @@
     },
     {
       "exemptionId": "external-resource-io",
-      "kind": "copy-file",
-      "line": 182,
+      "kind": "mkdir",
+      "line": 193,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
     },
     {
       "exemptionId": "external-resource-io",
-      "kind": "copy-file",
-      "line": 184,
+      "kind": "remove-path",
+      "line": 205,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7585,15 +7620,23 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 200,
+      "line": 222,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
     },
     {
       "exemptionId": "external-resource-io",
-      "kind": "rename",
-      "line": 201,
+      "kind": "copy-file",
+      "line": 225,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "copy-file",
+      "line": 227,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7601,7 +7644,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 218,
+      "line": 243,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7609,7 +7652,23 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 220,
+      "line": 244,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 261,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 263,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7617,7 +7676,79 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 221,
+      "line": 264,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 406,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 906,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "write-file",
+      "line": 907,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 940,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 971,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 985,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 1007,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 1093,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 1108,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7625,7 +7756,7 @@
     {
       "exemptionId": "url-provider-download-temp",
       "kind": "mkdir",
-      "line": 103,
+      "line": 105,
       "reason": "Writes a bounded network download to the caller-selected resource destination.",
       "sourceFile": "lib/resource-io/providers/url-provider.ts",
       "storeId": null
@@ -7633,7 +7764,7 @@
     {
       "exemptionId": "url-provider-download-temp",
       "kind": "write-file",
-      "line": 109,
+      "line": 111,
       "reason": "Writes a bounded network download to the caller-selected resource destination.",
       "sourceFile": "lib/resource-io/providers/url-provider.ts",
       "storeId": null

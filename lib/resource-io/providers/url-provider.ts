@@ -69,6 +69,8 @@ export class UrlProvider {
       trash: false,
       delete: false,
       mkdir: false,
+      exportTree: false,
+      importTree: false,
     };
   }
 
