@@ -1,7 +1,7 @@
 # Ticket 05: 适配 main 与会话级来源注册表
 
 - **被阻塞于：** [`03-freeze-open-knowledge-contract.md`](./03-freeze-open-knowledge-contract.md)、[`04-define-errors-and-diagnostics.md`](./04-define-errors-and-diagnostics.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -66,9 +66,24 @@
 
 ## 验收标准
 
-- [ ] main 始终存在；来源根由 provider 证明不重叠；历史 key 可复用但活动挂载不自动恢复。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] main 始终存在；来源根由 provider 证明不重叠；历史 key 可复用但活动挂载不自动恢复。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `4934e09f`（隔离 worktree 原始提交 `1d651545`，稳定 patch-id `4e16f4424242d9c733b4fbd6fb44a55b1a55f8e2`）。
+- **平台：** macOS Darwin 25.5.0 arm64、Node `v24.16.0`、npm `11.13.0`。
+- **Provider 身份：** `LocalFsProvider` 与本地 backing `MountProvider` 统一进入 `local_fs` identity namespace；身份使用 `realpathSync.native`、文件系统 `dev/ino`、平台大小写规则和 scope token。相同 namespace 只走唯一比较器；跨 namespace 未注入双向静态证明时返回 `unknown`。
+- **来源注册：** Server-owned `SourceRegistry` 始终创建不可卸载 `main`，串行化注册/卸载/重验；只允许活动根两两 `disjoint`。历史绑定原子写入 `<HANA_HOME>/knowledge-workspace/source-bindings/v1.json`，仅相同 `opaqueRootId` 可显式复用未占用 key；活动来源不持久化，workspace 切换及切回均不恢复旧挂载。
+- **公开协议：** Open composition 注册 `GET/POST/DELETE /api/knowledge-workspace/sources`。POST 只接收 `sourceKey`、`displayName`、既有 `mountId`；身份、路径、scope/token 字段闭合拒绝。DTO 仅含冻结的 `KnowledgeSourceDto` 字段，Provider 能力按读取时当前状态投影，挂载丢失后为 `unavailable`。
+- **安全与并发：** 并发注册由 mutation lock 串行化；持久历史写失败不会留下半活动来源；symlink retarget、root replacement、未知 Provider、重叠/别名根、历史损坏及错误 key 均 fail-closed。高风险后续操作可调用 `revalidate(sourceKey)` 复验 `opaqueRootId`/`scopeToken` 与全部活动根关系。
+- **自动化：** `npx vitest run tests/provider-root-identity.test.ts tests/knowledge-source-registry.test.ts tests/knowledge-workspace-route.test.ts tests/studio-workspaces-route.test.ts tests/mount-aware-file-service.test.ts tests/resource-io-local-fs-provider.test.ts tests/resource-io-mount-provider.test.ts`，7 files、40/40；新增目标 ESLint 0 warning；`npm run typecheck`、`npm run lint:boundary`、`git diff --check` 通过。
+- **构建：** `npm run build:renderer` 通过；使用 `scripts/artifact-keygen.mjs` 生成并在退出时删除的一次性本地校验密钥后，`npm run build:server` 与 `npm run build:server:open` 均通过，Open whitelist assertion 通过。未设置签名变量的首次 full build 按仓库安全契约拒绝，未被记录为成功。
+- **Smoke：** `npm run smoke:server:open` 的正向 identity 与负向闭源依赖 smoke 均打印通过；脚本在 `all smoke checks passed` 后仍保留既有句柄，Lead 随后手动中断。
+- **Playwright：** 本票明确不适用；`E2E-KW-003` 只保留发布级追踪。
+- **质量与规格检查：** 工程质量与规格符合性两轴均无未决问题；审查中修复了并发注册竞态、历史写半提交、陈旧 capability、workspace 切回自动恢复、活动 mount 未映射 main 及知识错误 envelope 降级问题。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-26-openhanako-knowledge-workspace-implementation-05.md`。

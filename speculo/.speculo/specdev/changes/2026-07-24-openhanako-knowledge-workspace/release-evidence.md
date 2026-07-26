@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `93de5ecf`（Ticket 03 实现验证点） |
+| Commit | `4934e09f`（Ticket 05 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -16,14 +16,14 @@
 
 | Requirement | Owner | Automated evidence | E2E | Status | Artifact/command |
 |---|---:|---|---|---|---|
-| KW-US-001 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
-| KW-US-002 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
+| KW-US-001 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | Ticket 05 定向 Vitest 40/40；cwd/活动 workspaceMountId 均映射为不可卸载 main，附加来源为会话态 |
+| KW-US-002 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | Provider root identity/broker 对 same/ancestor/descendant/unknown 全部拒绝，只允许可证明 disjoint |
 | KW-US-003 | 23 | `tests/knowledge-link-resolver.test.ts` | E2E-KW-009 | 未执行 | — |
 | KW-US-004 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成） |
 | KW-US-005 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
 | KW-US-006 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
-| KW-US-007 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
-| KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 未执行 | — |
+| KW-US-007 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | realpath/dev/ino/scope token；symlink retarget 重验、alias/nested root、跨 namespace unknown 均 fail-closed |
+| KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts`<br>`tests/knowledge-workspace-route.test.ts` | E2E-KW-003 | 通过（契约/集成） | 相同历史 opaqueRootId 可显式复用空闲 key；不同根、活动冲突、workspace 切回自动恢复均拒绝/不发生 |
 | KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成）；远程 DTO/错误无本地绝对路径 |
 | KW-US-010 | 09 | `tests/mobile-workbench-route.test.ts`<br>`desktop/src/react/__tests__/mobile/knowledge-access.test.ts` | E2E-KW-021 | 未执行 | — |
 | KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
@@ -215,7 +215,7 @@
 | Rule | Tickets | Status | Artifact/command |
 |---|---|---|---|
 | KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
-| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 部分通过（Ticket 03） | Ticket 03 契约/route/composition 135/135；后续 owner Tickets 05–09 尚未执行 |
+| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 部分通过（Tickets 03、05） | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40，typecheck、boundary、Full/Open build 与 Open smoke 通过；Tickets 06–09 尚未执行 |
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Ticket 04） | Ticket 04 相关回归 249/249；稳定错误/诊断、operation correlation、watch sequence/cursor 与无路径 resync 已验证；Tickets 10、43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Ticket 11） | `volta run npx vitest run tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`（29/29）；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证；后续 owner tickets 尚未执行 |
