@@ -1,7 +1,7 @@
 # Ticket 07: 迁移 Server、Desk 与 Workbench 兼容入口
 
 - **被阻塞于：** [`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)、[`06-complete-resource-io-http-seams.md`](./06-complete-resource-io-http-seams.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,24 @@
 
 ## 验收标准
 
-- [ ] 旧客户端契约不变；selectedAgentId 只影响授权上下文，不隐式改变 main。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 旧客户端契约不变；selectedAgentId 只影响授权上下文，不隐式改变 main。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `5ef59690`。
+- **平台：** macOS Darwin arm64、Node `v24.16.0`、npm `11.13.0`。
+- **统一 main：** `core/knowledge-workspace/workbench-compatibility.ts` 将活动 session workspace mount、session cwd 与既有 Desk fallback 映射到同一逻辑 `main`；Desk、Mobile Workbench 与 Knowledge route 共用该适配器。`selectedAgentId` 只进入授权 target，且与 legacy `agentId` 不一致时 fail-closed，不参与根选择。
+- **兼容与安全：** 保留既有 Desk/Workbench URL、method 与响应含义；远程 DTO、bootstrap、文件/技能错误均隐藏本机绝对路径，远程请求不能注入显式 `dir`、上传源路径、`filePath` 或 `skillDir`。工作区技能的列举、读取、安装、删除和文件 move 预检改经 ResourceIO/provider。
+- **流式内容：** ResourceIO/provider 新增 `openRead` bounded stream，支持 HEAD、ETag、Range、expected-version 与 mount root/scope 复验；每个最多 1 MiB 的 chunk 使用独立 buffer，大文件不会因复用内存而损坏。
+- **替换与外部变化：** provider 内部 `replaceExisting` 在同一目标 authority 内捕获并复验版本；活动 mount 换根、撤权、目标目录缺失、来源变化与远程 provider 故障均稳定失败，不写入旧根、不泄露路径。
+- **持久化清单：** 移除 Desk 直接 workspace mkdir/delete 的两个过期豁免，只保留 OS 临时 skill validation staging 清理豁免；`build/persistence-store-inventory.json` 与 compatible `build/persistence-schema-fingerprint.json` 已重生成，DATA_EPOCH 不变。
+- **定向自动化：** `npx vitest run tests/desk-route.test.ts tests/mobile-workbench-route.test.ts tests/mount-aware-file-service.test.ts tests/knowledge-workspace-route.test.ts tests/resource-io-local-fs-provider.test.ts tests/resource-io-mount-provider.test.ts tests/resource-io-transfer.test.ts tests/resource-io-provider-contract.test.ts tests/resource-io-types.test.ts tests/server-composition-boundary.test.ts tests/open-boundary-lint.test.ts tests/package-build-boundary.test.ts tests/build-server-open.test.ts tests/persistence-store-registry.test.ts tests/persistence-schema-tripwire.test.ts`，15 files、165/165。
+- **全仓回归：** `npm test -- --run --exclude 'temp/**' --exclude 'teach/**'`，1007 files passed、1 skipped，10092 tests passed、6 skipped。未排除时唯一失败是用户本地、已被 `.gitignore` 忽略的 `temp/HanaKDE-TodoList-Plugin-Teaching-v1.1.0` 下 8 个 `node:test` 脚本被 Vitest 当作空 suite；未修改该目录。
+- **静态与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint（0 errors、94 warnings）与 `git diff --check` 通过；`npm run build:packages`、`npm run build:server:open`、使用执行后删除的一次性签名密钥运行的 `npm run build:server` 均通过。
+- **双轴审查：** 规范轴初审发现并推动修复多块流 buffer 复用、Desk move 直读文件系统、远程技能安装错误泄漏三项阻塞；复审 0 发现、0 阻塞。标准轴 0 硬性违规、0 阻塞，保留 Desk 安全前置与 file-content response plan 两项非阻塞重复逻辑建议。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-28-openhanako-knowledge-workspace-implementation-07.md`。

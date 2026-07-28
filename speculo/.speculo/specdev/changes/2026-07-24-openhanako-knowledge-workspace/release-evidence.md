@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `4934e09f`（Ticket 05 实现验证点） |
+| Commit | `5ef59690`（Ticket 07 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -215,7 +215,7 @@
 | Rule | Tickets | Status | Artifact/command |
 |---|---|---|---|
 | KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
-| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 部分通过（Tickets 03、05、06） | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 `npm exec -- vitest run ...` 14 files、172/172，typecheck、boundary、Full/Open build 与 Open smoke 通过；Tickets 07–09 尚未执行 |
+| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 部分通过（Tickets 03、05、06、07） | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165，全仓（排除用户本地 ignored `temp/**`/`teach/**`）1007 files、10092 tests，typecheck、boundary、packages/Full/Open build 通过；Tickets 08–09 尚未执行 |
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Ticket 04） | Ticket 04 相关回归 249/249；稳定错误/诊断、operation correlation、watch sequence/cursor 与无路径 resync 已验证；Tickets 10、43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Ticket 11） | `volta run npx vitest run tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`（29/29）；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证；后续 owner tickets 尚未执行 |
