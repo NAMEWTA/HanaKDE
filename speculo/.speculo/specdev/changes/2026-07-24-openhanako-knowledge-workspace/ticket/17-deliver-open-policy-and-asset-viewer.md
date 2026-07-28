@@ -1,7 +1,7 @@
 # Ticket 17: 交付内容门禁与基础 Asset Viewer
 
 - **被阻塞于：** [`06-complete-resource-io-http-seams.md`](./06-complete-resource-io-http-seams.md)、[`14-establish-malicious-workspace-tests.md`](./14-establish-malicious-workspace-tests.md)、[`15-deliver-knowledge-shell.md`](./15-deliver-knowledge-shell.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -65,9 +65,25 @@
 
 ## 验收标准
 
-- [ ] spy provider 证明超限或不安全内容在 stat 后不发生正文 read；允许的图片/PDF/安全文本无需等待索引即可打开。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] spy provider 证明超限或不安全内容在 stat 后不发生正文 read；允许的图片/PDF/安全文本无需等待索引即可打开。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `185949d3`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **内容门禁：** `resource-open-policy.ts` 以 stat 的 `exists/isDirectory/version.size` 决定是否读取；10 MiB 边界内才允许正文，HTML/SVG/Mermaid/URI 与已知不支持二进制类型零读取并降级文件信息，未知后缀只作为有界文本候选。
+- **确定性解码：** Renderer 只请求有界 base64，并严格支持无 BOM UTF-8、UTF-8 BOM、带 BOM UTF-16 LE/BE 与 UTF-32 LE/BE；传统编码、错误序列、版本/大小漂移均 fail-closed，不使用替换字符、猜测代码页或截断正文。
+- **只读查看器：** 安全文本、图片、PDF、音频与视频使用只读表面；PDF 不调用索引、OCR、正文命中或高亮 API；未知/超限/不安全编码显示完整文件名、来源、知识地址、大小和默认应用入口。
+- **外部变化：** 复用现有来源 watcher 与 ResourceEvent signal；自动刷新会取消旧请求并阻止 stale result，保留滚动和媒体播放位置；读取/解码失败保留查看器并提供重新加载，外部删除显示资源不存在且不创建或猜测资源。
+- **Native 边界：** 查看器只向注入动作传递 `KnowledgeResourceAddress`；不接收或暴露绝对路径。未提供动作或 Open/Web 无能力时明确显示 `knowledge_native_capability_unavailable` 降级；grant、Main-only credential 与实际系统动作仍由 Ticket 51 的冻结边界交付。
+- **i18n/A11y/UI：** zh-CN、zh-TW、en、ja、ko 同步；region/status/alert、只读语义、键盘 focus、亮暗主题变量和窄布局已覆盖。
+- **TDD 证据：** 首次精确测试因两个交付物尚不存在而 2 suites 红；实现后 `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`（2 files、23/23）。
+- **相关回归：** 11 files、115/115；干净全仓 1021 files passed、1 skipped，10249 tests passed、6 skipped。
+- **门禁：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:client` 与 `git diff --check` 通过；标准轴与规范轴复审均无未决 blocker。
+- **Playwright：** E2E-KW-006 与 E2E-KW-017 尚未执行；当前 ticket 不抢占 Ticket 20/49 的编辑组/树打开入口或 Ticket 51 的 native bridge。场景保留在发布证据中，待这些显式 blocker 完成后以真实产品入口执行，不将未执行写成通过。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-28-openhanako-knowledge-workspace-implementation-17.md`

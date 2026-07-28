@@ -182,13 +182,13 @@
 | KW-US-153 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
 | KW-US-154 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
 | KW-US-155 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-156 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
+| KW-US-156 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`（2 files、23/23）；安全文本、图片、PDF、音频、视频与文件信息只读表面通过 |
 | KW-US-157 | 42 | `tests/safe-text-index-extractor.test.ts` | E2E-KW-013 | 未执行 | — |
-| KW-US-158 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
-| KW-US-159 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
-| KW-US-160 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
-| KW-US-161 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
-| KW-US-162 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 未执行 | — |
+| KW-US-158 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；不安全编码显示文件信息，默认应用动作只接收知识地址 |
+| KW-US-159 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；10 MiB + 1 在 stat 后零正文 read |
+| KW-US-160 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；PDF 只读预览且未调用索引/OCR/高亮能力 |
+| KW-US-161 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；自动刷新、取消/stale guard、滚动与媒体位置恢复通过 |
+| KW-US-162 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；外部删除保留查看器且无 write/create/路径猜测 |
 | KW-US-163 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；未认证、伪造 authority、无 owner/scope、越出来源均被安全拒绝 |
 | KW-US-164 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 均由隔离临时环境中的真实 Node Server 验证 |
 | KW-US-165 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts`<br>`desktop/src/react/__tests__/services/knowledge-native-client.test.ts` | E2E-KW-017 | 未执行 | — |
@@ -231,7 +231,7 @@
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12） | Ticket 11 Markdown IR 29/29；Ticket 12 精确表面测试 8/8、相关定向 15 files、151/151；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证，单一 CM6 surface/extension factory 注入 save、attachment、open-link、content-gate 策略并保留既有 decorations 与 undo；Tickets 23–39 尚未执行 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
-| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Ticket 14） | 恶意工作区精确门禁 13/13；相关 ResourceIO/Markdown/Mermaid 回归 10 files、192/192；当前 macOS 实际执行 symlink、TOCTOU、case/Unicode、控制字符/UNC、身份伪造、路径/正文/凭据脱敏、stat-first 上限与主动内容；Tickets 17、35、51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
+| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17） | Ticket 14 恶意工作区门禁 13/13；Ticket 17 stat-first asset policy/查看器 23/23，HTML/SVG/Mermaid/URI 与超限内容零读取，严格 BOM 解码、取消、版本漂移和媒体失败 fail-closed；Tickets 35、51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
 | KW-RULE-QUERY | 44, 46 | 未执行 | — |
 | KW-RULE-SEARCH | 45 | 未执行 | — |
@@ -244,7 +244,7 @@
 | KW-RULE-REFACTOR | 54 | 未执行 | — |
 | KW-RULE-RELEASE | 57 | 未执行 | — |
 | KW-RULE-PREFLIGHT | 01 | 通过 | `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts`（17/17）；Node v24.16.0；真实 SQLite FTS5；dirty 仅 warning |
-| KW-RULE-NATIVE | 17, 51, 56 | 未执行 | — |
+| KW-RULE-NATIVE | 17, 51, 56 | 部分通过（Ticket 17） | Asset Viewer 默认应用接缝只传 `KnowledgeResourceAddress`，无动作/Open/Web 显式返回 capability unavailable；不暴露绝对路径或建立任意路径 IPC。grant、Main-only credential、picker/reveal/trash 与真实系统动作等待 Tickets 51、56 |
 | KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 部分通过（Ticket 10） | Operation Journal 原子写/`.prev` 回退、rollback、`RECOVERY_REQUIRED`、启动 barrier、缺失终态结果重建、projection 重放及 source `recovering` 聚合由 22/22 精确测试证明；Tickets 43、54–56 尚未执行 |
 | KW-RULE-TEST | 01, 13, 14, 57 | 部分通过（Tickets 01、13、14） | Ticket 01 preflight/baseline 17/17；Ticket 13 性能 fixture/evidence 31/31；Ticket 14 恶意工作区/威胁矩阵 13/13、全仓 10211 tests passed；Ticket 57 尚未执行 |
 
@@ -294,7 +294,7 @@
 | TM-005 | 通过 | 控制字符、正文、token 与绝对路径错误/日志脱敏断言通过 |
 | TM-006 | 部分通过（Ticket 14 基线） | HTML/SVG/event 与非 `http/https` URI 默认拒绝；Ticket 35 外链用户手势流程尚未执行 |
 | TM-007 | 部分通过（Ticket 14 基线） | Mermaid strict、无 HTML label、丢弃 bindFunctions、SVG allowlist 与 stale-result guard 通过；Ticket 33 编辑字段尚未执行 |
-| TM-008 | 部分通过（Ticket 14 基线） | 读取前 stat/10 MiB/version gate 与 zero-read spy 通过；Tickets 17、19、42 产品流程尚未执行 |
+| TM-008 | 部分通过（Tickets 14、17） | Server 与 Asset Viewer 均在正文前 stat；10 MiB + 1、active/unsupported 类型零 read，允许内容受版本与实际字节数复验，取消/漂移 fail-closed；Tickets 19、42 尚未执行 |
 | TM-009 | 未执行 | — |
 | TM-010 | 未执行 | — |
 | TM-011 | 未执行 | — |
@@ -311,4 +311,5 @@
 ## Exceptions
 
 - 2026-07-28 Ticket 16 首次执行未带范围排除的 `npx vitest run` 时，Vitest 额外收集了用户本地 ignored `temp/**` 中 8 个 Node test 文件，并因其不是 Vitest suite 退出 1；该次产品范围内 1019 files、10226 tests 全部通过。未修改用户内容；随后实际门禁命令 `npx vitest run --exclude 'temp/**' --exclude 'teach/**'` 通过（1019 files passed、1 skipped；10226 tests passed、6 skipped）。这是已解决的范围外测试发现，不构成产品豁免或发布 blocker。
-- 除上述已解决测试发现外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
+- 2026-07-28 Ticket 17 的 E2E-KW-006、E2E-KW-017 尚未执行：当前代码交付 Asset Viewer 公共组件/策略，但真实用户入口分别依赖 Ticket 20/49 的编辑组与树打开语义，desktop native 动作依赖 Ticket 51。为避免私有 route/test shortcut 或提前形成平行打开/native 状态机，本票只登记 23/23 精确自动化；E2E 行保持“未执行”，待显式 blocker 完成后执行。这是有 owner 的暂存证据缺口，不能进入最终发布通过状态。
+- 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
