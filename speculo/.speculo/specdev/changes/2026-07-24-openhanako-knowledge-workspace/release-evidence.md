@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `84c66f04`（Ticket 19 实现验证点） |
+| Commit | `0150b9c5`（Ticket 20 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -17,7 +17,7 @@
 | Milestone | Gate | Status | Artifact/command |
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
-| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–19） | Knowledge 壳、真实多来源只读树、stat-first Asset Viewer、owner/window 隔离的共享 DocumentSession/DocumentView registry，以及单文档 Markdown 手动 expected-version 保存曳光弹已交付；严格 UTF-8/10 MiB 门禁、BOM/换行保持、共享 dirty/baseline/version/history 和持久非模态失败通知均已有证据。Ticket 19 精确 10/10、相关 38/38；当前干净全仓 1023 files passed、1 skipped，10269 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–20） | Knowledge 壳、真实多来源只读树、stat-first Asset Viewer、共享 DocumentSession/DocumentView registry、手动 expected-version 保存，以及递归编辑组/tabs/preview/面包屑组合层已交付；普通打开全局复用，显式侧边打开才建立共享 session 的第二 view，dirty session 在布局收拢后保留。Ticket 20 精确 8/8、相关 130/130；当前干净全仓 1025 files passed、1 skipped，10277 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
@@ -61,12 +61,12 @@
 | KW-US-032 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
 | KW-US-033 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
 | KW-US-034 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-035 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
-| KW-US-036 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
-| KW-US-037 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
-| KW-US-038 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
-| KW-US-039 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
-| KW-US-040 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
+| KW-US-035 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；单组可保留多个可切换资源 tabs |
+| KW-US-036 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；每组唯一 preview 被下一预览原位替换 |
+| KW-US-037 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；编辑、双击和拖动均把 preview 原地 pin |
+| KW-US-038 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；普通打开跨整棵布局激活既有 view |
+| KW-US-039 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；显式侧边打开建立第二 view 且同址 Markdown 共享 session |
+| KW-US-040 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；horizontal/vertical split 可递归组合 |
 | KW-US-041 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（1 file、10/10）；同址双 view 即时共享 buffer/baseline/version/dirty 与跨 view undo/redo history |
 | KW-US-042 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；cursor、selection、scroll、viewport、mode、Live Preview 语法显隐按 view 独立，共享 edit 只映射位置 |
 | KW-US-043 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；会话内返回既有 view 恢复其 group、位置、滚动与 mode |
@@ -75,12 +75,12 @@
 | KW-US-046 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-047 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-048 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-049 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
+| KW-US-049 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；移除最后 view 自动收拢空侧组且 dirty session 保留 |
 | KW-US-050 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-051 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-052 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-053 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
-| KW-US-054 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
+| KW-US-053 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；`A.md` 与 `archive.tar.gz` 均显示完整原始文件名 |
+| KW-US-054 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；来源/目录/完整文件名面包屑不含绝对路径，只有显式段点击发出定位 |
 | KW-US-055 | 27 | `desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts` | E2E-KW-005 | 未执行 | — |
 | KW-US-056 | 27 | `desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts` | E2E-KW-005 | 未执行 | — |
 | KW-US-057 | 12 | `desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx`（8/8）；覆盖 strict UTF-8、10 MiB 精确边界/超限拒绝、非法 UTF-8、BOM 去除、拒绝时不创建编辑缓冲、autosave/manual save 与目标切换隔离 |
@@ -314,4 +314,7 @@
 - 2026-07-28 Ticket 17 的 E2E-KW-006、E2E-KW-017 尚未执行：当前代码交付 Asset Viewer 公共组件/策略，但真实用户入口分别依赖 Ticket 20/49 的编辑组与树打开语义，desktop native 动作依赖 Ticket 51。为避免私有 route/test shortcut 或提前形成平行打开/native 状态机，本票只登记 23/23 精确自动化；E2E 行保持“未执行”，待显式 blocker 完成后执行。这是有 owner 的暂存证据缺口，不能进入最终发布通过状态。
 - 2026-07-28 Ticket 18 的 E2E-KW-004、E2E-KW-024 尚未执行：当前仓库只存在 E2E-KW-001 spec；E2E-KW-004 的真实 tabs/groups 入口由 Ticket 20 交付，E2E-KW-024 还依赖 Ticket 19/21/51 的保存、冲突与 native grant 链路。为避免私有测试入口或提前实现后续 owner 范围，本票登记 10/10 精确 registry 自动化并保持 E2E 行“未执行”；依赖完成后必须以真实产品入口回填，最终发布前不得保留此缺口。
 - 2026-07-28 Ticket 19 的 E2E-KW-005 尚未执行：当前仓库只有 E2E-KW-001 spec，Markdown 文档的真实打开、活动 tab 与编辑组入口依赖 Ticket 20/49。为避免私有 route/test shortcut 或提前实现后续 owner 范围，本票登记精确 10/10、相关 38/38 与干净全仓 10269 tests passed；E2E 行保持“未执行”，待真实产品入口完成后执行，最终发布前不得保留此缺口。
+- 2026-07-28 Ticket 20 的 E2E-KW-004 尚未执行：递归 groups/tabs、preview、全局复用、显式侧边 view 与 breadcrumb 组合层已进入真实 Knowledge shell，但资源树单击/双击/Space/Enter 的公开打开入口由 Tickets 48/49 拥有，仓库目前仍只有 E2E-KW-001 spec。为避免私有 route/test shortcut 或越权提前实现树交互，本票登记精确 8/8、相关 130/130 与干净全仓 10277 tests passed；依赖完成后必须通过真实产品入口执行 E2E-KW-004，最终发布前不得保留此缺口。
+- 2026-07-28 Ticket 20 文档回填后的前两次 `npx vitest run tests/knowledge-baseline-contract.test.ts` 在隔离 child import 用例触及固定 10 秒超时；排查确认三个此前为提取全仓统计而启动、但因输出管道提前返回的 Vitest 进程仍在后台并行占用 CPU。只终止本轮启动的冗余测试进程后，同一基线命令立即通过（11/11，child import 926 ms），随后单一前台全仓命令通过。这是已解决的测试编排资源争用，不是产品断言失败或发布豁免。
+- 2026-07-28 Ticket 20 全仓复验期间曾误传 `--reporter=basic`；Vitest 4 将其解析为无法加载的自定义 reporter，测试在 discovery 前退出。移除该无效参数后使用默认 reporter 的同一全仓命令通过（1025 files passed、1 skipped；10277 tests passed、6 skipped）。该记录仅说明命令更正，不属于产品测试失败或发布豁免。
 - 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
