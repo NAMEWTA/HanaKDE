@@ -4,6 +4,10 @@ import type {
 import type {
   KnowledgeWorkspaceClient,
 } from '../../services/knowledge-workspace-client';
+import type {
+  KnowledgeDocumentRegistry,
+} from '../../stores/knowledge-document-registry';
+import { KnowledgeEditorGroups } from './KnowledgeEditorGroups';
 import {
   KnowledgeResourceTree,
   type KnowledgeResourceTreeProps,
@@ -17,6 +21,7 @@ export interface KnowledgeLayoutProps {
   sourcesStatus: 'idle' | 'loading' | 'ready' | 'error';
   treeClient: KnowledgeWorkspaceClient;
   treeWorkspaceKey: string;
+  documentRegistry: KnowledgeDocumentRegistry;
   treeServices?: Pick<
     KnowledgeResourceTreeProps,
     'watchSource' | 'subscribeToChanges' | 'refreshDelayMs'
@@ -44,6 +49,7 @@ export function KnowledgeLayout({
   sourcesStatus,
   treeClient,
   treeWorkspaceKey,
+  documentRegistry,
   treeServices,
   onRetry,
 }: KnowledgeLayoutProps) {
@@ -113,21 +119,12 @@ export function KnowledgeLayout({
         </div>
       </nav>
 
-      <section
-        className={styles.editorGroup}
-        role="group"
-        aria-label={tr('knowledge.editor.groupLabel')}
-        tabIndex={0}
-      >
-        <div className={styles.emptyEditor}>
-          <h1 className={styles.emptyTitle}>
-            {tr('knowledge.editor.emptyTitle')}
-          </h1>
-          <p className={styles.emptyDescription}>
-            {tr('knowledge.editor.emptyDescription')}
-          </p>
-        </div>
-      </section>
+      <KnowledgeEditorGroups
+        key={treeWorkspaceKey}
+        registry={documentRegistry}
+        client={treeClient}
+        workspaceKey={treeWorkspaceKey}
+      />
     </main>
   );
 }

@@ -55,9 +55,20 @@
       "emptyDirectory": "{name}为空"
     },
     "editor": {
-      "groupLabel": "编辑组",
+      "groupLabel": "编辑组 {number}",
       "emptyTitle": "打开一个资源",
-      "emptyDescription": "从资源树中选择页面或资产。"
+      "emptyDescription": "从资源树中选择页面或资产。",
+      "splitHorizontal": "向右拆分编辑器",
+      "splitVertical": "向下拆分编辑器"
+    },
+    "tabs": {
+      "label": "已打开资源",
+      "preview": "预览 {name}",
+      "close": "关闭 {name}",
+      "openSide": "在侧边打开 {name}"
+    },
+    "breadcrumb": {
+      "label": "资源位置"
     },
     "document": {
       "loading": "正在加载文档…",

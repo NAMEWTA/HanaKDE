@@ -55,9 +55,20 @@
       "emptyDirectory": "{name}是空的"
     },
     "editor": {
-      "groupLabel": "編輯群組",
+      "groupLabel": "編輯群組 {number}",
       "emptyTitle": "開啟資源",
-      "emptyDescription": "請從資源樹選擇頁面或資產。"
+      "emptyDescription": "請從資源樹選擇頁面或資產。",
+      "splitHorizontal": "向右分割編輯器",
+      "splitVertical": "向下分割編輯器"
+    },
+    "tabs": {
+      "label": "已開啟資源",
+      "preview": "預覽 {name}",
+      "close": "關閉 {name}",
+      "openSide": "在側邊開啟 {name}"
+    },
+    "breadcrumb": {
+      "label": "資源位置"
     },
     "document": {
       "loading": "正在載入文件…",

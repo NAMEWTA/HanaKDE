@@ -55,9 +55,20 @@
       "emptyDirectory": "{name} is empty"
     },
     "editor": {
-      "groupLabel": "Editor group",
+      "groupLabel": "Editor group {number}",
       "emptyTitle": "Open a resource",
-      "emptyDescription": "Choose a page or asset from the resource tree."
+      "emptyDescription": "Choose a page or asset from the resource tree.",
+      "splitHorizontal": "Split editor right",
+      "splitVertical": "Split editor down"
+    },
+    "tabs": {
+      "label": "Open resources",
+      "preview": "Preview {name}",
+      "close": "Close {name}",
+      "openSide": "Open {name} to the side"
+    },
+    "breadcrumb": {
+      "label": "Resource location"
     },
     "document": {
       "loading": "Loading document…",

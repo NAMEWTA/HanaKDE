@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KnowledgeWorkspaceClientError,
   knowledgeWorkspaceClient,
   type KnowledgeWorkspaceClient,
 } from '../../services/knowledge-workspace-client';
 import { useStore } from '../../stores';
+import { createKnowledgeDocumentRegistry } from '../../stores/knowledge-document-registry';
 import { KnowledgeLayout } from './KnowledgeLayout';
 import type { KnowledgeResourceTreeProps } from './KnowledgeResourceTree';
 
@@ -23,6 +24,7 @@ export function KnowledgeWorkspace({
   treeServices,
 }: KnowledgeWorkspaceProps) {
   const activeServerConnectionId = useStore((state) => state.activeServerConnectionId);
+  const currentAgentId = useStore((state) => state.currentAgentId);
   const deskWorkspaceMountId = useStore((state) => state.deskWorkspaceMountId);
   const deskBasePath = useStore((state) => state.deskBasePath);
   const selectedFolder = useStore((state) => state.selectedFolder);
@@ -37,6 +39,17 @@ export function KnowledgeWorkspace({
     : `main:${deskBasePath || selectedFolder || 'current'}`;
   const workspaceKey = explicitWorkspaceKey ?? `${connectionKey}:${mainKey}`;
   const isCurrentWorkspace = storeWorkspaceKey === workspaceKey;
+  const [rendererContextId] = useState(() => (
+    globalThis.crypto?.randomUUID?.() ?? `knowledge-${Date.now()}`
+  ));
+  const documentRegistry = useMemo(() => createKnowledgeDocumentRegistry({
+    ownerId: currentAgentId || connectionKey,
+    windowId: `${rendererContextId}:${workspaceKey}`,
+  }), [connectionKey, currentAgentId, rendererContextId, workspaceKey]);
+
+  useEffect(() => () => {
+    documentRegistry.getState().dispose();
+  }, [documentRegistry]);
 
   const loadSources = useCallback(async () => {
     requestController.current?.abort();
@@ -82,6 +95,7 @@ export function KnowledgeWorkspace({
       sourcesStatus={isCurrentWorkspace ? sourcesStatus : 'idle'}
       treeClient={client}
       treeWorkspaceKey={workspaceKey}
+      documentRegistry={documentRegistry}
       treeServices={treeServices}
       onRetry={() => void loadSources()}
     />

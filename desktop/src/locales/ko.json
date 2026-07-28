@@ -55,9 +55,20 @@
       "emptyDirectory": "{name}이(가) 비어 있습니다"
     },
     "editor": {
-      "groupLabel": "편집기 그룹",
+      "groupLabel": "편집기 그룹 {number}",
       "emptyTitle": "리소스 열기",
-      "emptyDescription": "리소스 트리에서 페이지 또는 에셋을 선택하세요."
+      "emptyDescription": "리소스 트리에서 페이지 또는 에셋을 선택하세요.",
+      "splitHorizontal": "편집기를 오른쪽으로 분할",
+      "splitVertical": "편집기를 아래로 분할"
+    },
+    "tabs": {
+      "label": "열린 리소스",
+      "preview": "{name} 미리보기",
+      "close": "{name} 닫기",
+      "openSide": "{name} 옆에서 열기"
+    },
+    "breadcrumb": {
+      "label": "리소스 위치"
     },
     "document": {
       "loading": "문서를 불러오는 중…",

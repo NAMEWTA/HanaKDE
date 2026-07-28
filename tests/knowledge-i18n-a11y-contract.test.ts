@@ -16,6 +16,13 @@ const REQUIRED_KEYS = [
   'editor.groupLabel',
   'editor.emptyTitle',
   'editor.emptyDescription',
+  'editor.splitHorizontal',
+  'editor.splitVertical',
+  'tabs.label',
+  'tabs.preview',
+  'tabs.close',
+  'tabs.openSide',
+  'breadcrumb.label',
 ] as const;
 
 function nestedString(
@@ -59,11 +66,18 @@ describe('knowledge shell i18n, accessibility and visual contract', () => {
       ),
       'utf8',
     );
+    const editorGroupsSource = fs.readFileSync(
+      path.resolve(
+        'desktop/src/react/components/knowledge-workspace/KnowledgeEditorGroups.tsx',
+      ),
+      'utf8',
+    );
 
     expect(layoutSource).toMatch(/role="tree"/);
-    expect(layoutSource).toMatch(/role="group"/);
     expect(layoutSource).toMatch(/aria-(?:label|labelledby)=/);
-    expect(layoutSource).toMatch(/tabIndex=\{0\}/);
+    expect(editorGroupsSource).toMatch(/role="group"/);
+    expect(editorGroupsSource).toMatch(/tabIndex=\{0\}/);
+    expect(editorGroupsSource).toMatch(/<KnowledgeTabBar/);
     expect(cssSource).toMatch(/:focus-visible/);
     expect(cssSource).toMatch(/var\(--(?:bg|text|border|accent)/);
     expect(cssSource.match(/@media\s*\(max-width:/g)).toHaveLength(2);

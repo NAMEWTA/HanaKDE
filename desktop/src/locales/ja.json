@@ -55,9 +55,20 @@
       "emptyDirectory": "{name}は空です"
     },
     "editor": {
-      "groupLabel": "エディターグループ",
+      "groupLabel": "エディターグループ {number}",
       "emptyTitle": "リソースを開く",
-      "emptyDescription": "リソースツリーからページまたはアセットを選択してください。"
+      "emptyDescription": "リソースツリーからページまたはアセットを選択してください。",
+      "splitHorizontal": "エディターを右に分割",
+      "splitVertical": "エディターを下に分割"
+    },
+    "tabs": {
+      "label": "開いているリソース",
+      "preview": "{name} をプレビュー",
+      "close": "{name} を閉じる",
+      "openSide": "{name} を横に開く"
+    },
+    "breadcrumb": {
+      "label": "リソースの場所"
     },
     "document": {
       "loading": "ドキュメントを読み込んでいます…",
