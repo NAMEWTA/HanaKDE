@@ -58,6 +58,31 @@
       "groupLabel": "編輯群組",
       "emptyTitle": "開啟資源",
       "emptyDescription": "請從資源樹選擇頁面或資產。"
+    },
+    "asset": {
+      "label": "資產檢視器",
+      "loading": "正在載入資產…",
+      "openDefault": "使用系統預設應用程式開啟",
+      "openDefaultError": "無法使用系統預設應用程式開啟",
+      "nativeUnavailable": "目前用戶端不支援存取系統預設應用程式",
+      "reload": "重新載入",
+      "missing": "資源不存在",
+      "unavailable": "資產無法使用",
+      "fileInfo": "檔案資訊",
+      "textPreview": "唯讀文字預覽",
+      "sourceLabel": "來源",
+      "addressLabel": "知識位址",
+      "sizeLabel": "位元組數",
+      "unknownSize": "未知",
+      "reason": {
+        "resource_missing": "此知識位址下的資源已不存在",
+        "not_a_file": "此資源不是檔案",
+        "content_size_unavailable": "無法取得檔案大小",
+        "content_too_large": "內容超過 10 MiB 預覽上限",
+        "active_content": "應用程式內不預覽主動內容",
+        "unsupported_type": "此檔案類型沒有安全的內建預覽器",
+        "unsafe_encoding": "無法安全解碼此文字編碼"
+      }
     }
   },
   "quickChat": {

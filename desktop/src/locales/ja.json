@@ -58,6 +58,31 @@
       "groupLabel": "エディターグループ",
       "emptyTitle": "リソースを開く",
       "emptyDescription": "リソースツリーからページまたはアセットを選択してください。"
+    },
+    "asset": {
+      "label": "アセットビューアー",
+      "loading": "アセットを読み込み中…",
+      "openDefault": "既定のアプリで開く",
+      "openDefaultError": "既定のアプリで開けませんでした",
+      "nativeUnavailable": "このクライアントでは既定のアプリを利用できません",
+      "reload": "再読み込み",
+      "missing": "リソースが存在しません",
+      "unavailable": "アセットを利用できません",
+      "fileInfo": "ファイル情報",
+      "textPreview": "読み取り専用テキストプレビュー",
+      "sourceLabel": "ソース",
+      "addressLabel": "ナレッジアドレス",
+      "sizeLabel": "バイト数",
+      "unknownSize": "不明",
+      "reason": {
+        "resource_missing": "このナレッジアドレスにはリソースが存在しません",
+        "not_a_file": "このリソースはファイルではありません",
+        "content_size_unavailable": "ファイルサイズを取得できません",
+        "content_too_large": "コンテンツが 10 MiB のプレビュー上限を超えています",
+        "active_content": "アクティブコンテンツはアプリ内でプレビューしません",
+        "unsupported_type": "このファイル形式に安全な内蔵プレビューはありません",
+        "unsafe_encoding": "このテキストエンコーディングを安全にデコードできません"
+      }
     }
   },
   "quickChat": {

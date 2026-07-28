@@ -58,6 +58,31 @@
       "groupLabel": "编辑组",
       "emptyTitle": "打开一个资源",
       "emptyDescription": "从资源树中选择页面或资产。"
+    },
+    "asset": {
+      "label": "资产查看器",
+      "loading": "正在加载资产…",
+      "openDefault": "使用系统默认应用打开",
+      "openDefaultError": "无法使用系统默认应用打开",
+      "nativeUnavailable": "当前客户端不支持访问系统默认应用",
+      "reload": "重新加载",
+      "missing": "资源不存在",
+      "unavailable": "资产不可用",
+      "fileInfo": "文件信息",
+      "textPreview": "只读文本预览",
+      "sourceLabel": "来源",
+      "addressLabel": "知识地址",
+      "sizeLabel": "字节数",
+      "unknownSize": "未知",
+      "reason": {
+        "resource_missing": "此知识地址下的资源已不存在",
+        "not_a_file": "此资源不是文件",
+        "content_size_unavailable": "无法确定文件大小",
+        "content_too_large": "内容超过 10 MiB 预览上限",
+        "active_content": "应用内不预览主动内容",
+        "unsupported_type": "此文件类型没有安全的内置预览器",
+        "unsafe_encoding": "无法安全解码此文本编码"
+      }
     }
   },
   "quickChat": {

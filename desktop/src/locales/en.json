@@ -58,6 +58,31 @@
       "groupLabel": "Editor group",
       "emptyTitle": "Open a resource",
       "emptyDescription": "Choose a page or asset from the resource tree."
+    },
+    "asset": {
+      "label": "Asset viewer",
+      "loading": "Loading asset…",
+      "openDefault": "Open with default application",
+      "openDefaultError": "Could not open the default application",
+      "nativeUnavailable": "Default application access is unavailable in this client",
+      "reload": "Reload",
+      "missing": "Resource does not exist",
+      "unavailable": "Asset unavailable",
+      "fileInfo": "File information",
+      "textPreview": "Read-only text preview",
+      "sourceLabel": "Source",
+      "addressLabel": "Knowledge address",
+      "sizeLabel": "Bytes",
+      "unknownSize": "Unknown",
+      "reason": {
+        "resource_missing": "The resource no longer exists at this knowledge address",
+        "not_a_file": "This resource is not a file",
+        "content_size_unavailable": "The file size is unavailable",
+        "content_too_large": "Content is larger than the 10 MiB preview limit",
+        "active_content": "Active content is not previewed in the application",
+        "unsupported_type": "No safe built-in preview is available for this file type",
+        "unsafe_encoding": "The text encoding cannot be decoded safely"
+      }
     }
   },
   "quickChat": {
