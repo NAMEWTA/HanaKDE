@@ -6,11 +6,22 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `e2d05469`（Ticket 09 实现验证点） |
+| Commit | `8766d2a1`（Ticket 14 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
 | HANA_HOME | Vitest/Smoke `mkdtemp` 隔离目录（执行后清理，不记录本机绝对路径） |
+
+## Milestone evidence
+
+| Milestone | Gate | Status | Artifact/command |
+|---|---|---|---|
+| M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 未执行 | — |
+| M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
+| M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
+| M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
+| M5 发布（Ticket 57） | P2 | 未执行 | — |
 
 ## Requirement evidence
 
@@ -186,7 +197,7 @@
 | KW-US-168 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
 | KW-US-169 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
 | KW-US-170 | 04 | `tests/knowledge-diagnostics.test.ts` | 契约/集成 | 通过 | `volta run npx vitest run tests/knowledge-diagnostics.test.ts tests/resource-events-ws.test.ts tests/resource-io-route.test.ts` 及相关 ResourceIO/Renderer 回归（22 files、249/249）；稳定错误码/HTTP/retryable、诊断脱敏、恶意对象安全拒绝与无路径 resync 恢复链均通过 |
-| KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 未执行 | — |
+| KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 通过 | `npx vitest run tests/knowledge-malicious-workspace.test.ts tests/knowledge-threat-control-matrix.test.ts`（2 files、13/13，macOS arm64）；真实 symlink 越界/循环/TOCTOU、原生 case/Unicode、控制字符/盘符/UNC、伪造身份、LAN 错误脱敏、stat-before-read、HTML/SVG/URI、图片与 Mermaid 主动内容均 fail-closed；E2E-KW-022 仅追踪、未执行 |
 | KW-US-172 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | Ticket 03 精确命令（135/135，契约/集成）及 Open export 回归（52/52）；`build:server:open`、`smoke:server:open` 通过 |
 | KW-US-173 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 共享协议相同且 Full-only 差异仅由 composition 注入；一次性测试签名下 full build 通过 |
 | KW-US-174 | 25 | `tests/frontmatter-roundtrip.test.ts` | 契约/集成 | 未执行 | — |
@@ -220,7 +231,7 @@
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12） | Ticket 11 Markdown IR 29/29；Ticket 12 精确表面测试 8/8、相关定向 15 files、151/151；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证，单一 CM6 surface/extension factory 注入 save、attachment、open-link、content-gate 策略并保留既有 decorations 与 undo；Tickets 23–39 尚未执行 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
-| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 未执行 | — |
+| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Ticket 14） | 恶意工作区精确门禁 13/13；相关 ResourceIO/Markdown/Mermaid 回归 10 files、192/192；当前 macOS 实际执行 symlink、TOCTOU、case/Unicode、控制字符/UNC、身份伪造、路径/正文/凭据脱敏、stat-first 上限与主动内容；Tickets 17、35、51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
 | KW-RULE-QUERY | 44, 46 | 未执行 | — |
 | KW-RULE-SEARCH | 45 | 未执行 | — |
@@ -235,7 +246,7 @@
 | KW-RULE-PREFLIGHT | 01 | 通过 | `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts`（17/17）；Node v24.16.0；真实 SQLite FTS5；dirty 仅 warning |
 | KW-RULE-NATIVE | 17, 51, 56 | 未执行 | — |
 | KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 部分通过（Ticket 10） | Operation Journal 原子写/`.prev` 回退、rollback、`RECOVERY_REQUIRED`、启动 barrier、缺失终态结果重建、projection 重放及 source `recovering` 聚合由 22/22 精确测试证明；Tickets 43、54–56 尚未执行 |
-| KW-RULE-TEST | 01, 13, 14, 57 | 部分通过（Tickets 01、13） | Ticket 01 preflight/baseline 17/17；Ticket 13 性能 fixture/evidence 31/31；Tickets 14、57 尚未执行 |
+| KW-RULE-TEST | 01, 13, 14, 57 | 部分通过（Tickets 01、13、14） | Ticket 01 preflight/baseline 17/17；Ticket 13 性能 fixture/evidence 31/31；Ticket 14 恶意工作区/威胁矩阵 13/13、全仓 10211 tests passed；Ticket 57 尚未执行 |
 
 ## E2E projects
 
@@ -276,26 +287,26 @@
 
 | Threat | Status | Artifact |
 |---|---|---|
-| TM-001 | 未执行 | — |
-| TM-002 | 未执行 | — |
-| TM-003 | 未执行 | — |
-| TM-004 | 未执行 | — |
-| TM-005 | 未执行 | — |
-| TM-006 | 未执行 | — |
-| TM-007 | 未执行 | — |
-| TM-008 | 未执行 | — |
+| TM-001 | 部分通过（macOS 基线） | 真实 symlink 越界与循环 fail-closed；Windows junction 尚未执行 |
+| TM-002 | 部分通过（Ticket 14 基线） | `openRead(expectedVersion)` 与真实 TOCTOU 路径替换在产生正文前拒绝；Ticket 54 commit recheck 尚未执行 |
+| TM-003 | 通过 | 盘符/UNC/控制字符地址拒绝，LAN 错误与日志不含本机路径、正文或 token；相关 route 回归 192/192 |
+| TM-004 | 部分通过（macOS 基线） | 真实 APFS case/Unicode identity 与精确 relativePath 已执行；Windows/Linux 平台矩阵尚未执行 |
+| TM-005 | 通过 | 控制字符、正文、token 与绝对路径错误/日志脱敏断言通过 |
+| TM-006 | 部分通过（Ticket 14 基线） | HTML/SVG/event 与非 `http/https` URI 默认拒绝；Ticket 35 外链用户手势流程尚未执行 |
+| TM-007 | 部分通过（Ticket 14 基线） | Mermaid strict、无 HTML label、丢弃 bindFunctions、SVG allowlist 与 stale-result guard 通过；Ticket 33 编辑字段尚未执行 |
+| TM-008 | 部分通过（Ticket 14 基线） | 读取前 stat/10 MiB/version gate 与 zero-read spy 通过；Tickets 17、19、42 产品流程尚未执行 |
 | TM-009 | 未执行 | — |
 | TM-010 | 未执行 | — |
 | TM-011 | 未执行 | — |
 | TM-012 | 未执行 | — |
-| TM-013 | 未执行 | — |
-| TM-014 | 未执行 | — |
+| TM-013 | 部分通过（Ticket 14 基线） | 普通 route 伪造 credential/token/window 字段在 provider 前拒绝；Ticket 51/56 原生 grant 流程尚未执行 |
+| TM-014 | 部分通过（Ticket 14 矩阵） | no-follow、深度/条目/容量/cancel 控制已冻结并由矩阵门禁校验；Ticket 51 真实导入流程尚未执行 |
 | TM-015 | 未执行 | — |
-| TM-016 | 未执行 | — |
+| TM-016 | 通过 | wrong owner/source/window 与无 owner/scope 路由回归通过，远程 DTO 保持 source-scoped |
 | TM-017 | 未执行 | — |
-| TM-018 | 未执行 | — |
-| TM-019 | 未执行 | — |
-| TM-020 | 未执行 | — |
+| TM-018 | 部分通过（Ticket 14 基线） | 恶意工作区测试全部使用 `mkdtemp` 隔离 source/outside/HANA_HOME 并清理；Ticket 57 平台 runner 尚未执行 |
+| TM-019 | 通过 | Knowledge/ResourceIO route 仅信任 Hono principal，伪造 principal/user/studio/owner/scope 字段在 provider 前拒绝 |
+| TM-020 | 部分通过（Ticket 14 基线） | transfer 控制矩阵及既有 1 MiB chunk/4 streams/8 MiB buffer、取消/半目录/provider-pair 回归通过；Tickets 38、51–53 尚未执行 |
 
 ## Exceptions
 

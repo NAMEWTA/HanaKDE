@@ -1,7 +1,7 @@
 # Ticket 14: 建立威胁模型与恶意工作区门禁
 
 - **被阻塞于：** [`03-freeze-open-knowledge-contract.md`](./03-freeze-open-knowledge-contract.md)、[`04-define-errors-and-diagnostics.md`](./04-define-errors-and-diagnostics.md)、[`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -67,9 +67,23 @@
 
 ## 验收标准
 
-- [ ] 所有越界与主动内容默认拒绝；LAN 响应不泄露本机路径；安全用例纳入后续相关 ticket。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 所有越界与主动内容默认拒绝；LAN 响应不泄露本机路径；安全用例纳入后续相关 ticket。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `8766d2a1`。
+- **平台：** macOS 26.5（Darwin 25.5.0，arm64，APFS）、Node `v24.16.0`、npm `11.13.0`。
+- **文件访问门禁：** Knowledge address 读取先 `stat`，在任何正文读取前校验文件类型、10 MiB 上限和可用版本，再以 `expectedVersion` 调用 `openRead`；流大小漂移、取消、无版本和 TOCTOU 均 fail-closed。ResourceRef route 在 provider 调用前拒绝伪造 principal/user/studio/owner/scope/native credential/token/window 字段。
+- **渲染门禁：** Markdown 链接仅允许 `http/https`；图片默认拒绝，仅放行当前文档上下文解析出的精确本地 URL，并再次校验协议；Mermaid 固定 strict 配置、禁用 HTML label、丢弃交互绑定并对 SVG 做元素/属性/URI allowlist 消毒，过期异步结果不会覆盖新内容。
+- **真实恶意夹具：** 当前 macOS runner 实际执行 symlink 越界、循环、TOCTOU、原生 case/Unicode 行为、控制字符/盘符/UNC、伪造身份、错误与日志脱敏、stat-before-read 超限、版本绑定、HTML/SVG/URI、图片和 Mermaid 主动内容。Windows junction 分支已固化，但未在本平台冒充执行。
+- **精确自动化：** `npx vitest run tests/knowledge-malicious-workspace.test.ts tests/knowledge-threat-control-matrix.test.ts`，2 files、13/13。
+- **相关回归：** ResourceIO provider/route/transfer/workspace、Markdown、Mermaid 与共享 surface 共 10 files、192/192。
+- **整体验证：** 全仓 Vitest 1016 files passed、1 skipped，10211 tests passed、6 skipped；`npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:renderer`、`git diff --check` 均通过。
+- **质量与规格检查：** 工程质量轴和规格符合轴均无未决问题；没有新增 trust boundary、私有 route、平行文件系统或 Renderer→Node 依赖。
+- **证据边界：** 本票证明 macOS 上的恶意工作区基线和可移植门禁，不把 Windows/Linux、后续 trash/index/native/import/refactor 产品流程或 E2E-KW-022 登记为已执行。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-28-openhanako-knowledge-workspace-implementation-14.md`。
