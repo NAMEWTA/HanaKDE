@@ -212,6 +212,43 @@ describe('MarkdownEditorSurface', () => {
     });
   });
 
+  it('routes Mod-s through the explicit manual-save policy', async () => {
+    const execute = vi.fn(async () => ({
+      ok: true as const,
+      version: { mtimeMs: 2, size: 5, sha256: 'saved' },
+    }));
+    const ref = createRef<MarkdownEditorSurfaceHandle>();
+    render(
+      <MarkdownEditorSurface
+        ref={ref}
+        content="draft"
+        mode="markdown"
+        policy={policy({
+          scopeKey: 'knowledge:keyboard-save',
+          mode: 'manual',
+          execute,
+        })}
+      />,
+    );
+    const editor = ref.current?.getView();
+    expect(editor).not.toBeNull();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    editor?.contentDOM.dispatchEvent(event);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(execute).toHaveBeenCalledWith('draft', null);
+  });
+
   it('never flushes an old surface draft through a newly selected save scope', async () => {
     const executeA = vi.fn(async () => ({ ok: true, conflict: false, version: null }));
     const executeB = vi.fn(async () => ({ ok: true, conflict: false, version: null }));

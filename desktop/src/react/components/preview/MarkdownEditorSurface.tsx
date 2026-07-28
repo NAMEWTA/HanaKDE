@@ -832,6 +832,12 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         attachmentExtension,
         changeExtension,
         observeExtension,
+        onManualSave: policyRef.current.save.mode === 'manual'
+          ? () => {
+              void manualSaveRef.current();
+              return true;
+            }
+          : undefined,
         onOpenBlockMenu: toggleBlockMenu,
         onOpenLink: (url) => policyRef.current.openLink?.open(url),
       });

@@ -45,6 +45,7 @@ export interface CreateMarkdownEditorExtensionsOptions {
   attachmentExtension?: Extension;
   changeExtension?: Extension;
   observeExtension: Extension;
+  onManualSave?: () => boolean;
   onOpenBlockMenu: (request: MarkdownBlockMenuRequest) => void;
   onOpenLink?: MarkdownLinkOpenHandler;
 }
@@ -70,6 +71,7 @@ export function createMarkdownEditorExtensions(
     attachmentExtension,
     changeExtension,
     observeExtension,
+    onManualSave,
     onOpenBlockMenu,
     onOpenLink,
   } = options;
@@ -79,7 +81,11 @@ export function createMarkdownEditorExtensions(
     ...(isMarkdown ? [] : [drawSelection()]),
     history(),
     bracketMatching(),
-    keymap.of([...defaultKeymap, ...historyKeymap]),
+    keymap.of([
+      ...(onManualSave ? [{ key: 'Mod-s', run: onManualSave }] : []),
+      ...defaultKeymap,
+      ...historyKeymap,
+    ]),
     EditorView.contentAttributes.of({ spellcheck: 'false' }),
     EditorView.lineWrapping,
     ...(attachmentExtension ? [attachmentExtension] : []),

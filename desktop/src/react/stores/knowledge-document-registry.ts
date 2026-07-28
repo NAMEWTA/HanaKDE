@@ -3,9 +3,29 @@ import {
   parseKnowledgeResourceAddress,
   type KnowledgeResourceAddress,
 } from '../../../../shared/knowledge-workspace-contract.ts';
-import type { FileVersion } from '../types';
 
 export type KnowledgeDocumentMode = 'live-preview' | 'source';
+export type KnowledgeDocumentLineEnding = 'lf' | 'crlf';
+
+export interface KnowledgeDocumentVersion {
+  mtimeMs?: number;
+  size?: number | null;
+  sha256?: string;
+  etag?: string;
+  sequence?: number;
+}
+
+export interface KnowledgeDocumentFormat {
+  hadBom: boolean;
+  lineEnding: KnowledgeDocumentLineEnding;
+  mixedLineEndings: boolean;
+}
+
+export interface KnowledgeDocumentSaveError {
+  code: 'conflict' | 'unavailable';
+  fileName: string;
+  reason: string;
+}
 
 export interface KnowledgeDocumentSelection {
   anchor: number;
@@ -51,7 +71,7 @@ export interface KnowledgeDocumentConflict {
   baseline: string;
   local: string;
   disk: string;
-  diskVersion: FileVersion | null;
+  diskVersion: KnowledgeDocumentVersion | null;
 }
 
 export interface KnowledgeDocumentSession {
@@ -59,9 +79,11 @@ export interface KnowledgeDocumentSession {
   address: KnowledgeResourceAddress;
   buffer: string;
   baseline: string;
-  diskVersion: FileVersion | null;
+  diskVersion: KnowledgeDocumentVersion | null;
+  format: KnowledgeDocumentFormat;
   history: KnowledgeDocumentHistory;
   dirty: boolean;
+  saveError: KnowledgeDocumentSaveError | null;
   conflict: KnowledgeDocumentConflict | null;
   orphan: boolean;
 }
@@ -87,7 +109,8 @@ export interface EstablishKnowledgeDocumentSessionInput {
   address: KnowledgeResourceAddress;
   buffer: string;
   baseline?: string;
-  diskVersion?: FileVersion | null;
+  diskVersion?: KnowledgeDocumentVersion | null;
+  format?: KnowledgeDocumentFormat;
 }
 
 export interface OpenKnowledgeDocumentViewInput {
@@ -133,8 +156,13 @@ export interface KnowledgeDocumentRegistryState {
   commitSavedDocument: (
     address: KnowledgeResourceAddress,
     savedBuffer: string,
-    diskVersion: FileVersion | null,
+    diskVersion: KnowledgeDocumentVersion | null,
   ) => boolean;
+  reportDocumentSaveError: (
+    address: KnowledgeResourceAddress,
+    error: KnowledgeDocumentSaveError,
+  ) => boolean;
+  clearDocumentSaveError: (address: KnowledgeResourceAddress) => boolean;
   closeDocumentView: (viewId: string) => boolean;
   disposeDocumentSession: (address: KnowledgeResourceAddress) => boolean;
   dispose: () => void;
@@ -205,22 +233,66 @@ export function knowledgeDocumentKey(
   return JSON.stringify([canonical.sourceKey, canonical.relativePath]);
 }
 
-function cloneVersion(version: FileVersion | null | undefined): FileVersion | null {
+function cloneVersion(
+  version: KnowledgeDocumentVersion | null | undefined,
+): KnowledgeDocumentVersion | null {
   if (version == null) return null;
-  if (
-    !Number.isFinite(version.mtimeMs)
-    || version.mtimeMs < 0
-    || !Number.isSafeInteger(version.size)
-    || version.size < 0
-    || (version.sha256 !== undefined && typeof version.sha256 !== 'string')
-  ) {
-    throw new TypeError('diskVersion is invalid');
+  const next: KnowledgeDocumentVersion = {};
+  if (version.mtimeMs !== undefined) {
+    if (!Number.isFinite(version.mtimeMs) || version.mtimeMs < 0) {
+      throw new TypeError('diskVersion.mtimeMs is invalid');
+    }
+    next.mtimeMs = version.mtimeMs;
   }
-  return {
-    mtimeMs: version.mtimeMs,
-    size: version.size,
-    ...(version.sha256 === undefined ? {} : { sha256: version.sha256 }),
+  if (version.size !== undefined) {
+    if (
+      version.size !== null
+      && (!Number.isSafeInteger(version.size) || version.size < 0)
+    ) {
+      throw new TypeError('diskVersion.size is invalid');
+    }
+    next.size = version.size;
+  }
+  if (version.sha256 !== undefined) {
+    if (typeof version.sha256 !== 'string' || version.sha256.length === 0) {
+      throw new TypeError('diskVersion.sha256 is invalid');
+    }
+    next.sha256 = version.sha256;
+  }
+  if (version.etag !== undefined) {
+    if (typeof version.etag !== 'string' || version.etag.length === 0) {
+      throw new TypeError('diskVersion.etag is invalid');
+    }
+    next.etag = version.etag;
+  }
+  if (version.sequence !== undefined) {
+    if (!Number.isSafeInteger(version.sequence) || version.sequence < 0) {
+      throw new TypeError('diskVersion.sequence is invalid');
+    }
+    next.sequence = version.sequence;
+  }
+  if (Object.keys(next).length === 0) {
+    throw new TypeError('diskVersion must contain a version field');
+  }
+  return next;
+}
+
+function validateFormat(
+  value: KnowledgeDocumentFormat | undefined,
+): KnowledgeDocumentFormat {
+  const format = value ?? {
+    hadBom: false,
+    lineEnding: 'lf',
+    mixedLineEndings: false,
   };
+  if (
+    typeof format.hadBom !== 'boolean'
+    || (format.lineEnding !== 'lf' && format.lineEnding !== 'crlf')
+    || typeof format.mixedLineEndings !== 'boolean'
+  ) {
+    throw new TypeError('format is invalid');
+  }
+  return { ...format };
 }
 
 function requireString(value: unknown, field: string): string {
@@ -444,8 +516,10 @@ export function createKnowledgeDocumentRegistry(
         buffer,
         baseline,
         diskVersion,
+        format: validateFormat(input.format),
         history: { revision: 0, undo: [], redo: [] },
         dirty: buffer !== baseline,
+        saveError: null,
         conflict: null,
         orphan: false,
       };
@@ -606,7 +680,52 @@ export function createKnowledgeDocumentRegistry(
             baseline: savedBuffer,
             diskVersion: nextVersion,
             dirty: session.buffer !== savedBuffer,
+            format: {
+              ...session.format,
+              mixedLineEndings: false,
+            },
+            saveError: null,
           },
+        },
+      });
+      return true;
+    },
+
+    reportDocumentSaveError(address, error) {
+      const key = knowledgeDocumentKey(address);
+      const state = get();
+      const session = state.sessions[key];
+      if (!session) return false;
+      if (
+        (error?.code !== 'conflict' && error?.code !== 'unavailable')
+        || typeof error.fileName !== 'string'
+        || error.fileName.length === 0
+        || typeof error.reason !== 'string'
+        || error.reason.length === 0
+      ) {
+        throw new TypeError('save error is invalid');
+      }
+      set({
+        sessions: {
+          ...state.sessions,
+          [key]: {
+            ...session,
+            saveError: { ...error },
+          },
+        },
+      });
+      return true;
+    },
+
+    clearDocumentSaveError(address) {
+      const key = knowledgeDocumentKey(address);
+      const state = get();
+      const session = state.sessions[key];
+      if (!session || session.saveError === null) return false;
+      set({
+        sessions: {
+          ...state.sessions,
+          [key]: { ...session, saveError: null },
         },
       });
       return true;
