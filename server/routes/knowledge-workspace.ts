@@ -16,6 +16,9 @@ import {
   requestIdFromHono,
 } from "../http/resource-operation-context.ts";
 import type { ResourceOperationContext } from "../../lib/resource-io/types.ts";
+import {
+  resolveWorkbenchCompatibilityMain,
+} from "../../core/knowledge-workspace/workbench-compatibility.ts";
 
 type RegistryEntry = {
   workspaceKey: string;
@@ -111,14 +114,9 @@ async function registryFor(
   const studioId = requestContext?.studioId
     || engine.getRuntimeContext?.()?.studioId
     || "default";
-  const sessionPath = engine.currentSessionPath || "";
-  const sessionMount = sessionPath
-    ? engine.getSessionWorkspaceMount?.(sessionPath) || null
-    : null;
-  const defaultRoot = engine.defaultDeskCwd || engine.homeCwd || engine.deskCwd;
-  const mainRoot = sessionMount?.mountId
-    ? { kind: "mount" as const, mountId: sessionMount.mountId, path: "" }
-    : { kind: "local-file" as const, path: defaultRoot };
+  const compatibilityMain = resolveWorkbenchCompatibilityMain(engine);
+  const sessionPath = compatibilityMain.sessionPath || "";
+  const mainRoot = compatibilityMain.root;
   const signature = JSON.stringify(mainRoot);
   const workspaceKey = `${studioId}\0${sessionPath || "default"}`;
   if (
@@ -134,7 +132,7 @@ async function registryFor(
     engine,
     requestContext,
     mainRoot,
-    mainDisplayName: sessionMount?.label || "Main",
+    mainDisplayName: compatibilityMain.displayName,
     signature,
     studioId,
     workspaceKey,
@@ -168,7 +166,9 @@ async function createRegistryEntry({
   if (mainRoot.kind === "local-file" && !mainRoot.path) {
     throw routeError("knowledge workspace main root unavailable", 503);
   }
-  const defaultRoot = engine.defaultDeskCwd || engine.homeCwd || engine.deskCwd;
+  const defaultRoot = mainRoot.kind === "local-file"
+    ? mainRoot.path
+    : engine.defaultDeskCwd || engine.homeCwd || engine.deskCwd;
   const resourceIO = createSandboxResourceIO({
     cwd: defaultRoot,
     agentDir: defaultRoot,

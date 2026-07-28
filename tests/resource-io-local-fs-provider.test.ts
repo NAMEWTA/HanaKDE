@@ -8,6 +8,7 @@ import { ResourceAccessPolicy } from "../lib/resource-io/resource-access-policy.
 const CAPABILITY_KEYS = [
   "stat",
   "read",
+  "openRead",
   "write",
   "writeExpectedVersion",
   "edit",
@@ -162,6 +163,41 @@ describe("LocalFsProvider", () => {
     const deleted = await provider.delete({ kind: "local-file", path: "copy.md" });
     expect(deleted.resourceKey).toBe(`local_fs:${path.join(realCwd, "copy.md").replace(/\\/g, "/")}`);
     expect(fs.existsSync(path.join(cwd, "copy.md"))).toBe(false);
+  });
+
+  it("opens a bounded provider-owned read stream without buffering the whole file", async () => {
+    const { cwd, provider } = makeProvider();
+    fs.writeFileSync(path.join(cwd, "stream.txt"), "abcdef", "utf-8");
+
+    const opened = await provider.openRead(
+      { kind: "local-file", path: "stream.txt" },
+      { start: 1, end: 3 },
+    );
+    const chunks = [];
+    for await (const chunk of opened.body) chunks.push(Buffer.from(chunk));
+
+    expect(Buffer.concat(chunks).toString("utf-8")).toBe("bcd");
+    expect(opened).toMatchObject({
+      size: 6,
+      version: { size: 6 },
+    });
+  });
+
+  it("keeps every openRead chunk immutable while streaming files larger than one chunk", async () => {
+    const { cwd, provider } = makeProvider();
+    const content = Buffer.concat([
+      Buffer.alloc(1024 * 1024, 0x11),
+      Buffer.alloc(1024 * 1024, 0x22),
+      Buffer.from("tail"),
+    ]);
+    fs.writeFileSync(path.join(cwd, "large.bin"), content);
+
+    const opened = await provider.openRead({ kind: "local-file", path: "large.bin" });
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of opened.body) chunks.push(chunk);
+
+    expect(chunks).toHaveLength(3);
+    expect(Buffer.concat(chunks)).toEqual(content);
   });
 
   it("maps relative file watch names back to the watched file", async () => {

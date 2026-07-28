@@ -15,6 +15,8 @@ import type {
   ResourceListResult,
   ResourceMutationResult,
   ResourceMutationPreconditions,
+  ResourceOpenReadOptions,
+  ResourceOpenReadResult,
   ResourceReadResult,
   ResourceRef,
   ResourceSearchResult,
@@ -56,6 +58,7 @@ export class MountProvider {
     return {
       stat: local && has("read"),
       read: local && has("read"),
+      openRead: local && has("read"),
       write: local && has("write"),
       writeExpectedVersion: local && has("write"),
       edit: local && has("write"),
@@ -87,6 +90,20 @@ export class MountProvider {
   async read(ref: ResourceRef): Promise<ResourceReadResult> {
     const resolved = this.resolveLocalMount(ref, "read");
     return this.mapResult(ref, await resolved.provider.read({ kind: "local-file", path: resolved.path }));
+  }
+
+  async openRead(
+    ref: ResourceRef,
+    options: ResourceOpenReadOptions = {},
+  ): Promise<ResourceOpenReadResult> {
+    const resolved = this.resolveLocalMount(ref, "openRead");
+    return this.mapResult(
+      ref,
+      await resolved.provider.openRead(
+        { kind: "local-file", path: resolved.path },
+        options,
+      ),
+    );
   }
 
   async write(ref: ResourceRef, content: string | Buffer): Promise<ResourceMutationResult> {
@@ -286,7 +303,10 @@ export class MountProvider {
     return mount;
   }
 
-  resolveLocalMount(ref: ResourceRef, capability: "read" | "write" | "list" | "materialize") {
+  resolveLocalMount(
+    ref: ResourceRef,
+    capability: "read" | "openRead" | "write" | "list" | "materialize",
+  ) {
     if (ref.kind !== "mount") {
       throw new ResourceIOError(`mount provider cannot resolve ${ref.kind}`, {
         code: "invalid_resource_ref",
@@ -297,7 +317,9 @@ export class MountProvider {
     if (!(mount.sourceKind === "storage" && mount.provider === "local_fs")) {
       throw providerNotAvailable(`mount.${mount.provider || mount.sourceKind || ref.mountId}`);
     }
-    const required = capability === "materialize" ? "materialize" : capability;
+    const required = capability === "materialize"
+      ? "materialize"
+      : capability === "openRead" ? "read" : capability;
     if (!mount.capabilities?.includes(required)) throw capabilityDenied(required, "mount");
     const rootPath = mount.rootLocator?.path;
     if (typeof rootPath !== "string" || !path.isAbsolute(rootPath)) {

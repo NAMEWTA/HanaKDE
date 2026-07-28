@@ -10,8 +10,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import crypto from "crypto";
-import { execFileSync } from "child_process";
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { safeJson } from "../hono-helpers.ts";
 import { parseSkillMetadata } from "../../lib/skills/skill-metadata.ts";
 import { installSkillPackageFromPath } from "../../lib/skills/skill-package-installer.ts";
@@ -33,7 +33,11 @@ import { jsonRouteError } from "../http/route-errors.ts";
 import { isLocalOwnerPrincipal } from "../http/route-security.ts";
 import { createRequestContext } from "../http/boundary.ts";
 import { createApiResourceOperationContext, requestIdFromHono } from "../http/resource-operation-context.ts";
+import { recordSecurityAuditEvent } from "../http/security-audit.ts";
 import { MountAwareFileError, MountAwareFileService } from "../../core/mount-aware-file-service.ts";
+import {
+  workbenchCompatibilityServiceOptions,
+} from "../../core/knowledge-workspace/workbench-compatibility.ts";
 import { materializeUploadedSkillPackage } from "../utils/uploaded-skill-package.ts";
 import { requireAutomationExecutionContext } from "../../lib/desk/automation-execution-context.ts";
 
@@ -109,10 +113,13 @@ function deskRouteError(c, code, message, status) {
   return jsonRouteError(c, { code, message, status });
 }
 
-function deskFileActionErrorMessage(err) {
+function deskFileActionErrorMessage(err, discloseNativeDetails = true) {
   if (err?.code === "resource_not_found") return "not found";
   if (err?.code === "target_already_exists") return "target already exists";
   if (err?.code === "already_exists") return "already exists";
+  if (err?.code === "mount_capability_denied") return "mount capability denied";
+  if (err?.code === "mount_unavailable") return "mount unavailable";
+  if (!discloseNativeDetails) return "file action failed";
   return err?.message || err?.code || "file action failed";
 }
 
@@ -304,6 +311,17 @@ const MAX_COVER_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export function createDeskRoute(engine, hub) {
   const route = new Hono();
+  const withDeskMountErrors = (handler) => async (c) => {
+    try {
+      return await handler(c);
+    } catch (err) {
+      if (!(err instanceof MountAwareFileError)) throw err;
+      return c.json({
+        error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)),
+        ...(err.code ? { code: err.code } : {}),
+      }, err.status as ContentfulStatusCode);
+    }
+  };
 
   function bindCronRequestScope(c) {
     const requestContext = createRequestContext(c, engine);
@@ -548,11 +566,25 @@ export function createDeskRoute(engine, hub) {
     return !principal || principal.kind === "unknown" || isLocalOwnerPrincipal(principal);
   }
 
+  function rejectRemoteExplicitDeskDir(c, value) {
+    if (!value || canUseLocalAbsolutePaths(c)) return null;
+    return c.json({
+      error: "dir requires local owner",
+      code: "local_path_not_allowed",
+    }, 403);
+  }
+
   function fileServiceForRequest(c, defaultRootOverride = null) {
     const requestContext = createRequestContext(c, engine);
+    const compatibility = defaultRootOverride
+      ? {
+        defaultRoot: defaultRootOverride,
+        defaultRootRef: { kind: "local-file", path: defaultRootOverride },
+      }
+      : workbenchCompatibilityServiceOptions(engine);
     return new MountAwareFileService({
       hanakoHome: engine.hanakoHome,
-      defaultRoot: defaultRootOverride || defaultDeskDir(engine),
+      ...compatibility,
       studioId: requestContext?.studioId || engine.getRuntimeContext?.()?.studioId || null,
       createCheckpoint: typeof engine.createUserEditCheckpoint === "function"
         ? (args) => engine.createUserEditCheckpoint(args)
@@ -575,6 +607,75 @@ export function createDeskRoute(engine, hub) {
       : null;
   }
 
+  function defaultWorkspaceDirectory(c) {
+    if (!engine.hanakoHome) return defaultDeskDir(engine);
+    return fileServiceForRequest(c).resolveDirectory("default", "");
+  }
+
+  function authorizeDeskWorkspace(c, capability, selectedAgentId = null) {
+    const requestContext = createRequestContext(c, engine);
+    if (requestContext.authPrincipal?.kind === "unknown") {
+      return { requestContext, decision: null };
+    }
+    const agentId = typeof selectedAgentId === "string" && selectedAgentId.trim()
+      ? selectedAgentId.trim()
+      : null;
+    const target = {
+      kind: "studio",
+      studioId: requestContext.studioId,
+      ...(agentId ? { agentId } : {}),
+    };
+    const decision = requestContext.authorize(capability, target);
+    if (decision.allowed) return { requestContext, decision };
+    recordSecurityAuditEvent(c, engine, {
+      action: `desk.${capability}`,
+      target,
+      result: "denied",
+      decision,
+      errorCode: decision.reason,
+    } as any);
+    return {
+      requestContext,
+      decision,
+      response: c.json({
+        error: "insufficient_scope",
+        reason: decision.reason,
+        capability,
+      }, 403),
+    };
+  }
+
+  function rejectMismatchedDeskAgentIds(c, selectedAgentId = null, legacyAgentId = null) {
+    const selected = typeof selectedAgentId === "string" && selectedAgentId.trim()
+      ? selectedAgentId.trim()
+      : null;
+    const legacy = typeof legacyAgentId === "string" && legacyAgentId.trim()
+      ? legacyAgentId.trim()
+      : null;
+    if (!selected || !legacy || selected === legacy) return null;
+    return c.json({
+      error: "insufficient_scope",
+      reason: "agent_scope_mismatch",
+      capability: "files",
+    }, 403);
+  }
+
+  function assertWorkspaceCapability(c, workspace, capability, explicitDir = null) {
+    if (!engine.hanakoHome) return;
+    const files = fileServiceForRequest(c, explicitDir);
+    files.assertRootCapability(workspace.mountId || "default", capability);
+  }
+
+  function sanitizeWorkspaceSkillForResponse(c, skill) {
+    if (canUseLocalAbsolutePaths(c)) return skill;
+    const safe = { ...skill };
+    delete safe.dirPath;
+    delete safe.filePath;
+    delete safe.baseDir;
+    delete safe.sourceIdentity;
+    return safe;
+  }
+
   function resolveWorkspaceRootFromRequest(c, body = null) {
     const mountId = normalizeMountId(body?.mountId || body?.rootId || c.req.query("mountId") || c.req.query("rootId"));
     if (mountId) {
@@ -586,7 +687,9 @@ export function createDeskRoute(engine, hub) {
         mount: root,
       };
     }
-    const dir = body?.dir || (c.req.query("dir") ? decodeURIComponent(c.req.query("dir")) : defaultDeskDir(engine));
+    const dir = body?.dir || (c.req.query("dir")
+      ? decodeURIComponent(c.req.query("dir"))
+      : defaultWorkspaceDirectory(c));
     return { dir, mountId: null, mount: null };
   }
 
@@ -1232,6 +1335,20 @@ export function createDeskRoute(engine, hub) {
   /** 扫描工作台下的项目级技能 */
   route.get("/desk/skills", async (c) => {
     try {
+      const remoteDir = rejectRemoteExplicitDeskDir(c, c.req.query("dir"));
+      if (remoteDir) return remoteDir;
+      const auth = authorizeDeskWorkspace(
+        c,
+        "files.read",
+        c.req.query("selectedAgentId"),
+      );
+      if (auth.response) return auth.response;
+      const agentMismatch = rejectMismatchedDeskAgentIds(
+        c,
+        c.req.query("selectedAgentId"),
+        c.req.query("agentId"),
+      );
+      if (agentMismatch) return agentMismatch;
       const agentId = c.req.query("agentId") || null;
       const targetAgent = agentId ? engine.getAgent?.(agentId) : engine.agent;
       const policy = workspaceSkillPolicyFromConfig(targetAgent?.config?.workspace_context);
@@ -1241,17 +1358,39 @@ export function createDeskRoute(engine, hub) {
       if (!workspace.mountId && c.req.query("dir") && !isApprovedDir(dir, engine, { agentId })) {
         return c.json({ skills: [], policy });
       }
+      assertWorkspaceCapability(
+        c,
+        workspace,
+        "read",
+        c.req.query("dir") ? dir : null,
+      );
 
+      const workspaceFiles = fileServiceForRequest(
+        c,
+        c.req.query("dir") ? dir : null,
+      );
+      const workspaceRootId = workspace.mountId || "default";
       const results = [];
-      for (const root of resolveWorkspaceSkillCatalogPaths(dir)) {
-        const { dirPath: skillsDir, label, category } = root;
+      for (const root of resolveWorkspaceSkillCatalogPaths(dir, { existingOnly: false })) {
+        const { dirPath: skillsDir, label, category, sub } = root;
         try {
-          for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-            if (!entry.isDirectory()) continue;
+          const entries = await workspaceFiles.listDirectoryEntries(
+            workspaceRootId,
+            sub,
+            { allowHiddenPaths: true },
+          );
+          for (const entry of entries) {
+            if (!entry.isDirectory) continue;
             const skillFile = path.join(skillsDir, entry.name, "SKILL.md");
-            if (!fs.existsSync(skillFile)) continue;
             try {
-              const content = fs.readFileSync(skillFile, "utf-8");
+              const read = await workspaceFiles.readText(
+                workspaceRootId,
+                `${sub}/${entry.name}`,
+                "SKILL.md",
+                { allowHiddenPaths: true },
+              );
+              if (!read.exists) continue;
+              const content = read.content;
               const meta = parseSkillMetadata(content, entry.name);
               const baseDir = path.join(skillsDir, entry.name);
               const sourceIdentity = createSkillSourceIdentity({
@@ -1277,7 +1416,8 @@ export function createDeskRoute(engine, hub) {
         } catch { /* ignore unreadable workspace skill roots */ }
       }
       const resolved = resolveWorkspaceSkillCandidateStates(results, policy)
-        .map(({ resolutionIdentity: _resolutionIdentity, ...skill }) => skill);
+        .map(({ resolutionIdentity: _resolutionIdentity, ...skill }) =>
+          sanitizeWorkspaceSkillForResponse(c, skill));
       return c.json({ skills: resolved, policy });
     } catch (err) {
       if (err instanceof MountAwareFileError) return c.json({ error: err.message, code: err.code }, err.status as any);
@@ -1292,7 +1432,25 @@ export function createDeskRoute(engine, hub) {
    */
   route.post("/desk/install-skill", async (c) => {
     const body = await safeJson(c);
+    const remoteDir = rejectRemoteExplicitDeskDir(c, body.dir);
+    if (remoteDir) return remoteDir;
+    if (body.filePath && !canUseLocalAbsolutePaths(c)) {
+      return c.json({ error: "filePath requires local owner" }, 403);
+    }
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.write",
+      body.selectedAgentId,
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      body.selectedAgentId,
+      body.agentId,
+    );
+    if (agentMismatch) return agentMismatch;
     let uploadedSource = null;
+    let stagingRoot = null;
     try {
       const { filePath, dir } = body;
       const agentId = body.agentId || null;
@@ -1305,41 +1463,95 @@ export function createDeskRoute(engine, hub) {
       if (!workspace.mountId && dir && !isApprovedDir(cwd, engine, { agentId })) {
         return c.json({ error: "workspace is not approved" }, 403);
       }
-
-      const skillsDir = path.join(cwd, ".agents", "skills");
-
-      // 确保 .agents/skills/ 存在
-      fs.mkdirSync(skillsDir, { recursive: true });
-
-      // macOS: 隐藏 .agents 目录（chflags hidden）
-      if (process.platform === "darwin") {
-        const agentsDir = path.join(cwd, ".agents");
-        try { execFileSync("chflags", ["hidden", agentsDir]); } catch { /* best effort macOS Finder hint */ }
-      }
-
-      const installed = await installSkillPackageFromPath({
+      assertWorkspaceCapability(c, workspace, "write", dir ? cwd : null);
+      const workspaceFiles = fileServiceForRequest(c, dir ? cwd : null);
+      const workspaceRootId = workspace.mountId || "default";
+      stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-skill-stage-"));
+      const stagedInstallDir = path.join(stagingRoot, "installed");
+      const staged = await installSkillPackageFromPath({
         sourcePath,
-        installDir: skillsDir,
+        installDir: stagedInstallDir,
         owner: "workspace",
       });
+      await workspaceFiles.ensureDirectory(
+        workspaceRootId,
+        "",
+        ".agents",
+        { reason: "desk.skill.ensure_agents", allowHiddenPaths: true },
+      );
+      await workspaceFiles.ensureDirectory(
+        workspaceRootId,
+        ".agents",
+        "skills",
+        { reason: "desk.skill.ensure_skills", allowHiddenPaths: true },
+      );
+      await workspaceFiles.copyLocalPathIntoDirectory(
+        workspaceRootId,
+        ".agents/skills",
+        staged.dir,
+        {
+          reason: "desk.skill.install",
+          preferTransfer: true,
+          allowHiddenPaths: true,
+        },
+      );
+      const installedBaseDir = path.join(
+        cwd,
+        ".agents",
+        "skills",
+        staged.name,
+      );
+      const installed = {
+        name: staged.name,
+        installedSkillSource: createSkillSourceIdentity({
+          owner: "workspace",
+          skillName: staged.name,
+          filePath: path.join(installedBaseDir, "SKILL.md"),
+          baseDir: installedBaseDir,
+        }),
+      };
       if (typeof engine.syncWorkspaceSkillPaths === "function") {
         await engine.syncWorkspaceSkillPaths(cwd, { reload: true, emitEvent: true, force: true, agentId });
       }
       return c.json({
         ok: true,
         name: installed.name,
-        installedSkillSource: installed.installedSkillSource,
+        installedSkillSource: sanitizeWorkspaceSkillForResponse(
+          c,
+          installed.installedSkillSource,
+        ),
       });
     } catch (err) {
-      return c.json({ error: err.message }, err.status || 500);
+      return c.json({
+        error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)),
+        ...(err?.code ? { code: err.code } : {}),
+      }, err.status || 500);
     } finally {
       uploadedSource?.cleanup?.();
+      if (stagingRoot) fs.rmSync(stagingRoot, { recursive: true, force: true });
     }
   });
 
   /** 删除项目技能 */
   route.post("/desk/delete-skill", async (c) => {
     const body = await safeJson(c);
+    const remoteDir = rejectRemoteExplicitDeskDir(c, body.dir);
+    if (remoteDir) return remoteDir;
+    if (!canUseLocalAbsolutePaths(c)) {
+      return c.json({ error: "skillDir requires local owner" }, 403);
+    }
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.write",
+      body.selectedAgentId,
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      body.selectedAgentId,
+      body.agentId,
+    );
+    if (agentMismatch) return agentMismatch;
     const { skillDir } = body;
     const agentId = body.agentId || null;
     if (!skillDir) {
@@ -1352,14 +1564,27 @@ export function createDeskRoute(engine, hub) {
       if (!cwd) {
         return c.json({ error: "No active workspace" }, 400);
       }
+      assertWorkspaceCapability(c, workspace, "write", body.dir ? cwd : null);
       const allowedRoots = resolveWorkspaceSkillCatalogPaths(cwd, { existingOnly: false });
-      const allowed = allowedRoots.some(({ dirPath }) =>
-        isInsidePath(skillDir, dirPath)
+      const skillPath = realPath(skillDir);
+      const allowed = skillPath && allowedRoots.find(({ dirPath }) =>
+        path.dirname(skillPath) === realPath(dirPath)
+        && isPlainEntryName(path.basename(skillPath))
       );
       if (!allowed) {
         return c.json({ error: "Only skills in current workspace skill directories can be deleted" }, 403);
       }
-      fs.rmSync(skillDir, { recursive: true, force: true });
+      const workspaceFiles = fileServiceForRequest(c, body.dir ? cwd : null);
+      await workspaceFiles.safeDelete(
+        workspace.mountId || "default",
+        allowed.sub,
+        { name: path.basename(skillPath) },
+        {
+          reason: "desk.skill.delete",
+          allowHiddenPaths: true,
+          skipListing: true,
+        },
+      );
       if (typeof engine.syncWorkspaceSkillPaths === "function") {
         await engine.syncWorkspaceSkillPaths(cwd, { reload: true, emitEvent: true, force: true, agentId });
       }
@@ -1370,19 +1595,52 @@ export function createDeskRoute(engine, hub) {
   });
 
   /** 工作台路径 */
-  route.get("/desk/path", async (c) => {
+  route.get("/desk/path", withDeskMountErrors(async (c) => {
+    const remoteDir = rejectRemoteExplicitDeskDir(c, c.req.query("dir"));
+    if (remoteDir) return remoteDir;
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.read",
+      c.req.query("selectedAgentId"),
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      c.req.query("selectedAgentId"),
+      c.req.query("agentId"),
+    );
+    if (agentMismatch) return agentMismatch;
     const agentId = c.req.query("agentId") || null;
-    const dir = c.req.query("dir") ? decodeURIComponent(c.req.query("dir")) : defaultDeskDir(engine);
+    const dir = c.req.query("dir")
+      ? decodeURIComponent(c.req.query("dir"))
+      : defaultWorkspaceDirectory(c);
     if (!dir) return c.json({ path: null });
     if (c.req.query("dir") && !isApprovedDir(dir, engine, { agentId })) return c.json({ error: t("error.dirNotAllowed") });
-    fs.mkdirSync(dir, { recursive: true });
-    return c.json({ path: dir });
-  });
+    fileServiceForRequest(c, c.req.query("dir") ? dir : null)
+      .assertRootCapability("default", "read");
+    return c.json({ path: canUseLocalAbsolutePaths(c) ? dir : null });
+  }));
 
   /** 列出工作台文件（支持 ?subdir=xxx 浏览子目录, ?dir=xxx 覆盖基目录） */
-  route.get("/desk/files", async (c) => {
+  route.get("/desk/files", withDeskMountErrors(async (c) => {
+    const remoteDir = rejectRemoteExplicitDeskDir(c, c.req.query("dir"));
+    if (remoteDir) return remoteDir;
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.read",
+      c.req.query("selectedAgentId"),
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      c.req.query("selectedAgentId"),
+      c.req.query("agentId"),
+    );
+    if (agentMismatch) return agentMismatch;
     const agentId = c.req.query("agentId") || null;
-    const dir = c.req.query("dir") ? decodeURIComponent(c.req.query("dir")) : defaultDeskDir(engine);
+    const dir = c.req.query("dir")
+      ? decodeURIComponent(c.req.query("dir"))
+      : defaultWorkspaceDirectory(c);
     if (!dir) return c.json({ files: [], subdir: "", basePath: null });
     if (c.req.query("dir") && !isApprovedDir(dir, engine, { agentId })) return c.json({ error: t("error.dirNotAllowed") });
     const subdir = c.req.query("subdir") || "";
@@ -1393,17 +1651,40 @@ export function createDeskRoute(engine, hub) {
     const target = subdir ? path.join(dir, subdir) : dir;
     if (!isInsidePath(target, dir)) return c.json({ error: "invalid path" });
     try {
-      const result = await fileServiceForRequest(c, dir).listFiles("default", subdir);
-      return c.json({ files: result.files, subdir: subdir || "", basePath: dir });
+      const result = await fileServiceForRequest(
+        c,
+        c.req.query("dir") ? dir : null,
+      ).listFiles("default", subdir);
+      return c.json({
+        files: result.files,
+        subdir: subdir || "",
+        basePath: canUseLocalAbsolutePaths(c) ? dir : null,
+      });
     } catch (err) {
-      return c.json({ error: deskFileActionErrorMessage(err), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
+      return c.json({ error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
     }
-  });
+  }));
 
   /** 搜索工作台文件名（递归，默认跳过隐藏目录和常见依赖/构建目录） */
-  route.get("/desk/search-files", async (c) => {
+  route.get("/desk/search-files", withDeskMountErrors(async (c) => {
+    const remoteDir = rejectRemoteExplicitDeskDir(c, c.req.query("dir"));
+    if (remoteDir) return remoteDir;
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.read",
+      c.req.query("selectedAgentId"),
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      c.req.query("selectedAgentId"),
+      c.req.query("agentId"),
+    );
+    if (agentMismatch) return agentMismatch;
     const agentId = c.req.query("agentId") || null;
-    const dir = c.req.query("dir") ? decodeURIComponent(c.req.query("dir")) : defaultDeskDir(engine);
+    const dir = c.req.query("dir")
+      ? decodeURIComponent(c.req.query("dir"))
+      : defaultWorkspaceDirectory(c);
     if (!dir) return c.json({ results: [], basePath: null, query: c.req.query("q") || "" });
     if (c.req.query("dir") && !isApprovedDir(dir, engine, { agentId })) return c.json({ error: t("error.dirNotAllowed") });
     const query = c.req.query("q") || "";
@@ -1412,19 +1693,46 @@ export function createDeskRoute(engine, hub) {
       ? Math.min(limitRaw, WORKSPACE_SEARCH_LIMIT)
       : WORKSPACE_SEARCH_LIMIT;
     try {
-      await fileServiceForRequest(c, dir).listFiles("default", "");
-      const result = await fileServiceForRequest(c, dir).searchFiles("default", query);
-      return c.json({ results: result.results.slice(0, limit), basePath: dir, query });
+      const files = fileServiceForRequest(c, c.req.query("dir") ? dir : null);
+      await files.listFiles("default", "");
+      const result = await files.searchFiles("default", query);
+      return c.json({
+        results: result.results.slice(0, limit),
+        basePath: canUseLocalAbsolutePaths(c) ? dir : null,
+        query,
+      });
     } catch (err) {
-      if (err?.code === "resource_not_found") return c.json({ results: [], basePath: dir, query });
-      return c.json({ error: deskFileActionErrorMessage(err), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
+      if (err?.code === "resource_not_found") {
+        return c.json({
+          results: [],
+          basePath: canUseLocalAbsolutePaths(c) ? dir : null,
+          query,
+        });
+      }
+      return c.json({ error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
     }
-  });
+  }));
 
   /** 读取指定目录的 jian.md */
-  route.get("/desk/jian", async (c) => {
+  route.get("/desk/jian", withDeskMountErrors(async (c) => {
+    const remoteDir = rejectRemoteExplicitDeskDir(c, c.req.query("dir"));
+    if (remoteDir) return remoteDir;
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.read",
+      c.req.query("selectedAgentId"),
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      c.req.query("selectedAgentId"),
+      c.req.query("agentId"),
+    );
+    if (agentMismatch) return agentMismatch;
     const agentId = c.req.query("agentId") || null;
-    const dir = c.req.query("dir") ? decodeURIComponent(c.req.query("dir")) : defaultDeskDir(engine);
+    const dir = c.req.query("dir")
+      ? decodeURIComponent(c.req.query("dir"))
+      : defaultWorkspaceDirectory(c);
     if (!dir) return c.json({ content: null });
     if (c.req.query("dir") && !isApprovedDir(dir, engine, { agentId })) return c.json({ error: t("error.dirNotAllowed") });
     const subdir = c.req.query("subdir") || "";
@@ -1434,19 +1742,38 @@ export function createDeskRoute(engine, hub) {
     const target = subdir ? path.join(dir, subdir) : dir;
     if (!isInsidePath(target, dir)) return c.json({ error: "invalid path" });
     try {
-      const result = await fileServiceForRequest(c, dir).readText("default", subdir, "jian.md");
+      const result = await fileServiceForRequest(
+        c,
+        c.req.query("dir") ? dir : null,
+      ).readText("default", subdir, "jian.md");
       return c.json({ content: result.exists ? result.content : null });
     } catch (err) {
       if (err?.code === "resource_not_found") return c.json({ content: null });
-      return c.json({ error: deskFileActionErrorMessage(err), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
+      return c.json({ error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
     }
-  });
+  }));
 
   /** 保存指定目录的 jian.md（自动创建 / 内容为空时删除） */
-  route.post("/desk/jian", async (c) => {
+  route.post("/desk/jian", withDeskMountErrors(async (c) => {
     const body = await safeJson(c);
+    const remoteDir = rejectRemoteExplicitDeskDir(c, body.dir);
+    if (remoteDir) return remoteDir;
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.write",
+      body.selectedAgentId,
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      body.selectedAgentId,
+      body.agentId,
+    );
+    if (agentMismatch) return agentMismatch;
     const agentId = body.agentId || null;
-    const dir = body.dir ? body.dir : defaultDeskDir(engine);
+    const dir = body.dir
+      ? body.dir
+      : defaultWorkspaceDirectory(c);
     if (!dir) return c.json({ error: t("error.noWorkspace") });
     if (body.dir && !isApprovedDir(dir, engine, { agentId })) return c.json({ error: t("error.dirNotAllowed") });
     const { subdir, content } = body;
@@ -1458,29 +1785,47 @@ export function createDeskRoute(engine, hub) {
     if (!isInsidePath(target, dir)) return c.json({ error: "invalid path" });
 
     try {
+      const files = fileServiceForRequest(c, body.dir ? dir : null);
       if (content === null || content === undefined || content.trim() === "") {
-        await fileServiceForRequest(c, dir).safeDeleteIfExists("default", sub, "jian.md", { reason: "desk.jian.delete" });
+        await files.safeDeleteIfExists("default", sub, "jian.md", { reason: "desk.jian.delete" });
         return c.json({ ok: true, content: null });
       }
-      await fileServiceForRequest(c, dir).writeText("default", sub, {
+      await files.writeText("default", sub, {
         action: "writeText",
         name: "jian.md",
         content,
       }, { reason: "desk.jian.write" });
       return c.json({ ok: true, content });
     } catch (err) {
-      return c.json({ error: deskFileActionErrorMessage(err), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
+      return c.json({ error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)), ...(err?.code ? { code: err.code } : {}) }, err?.status || 400);
     }
-  });
+  }));
 
   /** 工作台文件操作（支持 subdir + dir override） */
-  route.post("/desk/files", async (c) => {
+  route.post("/desk/files", withDeskMountErrors(async (c) => {
     const body = await safeJson(c);
+    const remoteDir = rejectRemoteExplicitDeskDir(c, body.dir);
+    if (remoteDir) return remoteDir;
+    if (body.action === "upload" && !isLocalOwnerPrincipal(readAuthPrincipal(c))) {
+      return c.json({ error: "upload by absolute path requires local owner" }, 403);
+    }
+    const auth = authorizeDeskWorkspace(
+      c,
+      "files.write",
+      body.selectedAgentId,
+    );
+    if (auth.response) return auth.response;
+    const agentMismatch = rejectMismatchedDeskAgentIds(
+      c,
+      body.selectedAgentId,
+      body.agentId,
+    );
+    if (agentMismatch) return agentMismatch;
     const agentId = body.agentId || null;
-    const baseDir = body.dir || defaultDeskDir(engine);
+    const baseDir = body.dir
+      || defaultWorkspaceDirectory(c);
     if (!baseDir) return c.json({ error: t("error.noWorkspace") });
     if (body.dir && !isApprovedDir(baseDir, engine, { agentId })) return c.json({ error: t("error.dirNotAllowed") });
-    fs.mkdirSync(baseDir, { recursive: true });
 
     const { action, subdir: sub, paths, name, content, oldName, newName } = body;
 
@@ -1501,6 +1846,11 @@ export function createDeskRoute(engine, hub) {
       return isInsidePath(target, baseDir) ? target : null;
     };
     const reasonFor = (name) => `desk.files.${name}`;
+    let actionFiles = null;
+    const getActionFiles = () => {
+      actionFiles ||= fileServiceForRequest(c, body.dir ? baseDir : null);
+      return actionFiles;
+    };
 
     try {
     switch (action) {
@@ -1509,13 +1859,9 @@ export function createDeskRoute(engine, hub) {
         // 该语义只为桌面 owner 端的本机拖拽设计；远端 paired 设备不应能借此
         // 把 desk dir 之外的任意可读路径（~/Documents、Library、shell init 等）
         // 拷进工作区再读回。远端要上传文件应走 /api/workbench/upload。
-        if (!isLocalOwnerPrincipal(readAuthPrincipal(c))) {
-          return c.json({ error: "upload by absolute path requires local owner" }, 403);
-        }
         if (!Array.isArray(paths) || paths.length === 0) {
           return deskRouteError(c, "workspace_file_validation_failed", "paths required", 400);
         }
-        const files = fileServiceForRequest(c, baseDir);
         const results = [];
         for (const srcPath of paths) {
           try {
@@ -1527,13 +1873,13 @@ export function createDeskRoute(engine, hub) {
               results.push({ src: srcPath, error: "sensitive path blocked" });
               continue;
             }
-            const copied = await files.copyLocalPathIntoDirectory("default", subdirStr, srcPath, { reason: reasonFor("upload") });
+            const copied = await getActionFiles().copyLocalPathIntoDirectory("default", subdirStr, srcPath, { reason: reasonFor("upload") });
             results.push({ src: srcPath, name: copied.filename });
           } catch (err) {
             results.push({ src: srcPath, error: err.message });
           }
         }
-        return c.json({ ok: true, results, files: await files.filesForDirectory("default", subdirStr) });
+        return c.json({ ok: true, results, files: await getActionFiles().filesForDirectory("default", subdirStr) });
       }
 
       case "create": {
@@ -1541,8 +1887,7 @@ export function createDeskRoute(engine, hub) {
           return deskRouteError(c, "workspace_file_validation_failed", "name and content required", 400);
         }
         if (!isPlainEntryName(name)) return c.json({ error: "invalid name" });
-        const files = fileServiceForRequest(c, baseDir);
-        const result = await files.writeText("default", subdirStr, { action: "create", name, content }, {
+        const result = await getActionFiles().writeText("default", subdirStr, { action: "create", name, content }, {
           reason: reasonFor("create"),
           mustNotExist: true,
         });
@@ -1552,16 +1897,14 @@ export function createDeskRoute(engine, hub) {
       case "mkdir": {
         if (!name) return deskRouteError(c, "workspace_file_validation_failed", "name required", 400);
         if (!isPlainEntryName(name)) return c.json({ error: "invalid name" });
-        const files = fileServiceForRequest(c, baseDir);
-        const result = await files.mkdir("default", subdirStr, { name }, { reason: reasonFor("mkdir") });
+        const result = await getActionFiles().mkdir("default", subdirStr, { name }, { reason: reasonFor("mkdir") });
         return c.json({ ok: true, files: result.files });
       }
 
       case "rename": {
         if (!oldName || !newName) return deskRouteError(c, "workspace_file_validation_failed", "oldName and newName required", 400);
         if (!isPlainEntryName(oldName) || !isPlainEntryName(newName)) return c.json({ error: "invalid name" });
-        const files = fileServiceForRequest(c, baseDir);
-        const result = await files.rename("default", subdirStr, { oldName, newName }, { reason: reasonFor("rename") });
+        const result = await getActionFiles().rename("default", subdirStr, { oldName, newName }, { reason: reasonFor("rename") });
         return c.json({ ok: true, files: result.files });
       }
 
@@ -1574,25 +1917,21 @@ export function createDeskRoute(engine, hub) {
         if (names.includes(destFolder)) {
           return c.json({ error: "cannot move folder into itself" });
         }
-        const destDir = path.join(dir, path.basename(destFolder));
-        if (!isInsidePath(destDir, dir)) return c.json({ error: "invalid destFolder" });
-        if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
-          return c.json({ error: "destFolder is not a directory" });
-        }
-        const files = fileServiceForRequest(c, baseDir);
+        const destinationName = path.basename(destFolder);
+        if (!isPlainEntryName(destinationName)) return c.json({ error: "invalid destFolder" });
         const results = [];
         for (const n of names) {
           try {
-            await files.move("default", subdirStr, {
+            await getActionFiles().move("default", subdirStr, {
               name: path.basename(n),
-              destSubdir: path.basename(destFolder),
-            }, { reason: reasonFor("move") });
+              destSubdir: destinationName,
+            }, { reason: reasonFor("move"), createDestIfMissing: false });
             results.push({ name: n, ok: true });
           } catch (err) {
-            results.push({ name: n, error: deskFileActionErrorMessage(err) });
+            results.push({ name: n, error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)) });
           }
         }
-        return c.json({ ok: true, results, files: await files.filesForDirectory("default", subdirStr) });
+        return c.json({ ok: true, results, files: await getActionFiles().filesForDirectory("default", subdirStr) });
       }
 
       case "movePaths": {
@@ -1602,14 +1941,9 @@ export function createDeskRoute(engine, hub) {
         if (!Array.isArray(items) || items.length === 0) {
           return deskRouteError(c, "workspace_file_validation_failed", "items[] required", 400);
         }
-        const destDir = subdirToDir(destSubdir);
-        if (!destDir) return c.json({ error: "invalid destSubdir" });
-        if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
-          return c.json({ error: "destSubdir is not a directory" });
-        }
+        if (!subdirToDir(destSubdir)) return c.json({ error: "invalid destSubdir" });
 
-        const files = fileServiceForRequest(c, baseDir);
-        const result = await files.movePaths("default", {
+        const result = await getActionFiles().movePaths("default", {
           items,
           destSubdir,
           currentSubdir,
@@ -1625,8 +1959,7 @@ export function createDeskRoute(engine, hub) {
 
       case "remove": {
         if (!name) return deskRouteError(c, "workspace_file_validation_failed", "name required", 400);
-        const files = fileServiceForRequest(c, baseDir);
-        const result = await files.safeDelete("default", subdirStr, { name }, { reason: reasonFor("remove") });
+        const result = await getActionFiles().safeDelete("default", subdirStr, { name }, { reason: reasonFor("remove") });
         return c.json({ ok: true, trashId: result.trashId, files: result.files });
       }
 
@@ -1635,11 +1968,11 @@ export function createDeskRoute(engine, hub) {
     }
     } catch (err) {
       return c.json({
-        error: deskFileActionErrorMessage(err),
+        error: deskFileActionErrorMessage(err, canUseLocalAbsolutePaths(c)),
         ...(err?.code ? { code: err.code } : {}),
       }, err?.status || 400);
     }
-  });
+  }));
 
   return route;
 }

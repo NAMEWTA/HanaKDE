@@ -128,6 +128,17 @@
     },
     {
       "expiresOn": "2027-01-31",
+      "id": "desk-skill-install-staging",
+      "kinds": [
+        "remove-path"
+      ],
+      "linePattern": "stagingRoot",
+      "ownerModule": "server/routes/desk.ts",
+      "reason": "Removes one request-scoped skill validation directory created under the operating-system temporary directory before provider-mediated workspace import.",
+      "sourceFile": "server/routes/desk.ts"
+    },
+    {
+      "expiresOn": "2027-01-31",
       "id": "desktop-caller-selected-output",
       "kinds": [
         "mkdir",
@@ -272,17 +283,6 @@
       "ownerModule": "shared/default-workspace.ts",
       "reason": "Creates the user-selected default workspace outside HANA_HOME.",
       "sourceFile": "shared/default-workspace.ts"
-    },
-    {
-      "expiresOn": "2027-01-31",
-      "id": "external-desk-workspace-roots",
-      "kinds": [
-        "mkdir"
-      ],
-      "linePattern": "(?:skillsDir|fs[.]mkdirSync\\(dir|baseDir)",
-      "ownerModule": "server/routes/desk.ts",
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-      "sourceFile": "server/routes/desk.ts"
     },
     {
       "expiresOn": "2027-01-31",
@@ -578,17 +578,6 @@
       "ownerModule": "core/computer-use/providers/windows-uia-provider.ts",
       "reason": "Creates helper/request files in the operating-system temporary directory for one Windows UIA call.",
       "sourceFile": "core/computer-use/providers/windows-uia-provider.ts"
-    },
-    {
-      "expiresOn": "2027-01-31",
-      "id": "workspace-skill-delete",
-      "kinds": [
-        "remove-path"
-      ],
-      "linePattern": "skillDir",
-      "ownerModule": "server/routes/desk.ts",
-      "reason": "Deletes a skill directory only after the route proves it belongs to the explicitly mounted workspace skill catalog, outside Hana-owned persistence.",
-      "sourceFile": "server/routes/desk.ts"
     }
   ],
   "generatedBy": "scripts/generate-persistence-schema-fingerprint.mjs",
@@ -640,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:83379d1781e0ce8a4368b3893a79854c2558ceea0a5f5e395499ecb0dd8585f3",
+  "payloadFingerprint": "sha256:834e056fc12af753eb8016e06f6da97e23591b68465f63f102807592f72c9fd5",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2927,8 +2916,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Registering the existing schemaVersion 1 Knowledge source-binding store is an additive persistence inventory correction; no existing durable reader or writer format changes.",
-    "payloadFingerprint": "sha256:83379d1781e0ce8a4368b3893a79854c2558ceea0a5f5e395499ecb0dd8585f3"
+    "compatibilityReason": "Desk workspace skill mutations now use ResourceIO/provider boundaries; replacing obsolete direct-workspace filesystem exemptions with one OS-temporary staging cleanup exemption changes only persistence ownership metadata and no stored data schema or DATA_EPOCH.",
+    "payloadFingerprint": "sha256:834e056fc12af753eb8016e06f6da97e23591b68465f63f102807592f72c9fd5"
   },
   "schemas": [
     {
@@ -3090,7 +3079,7 @@
       "contract": "bounded base64 cover upload temporary-directory lifecycle",
       "kind": "directory-contract",
       "module": "server/routes/desk.ts",
-      "sourceHash": "sha256:a0e35fa038a9b1b930e65b96caf75ed8d5ef69d8ee8dc3ce621d44d1495b0d5e",
+      "sourceHash": "sha256:f85c6f99977a3d98068a7c4cb9780bfec4ca1a5efc619094d2650f26472a0516",
       "storeId": "desk-cover-upload-staging"
     },
     {
@@ -5092,15 +5081,7 @@
     {
       "exemptionId": "external-mount-writes",
       "kind": "mkdir",
-      "line": 376,
-      "reason": "Creates user-selected workspace or mounted roots whose ownership is recorded by studio-mounts.json rather than by HANA_HOME path inventory.",
-      "sourceFile": "core/mount-aware-file-service.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-mount-writes",
-      "kind": "mkdir",
-      "line": 395,
+      "line": 528,
       "reason": "Creates user-selected workspace or mounted roots whose ownership is recorded by studio-mounts.json rather than by HANA_HOME path inventory.",
       "sourceFile": "core/mount-aware-file-service.ts",
       "storeId": null
@@ -7580,7 +7561,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 143,
+      "line": 213,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7588,7 +7569,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 144,
+      "line": 214,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7596,7 +7577,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 179,
+      "line": 249,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7604,70 +7585,6 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 193,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "remove-path",
-      "line": 205,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "line": 222,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "copy-file",
-      "line": 225,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "copy-file",
-      "line": 227,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "line": 243,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "rename",
-      "line": 244,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "line": 261,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "rename",
       "line": 263,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
@@ -7675,48 +7592,40 @@
     },
     {
       "exemptionId": "external-resource-io",
-      "kind": "write-file",
-      "line": 264,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "line": 406,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "line": 906,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "write-file",
-      "line": 907,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "line": 940,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 971,
+      "line": 275,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 292,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "copy-file",
+      "line": 295,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "copy-file",
+      "line": 297,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 313,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7724,7 +7633,15 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 985,
+      "line": 314,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 331,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7732,7 +7649,47 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 1007,
+      "line": 333,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "write-file",
+      "line": 334,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 478,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 1064,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "write-file",
+      "line": 1065,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 1098,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7740,7 +7697,23 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1093,
+      "line": 1129,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 1143,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 1165,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7748,7 +7721,15 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1108,
+      "line": 1251,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 1266,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8812,7 +8793,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 683,
+      "line": 786,
       "reason": "Writes or removes a bounded temporary cover upload.",
       "sourceFile": "server/routes/desk.ts",
       "storeId": "desk-cover-upload-staging"
@@ -8820,7 +8801,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 686,
+      "line": 789,
       "reason": "Writes or removes a bounded temporary cover upload.",
       "sourceFile": "server/routes/desk.ts",
       "storeId": "desk-cover-upload-staging"
@@ -8828,40 +8809,16 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 689,
+      "line": 792,
       "reason": "Writes or removes a bounded temporary cover upload.",
       "sourceFile": "server/routes/desk.ts",
       "storeId": "desk-cover-upload-staging"
     },
     {
-      "exemptionId": "external-desk-workspace-roots",
-      "kind": "mkdir",
-      "line": 1312,
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-      "sourceFile": "server/routes/desk.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "workspace-skill-delete",
+      "exemptionId": "desk-skill-install-staging",
       "kind": "remove-path",
-      "line": 1362,
-      "reason": "Deletes a skill directory only after the route proves it belongs to the explicitly mounted workspace skill catalog, outside Hana-owned persistence.",
-      "sourceFile": "server/routes/desk.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-desk-workspace-roots",
-      "kind": "mkdir",
-      "line": 1378,
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-      "sourceFile": "server/routes/desk.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-desk-workspace-roots",
-      "kind": "mkdir",
-      "line": 1483,
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
+      "line": 1531,
+      "reason": "Removes one request-scoped skill validation directory created under the operating-system temporary directory before provider-mediated workspace import.",
       "sourceFile": "server/routes/desk.ts",
       "storeId": null
     },

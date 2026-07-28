@@ -4150,16 +4150,7 @@
     },
     {
       "sourceFile": "core/mount-aware-file-service.ts",
-      "line": 376,
-      "kind": "mkdir",
-      "excerpt": "fs.mkdirSync(this._defaultRoot, { recursive: true })",
-      "reason": "Creates user-selected workspace or mounted roots whose ownership is recorded by studio-mounts.json rather than by HANA_HOME path inventory.",
-      "storeId": null,
-      "exemptionId": "external-mount-writes"
-    },
-    {
-      "sourceFile": "core/mount-aware-file-service.ts",
-      "line": 395,
+      "line": 528,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(rootPath, { recursive: true })",
       "reason": "Creates user-selected workspace or mounted roots whose ownership is recorded by studio-mounts.json rather than by HANA_HOME path inventory.",
@@ -6949,7 +6940,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 143,
+      "line": 213,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6958,7 +6949,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 144,
+      "line": 214,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6967,7 +6958,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 179,
+      "line": 249,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, text, \"utf-8\")",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6976,7 +6967,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 193,
+      "line": 263,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(filePath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6985,7 +6976,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 205,
+      "line": 275,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(filePath, { recursive: true, force: false })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -6994,7 +6985,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 222,
+      "line": 292,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7003,7 +6994,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 225,
+      "line": 295,
       "kind": "copy-file",
       "excerpt": "fs.cpSync(sourcePath, targetPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7012,7 +7003,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 227,
+      "line": 297,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7021,7 +7012,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 243,
+      "line": 313,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7030,7 +7021,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 244,
+      "line": 314,
       "kind": "rename",
       "excerpt": "fs.renameSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7039,7 +7030,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 261,
+      "line": 331,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(trashPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7048,7 +7039,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 263,
+      "line": 333,
       "kind": "rename",
       "excerpt": "fs.renameSync(filePath, payloadPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7057,7 +7048,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 264,
+      "line": 334,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(path.join(trashPath, \"metadata.json\"), JSON.stringify({ schemaVersion: 1, trashId, originalPath: filePath, originalName: path.basename(filePath), deletedAt: new Date().toISOString(), ...(options.metadata && typeof options.m",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7066,7 +7057,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 406,
+      "line": 478,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(entryPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7075,7 +7066,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 906,
+      "line": 1064,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7084,7 +7075,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 907,
+      "line": 1065,
       "kind": "write-file",
       "excerpt": "fs.promises.open(filePath, \"wx\", 0o600)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7093,7 +7084,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 940,
+      "line": 1098,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7102,7 +7093,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 971,
+      "line": 1129,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(stagingPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7111,7 +7102,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 985,
+      "line": 1143,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7120,7 +7111,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1007,
+      "line": 1165,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7129,7 +7120,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1093,
+      "line": 1251,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(path.join(originalDirectoryPath, stagingName), { recursive: true, force: true, })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7138,7 +7129,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1108,
+      "line": 1266,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(path.join(movedDirectory, stagingName), { recursive: true, force: true, })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -8335,7 +8326,7 @@
     },
     {
       "sourceFile": "server/routes/desk.ts",
-      "line": 683,
+      "line": 786,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(uploadRoot, { recursive: true })",
       "reason": "Writes or removes a bounded temporary cover upload.",
@@ -8344,7 +8335,7 @@
     },
     {
       "sourceFile": "server/routes/desk.ts",
-      "line": 686,
+      "line": 789,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, buffer)",
       "reason": "Writes or removes a bounded temporary cover upload.",
@@ -8353,7 +8344,7 @@
     },
     {
       "sourceFile": "server/routes/desk.ts",
-      "line": 689,
+      "line": 792,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(tempDir, { recursive: true, force: true })",
       "reason": "Writes or removes a bounded temporary cover upload.",
@@ -8362,39 +8353,12 @@
     },
     {
       "sourceFile": "server/routes/desk.ts",
-      "line": 1312,
-      "kind": "mkdir",
-      "excerpt": "fs.mkdirSync(skillsDir, { recursive: true })",
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-      "storeId": null,
-      "exemptionId": "external-desk-workspace-roots"
-    },
-    {
-      "sourceFile": "server/routes/desk.ts",
-      "line": 1362,
+      "line": 1531,
       "kind": "remove-path",
-      "excerpt": "fs.rmSync(skillDir, { recursive: true, force: true })",
-      "reason": "Deletes a skill directory only after the route proves it belongs to the explicitly mounted workspace skill catalog, outside Hana-owned persistence.",
+      "excerpt": "fs.rmSync(stagingRoot, { recursive: true, force: true })",
+      "reason": "Removes one request-scoped skill validation directory created under the operating-system temporary directory before provider-mediated workspace import.",
       "storeId": null,
-      "exemptionId": "workspace-skill-delete"
-    },
-    {
-      "sourceFile": "server/routes/desk.ts",
-      "line": 1378,
-      "kind": "mkdir",
-      "excerpt": "fs.mkdirSync(dir, { recursive: true })",
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-      "storeId": null,
-      "exemptionId": "external-desk-workspace-roots"
-    },
-    {
-      "sourceFile": "server/routes/desk.ts",
-      "line": 1483,
-      "kind": "mkdir",
-      "excerpt": "fs.mkdirSync(baseDir, { recursive: true })",
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-      "storeId": null,
-      "exemptionId": "external-desk-workspace-roots"
+      "exemptionId": "desk-skill-install-staging"
     },
     {
       "sourceFile": "server/routes/plugins.ts",
@@ -9442,6 +9406,17 @@
       "linePattern": "(?:path[.]dirname\\(filePath\\)|serialized|temporaryPath)"
     },
     {
+      "id": "desk-skill-install-staging",
+      "ownerModule": "server/routes/desk.ts",
+      "sourceFile": "server/routes/desk.ts",
+      "reason": "Removes one request-scoped skill validation directory created under the operating-system temporary directory before provider-mediated workspace import.",
+      "expiresOn": "2027-01-31",
+      "kinds": [
+        "remove-path"
+      ],
+      "linePattern": "stagingRoot"
+    },
+    {
       "id": "desktop-caller-selected-output",
       "ownerModule": "desktop/main.cjs",
       "sourceFile": "desktop/main.cjs",
@@ -9587,17 +9562,6 @@
         "atomic-write",
         "persistent-store-constructor"
       ]
-    },
-    {
-      "id": "external-desk-workspace-roots",
-      "ownerModule": "server/routes/desk.ts",
-      "sourceFile": "server/routes/desk.ts",
-      "reason": "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-      "expiresOn": "2027-01-31",
-      "kinds": [
-        "mkdir"
-      ],
-      "linePattern": "(?:skillsDir|fs[.]mkdirSync\\(dir|baseDir)"
     },
     {
       "id": "external-file-ref-io",
@@ -9893,17 +9857,6 @@
         "atomic-write",
         "persistent-store-constructor"
       ]
-    },
-    {
-      "id": "workspace-skill-delete",
-      "ownerModule": "server/routes/desk.ts",
-      "sourceFile": "server/routes/desk.ts",
-      "reason": "Deletes a skill directory only after the route proves it belongs to the explicitly mounted workspace skill catalog, outside Hana-owned persistence.",
-      "expiresOn": "2027-01-31",
-      "kinds": [
-        "remove-path"
-      ],
-      "linePattern": "skillDir"
     }
   ]
 }

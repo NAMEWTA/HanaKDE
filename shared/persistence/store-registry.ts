@@ -1319,13 +1319,13 @@ export const PERSISTENCE_EXEMPTIONS: readonly PersistenceExemption[] = Object.fr
     "2027-01-31",
   ),
   exemption(
-    "workspace-skill-delete",
+    "desk-skill-install-staging",
     "server/routes/desk.ts",
     "server/routes/desk.ts",
-    "Deletes a skill directory only after the route proves it belongs to the explicitly mounted workspace skill catalog, outside Hana-owned persistence.",
+    "Removes one request-scoped skill validation directory created under the operating-system temporary directory before provider-mediated workspace import.",
     "2027-01-31",
     ["remove-path"],
-    "skillDir",
+    "stagingRoot",
   ),
   exemption(
     "conditional-plugin-install-cleanup",
@@ -1400,15 +1400,6 @@ export const PERSISTENCE_EXEMPTIONS: readonly PersistenceExemption[] = Object.fr
     "2026-10-31",
     ["mkdir", "copy-file"],
     "(?:path[.]dirname\\(dst\\)|sourcePath, dst)",
-  ),
-  exemption(
-    "external-desk-workspace-roots",
-    "server/routes/desk.ts",
-    "server/routes/desk.ts",
-    "Creates an approved external workspace root or its .agents/skills directory; the mount registry owns authorization, not the external content.",
-    "2027-01-31",
-    ["mkdir"],
-    "(?:skillsDir|fs[.]mkdirSync\\(dir|baseDir)",
   ),
   exemption(
     "external-beautify-markdown-output",

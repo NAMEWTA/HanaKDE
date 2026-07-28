@@ -41,24 +41,108 @@ export function serveFileContent(c, {
   cacheControl = "private, max-age=0, must-revalidate",
   headOnly = false,
 }) {
-  const stat = fs.statSync(filePath);
-  if (!stat.isFile()) {
-    return c.json({ error: "not_a_file" }, 400);
+  const fd = fs.openSync(
+    filePath,
+    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0),
+  );
+  const stat = fs.fstatSync(fd);
+  return serveOpenFileContent(c, {
+    fd,
+    filePath,
+    filename,
+    stat,
+    mime,
+    etag,
+    cacheControl,
+    headOnly,
+  });
+}
+
+export function serveOpenFileContent(c, {
+  fd,
+  filePath,
+  filename = path.basename(filePath || ""),
+  stat,
+  mime = guessMime(filename),
+  etag = null,
+  cacheControl = "private, max-age=0, must-revalidate",
+  headOnly = false,
+}) {
+  let streamOwnsFd = false;
+  try {
+    if (!stat?.isFile?.()) {
+      return c.json({ error: "not_a_file" }, 400);
+    }
+    const size = stat.size;
+    const resolvedEtag = etag || weakEtag(stat);
+    if (c.req.header("if-none-match") && c.req.header("if-none-match") === resolvedEtag) {
+      c.header("ETag", resolvedEtag);
+      return c.body(null, 304);
+    }
+
+    const range = parseRangeHeader(c.req.header("range"), size);
+    if (range?.unsatisfiable) {
+      c.header("Content-Range", `bytes */${size}`);
+      c.header("Accept-Ranges", "bytes");
+      return c.body(null, 416);
+    }
+
+    const start = range ? range.start : 0;
+    const end = range ? range.end : size - 1;
+    const length = size === 0 ? 0 : end - start + 1;
+    const status = range ? 206 : 200;
+
+    c.header("Content-Type", mime || "application/octet-stream");
+    c.header("Accept-Ranges", "bytes");
+    c.header("Content-Length", String(length));
+    c.header("Cache-Control", cacheControl);
+    c.header("ETag", resolvedEtag);
+    c.header("X-Hana-File-MtimeMs", String(stat.mtimeMs));
+    c.header("X-Hana-File-Size", String(size));
+    if (range) c.header("Content-Range", `bytes ${start}-${end}/${size}`);
+    if (filename) c.header("Content-Disposition", contentDisposition(filename));
+    if (headOnly || size === 0) return c.body(null, status);
+
+    const stream = fs.createReadStream(filePath, {
+      fd,
+      autoClose: true,
+      start,
+      end,
+    });
+    streamOwnsFd = true;
+    return c.body(Readable.toWeb(stream), status);
+  } finally {
+    if (!streamOwnsFd) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // The response path may already have closed the descriptor.
+      }
+    }
   }
-  const size = stat.size;
-  const resolvedEtag = etag || weakEtag(stat);
+}
+
+export async function serveResourceFileContent(c, {
+  filename,
+  size,
+  mtimeMs,
+  version = null,
+  openRange,
+  mime = guessMime(filename),
+  cacheControl = "private, max-age=0, must-revalidate",
+  headOnly = false,
+}) {
+  const resolvedEtag = weakEtag({ size, mtimeMs });
   if (c.req.header("if-none-match") && c.req.header("if-none-match") === resolvedEtag) {
     c.header("ETag", resolvedEtag);
     return c.body(null, 304);
   }
-
   const range = parseRangeHeader(c.req.header("range"), size);
   if (range?.unsatisfiable) {
     c.header("Content-Range", `bytes */${size}`);
     c.header("Accept-Ranges", "bytes");
     return c.body(null, 416);
   }
-
   const start = range ? range.start : 0;
   const end = range ? range.end : size - 1;
   const length = size === 0 ? 0 : end - start + 1;
@@ -69,13 +153,14 @@ export function serveFileContent(c, {
   c.header("Content-Length", String(length));
   c.header("Cache-Control", cacheControl);
   c.header("ETag", resolvedEtag);
-  c.header("X-Hana-File-MtimeMs", String(stat.mtimeMs));
+  c.header("X-Hana-File-MtimeMs", String(mtimeMs));
   c.header("X-Hana-File-Size", String(size));
   if (range) c.header("Content-Range", `bytes ${start}-${end}/${size}`);
   if (filename) c.header("Content-Disposition", contentDisposition(filename));
   if (headOnly || size === 0) return c.body(null, status);
 
-  const stream = fs.createReadStream(filePath, { start, end });
+  const opened = await openRange({ start, end, expectedVersion: version });
+  const stream = Readable.from(opened.body);
   return c.body(Readable.toWeb(stream), status);
 }
 

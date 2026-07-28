@@ -200,4 +200,102 @@ describe("MountAwareFileService", () => {
       }),
     );
   });
+
+  it("uses provider stat and does not create a missing destination when move requires an existing folder", async () => {
+    const { MountAwareFileService } = await import("../core/mount-aware-file-service.ts");
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-mount-file-"));
+    const defaultRoot = path.join(tmpDir, "default");
+    fs.mkdirSync(defaultRoot, { recursive: true });
+    fs.writeFileSync(path.join(defaultRoot, "note.md"), "note", "utf-8");
+    fs.mkdirSync(path.join(defaultRoot, "missing"));
+    const resourceIO = {
+      stat: vi.fn(async () => ({
+        exists: false,
+        isDirectory: false,
+        resourceKey: `local_fs:${path.join(defaultRoot, "missing")}`,
+      })),
+      read: vi.fn(),
+      write: vi.fn(),
+      list: vi.fn(async () => ({ items: [] })),
+      mkdir: vi.fn(),
+      move: vi.fn(),
+    };
+    const service = new MountAwareFileService({
+      hanakoHome: tmpDir,
+      defaultRoot,
+      resourceIO,
+    });
+
+    await expect(service.move(
+      "default",
+      "",
+      { name: "note.md", destSubdir: "missing" },
+      { reason: "desk.files.move", createDestIfMissing: false },
+    )).rejects.toMatchObject({
+      code: "dest_not_directory",
+      status: 400,
+    });
+
+    expect(resourceIO.stat).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "local-file", path: path.join(defaultRoot, "missing") }),
+    );
+    expect(resourceIO.mkdir).not.toHaveBeenCalled();
+    expect(resourceIO.move).not.toHaveBeenCalled();
+  });
+
+  it("re-resolves mounted replace uploads inside transfer instead of carrying a stale-root version", async () => {
+    const { upsertStudioMount } = await import("../core/studio-mounts.ts");
+    const { MountAwareFileService } = await import("../core/mount-aware-file-service.ts");
+    const { createSandboxResourceIO } = await import("../lib/resource-io/sandbox-resource-io.ts");
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-mount-file-race-"));
+    const defaultRoot = path.join(tmpDir, "default");
+    const oldRoot = path.join(tmpDir, "old-root");
+    const newRoot = path.join(tmpDir, "new-root");
+    const sourceRoot = path.join(tmpDir, "source");
+    for (const dir of [defaultRoot, oldRoot, newRoot, sourceRoot]) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const sourcePath = path.join(sourceRoot, "same.md");
+    fs.writeFileSync(sourcePath, "SRC!", "utf-8");
+    fs.writeFileSync(path.join(oldRoot, "same.md"), "OLD!", "utf-8");
+    fs.writeFileSync(path.join(newRoot, "same.md"), "NEW!", "utf-8");
+    const mount = (rootLocator) => ({
+      mountId: "mount_docs",
+      hostStudioId: "studio_1",
+      sourceKind: "storage",
+      provider: "local_fs",
+      rootLocator: { path: rootLocator },
+      label: "Docs",
+      presentation: "folder",
+      capabilities: ["list", "read", "write"],
+    });
+    upsertStudioMount(tmpDir, mount(oldRoot));
+    const resourceIO = createSandboxResourceIO({
+      cwd: defaultRoot,
+      agentDir: defaultRoot,
+      workspace: defaultRoot,
+      workspaceFolders: [defaultRoot],
+      authorizedFolders: [defaultRoot],
+      hanakoHome: tmpDir,
+      getSandboxEnabled: () => false,
+      studioId: "studio_1",
+    });
+    const transfer = resourceIO.transfer.bind(resourceIO);
+    vi.spyOn(resourceIO, "transfer").mockImplementation(async (...args) => {
+      upsertStudioMount(tmpDir, mount(newRoot));
+      return transfer(...args);
+    });
+    const service = new MountAwareFileService({
+      hanakoHome: tmpDir,
+      defaultRoot,
+      defaultRootRef: { kind: "mount", mountId: "mount_docs", path: "" },
+      studioId: "studio_1",
+      resourceIO,
+    });
+
+    await service.copyLocalPathIntoDirectory("default", "", sourcePath);
+
+    expect(fs.readFileSync(path.join(oldRoot, "same.md"), "utf-8")).toBe("OLD!");
+    expect(fs.readFileSync(path.join(newRoot, "same.md"), "utf-8")).toBe("SRC!");
+  });
 });

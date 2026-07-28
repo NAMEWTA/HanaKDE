@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { loadStudioMountRegistry } from "./studio-mounts.ts";
 import { createSandboxResourceIO } from "../lib/resource-io/sandbox-resource-io.ts";
+import type { ResourceRef } from "../lib/resource-io/types.ts";
 
 const SEARCH_LIMIT = 80;
 
@@ -20,6 +22,7 @@ export class MountAwareFileError extends Error {
 export class MountAwareFileService {
   declare _hanakoHome: string;
   declare _defaultRoot: string;
+  declare _defaultRootRef: ResourceRef | null;
   declare _studioId: string;
   declare _createCheckpoint: any;
   declare _discloseNativeRoot: boolean;
@@ -29,6 +32,7 @@ export class MountAwareFileService {
   constructor({
     hanakoHome,
     defaultRoot,
+    defaultRootRef = null,
     studioId,
     createCheckpoint,
     discloseNativeRoot = false,
@@ -38,6 +42,7 @@ export class MountAwareFileService {
     if (!hanakoHome) throw new Error("hanakoHome required");
     this._hanakoHome = hanakoHome;
     this._defaultRoot = defaultRoot || null;
+    this._defaultRootRef = normalizeDefaultRootRef(defaultRootRef, this._defaultRoot);
     this._studioId = studioId || null;
     this._createCheckpoint = typeof createCheckpoint === "function" ? createCheckpoint : null;
     // 本地 owner（桌面端 loopback principal）可以拿到 local_fs 根的 native 绝对路径，
@@ -65,6 +70,12 @@ export class MountAwareFileService {
     return dir;
   }
 
+  assertRootCapability(rootId = "default", capability = "read") {
+    const root = this._resolveRootInternal(rootId);
+    requireCapability(root, capability);
+    return publicRoot(root, this._discloseNativeRoot);
+  }
+
   async listFiles(rootId = "default", subdir = "") {
     const root = this._resolveRootInternal(rootId);
     requireCapability(root, "list");
@@ -79,6 +90,18 @@ export class MountAwareFileService {
       subdir: normalized,
       files: listItemsForWorkbench(listed.items),
     };
+  }
+
+  async listDirectoryEntries(
+    rootId = "default",
+    subdir = "",
+    options: Record<string, any> = {},
+  ) {
+    const root = this._resolveRootInternal(rootId);
+    requireCapability(root, "list");
+    const normalized = normalizeOperationSubdir(subdir, options);
+    const listed = await this._resourceIO.list(resourceRefForRoot(root, normalized));
+    return Array.isArray(listed.items) ? listed.items : [];
   }
 
   async searchFiles(rootId = "default", query = "") {
@@ -101,11 +124,11 @@ export class MountAwareFileService {
     };
   }
 
-  contentTarget(rootId = "default", subdir = "", name) {
+  contentTarget(rootId = "default", subdir = "", name, options: Record<string, any> = {}) {
     const root = this._resolveRootInternal(rootId);
     requireCapability(root, "read");
-    const normalized = normalizeSubdirOrThrow(subdir);
-    const filename = normalizePlainNameOrThrow(name);
+    const normalized = normalizeOperationSubdir(subdir, options);
+    const filename = normalizeOperationName(name, options);
     const dir = resolveInsideRoot(root.path, normalized);
     if (!dir) throw fileError("invalid path", "invalid_path", 400);
     const filePath = resolveFileTarget(root.path, dir, filename);
@@ -113,9 +136,10 @@ export class MountAwareFileService {
     return { root, filePath, filename };
   }
 
-  async readText(rootId, subdir, name) {
-    const target = this.contentTarget(rootId, subdir, name);
-    const subpath = this._normalizeTargetSubpath(subdir, target.filename);
+  async readText(rootId, subdir, name, options: Record<string, any> = {}) {
+    const target = this.contentTarget(rootId, subdir, name, options);
+    const normalizedSubdir = normalizeOperationSubdir(subdir, options);
+    const subpath = joinResourcePath(normalizedSubdir, target.filename);
     const ref = resourceRefForTarget(target.root, subpath);
     const stat = await this._resourceIO.stat(ref);
     if (!stat.exists) return { exists: false, content: null, version: null };
@@ -129,6 +153,47 @@ export class MountAwareFileService {
     };
   }
 
+  async fileContentInfo(rootId, subdir, name) {
+    const target = this.contentTarget(rootId, subdir, name);
+    const subpath = this._normalizeTargetSubpath(subdir, target.filename);
+    const ref = resourceRefForTarget(target.root, subpath);
+    const stat = await this._resourceIO.stat(ref);
+    if (!stat.exists) {
+      return {
+        exists: false,
+        filename: target.filename,
+        version: null,
+      };
+    }
+    if (stat.isDirectory) {
+      throw fileError("not a file", "not_a_file", 400);
+    }
+    return {
+      exists: true,
+      filename: target.filename,
+      size: Number(stat.version?.size || 0),
+      mtimeMs: Number(stat.version?.mtimeMs || 0),
+      version: stat.version || {},
+    };
+  }
+
+  async openFileContentRange(rootId, subdir, name, options: Record<string, any> = {}) {
+    const target = this.contentTarget(rootId, subdir, name);
+    if (typeof this._resourceIO.openRead !== "function") {
+      throw fileError("resource streaming unavailable", "resource_stream_unavailable", 501);
+    }
+    const subpath = this._normalizeTargetSubpath(subdir, target.filename);
+    return this._resourceIO.openRead(
+      resourceRefForTarget(target.root, subpath),
+      {
+        start: options.start,
+        end: options.end,
+        expectedVersion: options.expectedVersion,
+      },
+      this._operationContext,
+    );
+  }
+
   async mkdir(rootId, subdir, body: Record<string, any> = {}, options: Record<string, any> = {}) {
     const { root, dir } = this._writeDir(rootId, subdir);
     const name = normalizePlainNameOrThrow(body.name);
@@ -138,6 +203,26 @@ export class MountAwareFileService {
     if (stat.exists) throw fileError("already exists", "already_exists", 409);
     await this._resourceIO.mkdir(resourceRefForTarget(root, this._normalizeTargetSubpath(subdir, name)), this._mutationOptions(options));
     return workbenchWriteResult(root, "mkdir", { files: await this.filesForDirectory(root.id, subdir) }, this._discloseNativeRoot);
+  }
+
+  async ensureDirectory(rootId, subdir, name, options: Record<string, any> = {}) {
+    const { root, dir } = this._writeDir(rootId, subdir, options);
+    const normalizedName = normalizeOperationName(name, options);
+    const target = resolveFileTarget(root.path, dir, normalizedName);
+    if (!target) throw fileError("invalid path", "invalid_path", 400);
+    const ref = resourceRefForTarget(
+      root,
+      joinResourcePath(normalizeOperationSubdir(subdir, options), normalizedName),
+    );
+    const stat = await this._resourceIO.stat(ref);
+    if (stat.exists) {
+      if (!stat.isDirectory) {
+        throw fileError("target already exists", "target_already_exists", 409);
+      }
+      return { created: false, root };
+    }
+    await this._resourceIO.mkdir(ref, this._mutationOptions(options));
+    return { created: true, root };
   }
 
   async writeText(rootId, subdir, body: Record<string, any> = {}, options: Record<string, any> = {}) {
@@ -202,7 +287,17 @@ export class MountAwareFileService {
     const source = resolveFileTarget(root.path, dir, name);
     const destDir = resolveInsideRoot(root.path, destSubdir);
     if (!source || !destDir) throw fileError("invalid path", "invalid_path", 400);
-    await this._resourceIO.mkdir(resourceRefForRoot(root, destSubdir), this._mutationOptions({ ...options, emit: false }));
+    if (options.createDestIfMissing === false) {
+      const destStat = await this._resourceIO.stat(resourceRefForRoot(root, destSubdir));
+      if (!destStat.exists || !destStat.isDirectory) {
+        throw fileError("destSubdir is not a directory", "dest_not_directory", 400);
+      }
+    } else {
+      await this._resourceIO.mkdir(
+        resourceRefForRoot(root, destSubdir),
+        this._mutationOptions({ ...options, emit: false }),
+      );
+    }
     await this._resourceIO.move(
       resourceRefForTarget(root, this._normalizeTargetSubpath(subdir, name)),
       resourceRefForTarget(root, this._normalizeTargetSubpath(destSubdir, name)),
@@ -281,12 +376,12 @@ export class MountAwareFileService {
   }
 
   async safeDelete(rootId, subdir, body: Record<string, any> = {}, options: Record<string, any> = {}) {
-    const { root, dir, normalizedSubdir } = this._writeDir(rootId, subdir);
+    const { root, dir, normalizedSubdir } = this._writeDir(rootId, subdir, options);
     const name = normalizePlainNameOrThrow(body.name);
     const source = resolveFileTarget(root.path, dir, name);
     if (!source) throw fileError("invalid path", "invalid_path", 400);
     const result = await this._resourceIO.trash(
-      resourceRefForTarget(root, this._normalizeTargetSubpath(subdir, name)),
+      resourceRefForTarget(root, joinResourcePath(normalizedSubdir, name)),
       {
         namespace: "mobile-workbench",
         metadata: {
@@ -300,7 +395,9 @@ export class MountAwareFileService {
     );
     return workbenchWriteResult(root, "safeDelete", {
       trashId: result.trashId,
-      files: await this.filesForDirectory(root.id, subdir),
+      files: options.skipListing === true
+        ? []
+        : await this.filesForDirectory(root.id, subdir),
     }, this._discloseNativeRoot);
   }
 
@@ -338,13 +435,35 @@ export class MountAwareFileService {
 
   async copyLocalPathIntoDirectory(rootId, subdir, sourcePath, options: Record<string, any> = {}) {
     if (!path.isAbsolute(sourcePath)) throw fileError("invalid path", "invalid_path", 400);
-    const target = this.writeFileTarget(rootId, subdir, path.basename(sourcePath));
-    const subpath = this._normalizeTargetSubpath(subdir, target.filename);
-    const result = await this._resourceIO.copy(
-      { kind: "local-file", path: sourcePath },
-      resourceRefForTarget(target.root, subpath),
-      this._mutationOptions(options),
-    );
+    const { root, dir } = this._writeDir(rootId, subdir, options);
+    const filename = normalizePlainNameOrThrow(path.basename(sourcePath));
+    const nativeTarget = resolveFileTarget(root.path, dir, filename);
+    if (!nativeTarget) throw fileError("invalid path", "invalid_path", 400);
+    const target = { root, dir, filename, target: nativeTarget };
+    const normalizedSubdir = normalizeOperationSubdir(subdir, options);
+    const subpath = joinResourcePath(normalizedSubdir, target.filename);
+    const sourceRef = { kind: "local-file", path: sourcePath };
+    const targetRef = resourceRefForTarget(target.root, subpath);
+    let result;
+    if (typeof this._resourceIO.transfer === "function"
+      && (targetRef.kind !== sourceRef.kind || options.preferTransfer === true)) {
+      result = await this._resourceIO.transfer({
+        source: sourceRef,
+        targetDirectory: resourceRefForRoot(
+          target.root,
+          normalizedSubdir,
+        ),
+        targetName: target.filename,
+        replaceExisting: true,
+        operationId: crypto.randomUUID(),
+      }, this._mutationOptions(options));
+    } else {
+      result = await this._resourceIO.copy(
+        sourceRef,
+        targetRef,
+        this._mutationOptions(options),
+      );
+    }
     return { ...target, result };
   }
 
@@ -356,10 +475,10 @@ export class MountAwareFileService {
     return joinResourcePath(normalizeSubdirOrThrow(subdir), normalizePlainNameOrThrow(name));
   }
 
-  _writeDir(rootId = "default", subdir = "") {
+  _writeDir(rootId = "default", subdir = "", options: Record<string, any> = {}) {
     const root = this._resolveRootInternal(rootId);
     requireCapability(root, "write");
-    const normalizedSubdir = normalizeSubdirOrThrow(subdir);
+    const normalizedSubdir = normalizeOperationSubdir(subdir, options);
     const dir = resolveInsideRoot(root.path, normalizedSubdir);
     if (!dir) throw fileError("invalid path", "invalid_path", 400);
     return { root, dir, normalizedSubdir };
@@ -372,15 +491,49 @@ export class MountAwareFileService {
   _resolveRootInternal(rootId = "default") {
     const id = typeof rootId === "string" && rootId.trim() ? rootId.trim() : "default";
     if (id === "default") {
-      if (!this._defaultRoot) throw fileError("no workspace", "no_workspace", 400);
-      fs.mkdirSync(this._defaultRoot, { recursive: true });
+      if (this._defaultRootRef?.kind === "mount") {
+        const mount = findLocalFsMount(
+          this._hanakoHome,
+          this._studioId,
+          this._defaultRootRef.mountId,
+        );
+        if (!mount) throw fileError("unknown root", "unknown_root", 404);
+        const rootPath = mount.rootLocator?.path;
+        if (typeof rootPath !== "string" || !path.isAbsolute(rootPath)) {
+          throw fileError("invalid mount root", "invalid_mount_root", 400);
+        }
+        requireAvailableMountDirectory(rootPath);
+        return {
+          id: "default",
+          mountId: "default",
+          workspaceId: "default",
+          label: "Default",
+          presentation: "folder",
+          path: rootPath,
+          resourceRoot: {
+            kind: "mount",
+            mountId: this._defaultRootRef.mountId,
+            path: "",
+          },
+          capabilities: mount.capabilities,
+          sourceKind: mount.sourceKind,
+          provider: mount.provider,
+        };
+      }
+      if (!this._defaultRootRef || this._defaultRootRef.kind !== "local-file") {
+        throw fileError("no workspace", "no_workspace", 400);
+      }
+      const rootPath = this._defaultRootRef.path;
+      if (!rootPath) throw fileError("no workspace", "no_workspace", 400);
+      fs.mkdirSync(rootPath, { recursive: true });
       return {
         id: "default",
         mountId: "default",
         workspaceId: "default",
         label: "Default",
         presentation: "folder",
-        path: this._defaultRoot,
+        path: rootPath,
+        resourceRoot: { kind: "local-file", path: rootPath },
         capabilities: ["list", "read", "write"],
         sourceKind: "storage",
         provider: "local_fs",
@@ -392,7 +545,7 @@ export class MountAwareFileService {
     if (typeof rootPath !== "string" || !path.isAbsolute(rootPath)) {
       throw fileError("invalid mount root", "invalid_mount_root", 400);
     }
-    fs.mkdirSync(rootPath, { recursive: true });
+    requireAvailableMountDirectory(rootPath);
     return {
       id: mount.mountId,
       mountId: mount.mountId,
@@ -484,11 +637,21 @@ function normalizeOperationContext(value) {
 }
 
 function resourceRefForRoot(root, subpath = "") {
-  const normalized = normalizeSubdirOrThrow(subpath);
-  if (root.id === "default") {
+  const normalized = normalizeResourceSubpath(subpath);
+  if (root.resourceRoot?.kind === "mount") {
+    return {
+      kind: "mount",
+      mountId: root.resourceRoot.mountId,
+      path: normalized,
+    };
+  }
+  if (root.id === "default" || root.resourceRoot?.kind === "local-file") {
+    const rootPath = root.resourceRoot?.kind === "local-file"
+      ? root.resourceRoot.path
+      : root.path;
     return {
       kind: "local-file",
-      path: normalized ? path.join(root.path, ...normalized.split("/")) : root.path,
+      path: normalized ? path.join(rootPath, ...normalized.split("/")) : rootPath,
     };
   }
   return {
@@ -499,11 +662,21 @@ function resourceRefForRoot(root, subpath = "") {
 }
 
 function resourceRefForTarget(root, subpath = "") {
-  const normalized = String(subpath || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-  if (root.id === "default") {
+  const normalized = normalizeResourceSubpath(subpath);
+  if (root.resourceRoot?.kind === "mount") {
+    return {
+      kind: "mount",
+      mountId: root.resourceRoot.mountId,
+      path: normalized,
+    };
+  }
+  if (root.id === "default" || root.resourceRoot?.kind === "local-file") {
+    const rootPath = root.resourceRoot?.kind === "local-file"
+      ? root.resourceRoot.path
+      : root.path;
     return {
       kind: "local-file",
-      path: normalized ? path.join(root.path, ...normalized.split("/")) : root.path,
+      path: normalized ? path.join(rootPath, ...normalized.split("/")) : rootPath,
     };
   }
   return {
@@ -550,6 +723,18 @@ function joinResourcePath(...parts) {
     .join("/");
 }
 
+function normalizeResourceSubpath(value) {
+  const raw = String(value || "").replace(/^\/+|\/+$/g, "");
+  if (!raw) return "";
+  if (
+    raw.includes("\\")
+    || raw.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw fileError("invalid path", "invalid_path", 400);
+  }
+  return raw;
+}
+
 function findLocalFsMount(hanakoHome, studioId, rootId) {
   if (!studioId) return null;
   let registry;
@@ -566,7 +751,10 @@ function findLocalFsMount(hanakoHome, studioId, rootId) {
 }
 
 function publicRoot(root, discloseNativeRoot = false) {
-  const { path: rootPath, ...safe } = root;
+  const safe = { ...root };
+  const rootPath = safe.path;
+  delete safe.path;
+  delete safe.resourceRoot;
   if (discloseNativeRoot && root.sourceKind === "storage" && root.provider === "local_fs"
     && typeof rootPath === "string" && rootPath) {
     return { ...safe, nativeRootPath: rootPath };
@@ -643,9 +831,31 @@ function normalizeSubdirOrThrow(value) {
   return raw;
 }
 
+function normalizeOperationSubdir(value, options: Record<string, any> = {}) {
+  if (options.allowHiddenPaths !== true) return normalizeSubdirOrThrow(value);
+  const raw = String(value || "").replace(/^\/+|\/+$/g, "");
+  if (!raw) return "";
+  if (
+    raw.includes("\\")
+    || raw.split("/").some((part) => !part || part === ".." || part === ".")
+  ) {
+    throw fileError("invalid_subdir", "invalid_subdir", 400);
+  }
+  return raw;
+}
+
 function normalizePlainNameOrThrow(value) {
   const name = String(value || "").trim();
   if (!name || name.includes("/") || name.includes("\\") || name === "." || name === ".." || name.startsWith(".")) {
+    throw fileError("invalid name", "invalid_name", 400);
+  }
+  return name;
+}
+
+function normalizeOperationName(value, options: Record<string, any> = {}) {
+  if (options.allowHiddenPaths !== true) return normalizePlainNameOrThrow(value);
+  const name = String(value || "").trim();
+  if (!name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
     throw fileError("invalid name", "invalid_name", 400);
   }
   return name;
@@ -665,4 +875,30 @@ function realPath(p) {
   } catch {
     return null;
   }
+}
+
+function normalizeDefaultRootRef(
+  value: ResourceRef | null | undefined,
+  fallbackPath: string | null,
+): ResourceRef | null {
+  if (value?.kind === "mount" && typeof value.mountId === "string" && value.mountId.trim()) {
+    return {
+      kind: "mount",
+      mountId: value.mountId.trim(),
+      path: "",
+    };
+  }
+  if (value?.kind === "local-file" && typeof value.path === "string" && value.path) {
+    return { kind: "local-file", path: value.path };
+  }
+  return fallbackPath ? { kind: "local-file", path: fallbackPath } : null;
+}
+
+function requireAvailableMountDirectory(rootPath: string): void {
+  try {
+    if (fs.statSync(rootPath).isDirectory()) return;
+  } catch {
+    // Normalize missing, disconnected, and unreadable mounted roots.
+  }
+  throw fileError("mount unavailable", "mount_unavailable", 503);
 }

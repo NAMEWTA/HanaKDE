@@ -54,6 +54,7 @@
     "core/grant-registry.ts",
     "core/input-drafts-store.ts",
     "core/knowledge-workspace/source-registry.ts",
+    "core/knowledge-workspace/workbench-compatibility.ts",
     "core/llm-client.ts",
     "core/llm-request-policy.ts",
     "core/llm-utils.ts",

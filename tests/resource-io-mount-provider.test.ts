@@ -9,6 +9,7 @@ import { MountProvider } from "../lib/resource-io/providers/mount-provider.ts";
 const CAPABILITY_KEYS = [
   "stat",
   "read",
+  "openRead",
   "write",
   "writeExpectedVersion",
   "edit",

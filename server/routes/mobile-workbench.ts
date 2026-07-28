@@ -7,12 +7,15 @@ import {
   MountAwareFileService,
 } from "../../core/mount-aware-file-service.ts";
 import {
+  workbenchCompatibilityServiceOptions,
+} from "../../core/knowledge-workspace/workbench-compatibility.ts";
+import {
   consumeRemoteWriteLease,
   issueRemoteWriteLease,
   revokeRemoteWriteLease,
 } from "../../core/execution-lease-service.ts";
 import { safeJson } from "../hono-helpers.ts";
-import { serveFileContent } from "../http/file-content.ts";
+import { serveResourceFileContent } from "../http/file-content.ts";
 import { createRequestContext } from "../http/boundary.ts";
 import { createApiResourceOperationContext, requestIdFromHono } from "../http/resource-operation-context.ts";
 import { recordSecurityAuditEvent } from "../http/security-audit.ts";
@@ -31,27 +34,37 @@ export function createMobileWorkbenchRoute(engine) {
 
   route.get("/mobile/bootstrap", (c) => {
     engine.gcWorkspacePersistence?.();
+    const disclosePaths = mayDiscloseLocalPaths(c, engine);
     return c.json({
       locale: engine.getLocale?.() || engine.config?.locale || "zh-CN",
       agentName: engine.agentName || "Hanako",
       userName: engine.userName || "User",
       currentAgentId: engine.currentAgentId || null,
       agentYuan: engine.agent?.config?.agent?.yuan || "hanako",
-      homeFolder: engine.homeCwd || null,
-      cwdHistory: Array.isArray(engine.config?.cwd_history) ? engine.config.cwd_history : [],
+      homeFolder: disclosePaths ? engine.homeCwd || null : null,
+      cwdHistory: disclosePaths && Array.isArray(engine.config?.cwd_history)
+        ? engine.config.cwd_history
+        : [],
       memoryMasterEnabled: engine.agent?.memoryMasterEnabled !== false,
       memoryEnabled: engine.config?.memory?.enabled !== false,
       thinkingLevel: engine.getThinkingLevel?.() || "medium",
       editor: engine.config?.editor || {},
       avatars: readAvatarAvailability(engine),
-      agents: typeof engine.listAgents === "function" ? sanitizeAgents(engine.listAgents()) : [],
+      agents: typeof engine.listAgents === "function"
+        ? sanitizeAgents(engine.listAgents(), disclosePaths)
+        : [],
       appearance: engine.getAppearance?.() || {},
     });
   });
 
   const listWorkbenchFiles = async (c) => {
     try {
-      const auth = authorizeWorkbench(c, engine, "files.read");
+      const auth = authorizeWorkbench(
+        c,
+        engine,
+        "files.read",
+        c.req.query("selectedAgentId"),
+      );
       if (auth.response) return auth.response;
       return c.json(await fileService(engine, auth.requestContext)
         .listFiles(workbenchMountIdFromRequest(c), c.req.query("subdir") || ""));
@@ -64,7 +77,12 @@ export function createMobileWorkbenchRoute(engine) {
 
   const searchWorkbenchFiles = async (c) => {
     try {
-      const auth = authorizeWorkbench(c, engine, "files.read");
+      const auth = authorizeWorkbench(
+        c,
+        engine,
+        "files.read",
+        c.req.query("selectedAgentId"),
+      );
       if (auth.response) return auth.response;
       return c.json(await fileService(engine, auth.requestContext)
         .searchFiles(workbenchMountIdFromRequest(c), c.req.query("q") || ""));
@@ -81,10 +99,15 @@ export function createMobileWorkbenchRoute(engine) {
   route.on("HEAD", "/workbench/content", (c) => serveContent(c, engine, true));
 
   const runWorkbenchAction = async (c) => {
-    const auth = authorizeWorkbench(c, engine, "files.write");
-    if (auth.response) return auth.response;
     const body = await safeJson(c);
-    const files = fileService(engine, auth.requestContext, c, body);
+    const auth = authorizeWorkbench(
+      c,
+      engine,
+      "files.write",
+      body.selectedAgentId,
+    );
+    if (auth.response) return auth.response;
+    const files = fileService(engine, auth.requestContext, c);
     const mountId = workbenchMountIdFromBody(body);
     const subdir = body.subdir || "";
 
@@ -114,11 +137,16 @@ export function createMobileWorkbenchRoute(engine) {
   route.post("/workbench/actions", runWorkbenchAction);
 
   const uploadWorkbenchFiles = async (c) => {
-    const auth = authorizeWorkbench(c, engine, "files.write");
-    if (auth.response) return auth.response;
     try {
       const body = await safeJson(c);
-      const filesService = fileService(engine, auth.requestContext, c, body);
+      const auth = authorizeWorkbench(
+        c,
+        engine,
+        "files.write",
+        body.selectedAgentId,
+      );
+      if (auth.response) return auth.response;
+      const filesService = fileService(engine, auth.requestContext, c);
       const mountId = workbenchMountIdFromBody(body);
       const subdir = body.subdir || "";
       const files = Array.isArray(body.files) ? body.files : [body];
@@ -170,7 +198,7 @@ function readAvatarAvailability(engine) {
   return avatars;
 }
 
-function sanitizeAgents(agents) {
+function sanitizeAgents(agents, disclosePaths = false) {
   if (!Array.isArray(agents)) return [];
   return agents.map((agent) => ({
     id: agent.id,
@@ -180,36 +208,65 @@ function sanitizeAgents(agents) {
     isCurrent: !!agent.isCurrent,
     hasAvatar: !!agent.hasAvatar,
     chatModel: agent.chatModel || null,
-    homeFolder: agent.homeFolder || null,
+    homeFolder: disclosePaths ? agent.homeFolder || null : null,
     memoryMasterEnabled: agent.memoryMasterEnabled !== false,
   }));
 }
 
-function serveContent(c, engine, headOnly) {
+async function serveContent(c, engine, headOnly) {
   try {
-    const auth = authorizeWorkbench(c, engine, "files.read");
+    const auth = authorizeWorkbench(
+      c,
+      engine,
+      "files.read",
+      c.req.query("selectedAgentId"),
+    );
     if (auth.response) return auth.response;
-    const target = fileService(engine, auth.requestContext)
-      .contentTarget(workbenchMountIdFromRequest(c), c.req.query("subdir") || "", c.req.query("name"));
-    const { filePath, filename } = target;
-    if (!fs.existsSync(filePath)) return c.json({ error: "file_not_found" }, 404);
-    return serveFileContent(c, { filePath, filename, headOnly });
+    const files = fileService(engine, auth.requestContext);
+    const mountId = workbenchMountIdFromRequest(c);
+    const subdir = c.req.query("subdir") || "";
+    const name = c.req.query("name");
+    const result = await files.fileContentInfo(
+        mountId,
+        subdir,
+        name,
+      );
+    if (!result.exists) return c.json({ error: "file_not_found" }, 404);
+    return await serveResourceFileContent(c, {
+      filename: result.filename,
+      size: result.size,
+      mtimeMs: result.mtimeMs,
+      version: result.version,
+      headOnly,
+      openRange: (range) => files.openFileContentRange(
+        workbenchMountIdFromRequest(c),
+        subdir,
+        name,
+        range,
+      ),
+    });
   } catch (err) {
     return workbenchError(c, err);
   }
 }
 
-function authorizeWorkbench(c, engine, capability) {
+function authorizeWorkbench(c, engine, capability, selectedAgentId = null) {
   const requestContext = createRequestContext(c, engine);
   if (requestContext.authPrincipal?.kind === "unknown") return { requestContext, decision: null };
+  const agentId = normalizeSelectedAgentId(selectedAgentId);
   const decision = requestContext.authorize(capability, {
     kind: "studio",
     studioId: requestContext.studioId,
+    ...(agentId ? { agentId } : {}),
   });
   if (decision.allowed) return { requestContext, decision };
   recordSecurityAuditEvent(c, engine, {
     action: `mobile_workbench.${capability}`,
-    target: { kind: "studio", studioId: requestContext.studioId },
+    target: {
+      kind: "studio",
+      studioId: requestContext.studioId,
+      ...(agentId ? { agentId } : {}),
+    },
     result: "denied",
     decision,
     errorCode: decision.reason,
@@ -223,6 +280,17 @@ function authorizeWorkbench(c, engine, capability) {
       capability,
     }, 403),
   };
+}
+
+function normalizeSelectedAgentId(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function mayDiscloseLocalPaths(c, engine) {
+  const principal = createRequestContext(c, engine).authPrincipal;
+  return !principal
+    || principal.kind === "unknown"
+    || isLocalOwnerPrincipal(principal);
 }
 
 async function writeActionResponse(c, engine, action, auth, mountId, operation) {
@@ -276,11 +344,12 @@ function routeError(message, code, status) {
   return err;
 }
 
-function fileService(engine, requestContext, c = null, body = null) {
+function fileService(engine, requestContext, c = null) {
   const resourceIO = resourceIOForEngine(engine);
+  const compatibility = workbenchCompatibilityServiceOptions(engine);
   return new MountAwareFileService({
     hanakoHome: engine.hanakoHome,
-    defaultRoot: engine.defaultDeskCwd || engine.homeCwd || engine.deskCwd,
+    ...compatibility,
     studioId: requestContext?.studioId || engine.getRuntimeContext?.()?.studioId || null,
     createCheckpoint: typeof engine.createUserEditCheckpoint === "function"
       ? (args) => engine.createUserEditCheckpoint(args)
@@ -290,9 +359,7 @@ function fileService(engine, requestContext, c = null, body = null) {
     resourceIO,
     operationContext: createApiResourceOperationContext({
       requestContext,
-      sessionId: body?.sessionId,
-      sessionPath: body?.sessionPath,
-      requestId: body?.requestId || requestIdFromHono(c),
+      requestId: requestIdFromHono(c),
     }),
   });
 }
@@ -309,7 +376,19 @@ function resourceIOForEngine(engine) {
 
 function workbenchError(c, err) {
   if (err instanceof MountAwareFileError) {
-    return c.json({ error: err.code, detail: err.message }, err.status);
+    return c.json({
+      error: err.code,
+      detail: mayDiscloseLocalPaths(c, null)
+        ? err.message
+        : "Resource operation failed",
+    }, err.status);
   }
-  return c.json({ error: err.code || "file_action_failed", detail: err.message }, err.status || 400);
+  return c.json({
+    error: err.code || "file_action_failed",
+    detail: mayDiscloseLocalPaths(c, null)
+      ? err.message
+      : (typeof err.safeMessage === "string" && err.safeMessage
+        ? err.safeMessage
+        : "Resource operation failed"),
+  }, err.status || 400);
 }

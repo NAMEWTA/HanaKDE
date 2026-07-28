@@ -88,6 +88,7 @@ export type ResourceEventCatchUpResult =
 export type ResourceProviderCapabilities = {
   stat?: boolean;
   read?: boolean;
+  openRead?: boolean;
   write?: boolean;
   writeExpectedVersion?: boolean;
   edit?: boolean;
@@ -143,6 +144,22 @@ export type ResourceReadResult = {
   resource: ResourceDescriptor;
   content: Buffer;
   version?: ResourceVersion;
+  filePath?: string;
+};
+
+export type ResourceOpenReadOptions = {
+  start?: number;
+  end?: number;
+  expectedVersion?: ResourceVersion;
+};
+
+export type ResourceOpenReadResult = {
+  resourceKey: string;
+  resource: ResourceDescriptor;
+  body: AsyncIterable<Uint8Array>;
+  size: number;
+  mtimeMs: number;
+  version: ResourceVersion;
   filePath?: string;
 };
 
@@ -271,6 +288,7 @@ export type ResourceExportTreeOptions = {
 export type ResourceImportTreeOptions = {
   signal?: AbortSignal;
   expectedTargetVersion?: string | null;
+  replaceExisting?: boolean;
   operationId: string;
   abortTransfer?: () => void;
   revalidateSourceScope?: () => void | Promise<void>;
@@ -290,6 +308,7 @@ export type ResourceTransferRequest = {
   targetDirectory: ResourceRef;
   targetName: string;
   expectedTargetVersion?: string | null;
+  replaceExisting?: boolean;
   signal?: AbortSignal;
   operationId: string;
 };
@@ -332,6 +351,10 @@ export type ResourceProvider = {
   watchTarget?: (ref: ResourceRef) => ResourceWatchTarget;
   stat?: (ref: ResourceRef) => Promise<ResourceStat>;
   read?: (ref: ResourceRef) => Promise<ResourceReadResult>;
+  openRead?: (
+    ref: ResourceRef,
+    options?: ResourceOpenReadOptions,
+  ) => Promise<ResourceOpenReadResult>;
   write?: (ref: ResourceRef, content: string | Buffer) => Promise<ResourceMutationResult>;
   writeExpectedVersion?: (ref: ResourceRef, content: string | Buffer, expectedVersion: ResourceVersion) => Promise<ResourceWriteExpectedVersionResult>;
   edit?: (ref: ResourceRef, edits: ResourceEdit[]) => Promise<ResourceMutationResult>;

@@ -3,7 +3,9 @@ import os from "os";
 import path from "path";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { upsertStudioMount } from "../core/studio-mounts.ts";
+import { disableStudioMount, upsertStudioMount } from "../core/studio-mounts.ts";
+import { createGrant } from "../core/grant-registry.ts";
+import { normalizePrincipal } from "../core/security-principal.ts";
 
 const extractZipMock = vi.fn(async (zipPath, destDir) => {
   const skillDir = path.join(destDir, "sample-skill");
@@ -36,6 +38,7 @@ describe("desk route", () => {
         fs.writeFileSync(path.join(skillDir, "SKILL.md"), `---\nname: ${name}\n---\n`, "utf-8");
       }
       const engine = {
+        hanakoHome: path.join(tempRoot, "hana"),
         deskCwd: cwd,
         homeCwd: cwd,
         getAgent: vi.fn(() => ({
@@ -78,6 +81,7 @@ describe("desk route", () => {
       fs.mkdirSync(skillDir, { recursive: true });
       fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: disabled-skill\n---\n", "utf-8");
       const engine = {
+        hanakoHome: path.join(tempRoot, "hana"),
         deskCwd: cwd,
         homeCwd: cwd,
         getAgent: vi.fn(() => ({
@@ -124,6 +128,7 @@ describe("desk route", () => {
 
       const syncWorkspaceSkillPaths = vi.fn(async () => {});
       const engine = {
+        hanakoHome: path.join(tempRoot, "hana"),
         deskCwd: cwd,
         homeCwd: cwd,
         syncWorkspaceSkillPaths,
@@ -173,6 +178,7 @@ describe("desk route", () => {
 
       const syncWorkspaceSkillPaths = vi.fn(async () => {});
       const engine = {
+        hanakoHome: path.join(tempRoot, "hana"),
         deskCwd: cwd,
         homeCwd: cwd,
         syncWorkspaceSkillPaths,
@@ -191,7 +197,7 @@ describe("desk route", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ok: true });
       expect(fs.existsSync(skillDir)).toBe(false);
-      expect(syncWorkspaceSkillPaths).toHaveBeenCalledWith(cwd, { reload: true, emitEvent: true, force: true, agentId: null });
+      expect(syncWorkspaceSkillPaths).toHaveBeenCalledWith(fs.realpathSync(cwd), { reload: true, emitEvent: true, force: true, agentId: null });
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -222,7 +228,11 @@ describe("desk route", () => {
         hanakoHome,
         deskCwd: path.join(tempRoot, "default-workspace"),
         homeCwd: path.join(tempRoot, "default-workspace"),
-        getRuntimeContext: () => ({ studioId: "studio-main" }),
+        getRuntimeContext: () => ({
+          studioId: "studio-main",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+        }),
         syncWorkspaceSkillPaths,
       };
 
@@ -735,6 +745,316 @@ describe("desk route", () => {
 
       expect(res.status).toBe(200);
       expect(fs.existsSync(path.join(cwd, "note.md"))).toBe(true);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the active session workspace mount as legacy Desk main and ignores selectedAgentId for root selection", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-desk-route-main-"));
+    try {
+      const fallback = path.join(tempRoot, "fallback");
+      const mountedMain = path.join(tempRoot, "mounted-main");
+      const hanakoHome = path.join(tempRoot, "hana");
+      fs.mkdirSync(fallback, { recursive: true });
+      fs.mkdirSync(mountedMain, { recursive: true });
+      fs.writeFileSync(path.join(fallback, "wrong.md"), "fallback", "utf-8");
+      fs.writeFileSync(path.join(mountedMain, "main.md"), "main", "utf-8");
+      upsertStudioMount(hanakoHome, {
+        mountId: "mount_main",
+        hostStudioId: "studio_1",
+        sourceKind: "storage",
+        provider: "local_fs",
+        rootLocator: { path: mountedMain },
+        label: "Session Main",
+        presentation: "folder",
+        capabilities: ["list", "read", "write"],
+      });
+      const sessionPath = "/sessions/current.jsonl";
+      const engine = {
+        hanakoHome,
+        deskCwd: fallback,
+        homeCwd: fallback,
+        currentSessionPath: sessionPath,
+        selectedAgentId: "other-agent",
+        getHomeCwd: () => path.join(tempRoot, "other-agent-home"),
+        getSessionWorkspaceMount: (candidate) =>
+          candidate === sessionPath ? { mountId: "mount_main", label: "Session Main" } : null,
+        getRuntimeContext: () => ({
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          userId: "user_1",
+          studioId: "studio_1",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+        }),
+      };
+      const { createDeskRoute } = await import("../server/routes/desk.ts");
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        (c as any).set("authPrincipal", Object.freeze({
+          kind: "local_user",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+          scopes: ["*"],
+        }));
+        await next();
+      });
+      app.route("/api", createDeskRoute(engine, null));
+
+      const listed = await app.request(
+        "/api/desk/files?selectedAgentId=other-agent",
+      );
+      expect(listed.status).toBe(200);
+      expect(await listed.json()).toMatchObject({
+        files: [{ name: "main.md", isDir: false }],
+        subdir: "",
+        basePath: fs.realpathSync(mountedMain),
+      });
+
+      const created = await app.request("/api/desk/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          selectedAgentId: "other-agent",
+          name: "created.md",
+          content: "created in main",
+        }),
+      });
+      expect(created.status).toBe(200);
+      expect(fs.readFileSync(path.join(mountedMain, "created.md"), "utf-8"))
+        .toBe("created in main");
+      expect(fs.existsSync(path.join(fallback, "created.md"))).toBe(false);
+
+      const external = path.join(tempRoot, "external.md");
+      fs.writeFileSync(external, "external body", "utf-8");
+      fs.writeFileSync(path.join(mountedMain, "external.md"), "old mounted body", "utf-8");
+      const uploaded = await app.request("/api/desk/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "upload",
+          paths: [external],
+        }),
+      });
+      expect(uploaded.status).toBe(200);
+      expect(await uploaded.json()).toMatchObject({
+        ok: true,
+        results: [{ name: "external.md" }],
+      });
+      expect(fs.readFileSync(path.join(mountedMain, "external.md"), "utf-8"))
+        .toBe("external body");
+
+      disableStudioMount(hanakoHome, "mount_main", { hostStudioId: "studio_1" });
+      const unavailable = await app.request("/api/desk/files");
+      expect(unavailable.status).toBe(404);
+      expect(await unavailable.json()).toEqual({
+        error: "unknown root",
+        code: "unknown_root",
+      });
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects mismatched selectedAgentId and legacy agentId before using an agent-scoped explicit directory", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-desk-route-agent-scope-"));
+    try {
+      const hanakoHome = path.join(tempRoot, "hana");
+      const workspace = path.join(tempRoot, "workspace");
+      const otherAgentHome = path.join(tempRoot, "other-agent-home");
+      fs.mkdirSync(workspace, { recursive: true });
+      fs.mkdirSync(otherAgentHome, { recursive: true });
+      fs.writeFileSync(path.join(otherAgentHome, "private.md"), "private", "utf-8");
+      const principal = normalizePrincipal({
+        kind: "local_user",
+        credentialKind: "loopback_token",
+        connectionKind: "local",
+        serverNodeId: "node_1",
+        userId: "user_1",
+        studioId: "studio_1",
+        scopes: ["*"],
+      });
+      createGrant(hanakoHome, {
+        principalId: principal.principalId,
+        subjectKind: "device",
+        scope: { studioId: "studio_1", agentId: "allowed-agent" },
+        capabilities: ["files.read"],
+      });
+      const engine = {
+        hanakoHome,
+        deskCwd: workspace,
+        homeCwd: workspace,
+        getExplicitHomeCwd: (agentId) =>
+          agentId === "other-agent" ? otherAgentHome : null,
+        getRuntimeContext: () => ({
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          userId: "user_1",
+          studioId: "studio_1",
+        }),
+      };
+      const { createDeskRoute } = await import("../server/routes/desk.ts");
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        (c as any).set("authPrincipal", principal);
+        await next();
+      });
+      app.route("/api", createDeskRoute(engine, null));
+
+      const response = await app.request(
+        `/api/desk/files?dir=${encodeURIComponent(otherAgentHome)}&selectedAgentId=allowed-agent&agentId=other-agent`,
+      );
+
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({
+        error: "insufficient_scope",
+        reason: "agent_scope_mismatch",
+        capability: "files",
+      });
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("redacts absolute workspace and skill paths from remote Desk responses", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-desk-route-remote-"));
+    try {
+      const workspace = path.join(tempRoot, "workspace");
+      const skillDir = path.join(workspace, ".agents", "skills", "remote-safe");
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(workspace, "note.md"), "note", "utf-8");
+      fs.writeFileSync(
+        path.join(skillDir, "SKILL.md"),
+        "---\nname: remote-safe\ndescription: Safe metadata\n---\n",
+        "utf-8",
+      );
+      const hanakoHome = path.join(tempRoot, "hana");
+      const { createSandboxResourceIO } = await import("../lib/resource-io/sandbox-resource-io.ts");
+      const resourceIO = createSandboxResourceIO({
+        cwd: workspace,
+        agentDir: workspace,
+        workspace,
+        workspaceFolders: [workspace],
+        authorizedFolders: [workspace],
+        hanakoHome,
+        getSandboxEnabled: () => false,
+      });
+      const engine = {
+        hanakoHome,
+        deskCwd: workspace,
+        homeCwd: workspace,
+        resourceIO,
+        getRuntimeContext: () => ({
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          userId: "user_1",
+          studioId: "studio_1",
+        }),
+      };
+      const { createDeskRoute } = await import("../server/routes/desk.ts");
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        (c as any).set("authPrincipal", Object.freeze({
+          kind: "device",
+          credentialKind: "device_credential",
+          connectionKind: "lan",
+          trustState: "paired",
+          serverNodeId: "node_1",
+          userId: "user_1",
+          studioId: "studio_1",
+          deviceId: "device_1",
+          scopes: ["files.read", "files.write"],
+        }));
+        await next();
+      });
+      app.route("/api", createDeskRoute(engine, null));
+
+      const pathResponse = await app.request("/api/desk/path");
+      const pathPayload = await pathResponse.json();
+      expect(pathPayload).toEqual({ path: null });
+
+      const filesResponse = await app.request("/api/desk/files");
+      const filesPayload = await filesResponse.json();
+      expect(filesPayload).toMatchObject({
+        basePath: null,
+        files: [{ name: "note.md" }],
+      });
+
+      const missingResponse = await app.request("/api/desk/files?subdir=missing");
+      const missingPayload = await missingResponse.json();
+      expect(missingResponse.status).toBe(400);
+      expect(missingPayload).toMatchObject({
+        error: "file action failed",
+      });
+      expect(JSON.stringify(missingPayload)).not.toContain(workspace);
+
+      const explicitDir = await app.request(
+        `/api/desk/files?dir=${encodeURIComponent(workspace)}`,
+      );
+      expect(explicitDir.status).toBe(403);
+      expect(await explicitDir.json()).toEqual({
+        error: "dir requires local owner",
+        code: "local_path_not_allowed",
+      });
+
+      const skillsResponse = await app.request("/api/desk/skills");
+      const skillsPayload = await skillsResponse.json();
+      expect(skillsPayload.skills).toMatchObject([{
+        name: "remote-safe",
+        description: "Safe metadata",
+      }]);
+      expect(JSON.stringify({
+        path: pathPayload,
+        files: filesPayload,
+        skills: skillsPayload,
+      })).not.toContain(workspace);
+
+      const install = await app.request("/api/desk/install-skill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filePath: path.join(tempRoot, "attacker-selected.zip"),
+        }),
+      });
+      expect(install.status).toBe(403);
+      expect(await install.json()).toEqual({
+        error: "filePath requires local owner",
+      });
+
+      vi.spyOn(resourceIO, "transfer").mockRejectedValue(Object.assign(
+        new Error(`provider failed for ${path.join(workspace, ".agents", "skills")}`),
+        { code: "mount_unavailable", status: 503 },
+      ));
+      const failedUploadInstall = await app.request("/api/desk/install-skill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file: {
+            filename: "sample-skill.zip",
+            contentBase64: Buffer.from("placeholder").toString("base64"),
+          },
+        }),
+      });
+      const failedUploadPayload = await failedUploadInstall.json();
+      expect(failedUploadInstall.status).toBe(503);
+      expect(failedUploadPayload).toEqual({
+        error: "mount unavailable",
+        code: "mount_unavailable",
+      });
+      expect(JSON.stringify(failedUploadPayload)).not.toContain(workspace);
+
+      const remove = await app.request("/api/desk/delete-skill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skillDir }),
+      });
+      expect(remove.status).toBe(403);
+      expect(await remove.json()).toEqual({
+        error: "skillDir requires local owner",
+      });
+      expect(fs.existsSync(skillDir)).toBe(true);
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }

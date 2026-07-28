@@ -27,6 +27,8 @@ import type {
   ResourceListResult,
   ResourceMutationResult,
   ResourceMutationPreconditions,
+  ResourceOpenReadOptions,
+  ResourceOpenReadResult,
   ResourceReadResult,
   ResourceRef,
   ResourceSearchResult,
@@ -75,6 +77,7 @@ export class LocalFsProvider {
     return {
       stat: true,
       read: true,
+      openRead: true,
       write: true,
       writeExpectedVersion: true,
       edit: true,
@@ -134,6 +137,73 @@ export class LocalFsProvider {
       version: versionFromStat(stat),
       filePath,
     };
+  }
+
+  async openRead(
+    ref: ResourceRef | unknown,
+    options: ResourceOpenReadOptions = {},
+  ): Promise<ResourceOpenReadResult> {
+    const filePath = this.resolvePath(ref);
+    this.assertAllowed(filePath, "read");
+    const noFollow = typeof fs.constants.O_NOFOLLOW === "number"
+      ? fs.constants.O_NOFOLLOW
+      : 0;
+    let descriptor: number | null = null;
+    try {
+      descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+      const opened = fs.fstatSync(descriptor);
+      if (!opened.isFile()) throw safeOpenReadError("not_a_file", 400);
+      const current = fs.statSync(filePath);
+      if (!sameFileIdentity(fileIdentity(opened), current)) {
+        throw safeOpenReadError("resource_version_conflict", 409);
+      }
+      const version = versionFromStat(opened);
+      if (options.expectedVersion && !fileVersionsMatch(version, options.expectedVersion)) {
+        throw safeOpenReadError("resource_version_conflict", 409);
+      }
+      const start = options.start ?? 0;
+      const end = options.end ?? Math.max(opened.size - 1, 0);
+      if (
+        !Number.isSafeInteger(start)
+        || !Number.isSafeInteger(end)
+        || start < 0
+        || end < start
+        || (opened.size > 0 && end >= opened.size)
+      ) {
+        throw safeOpenReadError("invalid_read_range", 416);
+      }
+      this.assertAllowed(filePath, "read");
+      const body = openedLocalFileBody({
+        descriptor,
+        filePath,
+        start,
+        end,
+        expectedIdentity: fileIdentity(opened),
+        expectedVersion: version,
+        revalidateScope: () => this.assertAllowed(filePath, "read"),
+      });
+      descriptor = null;
+      return {
+        resourceKey: localResourceKey(filePath),
+        resource: this.resourceForPath(filePath),
+        body,
+        size: opened.size,
+        mtimeMs: opened.mtimeMs,
+        version,
+        filePath,
+      };
+    } catch (error) {
+      if (descriptor !== null) fs.closeSync(descriptor);
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        throw safeOpenReadError("resource_not_found", 404);
+      }
+      if (code === "ELOOP") throw safeOpenReadError("symbolic_link_not_allowed", 400);
+      if (code === "EACCES" || code === "EPERM") {
+        throw safeOpenReadError("resource_access_denied", 403);
+      }
+      throw error;
+    }
   }
 
   async write(ref: ResourceRef | unknown, content: string | Buffer): Promise<ResourceMutationResult> {
@@ -376,7 +446,9 @@ export class LocalFsProvider {
     const targetDirectoryIdentity = directoryIdentity(dirPath, dirStat);
     const finalPath = path.join(dirPath, targetName);
     this.assertAllowed(finalPath, "write");
-    const expected = normalizeExpectedTargetVersion(options.expectedTargetVersion);
+    const expected = options.replaceExisting === true
+      ? encodedCurrentTargetVersion(finalPath)
+      : normalizeExpectedTargetVersion(options.expectedTargetVersion);
     assertExpectedTargetState(finalPath, expected);
 
     const stagingPath = path.join(
@@ -508,23 +580,34 @@ export class LocalFsProvider {
   async list(ref: ResourceRef | unknown): Promise<ResourceListResult> {
     const dirPath = this.resolvePath(ref);
     this.assertAllowed(dirPath, "read");
-    const items = fs.readdirSync(dirPath, { withFileTypes: true })
-      .map((entry) => {
-        const fullPath = path.join(dirPath, entry.name);
-        const stat = fs.statSync(fullPath);
-        return {
-          name: entry.name,
-          isDirectory: entry.isDirectory(),
-          size: entry.isDirectory() ? null : stat.size,
-          mtimeMs: stat.mtimeMs,
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-    return {
-      resourceKey: localResourceKey(dirPath),
-      resource: this.resourceForPath(dirPath),
-      items,
-    };
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true })
+        .map((entry) => {
+          const fullPath = path.join(dirPath, entry.name);
+          const stat = fs.statSync(fullPath);
+          return {
+            name: entry.name,
+            isDirectory: entry.isDirectory(),
+            size: entry.isDirectory() ? null : stat.size,
+            mtimeMs: stat.mtimeMs,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return {
+        resourceKey: localResourceKey(dirPath),
+        resource: this.resourceForPath(dirPath),
+        items,
+      };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") throw resourceNotFound(dirPath);
+      if (code === "EACCES" || code === "EPERM") {
+        throw resourceAccessDenied("read", dirPath, "directory_read_denied", {
+          safeMessage: "Resource directory is unreadable",
+        });
+      }
+      throw error;
+    }
   }
 
   async search(ref: ResourceRef | unknown, { query, mode, limit }: { query?: string; mode?: string; limit?: number } = {}): Promise<ResourceSearchResult> {
@@ -845,6 +928,76 @@ function fileVersionsEqual(left: ResourceVersion, right: ResourceVersion): boole
   return left.mtimeMs === right.mtimeMs && left.size === right.size;
 }
 
+async function* openedLocalFileBody({
+  descriptor,
+  filePath,
+  start,
+  end,
+  expectedIdentity,
+  expectedVersion,
+  revalidateScope,
+}: {
+  descriptor: number;
+  filePath: string;
+  start: number;
+  end: number;
+  expectedIdentity: FileIdentity;
+  expectedVersion: ResourceVersion;
+  revalidateScope: () => void;
+}): AsyncIterable<Uint8Array> {
+  try {
+    if (expectedVersion.size === 0) return;
+    let position = start;
+    while (position <= end) {
+      revalidateScope();
+      const buffer = Buffer.allocUnsafe(
+        Math.min(TRANSFER_MAX_CHUNK_BYTES, end - position + 1),
+      );
+      const bytesRead = fs.readSync(
+        descriptor,
+        buffer,
+        0,
+        buffer.byteLength,
+        position,
+      );
+      if (bytesRead <= 0) throw safeOpenReadError("resource_changed_during_read", 409);
+      position += bytesRead;
+      revalidateScope();
+      yield buffer.subarray(0, bytesRead);
+    }
+    const completed = fs.fstatSync(descriptor);
+    const current = fs.statSync(filePath);
+    revalidateScope();
+    if (
+      !sameFileIdentity(expectedIdentity, completed)
+      || !sameFileIdentity(expectedIdentity, current)
+      || !fileVersionsEqual(versionFromStat(completed), expectedVersion)
+    ) {
+      throw safeOpenReadError("resource_changed_during_read", 409);
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      throw safeOpenReadError("resource_not_found", 404);
+    }
+    if (code === "EACCES" || code === "EPERM") {
+      throw safeOpenReadError("resource_access_denied", 403);
+    }
+    throw error;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function safeOpenReadError(code: string, status: number): ResourceIOError {
+  const error: any = new ResourceIOError("Resource content unavailable", {
+    code,
+    status,
+  });
+  error.safeMessage = "Resource content unavailable";
+  return error;
+}
+
 function assertPlatformTransferSegment(value: string): void {
   if (!isTransferNameSegment(value) || value.includes(path.sep)) {
     throw transferEntryUnsupported("invalid_target_name");
@@ -873,6 +1026,11 @@ function normalizeExpectedTargetVersion(value: string | null | undefined): strin
     throw transferVersionConflict("invalid_expected_target_version");
   }
   return value;
+}
+
+function encodedCurrentTargetVersion(filePath: string): string | null {
+  const current = versionFromLstatOrUndefined(filePath);
+  return current ? encodeResourceTransferVersion(current) : null;
 }
 
 function assertExpectedTargetState(filePath: string, expected: string | null): void {

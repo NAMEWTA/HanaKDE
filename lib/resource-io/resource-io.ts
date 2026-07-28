@@ -24,6 +24,8 @@ import type {
   ResourceProviderCapability,
   ResourceProviderId,
   ProviderRootIdentity,
+  ResourceOpenReadOptions,
+  ResourceOpenReadResult,
   ResourceReadResult,
   ResourceRef,
   ResourceSearchResult,
@@ -73,6 +75,23 @@ export class ResourceIO {
     const ref = normalizeResourceRef(input);
     const result = await this.callProvider<ResourceReadResult>(ref, "read", options, ref);
     if (options.auditRead) this.auditAllowed("read", result, options);
+    return result;
+  }
+
+  async openRead(
+    input: unknown,
+    readOptions: ResourceOpenReadOptions = {},
+    options: ResourceOperationContext = {},
+  ): Promise<ResourceOpenReadResult> {
+    const ref = normalizeResourceRef(input);
+    const result = await this.callProvider<ResourceOpenReadResult>(
+      ref,
+      "openRead",
+      options,
+      ref,
+      readOptions,
+    );
+    if (options.auditRead) this.auditAllowed("openRead", result, options);
     return result;
   }
 
@@ -239,6 +258,7 @@ export class ResourceIO {
         {
           signal: transferAbort.signal,
           expectedTargetVersion: request.expectedTargetVersion,
+          replaceExisting: request.replaceExisting,
           operationId: request.operationId,
           abortTransfer: transferAbort.abort,
           revalidateSourceScope: async () => {
@@ -460,11 +480,18 @@ function normalizeTransferRequest(input: ResourceTransferRequest | unknown): Res
   ) {
     throw transferEntryUnsupported("invalid_expected_target_version");
   }
+  if (value.replaceExisting !== undefined && typeof value.replaceExisting !== "boolean") {
+    throw transferEntryUnsupported("invalid_replace_existing");
+  }
+  if (value.replaceExisting === true && value.expectedTargetVersion !== undefined) {
+    throw transferEntryUnsupported("ambiguous_target_precondition");
+  }
   return {
     source,
     targetDirectory,
     targetName: value.targetName,
     expectedTargetVersion: value.expectedTargetVersion,
+    replaceExisting: value.replaceExisting,
     signal: value.signal,
     operationId: value.operationId,
   };

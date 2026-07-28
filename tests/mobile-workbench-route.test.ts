@@ -3,7 +3,9 @@ import os from "os";
 import path from "path";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { upsertStudioMount } from "../core/studio-mounts.ts";
+import { disableStudioMount, upsertStudioMount } from "../core/studio-mounts.ts";
+import { createGrant } from "../core/grant-registry.ts";
+import { normalizePrincipal } from "../core/security-principal.ts";
 
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "hana-mobile-workbench-"));
@@ -162,6 +164,299 @@ describe("mobile workbench route", () => {
     expect(fs.readFileSync(path.join(workspace, "asset.txt"), "utf-8")).toBe("uploaded");
   });
 
+  it("maps the active session workspace mount to legacy default/main without letting selectedAgentId change it", async () => {
+    tmpDir = makeTmpDir();
+    const fallback = path.join(tmpDir, "fallback");
+    const mountedMain = path.join(tmpDir, "mounted-main");
+    const hanakoHome = path.join(tmpDir, "hana");
+    fs.mkdirSync(fallback, { recursive: true });
+    fs.mkdirSync(mountedMain, { recursive: true });
+    fs.writeFileSync(path.join(fallback, "wrong.md"), "fallback", "utf-8");
+    fs.writeFileSync(path.join(mountedMain, "main.md"), "main", "utf-8");
+    upsertStudioMount(hanakoHome, {
+      mountId: "mount_main",
+      hostStudioId: "studio_1",
+      sourceKind: "storage",
+      provider: "local_fs",
+      rootLocator: { path: mountedMain },
+      label: "Session Main",
+      presentation: "folder",
+      capabilities: ["list", "read", "write"],
+    });
+    const sessionPath = "/sessions/current.jsonl";
+    const app = await makeApp({
+      hanakoHome,
+      deskCwd: fallback,
+      homeCwd: fallback,
+      currentSessionPath: sessionPath,
+      selectedAgentId: "other-agent",
+      getHomeCwd: () => path.join(tmpDir, "other-agent-home"),
+      getSessionWorkspaceMount: (candidate) =>
+        candidate === sessionPath ? { mountId: "mount_main", label: "Session Main" } : null,
+      getRuntimeContext: () => ({
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        userId: "user_1",
+        studioId: "studio_1",
+        connectionKind: "local",
+        credentialKind: "loopback_token",
+      }),
+    });
+
+    const files = await app.request(
+      "/api/workbench/files?selectedAgentId=other-agent",
+    );
+    expect(files.status).toBe(200);
+    expect(await files.json()).toMatchObject({
+      rootId: "default",
+      mountId: "default",
+      files: [{ name: "main.md", isDir: false }],
+    });
+
+    const write = await app.request("/api/mobile/workbench/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "writeText",
+        selectedAgentId: "other-agent",
+        name: "created.md",
+        content: "created in main",
+      }),
+    });
+    expect(write.status).toBe(200);
+    expect(fs.readFileSync(path.join(mountedMain, "created.md"), "utf-8"))
+      .toBe("created in main");
+    expect(fs.existsSync(path.join(fallback, "created.md"))).toBe(false);
+
+    upsertStudioMount(hanakoHome, {
+      mountId: "mount_main",
+      hostStudioId: "studio_1",
+      sourceKind: "storage",
+      provider: "local_fs",
+      rootLocator: { path: mountedMain },
+      label: "Session Main",
+      presentation: "folder",
+      capabilities: ["list", "read"],
+    });
+    const readOnlyWrite = await app.request("/api/workbench/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "writeText",
+        name: "denied.md",
+        content: "must not write",
+      }),
+    });
+    expect(readOnlyWrite.status).toBe(403);
+    expect(await readOnlyWrite.json()).toMatchObject({
+      error: "mount_capability_denied",
+    });
+    expect(fs.existsSync(path.join(mountedMain, "denied.md"))).toBe(false);
+
+    upsertStudioMount(hanakoHome, {
+      mountId: "mount_main",
+      hostStudioId: "studio_1",
+      sourceKind: "storage",
+      provider: "local_fs",
+      rootLocator: { path: mountedMain },
+      label: "Session Main",
+      presentation: "folder",
+      capabilities: ["list", "read", "write"],
+    });
+    fs.rmSync(mountedMain, { recursive: true, force: true });
+    const missing = await app.request("/api/workbench/files");
+    expect(missing.status).toBe(503);
+    expect(await missing.json()).toMatchObject({ error: "mount_unavailable" });
+    expect(fs.existsSync(mountedMain)).toBe(false);
+
+    fs.mkdirSync(mountedMain, { recursive: true });
+    disableStudioMount(hanakoHome, "mount_main", { hostStudioId: "studio_1" });
+    const unavailable = await app.request("/api/workbench/files");
+    expect(unavailable.status).toBe(404);
+    expect(await unavailable.json()).toMatchObject({ error: "unknown_root" });
+  });
+
+  it("tracks active session cwd switches instead of pinning default to an agent home", async () => {
+    tmpDir = makeTmpDir();
+    const agentHome = path.join(tmpDir, "agent-home");
+    const workspaceOne = path.join(tmpDir, "workspace-one");
+    const workspaceTwo = path.join(tmpDir, "workspace-two");
+    const hanakoHome = path.join(tmpDir, "hana");
+    for (const dir of [agentHome, workspaceOne, workspaceTwo]) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(agentHome, "wrong.md"), "home", "utf-8");
+    fs.writeFileSync(path.join(workspaceOne, "one.md"), "one", "utf-8");
+    fs.writeFileSync(path.join(workspaceTwo, "two.md"), "two", "utf-8");
+    const engine = {
+      hanakoHome,
+      deskCwd: agentHome,
+      homeCwd: agentHome,
+      currentSessionPath: "/sessions/one.jsonl",
+      getSessionFolderScope: (sessionPath) => ({
+        cwd: sessionPath.endsWith("one.jsonl") ? workspaceOne : workspaceTwo,
+      }),
+    };
+    const app = await makeApp(engine);
+
+    const first = await app.request("/api/workbench/files");
+    expect((await first.json()).files.map((entry) => entry.name)).toEqual(["one.md"]);
+
+    engine.currentSessionPath = "/sessions/two.jsonl";
+    const second = await app.request("/api/mobile/workbench/files");
+    expect((await second.json()).files.map((entry) => entry.name)).toEqual(["two.md"]);
+  });
+
+  it("uses selectedAgentId only as an authorization target and redacts remote bootstrap paths", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    const hanakoHome = path.join(tmpDir, "hana");
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.writeFileSync(path.join(workspace, "note.md"), "body", "utf-8");
+    const principal = normalizePrincipal({
+      kind: "device",
+      credentialKind: "device_credential",
+      connectionKind: "lan",
+      trustState: "paired",
+      serverNodeId: "node_1",
+      userId: "user_1",
+      studioId: "studio_1",
+      deviceId: "device_1",
+      scopes: [],
+    });
+    createGrant(hanakoHome, {
+      principalId: principal.principalId,
+      subjectKind: "device",
+      scope: { studioId: "studio_1", agentId: "allowed-agent" },
+      capabilities: ["files.read"],
+    });
+    const app = new Hono();
+    const { createMobileWorkbenchRoute } = await import("../server/routes/mobile-workbench.ts");
+    app.use("*", async (c, next) => {
+      (c as any).set("authPrincipal", principal);
+      await next();
+    });
+    app.route("/api", createMobileWorkbenchRoute({
+      hanakoHome,
+      deskCwd: workspace,
+      homeCwd: workspace,
+      config: { cwd_history: [workspace] },
+      listAgents: () => [{ id: "hana", homeFolder: workspace }],
+      getRuntimeContext: () => ({
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        userId: "user_1",
+        studioId: "studio_1",
+      }),
+    }));
+
+    const allowed = await app.request(
+      "/api/workbench/files?selectedAgentId=allowed-agent",
+    );
+    expect(allowed.status).toBe(200);
+    expect((await allowed.json()).files).toMatchObject([{ name: "note.md" }]);
+
+    const denied = await app.request(
+      "/api/workbench/files?selectedAgentId=other-agent",
+    );
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: "insufficient_scope",
+      capability: "files.read",
+    });
+
+    const bootstrap = await app.request("/api/mobile/bootstrap");
+    expect(await bootstrap.json()).toMatchObject({
+      homeFolder: null,
+      cwdHistory: [],
+      agents: [{ id: "hana", homeFolder: null }],
+    });
+  });
+
+  it("keeps provider failures stable at the legacy Workbench boundary", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    fs.mkdirSync(workspace, { recursive: true });
+    const unavailable = Object.assign(new Error("provider unavailable"), {
+      code: "provider_unavailable",
+      status: 503,
+    });
+    const app = await makeApp({
+      hanakoHome: path.join(tmpDir, "hana"),
+      deskCwd: workspace,
+      homeCwd: workspace,
+      getResourceIO: () => ({
+        stat: vi.fn(),
+        read: vi.fn(),
+        write: vi.fn(),
+        list: vi.fn(async () => {
+          throw unavailable;
+        }),
+      }),
+    });
+
+    const response = await app.request("/api/workbench/files");
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "provider_unavailable",
+      detail: "provider unavailable",
+    });
+  });
+
+  it("does not accept operation identity fields from a Workbench mutation body", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    fs.mkdirSync(workspace, { recursive: true });
+    const write = vi.fn(async () => ({
+      changeType: "created",
+      resourceKey: "local_fs:created.md",
+      version: { mtimeMs: 1, size: 4 },
+    }));
+    const app = await makeApp({
+      hanakoHome: path.join(tmpDir, "hana"),
+      deskCwd: workspace,
+      homeCwd: workspace,
+      getResourceIO: () => ({
+        stat: vi.fn(async () => ({ exists: false })),
+        read: vi.fn(),
+        write,
+        list: vi.fn(async () => ({ items: [] })),
+      }),
+    });
+
+    const response = await app.request("/api/workbench/actions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-Id": "trusted-transport-request",
+      },
+      body: JSON.stringify({
+        action: "writeText",
+        name: "created.md",
+        content: "body",
+        sessionId: "forged-session",
+        sessionPath: "/private/forged-session.jsonl",
+        requestId: "forged-body-request",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(write).toHaveBeenCalledWith(
+      expect.anything(),
+      "body",
+      expect.objectContaining({
+        requestId: "trusted-transport-request",
+        sessionId: null,
+        sessionPath: null,
+        principal: expect.objectContaining({
+          requestId: "trusted-transport-request",
+          sessionId: null,
+          sessionPath: null,
+        }),
+      }),
+    );
+  });
+
   it("returns mobile bootstrap metadata for desktop-compatible agent workbench selection", async () => {
     tmpDir = makeTmpDir();
     const workspace = path.join(tmpDir, "workspace");
@@ -235,12 +530,18 @@ describe("mobile workbench route", () => {
   it("serves UTF-8 file content with HEAD and Range support", async () => {
     tmpDir = makeTmpDir();
     const workspace = path.join(tmpDir, "workspace");
+    const hanakoHome = path.join(tmpDir, "hana");
     fs.mkdirSync(workspace, { recursive: true });
     fs.writeFileSync(path.join(workspace, "粘贴图片.md"), "abcdef", "utf-8");
+    const resourceIO = await makeRouteResourceIO({ hanakoHome, workspace });
+    const statSpy = vi.spyOn(resourceIO, "stat");
+    const readSpy = vi.spyOn(resourceIO, "read")
+      .mockRejectedValue(new Error("content route must not buffer through ResourceIO.read"));
     const app = await makeApp({
-      hanakoHome: path.join(tmpDir, "hana"),
+      hanakoHome,
       deskCwd: workspace,
       homeCwd: workspace,
+      resourceIO,
     });
     const query = `name=${encodeURIComponent("粘贴图片.md")}`;
 
@@ -255,6 +556,131 @@ describe("mobile workbench route", () => {
     expect(range.status).toBe(206);
     expect(range.headers.get("content-range")).toBe("bytes 1-3/6");
     expect(await range.text()).toBe("bcd");
+    expect(statSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(readSpy).not.toHaveBeenCalled();
+  });
+
+  it("streams from the provider's current mounted root when the mount changes after metadata lookup", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    const oldRoot = path.join(tmpDir, "old-root");
+    const newRoot = path.join(tmpDir, "new-root");
+    const hanakoHome = path.join(tmpDir, "hana");
+    for (const dir of [workspace, oldRoot, newRoot]) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const oldFile = path.join(oldRoot, "same.md");
+    const newFile = path.join(newRoot, "same.md");
+    fs.writeFileSync(oldFile, "OLD!", "utf-8");
+    fs.writeFileSync(newFile, "NEW!", "utf-8");
+    const fixedTime = new Date("2026-01-02T03:04:05.000Z");
+    fs.utimesSync(oldFile, fixedTime, fixedTime);
+    fs.utimesSync(newFile, fixedTime, fixedTime);
+    const mount = (rootLocator: string) => ({
+      mountId: "mount_docs",
+      hostStudioId: "studio_1",
+      sourceKind: "storage",
+      provider: "local_fs",
+      rootLocator: { path: rootLocator },
+      label: "Docs",
+      presentation: "folder",
+      capabilities: ["list", "read", "write"],
+    });
+    upsertStudioMount(hanakoHome, mount(oldRoot));
+    const resourceIO = await makeRouteResourceIO({
+      hanakoHome,
+      workspace,
+      studioId: "studio_1",
+    });
+    const stat = resourceIO.stat.bind(resourceIO);
+    let switched = false;
+    vi.spyOn(resourceIO, "stat").mockImplementation(async (...args) => {
+      const result = await stat(...args);
+      if (!switched) {
+        switched = true;
+        upsertStudioMount(hanakoHome, mount(newRoot));
+      }
+      return result;
+    });
+    const readSpy = vi.spyOn(resourceIO, "read");
+    const openReadSpy = vi.spyOn(resourceIO, "openRead");
+    const app = await makeApp({
+      hanakoHome,
+      deskCwd: workspace,
+      homeCwd: workspace,
+      resourceIO,
+      getRuntimeContext: () => ({
+        studioId: "studio_1",
+        connectionKind: "local",
+        credentialKind: "loopback_token",
+      }),
+    });
+
+    const response = await app.request(
+      "/api/workbench/content?mountId=mount_docs&name=same.md",
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("NEW!");
+    expect(openReadSpy).toHaveBeenCalledOnce();
+    expect(readSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not expose provider or native paths in remote content errors", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    const hanakoHome = path.join(tmpDir, "hana");
+    fs.mkdirSync(workspace, { recursive: true });
+    const principal = normalizePrincipal({
+      kind: "device",
+      credentialKind: "device_credential",
+      connectionKind: "lan",
+      trustState: "paired",
+      serverNodeId: "node_1",
+      userId: "user_1",
+      studioId: "studio_1",
+      deviceId: "device_1",
+      scopes: ["files.read"],
+    });
+    const leakedPath = "/private/server/workspace/gone.md";
+    const app = new Hono();
+    const { createMobileWorkbenchRoute } = await import("../server/routes/mobile-workbench.ts");
+    app.use("*", async (c, next) => {
+      (c as any).set("authPrincipal", principal);
+      await next();
+    });
+    app.route("/api", createMobileWorkbenchRoute({
+      hanakoHome,
+      deskCwd: workspace,
+      homeCwd: workspace,
+      getRuntimeContext: () => ({ studioId: "studio_1" }),
+      getResourceIO: () => ({
+        stat: vi.fn(async () => ({
+          exists: true,
+          isDirectory: false,
+          version: { mtimeMs: 1, size: 4 },
+        })),
+        read: vi.fn(),
+        openRead: vi.fn(async () => {
+          throw Object.assign(new Error(`ENOENT: open '${leakedPath}'`), {
+            code: "resource_not_found",
+            status: 404,
+          });
+        }),
+        write: vi.fn(),
+        list: vi.fn(async () => ({ items: [] })),
+      }),
+    }));
+
+    const response = await app.request("/api/workbench/content?name=gone.md");
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({
+      error: "resource_not_found",
+      detail: "Resource operation failed",
+    });
+    expect(JSON.stringify(payload)).not.toContain(leakedPath);
   });
 
   it("safe-deletes mobile files into recoverable trash instead of hard removing bytes", async () => {

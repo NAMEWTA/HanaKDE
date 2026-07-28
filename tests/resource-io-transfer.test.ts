@@ -97,6 +97,26 @@ describe("ResourceIO transfer", () => {
     });
   });
 
+  it("resolves replace-existing state inside the target provider operation", async () => {
+    const { sandbox, sourceRoot, targetRoot } = makeSandbox();
+    const { resourceIO } = makeLocalResourceIO(sandbox);
+    const sourceFile = path.join(sourceRoot, "note.md");
+    const targetFile = path.join(targetRoot, "copy.md");
+    fs.writeFileSync(sourceFile, "new body");
+    fs.writeFileSync(targetFile, "old body");
+
+    const result = await resourceIO.transfer({
+      source: { kind: "local-file", path: sourceFile },
+      targetDirectory: { kind: "local-file", path: targetRoot },
+      targetName: "copy.md",
+      replaceExisting: true,
+      operationId: OPERATION_ID,
+    }, { source: "api" });
+
+    expect(result.bytesTransferred).toBe(Buffer.byteLength("new body"));
+    expect(fs.readFileSync(targetFile, "utf-8")).toBe("new body");
+  });
+
   it("does not write native paths or local resource keys into transfer audit records", async () => {
     const { sandbox, sourceRoot, targetRoot } = makeSandbox();
     const records: Array<Record<string, unknown>> = [];
