@@ -1,6 +1,13 @@
 import type {
   KnowledgeSourceDto,
 } from '../../../../../shared/knowledge-workspace-contract.ts';
+import type {
+  KnowledgeWorkspaceClient,
+} from '../../services/knowledge-workspace-client';
+import {
+  KnowledgeResourceTree,
+  type KnowledgeResourceTreeProps,
+} from './KnowledgeResourceTree';
 import styles from './KnowledgeWorkspace.module.css';
 
 const tr = (key: string) => window.t?.(key) ?? key;
@@ -8,6 +15,12 @@ const tr = (key: string) => window.t?.(key) ?? key;
 export interface KnowledgeLayoutProps {
   sources: KnowledgeSourceDto[];
   sourcesStatus: 'idle' | 'loading' | 'ready' | 'error';
+  treeClient: KnowledgeWorkspaceClient;
+  treeWorkspaceKey: string;
+  treeServices?: Pick<
+    KnowledgeResourceTreeProps,
+    'watchSource' | 'subscribeToChanges' | 'refreshDelayMs'
+  >;
   onRetry(): void;
 }
 
@@ -29,6 +42,9 @@ function visibleSources(sources: KnowledgeSourceDto[]): KnowledgeSourceDto[] {
 export function KnowledgeLayout({
   sources,
   sourcesStatus,
+  treeClient,
+  treeWorkspaceKey,
+  treeServices,
   onRetry,
 }: KnowledgeLayoutProps) {
   const renderedSources = visibleSources(sources);
@@ -88,7 +104,12 @@ export function KnowledgeLayout({
           role="tree"
           aria-label={tr('knowledge.tree.heading')}
         >
-          <p className={styles.emptyTree}>{tr('knowledge.tree.empty')}</p>
+          <KnowledgeResourceTree
+            client={treeClient}
+            sources={renderedSources}
+            workspaceKey={treeWorkspaceKey}
+            {...treeServices}
+          />
         </div>
       </nav>
 

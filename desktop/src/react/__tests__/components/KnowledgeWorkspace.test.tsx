@@ -30,6 +30,11 @@ function clientWithListSources(
   } as KnowledgeWorkspaceClient;
 }
 
+const testTreeServices = {
+  watchSource: () => () => {},
+  subscribeToChanges: () => () => {},
+};
+
 describe('KnowledgeWorkspace', () => {
   beforeEach(() => {
     window.t = ((key: string) => ({
@@ -102,6 +107,7 @@ describe('KnowledgeWorkspace', () => {
     render(
       <KnowledgeWorkspace
         client={clientWithListSources(listSources)}
+        treeServices={testTreeServices}
         workspaceKey="workspace-session-15"
       />,
     );
@@ -122,7 +128,7 @@ describe('KnowledgeWorkspace', () => {
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
 
     await waitFor(() => expect(listSources).toHaveBeenCalledTimes(1));
-    expect(screen.getByText('Main workspace')).toBeInTheDocument();
+    expect(screen.getAllByText('Main workspace')).toHaveLength(2);
     expect(screen.queryByText('Restored mount must disappear')).not.toBeInTheDocument();
     expect(useStore.getState()).toMatchObject({
       knowledgeWorkspaceKey: 'workspace-session-15',
@@ -146,12 +152,13 @@ describe('KnowledgeWorkspace', () => {
     render(
       <KnowledgeWorkspace
         client={clientWithListSources(listSources)}
+        treeServices={testTreeServices}
         workspaceKey="workspace-session-error"
       />,
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sources unavailable');
-    expect(screen.getByText('Main')).toBeInTheDocument();
+    expect(screen.getAllByText('Main')).toHaveLength(2);
     expect(screen.getByRole('group', { name: 'Editor group' })).toBeInTheDocument();
 
     await act(async () => {
@@ -160,7 +167,7 @@ describe('KnowledgeWorkspace', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(screen.getByText('Main workspace')).toBeInTheDocument();
+      expect(screen.getAllByText('Main workspace')).toHaveLength(2);
     });
     expect(listSources).toHaveBeenCalledTimes(2);
   });
@@ -176,6 +183,7 @@ describe('KnowledgeWorkspace', () => {
     const view = render(
       <KnowledgeWorkspace
         client={clientWithListSources(listSources)}
+        treeServices={testTreeServices}
         workspaceKey="workspace-session-cancel"
       />,
     );

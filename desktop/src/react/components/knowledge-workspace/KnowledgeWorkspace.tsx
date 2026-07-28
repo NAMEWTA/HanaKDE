@@ -6,15 +6,21 @@ import {
 } from '../../services/knowledge-workspace-client';
 import { useStore } from '../../stores';
 import { KnowledgeLayout } from './KnowledgeLayout';
+import type { KnowledgeResourceTreeProps } from './KnowledgeResourceTree';
 
 export interface KnowledgeWorkspaceProps {
   client?: KnowledgeWorkspaceClient;
   workspaceKey?: string;
+  treeServices?: Pick<
+    KnowledgeResourceTreeProps,
+    'watchSource' | 'subscribeToChanges' | 'refreshDelayMs'
+  >;
 }
 
 export function KnowledgeWorkspace({
   client = knowledgeWorkspaceClient,
   workspaceKey: explicitWorkspaceKey,
+  treeServices,
 }: KnowledgeWorkspaceProps) {
   const activeServerConnectionId = useStore((state) => state.activeServerConnectionId);
   const deskWorkspaceMountId = useStore((state) => state.deskWorkspaceMountId);
@@ -74,6 +80,9 @@ export function KnowledgeWorkspace({
     <KnowledgeLayout
       sources={isCurrentWorkspace ? sources : []}
       sourcesStatus={isCurrentWorkspace ? sourcesStatus : 'idle'}
+      treeClient={client}
+      treeWorkspaceKey={workspaceKey}
+      treeServices={treeServices}
       onRetry={() => void loadSources()}
     />
   );

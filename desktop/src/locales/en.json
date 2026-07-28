@@ -45,7 +45,14 @@
     "retry": "Retry",
     "tree": {
       "heading": "Resource tree",
-      "empty": "No resources expanded"
+      "empty": "No resources expanded",
+      "expand": "Expand {name}",
+      "collapse": "Collapse {name}",
+      "loading": "Loading {name}…",
+      "loadError": "Could not load {name}",
+      "retry": "Retry {name}",
+      "unavailable": "{name} is unavailable",
+      "emptyDirectory": "{name} is empty"
     },
     "editor": {
       "groupLabel": "Editor group",

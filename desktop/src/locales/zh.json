@@ -45,7 +45,14 @@
     "retry": "重试",
     "tree": {
       "heading": "资源树",
-      "empty": "暂无已展开资源"
+      "empty": "暂无已展开资源",
+      "expand": "展开{name}",
+      "collapse": "折叠{name}",
+      "loading": "正在加载{name}…",
+      "loadError": "无法加载{name}",
+      "retry": "重试{name}",
+      "unavailable": "{name}不可用",
+      "emptyDirectory": "{name}为空"
     },
     "editor": {
       "groupLabel": "编辑组",

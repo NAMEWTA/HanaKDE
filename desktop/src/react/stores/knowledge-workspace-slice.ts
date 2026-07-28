@@ -31,6 +31,10 @@ export interface KnowledgeWorkspaceSlice {
     requestId: number,
     errorCode: KnowledgeSourcesErrorCode,
   ) => void;
+  setKnowledgeExpandedPaths: (
+    sourceKey: string,
+    paths: string[],
+  ) => void;
 }
 
 type KnowledgeWorkspaceSliceState = Pick<
@@ -105,6 +109,13 @@ export const createKnowledgeWorkspaceSlice = (
           knowledgeSourcesErrorCode: errorCode,
         }
   )),
+
+  setKnowledgeExpandedPaths: (sourceKey, paths) => set((state) => ({
+    knowledgeExpandedPathsBySource: {
+      ...state.knowledgeExpandedPathsBySource,
+      [sourceKey]: [...new Set(paths)],
+    },
+  })),
 });
 
 export type { KnowledgeWorkspaceSliceState };

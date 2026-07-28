@@ -45,7 +45,14 @@
     "retry": "다시 시도",
     "tree": {
       "heading": "리소스 트리",
-      "empty": "펼쳐진 리소스가 없습니다"
+      "empty": "펼쳐진 리소스가 없습니다",
+      "expand": "{name} 펼치기",
+      "collapse": "{name} 접기",
+      "loading": "{name} 불러오는 중…",
+      "loadError": "{name}을(를) 불러올 수 없습니다",
+      "retry": "{name} 다시 시도",
+      "unavailable": "{name}을(를) 사용할 수 없습니다",
+      "emptyDirectory": "{name}이(가) 비어 있습니다"
     },
     "editor": {
       "groupLabel": "편집기 그룹",

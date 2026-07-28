@@ -45,7 +45,14 @@
     "retry": "再試行",
     "tree": {
       "heading": "リソースツリー",
-      "empty": "展開されたリソースはありません"
+      "empty": "展開されたリソースはありません",
+      "expand": "{name}を展開",
+      "collapse": "{name}を折りたたむ",
+      "loading": "{name}を読み込み中…",
+      "loadError": "{name}を読み込めません",
+      "retry": "{name}を再試行",
+      "unavailable": "{name}は利用できません",
+      "emptyDirectory": "{name}は空です"
     },
     "editor": {
       "groupLabel": "エディターグループ",
