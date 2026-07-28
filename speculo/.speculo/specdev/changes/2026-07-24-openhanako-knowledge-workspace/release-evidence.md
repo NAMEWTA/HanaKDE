@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `72feaeff`（Ticket 18 实现验证点） |
+| Commit | `84c66f04`（Ticket 19 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -17,7 +17,7 @@
 | Milestone | Gate | Status | Artifact/command |
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
-| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–18） | Knowledge 壳、真实多来源只读树、stat-first Asset Viewer 及 owner/window 隔离的 DocumentSession/DocumentView registry 已交付；同址 buffer/baseline/version/history/dirty 共享，view cursor/selection/scroll/viewport/mode 独立。Ticket 18 精确 10/10、相关 67/67；当前干净全仓 10258 tests passed，typecheck、boundary 与 Renderer build 通过 |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–19） | Knowledge 壳、真实多来源只读树、stat-first Asset Viewer、owner/window 隔离的共享 DocumentSession/DocumentView registry，以及单文档 Markdown 手动 expected-version 保存曳光弹已交付；严格 UTF-8/10 MiB 门禁、BOM/换行保持、共享 dirty/baseline/version/history 和持久非模态失败通知均已有证据。Ticket 19 精确 10/10、相关 38/38；当前干净全仓 1023 files passed、1 skipped，10269 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
@@ -84,7 +84,7 @@
 | KW-US-055 | 27 | `desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts` | E2E-KW-005 | 未执行 | — |
 | KW-US-056 | 27 | `desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts` | E2E-KW-005 | 未执行 | — |
 | KW-US-057 | 12 | `desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx`（8/8）；覆盖 strict UTF-8、10 MiB 精确边界/超限拒绝、非法 UTF-8、BOM 去除、拒绝时不创建编辑缓冲、autosave/manual save 与目标切换隔离 |
-| KW-US-058 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
+| KW-US-058 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（1 file、10/10）；纯 LF/CRLF 原样保持，mixed 按多数且平局选 LF，首次保存提示规范化，UTF-8 BOM 保持 |
 | KW-US-059 | 28 | `desktop/src/react/__tests__/editor/knowledge-enter-commands.test.ts` | 契约/集成 | 未执行 | — |
 | KW-US-060 | 28 | `desktop/src/react/__tests__/editor/knowledge-enter-commands.test.ts` | 契约/集成 | 未执行 | — |
 | KW-US-061 | 29 | `desktop/src/react/__tests__/editor/knowledge-indent-commands.test.ts` | 契约/集成 | 未执行 | — |
@@ -149,16 +149,16 @@
 | KW-US-120 | 39 | `desktop/src/react/__tests__/editor/knowledge-embed-field.test.ts` | E2E-KW-009 | 未执行 | — |
 | KW-US-121 | 37 | `desktop/src/react/__tests__/editor/knowledge-link-completion.test.ts`<br>`desktop/src/react/__tests__/commands/knowledge-link-navigation.test.ts` | E2E-KW-009 | 未执行 | — |
 | KW-US-122 | 35 | `tests/knowledge-safe-links.test.ts`<br>`desktop/src/react/__tests__/utils/knowledge-safe-rendering.test.ts` | E2E-KW-011 | 未执行 | — |
-| KW-US-123 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-124 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-125 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-126 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-127 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-128 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-129 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-130 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-131 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
-| KW-US-132 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
+| KW-US-123 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；真实 Surface 在 manual policy 下注册 `Mod-s`，只保存当前文档 |
+| KW-US-124 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；输入、blur、idle 与 rerender 均不触发 ResourceIO write |
+| KW-US-125 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；未提供 Save All，保存调用只携带目标文档的精确知识地址 |
+| KW-US-126 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；同址两 view 共享 registry buffer，任一 view 保存共享最新文本并共同推进 baseline |
+| KW-US-127 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；write 使用最近成功 load/save 的 provider-neutral expected version，写入异常不推进 version |
+| KW-US-128 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；保存成功保持静默并保留共享 undo history |
+| KW-US-129 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；冲突/不可用异常保留 buffer、旧 baseline、dirty 与所有共享 view 状态 |
+| KW-US-130 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；异常以持久非模态 alert 呈现，可手动关闭且编辑焦点不被夺取 |
+| KW-US-131 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；重复冲突更新同一 session/document 通知，不堆叠多条 alert |
+| KW-US-132 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；后续成功只清除该文档 saveError，不影响其他文档通知 |
 | KW-US-133 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 未执行 | — |
 | KW-US-134 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 未执行 | — |
 | KW-US-135 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 未执行 | — |
@@ -294,7 +294,7 @@
 | TM-005 | 通过 | 控制字符、正文、token 与绝对路径错误/日志脱敏断言通过 |
 | TM-006 | 部分通过（Ticket 14 基线） | HTML/SVG/event 与非 `http/https` URI 默认拒绝；Ticket 35 外链用户手势流程尚未执行 |
 | TM-007 | 部分通过（Ticket 14 基线） | Mermaid strict、无 HTML label、丢弃 bindFunctions、SVG allowlist 与 stale-result guard 通过；Ticket 33 编辑字段尚未执行 |
-| TM-008 | 部分通过（Tickets 14、17） | Server 与 Asset Viewer 均在正文前 stat；10 MiB + 1、active/unsupported 类型零 read，允许内容受版本与实际字节数复验，取消/漂移 fail-closed；Tickets 19、42 尚未执行 |
+| TM-008 | 部分通过（Tickets 14、17、19） | Server、Asset Viewer 与 Markdown Editor 均在正文前 stat；10 MiB + 1、active/unsupported 类型零 read，Markdown 超限时不创建 session/view；允许内容受实际字节数复验，取消、stale 结果与非法 UTF-8 均 fail-closed；Ticket 42 尚未执行 |
 | TM-009 | 未执行 | — |
 | TM-010 | 未执行 | — |
 | TM-011 | 未执行 | — |
@@ -313,4 +313,5 @@
 - 2026-07-28 Ticket 16 首次执行未带范围排除的 `npx vitest run` 时，Vitest 额外收集了用户本地 ignored `temp/**` 中 8 个 Node test 文件，并因其不是 Vitest suite 退出 1；该次产品范围内 1019 files、10226 tests 全部通过。未修改用户内容；随后实际门禁命令 `npx vitest run --exclude 'temp/**' --exclude 'teach/**'` 通过（1019 files passed、1 skipped；10226 tests passed、6 skipped）。这是已解决的范围外测试发现，不构成产品豁免或发布 blocker。
 - 2026-07-28 Ticket 17 的 E2E-KW-006、E2E-KW-017 尚未执行：当前代码交付 Asset Viewer 公共组件/策略，但真实用户入口分别依赖 Ticket 20/49 的编辑组与树打开语义，desktop native 动作依赖 Ticket 51。为避免私有 route/test shortcut 或提前形成平行打开/native 状态机，本票只登记 23/23 精确自动化；E2E 行保持“未执行”，待显式 blocker 完成后执行。这是有 owner 的暂存证据缺口，不能进入最终发布通过状态。
 - 2026-07-28 Ticket 18 的 E2E-KW-004、E2E-KW-024 尚未执行：当前仓库只存在 E2E-KW-001 spec；E2E-KW-004 的真实 tabs/groups 入口由 Ticket 20 交付，E2E-KW-024 还依赖 Ticket 19/21/51 的保存、冲突与 native grant 链路。为避免私有测试入口或提前实现后续 owner 范围，本票登记 10/10 精确 registry 自动化并保持 E2E 行“未执行”；依赖完成后必须以真实产品入口回填，最终发布前不得保留此缺口。
+- 2026-07-28 Ticket 19 的 E2E-KW-005 尚未执行：当前仓库只有 E2E-KW-001 spec，Markdown 文档的真实打开、活动 tab 与编辑组入口依赖 Ticket 20/49。为避免私有 route/test shortcut 或提前实现后续 owner 范围，本票登记精确 10/10、相关 38/38 与干净全仓 10269 tests passed；E2E 行保持“未执行”，待真实产品入口完成后执行，最终发布前不得保留此缺口。
 - 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。

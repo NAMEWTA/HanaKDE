@@ -35,7 +35,7 @@
 | 16 | 1 Workspace/文档 | [交付真实多来源只读资源树](./ticket/16-deliver-readonly-source-tree.md) | 06, 08, 15 | KW-US-012, KW-US-013, KW-US-030 | P1 | 已完成 |
 | 17 | 1 Workspace/文档 | [交付内容门禁与基础 Asset Viewer](./ticket/17-deliver-open-policy-and-asset-viewer.md) | 06, 14, 15 | KW-US-156, KW-US-158, KW-US-159, KW-US-160, KW-US-161, KW-US-162, KW-RULE-SEC, KW-RULE-NATIVE | P1 | 已完成 |
 | 18 | 1 Workspace/文档 | [建立共享文档会话与视图状态](./ticket/18-establish-document-session-registry.md) | 08, 12, 17 | KW-US-041, KW-US-042, KW-US-043, KW-US-044, KW-US-166 | P1 | 已完成 |
-| 19 | 1 Workspace/文档 | [交付单 Markdown 打开编辑保存曳光弹](./ticket/19-deliver-manual-save-tracer.md) | 06, 12, 18 | KW-US-058, KW-US-123, KW-US-124, KW-US-125, KW-US-126, KW-US-127, KW-US-128, KW-US-129, KW-US-130, KW-US-131, KW-US-132 | P1 | 未开始 |
+| 19 | 1 Workspace/文档 | [交付单 Markdown 打开编辑保存曳光弹](./ticket/19-deliver-manual-save-tracer.md) | 06, 12, 18 | KW-US-058, KW-US-123, KW-US-124, KW-US-125, KW-US-126, KW-US-127, KW-US-128, KW-US-129, KW-US-130, KW-US-131, KW-US-132 | P1 | 已完成 |
 | 20 | 1 Workspace/文档 | [交付编辑组、标签、临时预览与面包屑](./ticket/20-deliver-groups-tabs-breadcrumbs.md) | 15, 18 | KW-US-035, KW-US-036, KW-US-037, KW-US-038, KW-US-039, KW-US-040, KW-US-049, KW-US-053, KW-US-054 | P1 | 未开始 |
 | 21 | 1 Workspace/文档 | [交付外部变化与显式三方冲突](./ticket/21-deliver-external-change-conflicts.md) | 04, 06, 19 | KW-US-133, KW-US-134, KW-US-135 | P1 | 未开始 |
 | 22 | 1 Workspace/文档 | [交付关闭、Workspace 切换与悬空文档](./ticket/22-deliver-close-switch-orphan-flow.md) | 05, 18, 19, 20, 21 | KW-US-045, KW-US-046, KW-US-047, KW-US-048, KW-US-050, KW-US-051, KW-US-052, KW-US-136, KW-US-137, KW-US-138, KW-US-139, KW-US-140, KW-US-141, KW-US-142 | P1 | 未开始 |
