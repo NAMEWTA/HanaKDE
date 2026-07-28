@@ -1,7 +1,7 @@
 # Ticket 08: 迁移 Renderer 资源客户端与 Desk 兼容状态
 
 - **被阻塞于：** [`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)、[`06-complete-resource-io-http-seams.md`](./06-complete-resource-io-http-seams.md)、[`07-migrate-server-desk-workbench.md`](./07-migrate-server-desk-workbench.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,19 @@
 
 ## 验收标准
 
-- [ ] Renderer 不使用 Node API；Knowledge 启动不恢复 Desk tabs、树状态或挂载。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] Renderer 不使用 Node API；Knowledge 启动不恢复 Desk tabs、树状态或挂载。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- **实现提交：** `1783fbeb`
+- 建立唯一生产级 `knowledgeWorkspaceClient`，Renderer 只通过共享 `KnowledgeResourceAddress`、Knowledge/ResourceIO HTTP 与资源事件协议访问来源，不读取 Node 文件系统、provider identity 或本机路径。
+- 建立独立、仅会话态的 Knowledge workspace slice；每次启动从空白来源、展开项、打开项与活动项开始，旧 Desk 的 tabs、树状态、挂载与持久化逻辑保持不变。
+- 资源事件由唯一客户端串行执行 catch-up/live、严格 DTO 校验、gap/epoch 恢复、成功后 cursor 提交和权威重查；取消、版本冲突、权限/不可用、畸形事件、symlink/分隔符越界与 mount 换根均 fail-closed。
+- `npm exec -- vitest run` 定向 11 files、193/193；干净全仓 `npm test -- --run --exclude 'temp/**' --exclude 'teach/**'` 为 1009 files passed、1 skipped，10130 tests passed、6 skipped。
+- `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:renderer`、`npm run build:packages`、`npm run build:server` 与 `git diff --check` 均通过。
+- 规范轴与标准轴复审均为 0 个阻塞项；Ticket 16 在接入资源树前须补充显式的 source-root listing 接缝，不能用空 `relativePath` 绕过冻结地址契约。
