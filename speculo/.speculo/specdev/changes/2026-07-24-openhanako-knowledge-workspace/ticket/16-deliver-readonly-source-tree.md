@@ -1,7 +1,7 @@
 # Ticket 16: 交付真实多来源只读资源树
 
 - **被阻塞于：** [`06-complete-resource-io-http-seams.md`](./06-complete-resource-io-http-seams.md)、[`08-migrate-renderer-resource-client.md`](./08-migrate-renderer-resource-client.md)、[`15-deliver-knowledge-shell.md`](./15-deliver-knowledge-shell.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -62,9 +62,24 @@
 
 ## 验收标准
 
-- [ ] 树不展示虚拟知识节点；完整文件名可见；来源不可用不清空其他来源。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 树不展示虚拟知识节点；完整文件名可见；来源不可用不清空其他来源。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `212b9fd2`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **真实树投影：** main 与全部当前来源作为真实来源根；展开时只通过唯一 knowledge client 的 `ResourceIO.list({ sourceKey, relativePath })` 按需读取，不创建虚拟 Page/Asset 分组、私有 route 或第二套文件系统。
+- **身份与显示：** 同级目录默认稳定自然排序且目录优先；Markdown、多重扩展名与未知后缀均显示完整原始名称；普通树排除来源内部 `.trash/`。
+- **刷新与故障：** 复用既有来源 watcher 和 ResourceEvent catch-up/live 流；事件只刷新已加载且仍展开的分支，120 ms 合并突发通知；单来源失败保留该分支旧投影及其他来源，并提供脱敏重试。
+- **取消与会话：** 折叠、workspace 切换和卸载均取消在途 list，request identity 阻止旧响应覆盖；展开状态保留在当前 workspace session，同 workspace 重挂载恢复，新 workspace 从全折叠开始。
+- **i18n/A11y/UI：** zh-CN、zh-TW、en、ja、ko 同步；来源根、treeitem/group、`aria-level`、`aria-expanded`、状态/错误语义和键盘可达 disclosure/retry 完整；名称可换行且无扩展名截断，沿用主题变量与既有窄布局。
+- **精确自动化：** `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx`（1 file、6/6）。
+- **相关回归：** 5 files、34/34；干净全仓 1019 files passed、1 skipped，10226 tests passed、6 skipped。
+- **门禁：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:client` 与 `git diff --check` 通过；双轴复审无未决 blocker。
+- **Playwright：** 按本 ticket 固定测试选择不适用，未运行。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-28-openhanako-knowledge-workspace-implementation-16.md`

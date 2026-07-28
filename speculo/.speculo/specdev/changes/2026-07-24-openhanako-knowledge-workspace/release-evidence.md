@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `9a7dda3b`（Ticket 15 实现验证点） |
+| Commit | `212b9fd2`（Ticket 16 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -17,7 +17,7 @@
 | Milestone | Gate | Status | Artifact/command |
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
-| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Ticket 15） | Knowledge 固定顶层视图、空白 main 编辑组、来源/树/编辑区壳、五语言、亮暗主题、窄布局、键盘与 ARIA 已交付；精确自动化 6/6，相关回归 65/65，desktop-full 2/2、web-open 1/1；全仓 10219 tests passed，typecheck、boundary 与 Renderer build 通过 |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–16） | Knowledge 固定顶层视图、空白 main 编辑组及真实多来源只读树已交付；树复用 ResourceIO/来源 watcher/ResourceEvent，支持懒加载、取消、增量刷新、完整文件名、单来源故障隔离和会话内展开；Ticket 16 精确自动化 6/6、相关 34/34；当前干净全仓 10226 tests passed，typecheck、boundary 与 Renderer build 通过 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
@@ -38,8 +38,8 @@
 | KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成）；远程 DTO/错误无本地绝对路径 |
 | KW-US-010 | 09 | `tests/mobile-workbench-route.test.ts`<br>`desktop/src/react/__tests__/mobile/knowledge-access.test.ts` | E2E-KW-021 | 通过 | `npx vitest run tests/http-route-security.test.ts tests/resource-io-route.test.ts tests/resource-watch-registry.test.ts tests/knowledge-workspace-route.test.ts tests/resource-events-ws.test.ts tests/ws-scope.test.ts tests/mobile-workbench-route.test.ts tests/chat-route-switching.test.ts desktop/src/react/__tests__/services/knowledge-workspace-client.test.ts desktop/src/react/__tests__/services/resource-events.test.ts desktop/src/react/__tests__/mobile/knowledge-access.test.ts desktop/src/react/__tests__/mobile/MobileApp.test.tsx`（12 files、274/274）；两来源同相对路径隔离、跨来源 transfer 保留 sourceKey、Mobile 独立水合/取消、LAN 权限链、无路径 DTO 与租约清理通过 |
 | KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx tests/knowledge-i18n-a11y-contract.test.ts`（2 files、6/6）；Knowledge 固定同级顶层入口、main 首位与单一空编辑组通过 |
-| KW-US-012 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
-| KW-US-013 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
+| KW-US-012 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx`（1 file、6/6）；main/挂载来源根、精确 KnowledgeResourceAddress 懒加载、嵌套目录、来源 watcher、事件增量刷新和单来源故障隔离通过 |
+| KW-US-013 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx`（1 file、6/6）；`notes.md`、`nested.page.md`、`archive.tar.gz` 与未知后缀 `raw.sdfds` 均以完整原始名称显示 |
 | KW-US-014 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
 | KW-US-015 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 未执行 | — |
 | KW-US-016 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 未执行 | — |
@@ -56,7 +56,7 @@
 | KW-US-027 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 未执行 | — |
 | KW-US-028 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 未执行 | — |
 | KW-US-029 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-030 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
+| KW-US-030 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx`（1 file、6/6）；同 workspace 重挂载恢复展开分支，折叠取消在途读取，新 workspace 清空展开状态 |
 | KW-US-031 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
 | KW-US-032 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
 | KW-US-033 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
@@ -310,4 +310,5 @@
 
 ## Exceptions
 
-没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
+- 2026-07-28 Ticket 16 首次执行未带范围排除的 `npx vitest run` 时，Vitest 额外收集了用户本地 ignored `temp/**` 中 8 个 Node test 文件，并因其不是 Vitest suite 退出 1；该次产品范围内 1019 files、10226 tests 全部通过。未修改用户内容；随后实际门禁命令 `npx vitest run --exclude 'temp/**' --exclude 'teach/**'` 通过（1019 files passed、1 skipped；10226 tests passed、6 skipped）。这是已解决的范围外测试发现，不构成产品豁免或发布 blocker。
+- 除上述已解决测试发现外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
