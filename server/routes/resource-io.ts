@@ -6,7 +6,10 @@ import {
   principalOwnsLocalConnection,
 } from "../../core/security-principal.ts";
 import { isOperationCorrelationId } from "../../shared/knowledge-diagnostics.ts";
-import { parseKnowledgeResourceAddress } from "../../shared/knowledge-workspace-contract.ts";
+import {
+  KNOWLEDGE_MARKDOWN_MAX_BYTES,
+  parseKnowledgeResourceAddress,
+} from "../../shared/knowledge-workspace-contract.ts";
 import { KnowledgeWorkspaceError, snapshotOwnData, toKnowledgeErrorEnvelope, toPublicKnowledgeErrorEnvelope } from "../../shared/knowledge-workspace-errors.ts";
 import { safeJson } from "../hono-helpers.ts";
 import { createHonoResourceOperationContext } from "../http/resource-operation-context.ts";
@@ -43,6 +46,12 @@ const MUTATION_AUTHORITY_FIELDS = new Set([
   "opaqueRootId",
   "nativeCredential",
   "nativeBridgeCredential",
+  "nativeToken",
+  "nativeBridgeToken",
+  "token",
+  "credential",
+  "credentials",
+  "windowId",
 ]);
 
 const RESOURCE_REF_FIELDS = Object.freeze({
@@ -308,6 +317,16 @@ export function createResourceIoRoute(engine, {
       capability: "files.read",
       allowedAddressFields: KNOWLEDGE_ADDRESS_ROUTE_FIELDS.read,
     });
+    if (body?.address !== undefined) {
+      return encodeReadResult(
+        await readKnowledgeContentWithGate(
+          resourceIO,
+          resource,
+          c.req.raw?.signal,
+        ),
+        body,
+      );
+    }
     const result = await resourceIO.read(resource);
     return encodeReadResult(result, body);
   }, { responseKind: "read" }));
@@ -603,6 +622,134 @@ function decodeBase64Content(content) {
   return Buffer.from(compact, "base64");
 }
 
+async function readKnowledgeContentWithGate(
+  resourceIO,
+  resource,
+  signal,
+) {
+  throwIfKnowledgeReadAborted(signal);
+  const stat = await resourceIO.stat(resource);
+  const size = stat?.version?.size;
+  if (stat?.exists !== true) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_resource_not_found",
+      "Knowledge content is unavailable",
+    );
+  }
+  if (
+    stat?.isDirectory
+    || !Number.isSafeInteger(size)
+    || size < 0
+    || !hasKnowledgeReadVersion(stat?.version)
+  ) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Knowledge content size is unavailable",
+      {
+        state: stat?.isDirectory
+          ? "not_a_file"
+          : !Number.isSafeInteger(size) || size < 0
+            ? "content_size_unavailable"
+            : "content_version_unavailable",
+      },
+    );
+  }
+  assertKnowledgeContentSize(size);
+
+  throwIfKnowledgeReadAborted(signal);
+  const opened = await resourceIO.openRead(resource, {
+    expectedVersion: stat.version,
+  });
+  assertKnowledgeContentSize(opened?.size);
+  if (opened.size !== size) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_version_conflict",
+      "Knowledge content changed after stat",
+      { state: "content_size_changed" },
+    );
+  }
+
+  const chunks = [];
+  let byteLength = 0;
+  for await (const chunk of opened.body) {
+    throwIfKnowledgeReadAborted(signal);
+    if (!Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+      throw new KnowledgeWorkspaceError(
+        "knowledge_resource_unavailable",
+        "Knowledge content stream is invalid",
+        { state: "invalid_content_chunk" },
+      );
+    }
+    byteLength += chunk.byteLength;
+    if (byteLength > size) {
+      throw new KnowledgeWorkspaceError(
+        "knowledge_transfer_limit_exceeded",
+        "Knowledge content exceeds the stat-first hard limit",
+        { limit: size, actual: byteLength },
+      );
+    }
+    chunks.push(
+      Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength),
+    );
+  }
+  if (byteLength !== size) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_version_conflict",
+      "Knowledge content changed during read",
+      { state: "content_size_changed" },
+    );
+  }
+  return {
+    resourceKey: opened.resourceKey,
+    resource: opened.resource,
+    content: Buffer.concat(chunks, byteLength),
+    version: opened.version,
+    ...(opened.filePath ? { filePath: opened.filePath } : {}),
+  };
+}
+
+function hasKnowledgeReadVersion(version) {
+  if (!version || typeof version !== "object") return false;
+  return (
+    Number.isFinite(version.mtimeMs)
+    || Number.isFinite(version.sequence)
+    || (
+      typeof version.sha256 === "string"
+      && version.sha256.length > 0
+    )
+    || (
+      typeof version.etag === "string"
+      && version.etag.length > 0
+    )
+  );
+}
+
+function assertKnowledgeContentSize(size) {
+  if (
+    !Number.isSafeInteger(size)
+    || size < 0
+    || size > KNOWLEDGE_MARKDOWN_MAX_BYTES
+  ) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_transfer_limit_exceeded",
+      "Knowledge content exceeds the V1 hard limit",
+      {
+        limit: KNOWLEDGE_MARKDOWN_MAX_BYTES,
+        actual: Number.isFinite(size)
+          ? Math.max(0, size)
+          : KNOWLEDGE_MARKDOWN_MAX_BYTES + 1,
+      },
+    );
+  }
+}
+
+function throwIfKnowledgeReadAborted(signal) {
+  if (!signal?.aborted) return;
+  const error = new Error("knowledge content read aborted");
+  error.name = "AbortError";
+  throw error;
+}
+
 async function resourceJson(c, engine, handler, {
   rejectMutationAuthority = false,
   allowScopedKnowledgeMutation = false,
@@ -611,8 +758,14 @@ async function resourceJson(c, engine, handler, {
 } = {}) {
   try {
     const body = await safeJson(c);
-    if (rejectMutationAuthority) {
+    // Knowledge-address routes already apply their stricter schema first and
+    // retain the stable knowledge_operation_precondition_failed envelope.
+    // Legacy ResourceRef routes have no equivalent top-level schema, so they
+    // must reject authority fields here for both reads and mutations.
+    if (body?.address === undefined || rejectMutationAuthority) {
       rejectMutationAuthorityFields(body, { recursive: true });
+    }
+    if (rejectMutationAuthority) {
       createHonoResourceOperationContext(c, {
         reason: body?.reason || "resource_io_route",
         allowScopedKnowledgeMutation:

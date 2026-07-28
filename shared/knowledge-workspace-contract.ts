@@ -1,4 +1,5 @@
 export const KNOWLEDGE_SOURCE_ROLES = ["main", "mounted"] as const;
+export const KNOWLEDGE_MARKDOWN_MAX_BYTES = 10 * 1024 * 1024;
 
 export const KNOWLEDGE_SOURCE_CAPABILITIES = [
   "stat",

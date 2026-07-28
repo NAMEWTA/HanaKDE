@@ -1,4 +1,5 @@
 import type { MermaidConfig } from 'mermaid';
+import { sanitizeMermaidSvg } from './markdown-html-sanitizer';
 
 interface MermaidRenderResult {
   svg: string;
@@ -15,6 +16,9 @@ type MermaidLoader = () => Promise<MermaidApi>;
 const MERMAID_CONFIG: MermaidConfig = {
   startOnLoad: false,
   securityLevel: 'strict',
+  flowchart: {
+    htmlLabels: false,
+  },
 };
 
 let mermaidPromise: Promise<MermaidApi> | null = null;
@@ -135,10 +139,14 @@ async function renderMermaidDiagram(diagram: HTMLElement): Promise<void> {
 
   try {
     const mermaid = await loadMermaid();
-    const { svg, bindFunctions } = await mermaid.render(nextMermaidId(), source);
+    const { svg } = await mermaid.render(nextMermaidId(), source);
     if (diagram.dataset.mermaidRenderSeq !== currentRenderSeq || readSource(diagram) !== source) return;
-    rendered.innerHTML = svg;
-    bindFunctions?.(rendered);
+    const sanitizedSvg = sanitizeMermaidSvg(svg);
+    if (!sanitizedSvg) {
+      throw new Error('unsafe Mermaid SVG');
+    }
+    if (diagram.dataset.mermaidRenderSeq !== currentRenderSeq || readSource(diagram) !== source) return;
+    rendered.innerHTML = sanitizedSvg;
     sourceBlock?.setAttribute('hidden', '');
     if (sourceBlock) ensureSourceToolbar(diagram, sourceBlock, source);
     diagram.dataset.mermaidStatus = 'rendered';

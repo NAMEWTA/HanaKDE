@@ -268,11 +268,11 @@ describe('renderMarkdown', () => {
     expect(html).toContain('height="180"');
   });
 
-  it('renders Obsidian external image width shorthand without leaking the size into alt text', () => {
+  it('does not auto-load Obsidian external image targets', () => {
     const html = renderMarkdownPreview('![250](https://example.com/image.jpg)');
 
-    expect(html).toContain('<img src="https://example.com/image.jpg" alt="" width="250"');
-    expect(html).not.toContain('alt="250"');
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('https://example.com/image.jpg');
   });
 
   it('filters unsafe markdown preview links while preserving safe links', () => {

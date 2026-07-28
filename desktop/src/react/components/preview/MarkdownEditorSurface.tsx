@@ -33,10 +33,11 @@ import { hasMarkdownCoverDropImage } from '../../utils/markdown-cover-drop';
 import type { FileVersion, RemoteWorkbenchContentRef, VersionedWriteResult } from '../../types';
 import type { MarkdownImageContext } from '../../utils/markdown';
 import type { PreviewScrollSnapshot } from '../../../../../shared/preview-reading-position.ts';
+import { KNOWLEDGE_MARKDOWN_MAX_BYTES } from '../../../../../shared/knowledge-workspace-contract.ts';
 
 /* ── Types ── */
 
-export const KNOWLEDGE_MARKDOWN_MAX_BYTES = 10 * 1024 * 1024;
+export { KNOWLEDGE_MARKDOWN_MAX_BYTES };
 
 export type MarkdownContentGateRejectionReason = 'content_too_large' | 'invalid_utf8';
 

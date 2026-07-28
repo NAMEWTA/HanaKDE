@@ -127,8 +127,8 @@ const KATEX_CLASS_NAMES = new Set([
   'mainrm',
 ]);
 
-const SAFE_URL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
-const SAFE_IMAGE_URL_PROTOCOLS = new Set(['http:', 'https:', 'file:']);
+const SAFE_URL_PROTOCOLS = new Set(['http:', 'https:']);
+const TRUSTED_IMAGE_PROTOCOLS = new Set(['http:', 'https:', 'file:']);
 const EXPLICIT_PROTOCOL_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 const HTML_DIMENSION_RE = /^[1-9]\d{0,4}$/;
 const FOOTNOTE_ID_RE = /^(?:fn|fnref)-hana-fn-[a-z0-9]+-\d+(?:-\d+)?$/;
@@ -235,13 +235,18 @@ function sanitizeHref(raw: string): string | null {
   }
 }
 
-function sanitizeImageSrc(raw: string): string | null {
-  const src = raw.trim();
-  if (!src || !EXPLICIT_PROTOCOL_RE.test(src)) return null;
+export interface MarkdownHtmlSanitizerOptions {
+  trustedImageUrls?: ReadonlySet<string>;
+}
 
+function sanitizeImageSrc(
+  raw: string,
+  trustedImageUrls: ReadonlySet<string>,
+): string | null {
+  const src = raw.trim();
+  if (!src || !trustedImageUrls.has(src)) return null;
   try {
-    const parsed = new URL(src);
-    return SAFE_IMAGE_URL_PROTOCOLS.has(parsed.protocol) ? src : null;
+    return TRUSTED_IMAGE_PROTOCOLS.has(new URL(src).protocol) ? src : null;
   } catch {
     return null;
   }
@@ -340,7 +345,11 @@ function normalizeFootnoteRole(element: Element, tagName: string, raw: string): 
   return null;
 }
 
-function sanitizeAttributes(element: Element, tagName: string): void {
+function sanitizeAttributes(
+  element: Element,
+  tagName: string,
+  options: MarkdownHtmlSanitizerOptions,
+): void {
   for (const attr of Array.from(element.attributes)) {
     const name = attr.name.toLowerCase();
 
@@ -361,7 +370,10 @@ function sanitizeAttributes(element: Element, tagName: string): void {
     }
 
     if (tagName === 'img' && name === 'src') {
-      const src = sanitizeImageSrc(attr.value);
+      const src = sanitizeImageSrc(
+        attr.value,
+        options.trustedImageUrls ?? new Set(),
+      );
       if (src) element.setAttribute('src', src);
       else element.removeAttribute(attr.name);
       continue;
@@ -459,13 +471,19 @@ function unwrapElement(element: Element): void {
   parent.removeChild(element);
 }
 
-function sanitizeChildren(parent: ParentNode): void {
+function sanitizeChildren(
+  parent: ParentNode,
+  options: MarkdownHtmlSanitizerOptions,
+): void {
   for (const child of Array.from(parent.childNodes)) {
-    sanitizeNode(child);
+    sanitizeNode(child, options);
   }
 }
 
-function sanitizeNode(node: ChildNode): void {
+function sanitizeNode(
+  node: ChildNode,
+  options: MarkdownHtmlSanitizerOptions,
+): void {
   if (node.nodeType === 3) return;
 
   if (node.nodeType !== 1) {
@@ -496,7 +514,7 @@ function sanitizeNode(node: ChildNode): void {
 
   const isFootnoteSection = tagName === 'section' && hasClass(element, 'footnotes');
   if (!isFootnoteSection && !ALLOWED_TAGS.has(tagName)) {
-    sanitizeChildren(element);
+    sanitizeChildren(element, options);
     unwrapElement(element);
     return;
   }
@@ -507,21 +525,176 @@ function sanitizeNode(node: ChildNode): void {
     return;
   }
 
-  sanitizeAttributes(element, tagName);
+  sanitizeAttributes(element, tagName, options);
   if (tagName === 'img' && !element.getAttribute('src')) {
     element.remove();
     return;
   }
-  sanitizeChildren(element);
+  sanitizeChildren(element, options);
 }
 
-export function sanitizeMarkdownPreviewHtml(html: string): string {
+export function sanitizeMarkdownPreviewHtml(
+  html: string,
+  options: MarkdownHtmlSanitizerOptions = {},
+): string {
   if (typeof document === 'undefined') {
     throw new Error('Markdown preview sanitizer requires a DOM environment');
   }
 
   const template = document.createElement('template');
   template.innerHTML = html;
-  sanitizeChildren(template.content);
+  sanitizeChildren(template.content, options);
   return template.innerHTML;
+}
+
+const MERMAID_SVG_TAGS = new Set([
+  'svg',
+  'g',
+  'path',
+  'line',
+  'polyline',
+  'polygon',
+  'rect',
+  'circle',
+  'ellipse',
+  'text',
+  'tspan',
+  'defs',
+  'marker',
+  'lineargradient',
+  'radialgradient',
+  'stop',
+  'clippath',
+  'mask',
+  'title',
+  'desc',
+]);
+
+const MERMAID_SVG_ATTRS = new Set([
+  'xmlns',
+  'viewbox',
+  'preserveaspectratio',
+  'width',
+  'height',
+  'x',
+  'y',
+  'x1',
+  'x2',
+  'y1',
+  'y2',
+  'cx',
+  'cy',
+  'r',
+  'rx',
+  'ry',
+  'd',
+  'points',
+  'transform',
+  'fill',
+  'fill-opacity',
+  'stroke',
+  'stroke-width',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-dasharray',
+  'stroke-opacity',
+  'opacity',
+  'font-family',
+  'font-size',
+  'font-style',
+  'font-weight',
+  'text-anchor',
+  'dominant-baseline',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+  'orient',
+  'markerwidth',
+  'markerheight',
+  'refx',
+  'refy',
+  'gradientunits',
+  'gradienttransform',
+  'offset',
+  'stop-color',
+  'stop-opacity',
+  'clip-path',
+  'mask',
+  'role',
+  'aria-label',
+  'aria-hidden',
+]);
+
+const SAFE_SVG_ID_RE = /^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/;
+const SAFE_SVG_CLASS_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const SAFE_SVG_FRAGMENT_RE = /^#[A-Za-z][A-Za-z0-9_.:-]{0,127}$/;
+const SAFE_SVG_URL_RE = /^url\(\s*#[A-Za-z][A-Za-z0-9_.:-]{0,127}\s*\)$/;
+const SVG_ACTIVE_VALUE_RE = /(?:javascript|vbscript|data|file|https?):/i;
+const SVG_CONTROL_RE = /\p{Cc}/u;
+
+function safeMermaidSvgAttribute(name: string, value: string): boolean {
+  if (SVG_CONTROL_RE.test(value) || SVG_ACTIVE_VALUE_RE.test(value)) {
+    return false;
+  }
+  if (value.toLowerCase().includes('url(')) {
+    return SAFE_SVG_URL_RE.test(value);
+  }
+  if (name === 'id') return SAFE_SVG_ID_RE.test(value);
+  if (name === 'class') {
+    return value
+      .split(/\s+/)
+      .filter(Boolean)
+      .every(token => SAFE_SVG_CLASS_RE.test(token));
+  }
+  return MERMAID_SVG_ATTRS.has(name);
+}
+
+function sanitizeMermaidSvgNode(node: ChildNode): void {
+  if (node.nodeType === 3) return;
+  if (node.nodeType !== 1) {
+    node.remove();
+    return;
+  }
+  const element = node as Element;
+  const tagName = element.tagName.toLowerCase();
+  if (!MERMAID_SVG_TAGS.has(tagName)) {
+    element.remove();
+    return;
+  }
+  for (const attr of Array.from(element.attributes)) {
+    const name = attr.name.toLowerCase();
+    if (name.startsWith('on')) {
+      element.removeAttribute(attr.name);
+      continue;
+    }
+    if (name === 'href' || name === 'xlink:href') {
+      if (!SAFE_SVG_FRAGMENT_RE.test(attr.value)) {
+        element.removeAttribute(attr.name);
+      }
+      continue;
+    }
+    if (!safeMermaidSvgAttribute(name, attr.value)) {
+      element.removeAttribute(attr.name);
+    }
+  }
+  for (const child of Array.from(element.childNodes)) {
+    sanitizeMermaidSvgNode(child);
+  }
+}
+
+/**
+ * Mermaid is treated as hostile even when its own securityLevel is strict.
+ * Interactive bindings and active/resource-bearing SVG elements are not part
+ * of the accepted output surface.
+ */
+export function sanitizeMermaidSvg(svg: string): string | null {
+  if (typeof document === 'undefined') {
+    throw new Error('Mermaid SVG sanitizer requires a DOM environment');
+  }
+  const template = document.createElement('template');
+  template.innerHTML = svg;
+  const root = template.content.querySelector('svg');
+  if (!root) return null;
+  sanitizeMermaidSvgNode(root);
+  return root.isConnected || root.parentNode ? root.outerHTML : null;
 }

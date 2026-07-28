@@ -19,6 +19,7 @@ import { uniqueMarkdownHeadingId } from './markdown-document';
 type MarkdownItInstance = ReturnType<typeof markdownit>;
 type MarkdownRenderEnv = {
   markdownImage?: MarkdownImageContext;
+  trustedImageUrls?: Set<string>;
   footnoteIdPrefix?: string;
   footnotes?: FootnoteState;
 };
@@ -228,7 +229,7 @@ function sanitizeImageUrl(raw: string): string | null {
 function resolveLocalImagePath(rawPath: string, currentFilePath: string): string | null {
   const decodedPath = decodeMarkdownPath(rawPath.trim());
   if (!decodedPath) return null;
-  if (isAbsoluteLocalPath(decodedPath)) return normalizeJoinedPath(decodedPath);
+  if (isAbsoluteLocalPath(decodedPath)) return null;
 
   const baseDir = dirnamePortable(currentFilePath);
   if (!baseDir) return null;
@@ -1003,7 +1004,18 @@ function markdownImageRenderer(md: MarkdownItInstance): void {
     const token = tokens[idx];
     const markdownEnv = env as MarkdownRenderEnv;
     const src = token.attrGet('src');
-    if (src) token.attrSet('src', resolveMarkdownImageSrc(src, markdownEnv.markdownImage));
+    if (src) {
+      const resolved = resolveMarkdownImageSrc(src, markdownEnv.markdownImage);
+      token.attrSet('src', resolved);
+      if (
+        resolved !== src
+        && !EXPLICIT_PROTOCOL_RE.test(src.trim())
+        && markdownEnv.markdownImage?.filePath
+        && typeof markdownEnv.markdownImage.getFileUrl === 'function'
+      ) {
+        markdownEnv.trustedImageUrls?.add(resolved);
+      }
+    }
 
     const rawAlt = token.children
       ? self.renderInlineAsText(token.children, options, env)
@@ -1041,6 +1053,7 @@ function markdownTableScrollWrapper(md: MarkdownItInstance): void {
 function buildMarkdownEnv(src: string, options: MarkdownPreviewOptions = {}): MarkdownRenderEnv {
   return {
     footnoteIdPrefix: footnoteIdPrefixForSource(src),
+    trustedImageUrls: new Set<string>(),
     markdownImage: {
       filePath: options.filePath,
       getFileUrl: options.getFileUrl,
@@ -1080,7 +1093,11 @@ export function renderMarkdown(src: string): string {
 
 export function renderMarkdownPreview(src: string, options: MarkdownPreviewOptions = {}): string {
   try {
-    return sanitizeMarkdownPreviewHtml(getPreviewMd().render(src, buildMarkdownEnv(src, options)));
+    const env = buildMarkdownEnv(src, options);
+    return sanitizeMarkdownPreviewHtml(
+      getPreviewMd().render(src, env),
+      { trustedImageUrls: env.trustedImageUrls },
+    );
   } catch (err) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[markdown] preview sanitizer failed:', err);
