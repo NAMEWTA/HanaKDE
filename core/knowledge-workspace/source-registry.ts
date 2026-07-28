@@ -3,7 +3,9 @@ import path from "path";
 import { atomicWriteSync } from "../../shared/safe-fs.ts";
 import {
   KNOWLEDGE_SOURCE_CAPABILITIES,
+  parseKnowledgeResourceAddress,
   parseKnowledgeSourceDto,
+  type KnowledgeResourceAddress,
   type KnowledgeSourceCapability,
   type KnowledgeSourceDto,
 } from "../../shared/knowledge-workspace-contract.ts";
@@ -158,6 +160,51 @@ export class SourceRegistry {
       );
     }
     return cloneRef(source.root);
+  }
+
+  async resolveAddress(address: KnowledgeResourceAddress): Promise<ResourceRef> {
+    const parsed = parseKnowledgeResourceAddress(address);
+    if (parsed.ok === false) {
+      throw Object.assign(new Error("invalid knowledge resource address"), parsed.error);
+    }
+    await this.revalidate(parsed.value.sourceKey);
+    const root = this.rootRef(parsed.value.sourceKey);
+    if (parsed.value.relativePath.includes("\\")) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "knowledge source provider does not support literal backslash segments",
+      );
+    }
+    if (root.kind === "local-file") {
+      const rootPath = realOrResolved(root.path);
+      const candidatePath = realOrResolved(path.join(
+        rootPath,
+        ...parsed.value.relativePath.split("/"),
+      ));
+      if (!isInsideRoot(rootPath, candidatePath)) {
+        throw createKnowledgeWorkspaceError(
+          "knowledge_resource_out_of_scope",
+          "knowledge resource address escapes its source",
+        );
+      }
+      return {
+        kind: "local-file",
+        path: candidatePath,
+      };
+    }
+    if (root.kind === "mount") {
+      return {
+        kind: "mount",
+        mountId: root.mountId,
+        path: [root.path, parsed.value.relativePath]
+          .filter(Boolean)
+          .join("/"),
+      };
+    }
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge source provider cannot resolve child resources",
+    );
   }
 
   async register(input: RegisterKnowledgeSourceInput): Promise<KnowledgeSourceDto> {
@@ -453,6 +500,36 @@ function cloneDto(dto: KnowledgeSourceDto): KnowledgeSourceDto {
 
 function bindingsPath(hanakoHome: string): string {
   return path.join(hanakoHome, SOURCE_BINDINGS_FILE);
+}
+
+function realOrResolved(filePath: string): string {
+  try {
+    return path.normalize(fs.realpathSync(filePath));
+  } catch {
+    const unresolved: string[] = [];
+    let current = path.resolve(filePath);
+    while (true) {
+      try {
+        return path.join(
+          path.normalize(fs.realpathSync(current)),
+          ...unresolved.reverse(),
+        );
+      } catch {
+        const parent = path.dirname(current);
+        if (parent === current) return path.resolve(filePath);
+        unresolved.push(path.basename(current));
+        current = parent;
+      }
+    }
+  }
+}
+
+function isInsideRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === ""
+    || (!relative.startsWith(`..${path.sep}`)
+      && relative !== ".."
+      && !path.isAbsolute(relative));
 }
 
 function loadBindings(hanakoHome: string): {

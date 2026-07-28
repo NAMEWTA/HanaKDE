@@ -6,6 +6,10 @@ import {
 } from "../../core/knowledge-workspace/source-registry.ts";
 import { createSandboxResourceIO } from "../../lib/resource-io/sandbox-resource-io.ts";
 import {
+  parseKnowledgeResourceAddress,
+} from "../../shared/knowledge-workspace-contract.ts";
+import {
+  createKnowledgeWorkspaceError,
   toKnowledgeErrorEnvelope,
   toPublicKnowledgeErrorEnvelope,
 } from "../../shared/knowledge-workspace-errors.ts";
@@ -26,17 +30,15 @@ type RegistryEntry = {
   registry: SourceRegistry;
 };
 
+const registryStates = new WeakMap<object, {
+  current: Promise<RegistryEntry> | null;
+  workspaceKey: string | null;
+  signature: string | null;
+}>();
+
 export function createKnowledgeWorkspaceRoute(engine) {
   const route = new Hono();
-  const registryState: {
-    current: Promise<RegistryEntry> | null;
-    workspaceKey: string | null;
-    signature: string | null;
-  } = {
-    current: null,
-    workspaceKey: null,
-    signature: null,
-  };
+  const registryState = registryStateFor(engine);
 
   route.get("/knowledge-workspace/sources", async (c) => {
     try {
@@ -79,6 +81,58 @@ export function createKnowledgeWorkspaceRoute(engine) {
   });
 
   return route;
+}
+
+export async function resolveKnowledgeResourceAddressForRequest(
+  c,
+  engine,
+  input: unknown,
+  capability: "files.read" | "files.write",
+) {
+  const parsed = parseKnowledgeResourceAddress(input);
+  if (parsed.ok === false) throw Object.assign(new Error(parsed.error.code), parsed.error);
+  const requestContext = authorizeAddress(c, engine, capability);
+  const registry = await registryFor(
+    c,
+    engine,
+    requestContext,
+    registryStateFor(engine),
+  );
+  return registry.resolveAddress(parsed.value);
+}
+
+function authorizeAddress(
+  c,
+  engine,
+  capability: "files.read" | "files.write",
+) {
+  const requestContext = createRequestContext(c, engine);
+  if (requestContext.authPrincipal?.kind === "unknown") return requestContext;
+  const decision = requestContext.authorize(capability, {
+    kind: "studio",
+    studioId: requestContext.studioId,
+  });
+  if (decision.allowed) return requestContext;
+  throw createKnowledgeWorkspaceError(
+    "knowledge_resource_out_of_scope",
+    "knowledge resource capability is outside the authenticated scope",
+  );
+}
+
+function registryStateFor(engine) {
+  if (!engine || (typeof engine !== "object" && typeof engine !== "function")) {
+    throw routeError("knowledge workspace engine required", 500);
+  }
+  let state = registryStates.get(engine);
+  if (!state) {
+    state = {
+      current: null,
+      workspaceKey: null,
+      signature: null,
+    };
+    registryStates.set(engine, state);
+  }
+  return state;
 }
 
 function authorize(c, engine, capability: "files.read" | "files.write") {

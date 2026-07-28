@@ -3187,7 +3187,7 @@
     },
     {
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
-      "line": 502,
+      "line": 579,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
@@ -3196,7 +3196,7 @@
     },
     {
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
-      "line": 503,
+      "line": 580,
       "kind": "atomic-write",
       "excerpt": "atomicWriteSync(filePath, `${JSON.stringify(data, null, 2)}\\n`)",
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",

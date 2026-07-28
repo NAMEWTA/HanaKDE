@@ -7,6 +7,9 @@ import { parseKnowledgeResourceAddress } from "../../shared/knowledge-workspace-
 import { KnowledgeWorkspaceError, snapshotOwnData, toKnowledgeErrorEnvelope, toPublicKnowledgeErrorEnvelope } from "../../shared/knowledge-workspace-errors.ts";
 import { safeJson } from "../hono-helpers.ts";
 import { createHonoResourceOperationContext } from "../http/resource-operation-context.ts";
+import {
+  resolveKnowledgeResourceAddressForRequest,
+} from "./knowledge-workspace.ts";
 
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -50,6 +53,22 @@ const MUTATION_ROUTE_FIELDS = Object.freeze({
   delete: new Set(["resource", "ref", "target", "reason", "operationId", "expectedVersion"]),
   copy: new Set(["from", "to", "oldResource", "newResource", "reason", "operationId", "expectedVersion"]),
   transfer: new Set(["source", "targetDirectory", "targetName", "reason", "operationId", "expectedTargetVersion"]),
+});
+
+const KNOWLEDGE_ADDRESS_ROUTE_FIELDS = Object.freeze({
+  stat: new Set(["address"]),
+  read: new Set(["address", "encoding", "responseEncoding"]),
+  list: new Set(["address"]),
+  search: new Set(["address", "query"]),
+  writeExpectedVersion: new Set([
+    "address",
+    "content",
+    "encoding",
+    "contentEncoding",
+    "expectedVersion",
+    "reason",
+    "operationId",
+  ]),
 });
 
 export function createResourceIoRoute(engine) {
@@ -147,23 +166,35 @@ export function createResourceIoRoute(engine) {
   });
 
   route.post("/resource-io/stat", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
-    const resource = body?.resource || body?.ref || body?.target || body;
+    const resource = await readResourceRef(c, engine, body, {
+      capability: "files.read",
+      allowedAddressFields: KNOWLEDGE_ADDRESS_ROUTE_FIELDS.stat,
+    });
     return resourceIO.stat(resource);
   }, { responseKind: "stat" }));
 
   route.post("/resource-io/read", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
-    const resource = body?.resource || body?.ref || body?.target || body;
+    const resource = await readResourceRef(c, engine, body, {
+      capability: "files.read",
+      allowedAddressFields: KNOWLEDGE_ADDRESS_ROUTE_FIELDS.read,
+    });
     const result = await resourceIO.read(resource);
     return encodeReadResult(result, body);
   }, { responseKind: "read" }));
 
   route.post("/resource-io/list", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
-    const resource = body?.resource || body?.ref || body?.target || body;
+    const resource = await readResourceRef(c, engine, body, {
+      capability: "files.read",
+      allowedAddressFields: KNOWLEDGE_ADDRESS_ROUTE_FIELDS.list,
+    });
     return resourceIO.list(resource);
   }, { responseKind: "list" }));
 
   route.post("/resource-io/search", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
-    const resource = body?.resource || body?.ref || body?.target || body;
+    const resource = await readResourceRef(c, engine, body, {
+      capability: "files.read",
+      allowedAddressFields: KNOWLEDGE_ADDRESS_ROUTE_FIELDS.search,
+    });
     return resourceIO.search(resource, { query: body?.query });
   }, { responseKind: "search" }));
 
@@ -173,7 +204,10 @@ export function createResourceIoRoute(engine) {
   }, { rejectMutationAuthority: true, responseKind: "mutation" }));
 
   route.post("/resource-io/write-expected-version", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
-    const resource = body?.resource || body?.ref || body?.target;
+    const resource = await readResourceRef(c, engine, body, {
+      capability: "files.write",
+      allowedAddressFields: KNOWLEDGE_ADDRESS_ROUTE_FIELDS.writeExpectedVersion,
+    });
     return resourceIO.writeExpectedVersion(
       resource,
       decodeWriteContent(body),
@@ -226,6 +260,34 @@ export function createResourceIoRoute(engine) {
   }, { rejectMutationAuthority: true, responseKind: "transfer", allowedFields: MUTATION_ROUTE_FIELDS.transfer }));
 
   return route;
+}
+
+async function readResourceRef(c, engine, body, {
+  capability,
+  allowedAddressFields,
+}) {
+  if (body?.address !== undefined) {
+    rejectUnexpectedFields(body, allowedAddressFields);
+    if (
+      body?.resource !== undefined
+      || body?.ref !== undefined
+      || body?.target !== undefined
+      || typeof body?.kind === "string"
+    ) {
+      throw new KnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "Knowledge resource request cannot mix address and ResourceRef",
+        { field: "address" },
+      );
+    }
+    return resolveKnowledgeResourceAddressForRequest(
+      c,
+      engine,
+      body.address,
+      capability,
+    );
+  }
+  return body?.resource || body?.ref || body?.target || body;
 }
 
 function operationContextFromBody(body, c) {
@@ -350,7 +412,7 @@ function rejectUnexpectedFields(body, allowedFields) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new KnowledgeWorkspaceError(
       "knowledge_operation_precondition_failed",
-      "Resource mutation body must be an object",
+      "Resource request body must be an object",
       { field: "body" },
     );
   }
@@ -358,7 +420,7 @@ function rejectUnexpectedFields(body, allowedFields) {
     if (!allowedFields.has(field)) {
       throw new KnowledgeWorkspaceError(
         "knowledge_operation_precondition_failed",
-        "Resource mutation body contains an unexpected field",
+        "Resource request body contains an unexpected field",
         { field },
       );
     }

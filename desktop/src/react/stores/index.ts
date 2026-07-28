@@ -24,6 +24,10 @@ import { createSelectionSlice, type SelectionSlice } from './selection-slice';
 import { createSubagentPreviewSlice, type SubagentPreviewSlice } from './subagent-preview-slice';
 import { createComputerOverlaySlice, type ComputerOverlaySlice } from './computer-overlay-slice';
 import { createScreenshotSlice, type ScreenshotSlice } from './screenshot-slice';
+import {
+  createKnowledgeWorkspaceSlice,
+  type KnowledgeWorkspaceSlice,
+} from './knowledge-workspace-slice';
 import { configureMessageLiveVersionSessionKeyResolver } from './message-live-version';
 
 export type StoreState = ConnectionSlice &
@@ -50,7 +54,8 @@ export type StoreState = ConnectionSlice &
   SelectionSlice &
   SubagentPreviewSlice &
   ComputerOverlaySlice &
-  ScreenshotSlice;
+  ScreenshotSlice &
+  KnowledgeWorkspaceSlice;
 
 export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createConnectionSlice(set, _get),
@@ -78,6 +83,7 @@ export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createSubagentPreviewSlice(set),
   ...createComputerOverlaySlice(set),
   ...createScreenshotSlice(set),
+  ...createKnowledgeWorkspaceSlice(set, _get),
 }));
 
 configureMessageLiveVersionSessionKeyResolver((sessionPath) => (
@@ -111,4 +117,5 @@ export type {
   SubagentPreviewSlice,
   ComputerOverlaySlice,
   ScreenshotSlice,
+  KnowledgeWorkspaceSlice,
 };

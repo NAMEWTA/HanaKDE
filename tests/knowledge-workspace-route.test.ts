@@ -2,11 +2,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { Hono } from "hono";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { upsertStudioMount } from "../core/studio-mounts.ts";
 import {
   createKnowledgeWorkspaceRoute,
 } from "../server/routes/knowledge-workspace.ts";
+import { createResourceIoRoute } from "../server/routes/resource-io.ts";
 
 describe("knowledge workspace source route", () => {
   let tempRoot: string | null = null;
@@ -90,6 +91,144 @@ describe("knowledge workspace source route", () => {
       ok: true,
       sourceKey: "research",
     });
+  });
+
+  it("resolves public KnowledgeResourceAddress values before ResourceIO access", async () => {
+    const { engine, main } = setup();
+    const stat = vi.fn(async (resource) => ({
+      resourceKey: "local_fs:redacted",
+      resource,
+      exists: true,
+      isDirectory: false,
+      version: { size: 3, mtimeMs: 12 },
+      filePath: path.join(main, "notes", "a.md"),
+    }));
+    Object.assign(engine, { resourceIO: { stat } });
+    const app = new Hono();
+    app.route("/api", createResourceIoRoute(engine));
+
+    const response = await app.request("/api/resource-io/stat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: { sourceKey: "main", relativePath: "notes/a.md" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(stat).toHaveBeenCalledWith({
+      kind: "local-file",
+      path: path.join(fs.realpathSync(main), "notes", "a.md"),
+    });
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({
+      exists: true,
+      isDirectory: false,
+      version: { size: 3, mtimeMs: 12 },
+    });
+    expect(text).not.toContain(main);
+  });
+
+  it("keeps mounted provider identity behind sourceKey during ResourceIO access", async () => {
+    const { engine } = setup();
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    const stat = vi.fn(async (resource) => ({
+      resourceKey: "mount:redacted",
+      resource,
+      exists: true,
+      isDirectory: false,
+      version: { size: 3, mtimeMs: 12 },
+    }));
+    Object.assign(engine, { resourceIO: { stat } });
+    app.route("/api", createResourceIoRoute(engine));
+
+    const created = await app.request("/api/knowledge-workspace/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceKey: "research",
+        displayName: "Research",
+        mountId: "mount_research",
+      }),
+    });
+    expect(created.status).toBe(201);
+
+    const response = await app.request("/api/resource-io/stat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: {
+          sourceKey: "research",
+          relativePath: "papers/a.md",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(stat).toHaveBeenCalledWith({
+      kind: "mount",
+      mountId: "mount_research",
+      path: "papers/a.md",
+    });
+  });
+
+  it("authorizes address operations by capability and rejects non-contract body fields", async () => {
+    const { engine } = setup();
+    const stat = vi.fn(async () => ({
+      exists: true,
+      isDirectory: false,
+    }));
+    Object.assign(engine, { resourceIO: { stat } });
+    const remoteApp = new Hono();
+    remoteApp.use("*", async (c, next) => {
+      (c as unknown as {
+        set(key: string, value: unknown): void;
+      }).set("authPrincipal", {
+        kind: "device",
+        userId: "user_1",
+        studioId: "studio_1",
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        deviceId: "device_write_only",
+        connectionKind: "lan",
+        credentialKind: "device_credential",
+        trustState: "paired",
+        scopes: ["files.write"],
+      });
+      await next();
+    });
+    remoteApp.route("/api", createResourceIoRoute(engine));
+
+    const denied = await remoteApp.request("/api/resource-io/stat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: { sourceKey: "main", relativePath: "notes/a.md" },
+      }),
+    });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      code: "knowledge_resource_out_of_scope",
+      httpStatus: 403,
+    });
+
+    const localApp = new Hono();
+    localApp.route("/api", createResourceIoRoute(engine));
+    const forged = await localApp.request("/api/resource-io/stat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: { sourceKey: "main", relativePath: "notes/a.md" },
+        principal: "attacker",
+      }),
+    });
+    expect(forged.status).toBe(412);
+    expect(await forged.json()).toMatchObject({
+      code: "knowledge_operation_precondition_failed",
+      details: { field: "principal" },
+    });
+    expect(stat).not.toHaveBeenCalled();
   });
 
   it("returns closed safe envelopes and never leaks roots or identity tokens", async () => {

@@ -1,4 +1,16 @@
 import { hanaFetch } from '../hooks/use-hana-fetch';
+import {
+  createKnowledgeWorkspaceClient,
+  knowledgeWorkspaceClient,
+  type KnowledgeResourceEvent,
+  type KnowledgeWorkspaceFetch,
+  type KnowledgeWorkspaceClient,
+} from './knowledge-workspace-client';
+import {
+  invalidateAllDeskTreePaths,
+  PREVIEW_DOCUMENT_CATCH_UP_REFRESH_OPTIONS,
+  refreshOpenPreviewDocuments,
+} from '../utils/preview-document-refresh';
 
 export type ResourceRef =
   | { kind: 'local-file'; path: string }
@@ -24,12 +36,18 @@ type ResourceEvent = {
 type ResourceEventFetch = (
   path: string,
   opts?: RequestInit & { timeout?: number; throwOnHttpError?: boolean },
-) => Promise<{ json: () => Promise<any> }>;
+) => Promise<{
+  ok?: boolean;
+  status?: number;
+  json: () => Promise<unknown>;
+}>;
 
 type ResourceEventClientOptions = {
   fetchImpl?: ResourceEventFetch;
   applyEvent?: (event: ResourceEvent) => void;
   resubscribeWatches?: () => Promise<void> | void;
+  requeryAfterGap?: () => Promise<void> | void;
+  client?: KnowledgeWorkspaceClient;
 };
 
 type ForegroundCatchUpOptions = {
@@ -44,50 +62,78 @@ export function createResourceEventClient({
   fetchImpl = hanaFetch,
   applyEvent,
   resubscribeWatches,
+  requeryAfterGap,
+  client: injectedClient,
 }: ResourceEventClientOptions = {}) {
-  let lastSeenSequence = 0;
+  const client = injectedClient ?? createKnowledgeWorkspaceClient({
+    fetchImpl: adaptResourceEventFetch(fetchImpl),
+  });
+  let eventQueue: Promise<void> = Promise.resolve();
 
-  const handleEvent = (event: ResourceEvent | null | undefined): void => {
-    if (!isResourceEvent(event)) return;
-    if (Number.isFinite(event.sequence) && Number(event.sequence) > lastSeenSequence) {
-      lastSeenSequence = Math.floor(Number(event.sequence));
+  const recoverFromGap = async (): Promise<void> => {
+    await resubscribeWatches?.();
+    if (requeryAfterGap) {
+      await requeryAfterGap();
+    } else {
+      await recoverDeskResourcesAfterGap();
     }
   };
 
-  const catchUpAfterReconnect = async (options: { applyEvent?: (event: ResourceEvent) => void } = {}) => {
-    const res = await fetchImpl(`/api/resource-io/events?since=${lastSeenSequence}`, {
-      method: 'GET',
-      throwOnHttpError: false,
-    });
-    const data = await res.json();
-    if (data?.stale) {
-      await resubscribeWatches?.();
-      if (Number.isFinite(data.latestSequence) && Number(data.latestSequence) > lastSeenSequence) {
-        lastSeenSequence = Math.floor(Number(data.latestSequence));
-      }
-      return data;
-    }
+  const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
+    const result = eventQueue.then(task);
+    eventQueue = result.then(() => undefined, () => undefined);
+    return result;
+  };
 
+  const handleEvent = (
+    event: ResourceEvent | null | undefined,
+    applyEventOverride?: (event: ResourceEvent) => Promise<void> | void,
+  ): Promise<void> => {
+    if (!isResourceEventMessage(event)) return Promise.resolve();
+    const handler = applyEventOverride || applyEvent;
+    return enqueue(() => client.applyResourceEvent(event, {
+      recoverFromGap,
+      applyEvent: (safeEvent: KnowledgeResourceEvent) => handler?.(safeEvent),
+    }));
+  };
+
+  const catchUpAfterReconnect = (
+    options: {
+      applyEvent?: (event: ResourceEvent) => Promise<void> | void;
+    } = {},
+  ) => enqueue(async () => {
     const handler = options.applyEvent || applyEvent;
-    for (const event of Array.isArray(data?.events) ? data.events : []) {
-      handleEvent(event);
-      handler?.(event);
-    }
-    if (Number.isFinite(data?.latestSequence) && Number(data.latestSequence) > lastSeenSequence) {
-      lastSeenSequence = Math.floor(Number(data.latestSequence));
-    }
-    return data;
-  };
+    return client.catchUpResourceEvents({
+      recoverFromGap,
+      applyEvent: (event: KnowledgeResourceEvent) => handler?.(event),
+    });
+  });
 
   return {
     handleEvent,
     catchUpAfterReconnect,
-    lastSeenSequence: () => lastSeenSequence,
+    lastSeenSequence: client.lastResourceEventSequence,
+  };
+}
+
+async function recoverDeskResourcesAfterGap(): Promise<void> {
+  invalidateAllDeskTreePaths();
+  await refreshOpenPreviewDocuments(PREVIEW_DOCUMENT_CATCH_UP_REFRESH_OPTIONS);
+}
+
+function adaptResourceEventFetch(fetchImpl: ResourceEventFetch): KnowledgeWorkspaceFetch {
+  return async (path, options) => {
+    const response = await fetchImpl(path, options);
+    return {
+      ok: response.ok !== false,
+      status: typeof response.status === 'number' ? response.status : 200,
+      json: response.json,
+    };
   };
 }
 
 const resourceEventClient = createResourceEventClient({
-  fetchImpl: hanaFetch,
+  client: knowledgeWorkspaceClient,
   resubscribeWatches: resubscribeActiveWatches,
 });
 
@@ -197,16 +243,20 @@ async function resubscribeActiveWatches(): Promise<void> {
   }));
 }
 
-function isResourceEvent(event: ResourceEvent | null | undefined): event is ResourceEvent {
-  if (!event || !Number.isSafeInteger(event.sequence) || Number(event.sequence) < 0) return false;
-  if (event.type === 'resource.resync_required') {
-    return event.stale === true && event.resync === 'resource-stat-required';
-  }
-  return event.type === 'resource.changed' || event.type === 'resource.deleted' || event.type === 'resource.renamed';
+export function isResourceEventMessage(
+  event: ResourceEvent | null | undefined,
+): event is ResourceEvent {
+  return event?.type === 'resource.resync_required'
+    || event?.type === 'resource.changed'
+    || event?.type === 'resource.deleted'
+    || event?.type === 'resource.renamed';
 }
 
-export function recordResourceEventCursor(event: ResourceEvent | null | undefined): void {
-  resourceEventClient.handleEvent(event);
+export function processResourceEventMessage(
+  event: ResourceEvent | null | undefined,
+  applyEvent?: (event: ResourceEvent) => Promise<void> | void,
+): Promise<void> {
+  return resourceEventClient.handleEvent(event, applyEvent);
 }
 
 export function catchUpResourceEventsAfterReconnect(applyEvent?: (event: ResourceEvent) => void): Promise<unknown> {

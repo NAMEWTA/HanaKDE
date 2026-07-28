@@ -121,6 +121,32 @@ describe("knowledge SourceRegistry", () => {
     })).rejects.toMatchObject({ code: "source_root_not_disjoint", status: 409 });
   });
 
+  it("keeps resolved addresses inside the active source root across provider path semantics", async () => {
+    const { create, main } = await setup();
+    const registry = await create();
+    const outside = path.join(path.dirname(main), "outside");
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(path.join(outside, "secret.md"), "secret");
+    fs.symlinkSync(
+      outside,
+      path.join(main, "linked-outside"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    await expect(registry.resolveAddress({
+      sourceKey: "main",
+      relativePath: "linked-outside/secret.md",
+    })).rejects.toMatchObject({
+      code: "knowledge_resource_out_of_scope",
+    });
+    await expect(registry.resolveAddress({
+      sourceKey: "main",
+      relativePath: "notes\\..\\outside.md",
+    })).rejects.toMatchObject({
+      code: "knowledge_operation_precondition_failed",
+    });
+  });
+
   it("reuses a historical key only for the same inactive opaque root", async () => {
     const { create } = await setup();
     const first = await create();

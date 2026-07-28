@@ -11,7 +11,8 @@ import { requestStreamResume, injectHandlers, injectWebSocketGetter } from './st
 import {
   bindResourceEventForegroundCatchUp,
   catchUpResourceEventsAfterReconnect,
-  recordResourceEventCursor,
+  isResourceEventMessage,
+  processResourceEventMessage,
 } from './resource-events';
 import { useStore } from '../stores';
 import { setStatus } from '../utils/ui-helpers';
@@ -142,7 +143,14 @@ async function openConnectionWebSocket(connection: ServerConnection): Promise<vo
   _ws.onmessage = (event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data);
-      recordResourceEventCursor(msg);
+      if (isResourceEventMessage(msg)) {
+        void processResourceEventMessage(msg, (safeEvent) => {
+          handleServerMessage(safeEvent);
+        }).catch((err) => {
+          console.warn('[ws] resource event apply failed:', err);
+        });
+        return;
+      }
       handleServerMessage(msg);
     } catch (err) {
       console.error('[ws] message parse error:', err);

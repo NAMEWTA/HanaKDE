@@ -108727,6 +108727,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "server/routes/knowledge-workspace.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/routes/resource-io.ts",
           "kind": "import-statement"
         },
@@ -108738,11 +108743,6 @@
         {
           "root": "server-bootstrap",
           "from": "server/routes/studio-workspaces.ts",
-          "kind": "import-statement"
-        },
-        {
-          "root": "server-bootstrap",
-          "from": "server/routes/knowledge-workspace.ts",
           "kind": "import-statement"
         },
         {
@@ -108789,12 +108789,12 @@
         },
         {
           "root": "server-bootstrap",
-          "from": "server/routes/studio-workspaces.ts",
+          "from": "server/routes/knowledge-workspace.ts",
           "kind": "import-statement"
         },
         {
           "root": "server-bootstrap",
-          "from": "server/routes/knowledge-workspace.ts",
+          "from": "server/routes/studio-workspaces.ts",
           "kind": "import-statement"
         }
       ],
@@ -108973,6 +108973,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "server/routes/knowledge-workspace.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/routes/resource-io.ts",
           "kind": "import-statement"
         },
@@ -108980,14 +108985,9 @@
           "root": "server-bootstrap",
           "from": "server/routes/studio-workspaces.ts",
           "kind": "import-statement"
-        },
-        {
-          "root": "server-bootstrap",
-          "from": "server/routes/knowledge-workspace.ts",
-          "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by server/routes/mobile-workbench.ts (import-statement); server/routes/resource-io.ts (import-statement); server/routes/studio-workspaces.ts (import-statement); +1 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by server/routes/mobile-workbench.ts (import-statement); server/routes/knowledge-workspace.ts (import-statement); server/routes/resource-io.ts (import-statement); +1 more importer(s)."
     },
     {
       "path": "server/http/route-errors.ts",
@@ -109376,11 +109376,16 @@
       "provenance": [
         {
           "root": "server-bootstrap",
+          "from": "server/routes/resource-io.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/composition/open-root.ts",
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by server/composition/open-root.ts (import-statement)."
+      "reason": "Reached via esbuild source module graph, imported by server/routes/resource-io.ts (import-statement); server/composition/open-root.ts (import-statement)."
     },
     {
       "path": "server/routes/media.ts",
@@ -110575,16 +110580,21 @@
         },
         {
           "root": "server-bootstrap",
-          "from": "server/routes/resource-io.ts",
+          "from": "core/knowledge-workspace/source-registry.ts",
           "kind": "import-statement"
         },
         {
           "root": "server-bootstrap",
-          "from": "core/knowledge-workspace/source-registry.ts",
+          "from": "server/routes/knowledge-workspace.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "server/routes/resource-io.ts",
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); server/routes/resource-io.ts (import-statement); +1 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); core/knowledge-workspace/source-registry.ts (import-statement); +2 more importer(s)."
     },
     {
       "path": "shared/knowledge-workspace-errors.ts",
@@ -110607,17 +110617,17 @@
         },
         {
           "root": "server-bootstrap",
-          "from": "server/routes/resource-io.ts",
-          "kind": "import-statement"
-        },
-        {
-          "root": "server-bootstrap",
           "from": "core/knowledge-workspace/source-registry.ts",
           "kind": "import-statement"
         },
         {
           "root": "server-bootstrap",
           "from": "server/routes/knowledge-workspace.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "server/routes/resource-io.ts",
           "kind": "import-statement"
         }
       ],

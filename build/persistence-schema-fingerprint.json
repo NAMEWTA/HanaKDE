@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:834e056fc12af753eb8016e06f6da97e23591b68465f63f102807592f72c9fd5",
+  "payloadFingerprint": "sha256:8a6d564f8d2a0c3f85f14f7559a33cfcaaab98f3f16bec4ac25ebc4e35f7f425",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2916,8 +2916,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Desk workspace skill mutations now use ResourceIO/provider boundaries; replacing obsolete direct-workspace filesystem exemptions with one OS-temporary staging cleanup exemption changes only persistence ownership metadata and no stored data schema or DATA_EPOCH.",
-    "payloadFingerprint": "sha256:834e056fc12af753eb8016e06f6da97e23591b68465f63f102807592f72c9fd5"
+    "compatibilityReason": "Ticket 08 adds address resolution and shifts registered Knowledge source binding write locations without changing persisted schema semantics.",
+    "payloadFingerprint": "sha256:8a6d564f8d2a0c3f85f14f7559a33cfcaaab98f3f16bec4ac25ebc4e35f7f425"
   },
   "schemas": [
     {
@@ -3128,7 +3128,7 @@
       "contract": "schemaVersion 1 source binding history validator and atomic serializer",
       "kind": "runtime-contract",
       "module": "core/knowledge-workspace/source-registry.ts",
-      "sourceHash": "sha256:f69dea7c958513cccb731e63cde112dad0d9adb6c2002e28f1a11c39a21a7a48",
+      "sourceHash": "sha256:42ffcb370784ea9a073036946a864e7f575f4eb961882b430d1561c5bd1bfdd1",
       "storeId": "knowledge-source-bindings"
     },
     {
@@ -4225,7 +4225,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 502,
+      "line": 579,
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
       "storeId": "knowledge-source-bindings"
@@ -4233,7 +4233,7 @@
     {
       "exemptionId": null,
       "kind": "atomic-write",
-      "line": 503,
+      "line": 580,
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
       "storeId": "knowledge-source-bindings"
