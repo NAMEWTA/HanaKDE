@@ -31,7 +31,7 @@
 | 12 | 0 基础契约 | [抽取策略驱动的共享 CM6 表面](./ticket/12-extract-policy-driven-cm6-surface.md) | 01, 02, 11 | KW-US-057, KW-RULE-MARKDOWN | P0 | 已完成 |
 | 13 | 0 基础契约 | [建立性能预算与基准夹具](./ticket/13-establish-performance-fixtures.md) | 01, 03 | KW-RULE-PERF, KW-RULE-TEST | P0 | 已完成 |
 | 14 | 0 基础契约 | [建立威胁模型与恶意工作区门禁](./ticket/14-establish-malicious-workspace-tests.md) | 03, 04, 05 | KW-US-171, KW-RULE-SEC, KW-RULE-TEST | P0 | 已完成 |
-| 15 | 1 Workspace/文档 | [交付知识视图壳与空白 main 会话](./ticket/15-deliver-knowledge-shell.md) | 05, 08 | KW-US-011, KW-US-167, KW-US-168, KW-US-169 | P1 | 未开始 |
+| 15 | 1 Workspace/文档 | [交付知识视图壳与空白 main 会话](./ticket/15-deliver-knowledge-shell.md) | 05, 08 | KW-US-011, KW-US-167, KW-US-168, KW-US-169 | P1 | 已完成 |
 | 16 | 1 Workspace/文档 | [交付真实多来源只读资源树](./ticket/16-deliver-readonly-source-tree.md) | 06, 08, 15 | KW-US-012, KW-US-013, KW-US-030 | P1 | 未开始 |
 | 17 | 1 Workspace/文档 | [交付内容门禁与基础 Asset Viewer](./ticket/17-deliver-open-policy-and-asset-viewer.md) | 06, 14, 15 | KW-US-156, KW-US-158, KW-US-159, KW-US-160, KW-US-161, KW-US-162, KW-RULE-SEC, KW-RULE-NATIVE | P1 | 未开始 |
 | 18 | 1 Workspace/文档 | [建立共享文档会话与视图状态](./ticket/18-establish-document-session-registry.md) | 08, 12, 17 | KW-US-041, KW-US-042, KW-US-043, KW-US-044, KW-US-166 | P1 | 未开始 |

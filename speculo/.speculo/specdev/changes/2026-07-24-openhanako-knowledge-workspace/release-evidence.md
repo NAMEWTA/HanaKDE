@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `8766d2a1`（Ticket 14 实现验证点） |
+| Commit | `9a7dda3b`（Ticket 15 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -17,7 +17,7 @@
 | Milestone | Gate | Status | Artifact/command |
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
-| M1 Workspace/文档（Tickets 15–22） | P1 | 未执行 | — |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Ticket 15） | Knowledge 固定顶层视图、空白 main 编辑组、来源/树/编辑区壳、五语言、亮暗主题、窄布局、键盘与 ARIA 已交付；精确自动化 6/6，相关回归 65/65，desktop-full 2/2、web-open 1/1；全仓 10219 tests passed，typecheck、boundary 与 Renderer build 通过 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
@@ -37,7 +37,7 @@
 | KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；相同历史 opaqueRootId 可显式复用空闲 key；不同根、活动冲突、workspace 切回自动恢复均拒绝/不发生 |
 | KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成）；远程 DTO/错误无本地绝对路径 |
 | KW-US-010 | 09 | `tests/mobile-workbench-route.test.ts`<br>`desktop/src/react/__tests__/mobile/knowledge-access.test.ts` | E2E-KW-021 | 通过 | `npx vitest run tests/http-route-security.test.ts tests/resource-io-route.test.ts tests/resource-watch-registry.test.ts tests/knowledge-workspace-route.test.ts tests/resource-events-ws.test.ts tests/ws-scope.test.ts tests/mobile-workbench-route.test.ts tests/chat-route-switching.test.ts desktop/src/react/__tests__/services/knowledge-workspace-client.test.ts desktop/src/react/__tests__/services/resource-events.test.ts desktop/src/react/__tests__/mobile/knowledge-access.test.ts desktop/src/react/__tests__/mobile/MobileApp.test.tsx`（12 files、274/274）；两来源同相对路径隔离、跨来源 transfer 保留 sourceKey、Mobile 独立水合/取消、LAN 权限链、无路径 DTO 与租约清理通过 |
-| KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
+| KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx tests/knowledge-i18n-a11y-contract.test.ts`（2 files、6/6）；Knowledge 固定同级顶层入口、main 首位与单一空编辑组通过 |
 | KW-US-012 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
 | KW-US-013 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
 | KW-US-014 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
@@ -193,11 +193,11 @@
 | KW-US-164 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 均由隔离临时环境中的真实 Node Server 验证 |
 | KW-US-165 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts`<br>`desktop/src/react/__tests__/services/knowledge-native-client.test.ts` | E2E-KW-017 | 未执行 | — |
 | KW-US-166 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 未执行 | — |
-| KW-US-167 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
-| KW-US-168 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
-| KW-US-169 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
+| KW-US-167 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | 精确 Vitest 6/6；`npx playwright test tests/knowledge-workspace-e2e/E2E-KW-001-shell.spec.ts --project=desktop-full`（2/2）；来源、树与空编辑区的真实 Electron 布局通过 |
+| KW-US-168 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx tests/knowledge-i18n-a11y-contract.test.ts`（6/6）；desktop-full 2/2、web-open 1/1；workspace 切换取消、状态清空、旧来源遮蔽、错误重试及 Chat/Knowledge 隔离通过 |
+| KW-US-169 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx playwright test tests/knowledge-workspace-e2e/E2E-KW-001-shell.spec.ts --project=desktop-full`（2/2）；E2E-KW-023 覆盖五语言、亮暗主题、窄布局、键盘 focus、ARIA 与单一编辑组 |
 | KW-US-170 | 04 | `tests/knowledge-diagnostics.test.ts` | 契约/集成 | 通过 | `volta run npx vitest run tests/knowledge-diagnostics.test.ts tests/resource-events-ws.test.ts tests/resource-io-route.test.ts` 及相关 ResourceIO/Renderer 回归（22 files、249/249）；稳定错误码/HTTP/retryable、诊断脱敏、恶意对象安全拒绝与无路径 resync 恢复链均通过 |
-| KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 通过 | `npx vitest run tests/knowledge-malicious-workspace.test.ts tests/knowledge-threat-control-matrix.test.ts`（2 files、13/13，macOS arm64）；真实 symlink 越界/循环/TOCTOU、原生 case/Unicode、控制字符/盘符/UNC、伪造身份、LAN 错误脱敏、stat-before-read、HTML/SVG/URI、图片与 Mermaid 主动内容均 fail-closed；E2E-KW-022 仅追踪、未执行 |
+| KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 通过 | `npx vitest run tests/knowledge-malicious-workspace.test.ts tests/knowledge-threat-control-matrix.test.ts`（2 files、13/13，macOS arm64）；真实 symlink 越界/循环/TOCTOU、原生 case/Unicode、控制字符/盘符/UNC、伪造身份、LAN 错误脱敏、stat-before-read、HTML/SVG/URI、图片与 Mermaid 主动内容均默认拒绝；E2E-KW-022 仅关联追踪，不属于本票 Playwright 门禁 |
 | KW-US-172 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | Ticket 03 精确命令（135/135，契约/集成）及 Open export 回归（52/52）；`build:server:open`、`smoke:server:open` 通过 |
 | KW-US-173 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 共享协议相同且 Full-only 差异仅由 composition 注入；一次性测试签名下 full build 通过 |
 | KW-US-174 | 25 | `tests/frontmatter-roundtrip.test.ts` | 契约/集成 | 未执行 | — |
@@ -252,7 +252,7 @@
 
 | Scenario | desktop-full | web-open | web-full | Platforms/artifacts |
 |---|---|---|---|---|
-| E2E-KW-001 | 未执行 | 未执行 | 未执行 | — |
+| E2E-KW-001 | 通过 | 通过 | 不适用 | macOS arm64；`npx playwright test tests/knowledge-workspace-e2e/E2E-KW-001-shell.spec.ts --project=desktop-full` 与 `--project=web-open`；desktop-full 2/2（含 E2E-KW-023），web-open 1/1 |
 | E2E-KW-002 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-003 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-004 | 未执行 | 未执行 | 未执行 | — |
@@ -274,7 +274,7 @@
 | E2E-KW-020 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-021 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-022 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-023 | 未执行 | 未执行 | 未执行 | — |
+| E2E-KW-023 | 通过 | 不适用 | 不适用 | macOS arm64 desktop-full；五语言、亮暗主题、窄布局、键盘 focus、ARIA 与单一空编辑组通过 |
 | E2E-KW-024 | 未执行 | 未执行 | 未执行 | — |
 
 ## Performance
