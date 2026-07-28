@@ -1,7 +1,7 @@
 # Ticket 09: 迁移 Mobile 与 LAN 知识契约
 
 - **被阻塞于：** [`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)、[`06-complete-resource-io-http-seams.md`](./06-complete-resource-io-http-seams.md)、[`07-migrate-server-desk-workbench.md`](./07-migrate-server-desk-workbench.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -67,9 +67,19 @@
 
 ## 验收标准
 
-- [ ] 远程客户端无法提交绝对路径；Desktop 与 Mobile 对 sourceKey、冲突和错误码解释一致。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 远程客户端无法提交绝对路径；Desktop 与 Mobile 对 sourceKey、冲突和错误码解释一致。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- **实现提交：** `e2d05469`
+- Mobile Knowledge 使用唯一 `knowledgeWorkspaceClient`，以独立 blank/loading/ready/error 状态异步水合来源；真实取消信号、登录 singleflight、启动 epoch 与 cleanup barrier 保证切换、卸载和并发初始化不会提交陈旧状态，也不阻塞 Chat/Workbench。
+- LAN 只接受 `KnowledgeResourceAddress`；绝对路径、反斜杠/native locator、深层伪造 authority 与 legacy ResourceRef 越权均 fail-closed。跨来源 transfer 在 Server 内私下解析 SourceRegistry，响应、事件和错误仅暴露共享地址与稳定错误码。
+- 远程 source watcher 使用与 principal/Studio 绑定的租约、续租、幂等释放、指数退避与 server epoch/gap 恢复；页面卸载、BFCache suspend/restore、网络失败、close 失败和 lease expiry 均有确定清理或重建语义，且事件不泄露本机路径。
+- `npx vitest run` 定向 12 files、274/274；全仓 `npm test -- --exclude 'temp/**' --exclude 'teach/**'` 为 1010 files passed、1 skipped，10161 tests passed、6 skipped。
+- `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:renderer`、`npm run build:server:open` 与 `git diff --check` 均通过。
+- 规范轴与标准轴复审均为 0 blocker、0 nonblocker；E2E-KW-021 仅保持发布级关联，不作为本 ticket 的 Playwright 门禁。

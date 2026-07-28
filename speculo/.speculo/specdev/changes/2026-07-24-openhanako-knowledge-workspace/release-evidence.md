@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `1783fbeb`（Ticket 08 实现验证点） |
+| Commit | `e2d05469`（Ticket 09 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -25,7 +25,7 @@
 | KW-US-007 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；realpath/dev/ino/scope token；symlink retarget 重验、alias/nested root、跨 namespace unknown 均被拒绝 |
 | KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；相同历史 opaqueRootId 可显式复用空闲 key；不同根、活动冲突、workspace 切回自动恢复均拒绝/不发生 |
 | KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成）；远程 DTO/错误无本地绝对路径 |
-| KW-US-010 | 09 | `tests/mobile-workbench-route.test.ts`<br>`desktop/src/react/__tests__/mobile/knowledge-access.test.ts` | E2E-KW-021 | 未执行 | — |
+| KW-US-010 | 09 | `tests/mobile-workbench-route.test.ts`<br>`desktop/src/react/__tests__/mobile/knowledge-access.test.ts` | E2E-KW-021 | 通过 | `npx vitest run tests/http-route-security.test.ts tests/resource-io-route.test.ts tests/resource-watch-registry.test.ts tests/knowledge-workspace-route.test.ts tests/resource-events-ws.test.ts tests/ws-scope.test.ts tests/mobile-workbench-route.test.ts tests/chat-route-switching.test.ts desktop/src/react/__tests__/services/knowledge-workspace-client.test.ts desktop/src/react/__tests__/services/resource-events.test.ts desktop/src/react/__tests__/mobile/knowledge-access.test.ts desktop/src/react/__tests__/mobile/MobileApp.test.tsx`（12 files、274/274）；两来源同相对路径隔离、跨来源 transfer 保留 sourceKey、Mobile 独立水合/取消、LAN 权限链、无路径 DTO 与租约清理通过 |
 | KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 未执行 | — |
 | KW-US-012 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
 | KW-US-013 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 未执行 | — |
@@ -215,7 +215,7 @@
 | Rule | Tickets | Status | Artifact/command |
 |---|---|---|---|
 | KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
-| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 部分通过（Tickets 03、05、06、07、08） | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193，干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1009 files passed、1 skipped，10130 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer/packages/server build 通过；Ticket 09 尚未执行 |
+| KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 通过 | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193；Ticket 09 Mobile/LAN 共享 DTO、来源隔离、provider-neutral transfer、租约 watcher、权限/取消/冲突/不可用与清理故障注入，定向 12 files、274/274；干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1010 files passed、1 skipped，10161 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过 |
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Ticket 04） | Ticket 04 相关回归 249/249；稳定错误/诊断、operation correlation、watch sequence/cursor 与无路径 resync 已验证；Tickets 10、43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Ticket 11） | `volta run npx vitest run tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`（29/29）；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证；后续 owner tickets 尚未执行 |
