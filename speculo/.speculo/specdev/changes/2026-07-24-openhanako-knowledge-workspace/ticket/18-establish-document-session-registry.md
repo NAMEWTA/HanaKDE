@@ -1,7 +1,7 @@
 # Ticket 18: 建立共享文档会话与视图状态
 
 - **被阻塞于：** [`08-migrate-renderer-resource-client.md`](./08-migrate-renderer-resource-client.md)、[`12-extract-policy-driven-cm6-surface.md`](./12-extract-policy-driven-cm6-surface.md)、[`17-deliver-open-policy-and-asset-viewer.md`](./17-deliver-open-policy-and-asset-viewer.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -62,9 +62,26 @@
 
 ## 验收标准
 
-- [ ] 同页多视图共享文本和保存状态但不共享光标；Registry 不保存 DOM、EditorView 或文件句柄。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 同页多视图共享文本和保存状态但不共享光标；Registry 不保存 DOM、EditorView 或文件句柄。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `72feaeff`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **隔离 registry：** `createKnowledgeDocumentRegistry({ ownerId, windowId })` 为每个 Renderer context 创建独立 Zustand vanilla store；模块不导出全局实例，同一地址在不同 owner/window 中没有共享引用或状态。
+- **共享 DocumentSession：** collision-free `KnowledgeResourceAddress` key 下共享 buffer、baseline、diskVersion、可逆文本 edit history、dirty、conflict 和 orphan；任一视图编辑、undo 或 redo 以单次原子 mutation 通知全部订阅者。
+- **独立 DocumentView：** view id 下独立保存 group、cursor、selection、scroll、viewport、Live Preview/Source mode 与语法显隐范围；共享 edit 映射各自位置但不令视图状态相等。
+- **生命周期：** 已存在 view 再打开返回原状态；关闭后不缓存 view，重开从文档开头、零滚动和默认 Live Preview 开始；显式 cleanup 拒绝删除仍有 view 的 session，并支持 context 整体 dispose。
+- **竞态与保存：** 同地址迟到/重复 load 不覆盖现有共享 session；保存成功提交的是实际保存快照及其新 version，若保存期间又有编辑则只推进 baseline/version，保留新 buffer 与 dirty。
+- **数据边界：** 地址继续使用公开 schema 校验；无绝对路径、Renderer Node API、DOM、EditorView、文件句柄或富文本模型进入 registry，外来同名附加字段也不会被保存。
+- **TDD 证据：** 首次 `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` 因交付模块尚不存在而红；实现后 1 file、10/10 通过。
+- **相关回归：** `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts desktop/src/react/__tests__/stores/knowledge-workspace-slice.test.ts desktop/src/react/__tests__/stores/preview-slice.test.ts desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx tests/knowledge-baseline-contract.test.ts`（5 files、67/67）。
+- **全仓回归：** `npx vitest run --exclude 'temp/**' --exclude 'teach/**'`（1022 files passed、1 skipped；10258 tests passed、6 skipped）。
+- **门禁：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:renderer` 与 `git diff --check` 通过；标准轴与规范轴复审均无未决 blocker。
+- **Playwright：** E2E-KW-004 与 E2E-KW-024 尚未执行；仓库当前只有 E2E-KW-001 spec。E2E-KW-004 的真实 tabs/groups 用户入口由 Ticket 20 交付，E2E-KW-024 还需 Ticket 19/21/51 的保存、冲突与 native grant 链路；场景保持未执行，待这些 owner ticket 完成后运行，不创建私有测试入口或提前实现后续功能。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-28-openhanako-knowledge-workspace-implementation-18.md`

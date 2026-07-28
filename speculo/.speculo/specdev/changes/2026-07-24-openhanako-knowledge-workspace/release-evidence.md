@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `212b9fd2`（Ticket 16 实现验证点） |
+| Commit | `72feaeff`（Ticket 18 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -17,7 +17,7 @@
 | Milestone | Gate | Status | Artifact/command |
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
-| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–16） | Knowledge 固定顶层视图、空白 main 编辑组及真实多来源只读树已交付；树复用 ResourceIO/来源 watcher/ResourceEvent，支持懒加载、取消、增量刷新、完整文件名、单来源故障隔离和会话内展开；Ticket 16 精确自动化 6/6、相关 34/34；当前干净全仓 10226 tests passed，typecheck、boundary 与 Renderer build 通过 |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–18） | Knowledge 壳、真实多来源只读树、stat-first Asset Viewer 及 owner/window 隔离的 DocumentSession/DocumentView registry 已交付；同址 buffer/baseline/version/history/dirty 共享，view cursor/selection/scroll/viewport/mode 独立。Ticket 18 精确 10/10、相关 67/67；当前干净全仓 10258 tests passed，typecheck、boundary 与 Renderer build 通过 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
@@ -67,10 +67,10 @@
 | KW-US-038 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
 | KW-US-039 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
 | KW-US-040 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
-| KW-US-041 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 未执行 | — |
-| KW-US-042 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 未执行 | — |
-| KW-US-043 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 未执行 | — |
-| KW-US-044 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 未执行 | — |
+| KW-US-041 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（1 file、10/10）；同址双 view 即时共享 buffer/baseline/version/dirty 与跨 view undo/redo history |
+| KW-US-042 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；cursor、selection、scroll、viewport、mode、Live Preview 语法显隐按 view 独立，共享 edit 只映射位置 |
+| KW-US-043 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；会话内返回既有 view 恢复其 group、位置、滚动与 mode |
+| KW-US-044 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；关闭 view 后不缓存，重开从文档开头、零滚动和默认 Live Preview 开始 |
 | KW-US-045 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-046 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-047 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
@@ -192,7 +192,7 @@
 | KW-US-163 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；未认证、伪造 authority、无 owner/scope、越出来源均被安全拒绝 |
 | KW-US-164 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 均由隔离临时环境中的真实 Node Server 验证 |
 | KW-US-165 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts`<br>`desktop/src/react/__tests__/services/knowledge-native-client.test.ts` | E2E-KW-017 | 未执行 | — |
-| KW-US-166 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 未执行 | — |
+| KW-US-166 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；显式 owner/window factory 隔离三套 registry，无模块 singleton、DOM/EditorView/file handle 或浮动窗口入口 |
 | KW-US-167 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | 精确 Vitest 6/6；`npx playwright test tests/knowledge-workspace-e2e/E2E-KW-001-shell.spec.ts --project=desktop-full`（2/2）；来源、树与空编辑区的真实 Electron 布局通过 |
 | KW-US-168 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx tests/knowledge-i18n-a11y-contract.test.ts`（6/6）；desktop-full 2/2、web-open 1/1；workspace 切换取消、状态清空、旧来源遮蔽、错误重试及 Chat/Knowledge 隔离通过 |
 | KW-US-169 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx playwright test tests/knowledge-workspace-e2e/E2E-KW-001-shell.spec.ts --project=desktop-full`（2/2）；E2E-KW-023 覆盖五语言、亮暗主题、窄布局、键盘 focus、ARIA 与单一编辑组 |
@@ -312,4 +312,5 @@
 
 - 2026-07-28 Ticket 16 首次执行未带范围排除的 `npx vitest run` 时，Vitest 额外收集了用户本地 ignored `temp/**` 中 8 个 Node test 文件，并因其不是 Vitest suite 退出 1；该次产品范围内 1019 files、10226 tests 全部通过。未修改用户内容；随后实际门禁命令 `npx vitest run --exclude 'temp/**' --exclude 'teach/**'` 通过（1019 files passed、1 skipped；10226 tests passed、6 skipped）。这是已解决的范围外测试发现，不构成产品豁免或发布 blocker。
 - 2026-07-28 Ticket 17 的 E2E-KW-006、E2E-KW-017 尚未执行：当前代码交付 Asset Viewer 公共组件/策略，但真实用户入口分别依赖 Ticket 20/49 的编辑组与树打开语义，desktop native 动作依赖 Ticket 51。为避免私有 route/test shortcut 或提前形成平行打开/native 状态机，本票只登记 23/23 精确自动化；E2E 行保持“未执行”，待显式 blocker 完成后执行。这是有 owner 的暂存证据缺口，不能进入最终发布通过状态。
+- 2026-07-28 Ticket 18 的 E2E-KW-004、E2E-KW-024 尚未执行：当前仓库只存在 E2E-KW-001 spec；E2E-KW-004 的真实 tabs/groups 入口由 Ticket 20 交付，E2E-KW-024 还依赖 Ticket 19/21/51 的保存、冲突与 native grant 链路。为避免私有测试入口或提前实现后续 owner 范围，本票登记 10/10 精确 registry 自动化并保持 E2E 行“未执行”；依赖完成后必须以真实产品入口回填，最终发布前不得保留此缺口。
 - 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
