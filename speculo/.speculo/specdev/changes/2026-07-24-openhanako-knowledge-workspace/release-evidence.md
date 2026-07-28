@@ -158,7 +158,7 @@
 | KW-US-140 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-141 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-142 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-143 | 10 | `tests/knowledge-operation-tracer.test.ts`<br>`tests/knowledge-operation-journal.test.ts`<br>`tests/knowledge-operation-recovery.test.ts` | 契约/集成 | 未执行 | — |
+| KW-US-143 | 10 | `tests/knowledge-operation-tracer.test.ts`<br>`tests/knowledge-operation-journal.test.ts`<br>`tests/knowledge-operation-recovery.test.ts` | 契约/集成 | 通过 | `npx vitest run tests/knowledge-operation-tracer.test.ts tests/knowledge-operation-journal.test.ts tests/knowledge-operation-recovery.test.ts`（22/22）；UUIDv4/canonical hash/TTL、锁与幂等、checkpoint/rollback、启动恢复、projection 重放及脱敏结果均通过 |
 | KW-US-144 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
 | KW-US-145 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
 | KW-US-146 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
@@ -216,8 +216,8 @@
 |---|---|---|---|
 | KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 通过 | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193；Ticket 09 Mobile/LAN 共享 DTO、来源隔离、provider-neutral transfer、租约 watcher、权限/取消/冲突/不可用与清理故障注入，定向 12 files、274/274；干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1010 files passed、1 skipped，10161 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过 |
-| KW-RULE-OBS | 04, 10, 43 | 部分通过（Ticket 04） | Ticket 04 相关回归 249/249；稳定错误/诊断、operation correlation、watch sequence/cursor 与无路径 resync 已验证；Tickets 10、43 尚未执行 |
-| KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 未执行 | — |
+| KW-RULE-OBS | 04, 10, 43 | 部分通过（Tickets 04、10） | Ticket 04 相关回归 249/249；Ticket 10 operation/journal/recovery 22/22、相关定向 255/255；稳定错误/诊断、同一 operation correlation、watch sequence/cursor、rollback 与无路径 resync 已验证；Ticket 43 尚未执行 |
+| KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Ticket 11） | `volta run npx vitest run tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`（29/29）；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证；后续 owner tickets 尚未执行 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 未执行 | — |
@@ -234,7 +234,7 @@
 | KW-RULE-RELEASE | 57 | 未执行 | — |
 | KW-RULE-PREFLIGHT | 01 | 通过 | `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts`（17/17）；Node v24.16.0；真实 SQLite FTS5；dirty 仅 warning |
 | KW-RULE-NATIVE | 17, 51, 56 | 未执行 | — |
-| KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 未执行 | — |
+| KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 部分通过（Ticket 10） | Operation Journal 原子写/`.prev` 回退、rollback、`RECOVERY_REQUIRED`、启动 barrier、缺失终态结果重建、projection 重放及 source `recovering` 聚合由 22/22 精确测试证明；Tickets 43、54–56 尚未执行 |
 | KW-RULE-TEST | 01, 13, 14, 57 | 部分通过（Tickets 01、13） | Ticket 01 preflight/baseline 17/17；Ticket 13 性能 fixture/evidence 31/31；Tickets 14、57 尚未执行 |
 
 ## E2E projects

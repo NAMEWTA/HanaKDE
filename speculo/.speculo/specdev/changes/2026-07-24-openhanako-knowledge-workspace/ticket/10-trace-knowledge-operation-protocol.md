@@ -1,7 +1,7 @@
 # Ticket 10: 贯通知识操作计划与提交曳光弹
 
 - **被阻塞于：** [`04-define-errors-and-diagnostics.md`](./04-define-errors-and-diagnostics.md)、[`06-complete-resource-io-http-seams.md`](./06-complete-resource-io-http-seams.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,19 @@
 
 ## 验收标准
 
-- [ ] 过期计划拒绝提交；失败可回滚；watcher 能识别内部事务；结果逐项报告成功、失败和回滚。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 过期计划拒绝提交；失败可回滚；watcher 能识别内部事务；结果逐项报告成功、失败和回滚。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- **实现提交：** `bfd5fa93`
+- Operation plan 使用服务端 UUIDv4、递归 Unicode code point 排序 canonical JSON、SHA-256 request hash 和 15 分钟 TTL；同源 rename 计划冻结 owner/source/root/version/target，并在 coordinator 与 provider 两层重验 source version 和 target absent。
+- Operation Journal 以版本化目录、临时文件 fsync、原子 rename、`.prev` 回退、稳定地址锁和 request-hash 幂等提交持久化状态；checkpoint 先于高风险 rename，失败按命名注入点回滚并以同一 operationId/correlation 发布 rollback，无法完成时进入 `RECOVERY_REQUIRED`。
+- mutation route 注册前执行 recovery barrier；启动恢复会重建缺失终态结果、续跑 rollback/commit projections，并按当前 source root identity 聚合 `recovering` 可用性。Renderer 公开 client 提供 plan/commit/cancel/get 严格 DTO，响应、journal、错误与证据不包含绝对路径、正文、凭证或 provider-native identity。
+- `npx vitest run tests/knowledge-operation-tracer.test.ts tests/knowledge-operation-journal.test.ts tests/knowledge-operation-recovery.test.ts` 为 22/22；相关定向 16 files 为 255/255；持久化扫描/兼容性回归为 21/21；开放边界/closure/export 回归为 56/56。
+- 全仓 `npx vitest run --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**' --exclude 'temp/**'` 为 1013 files passed、1 skipped，10190 tests passed、6 skipped；`temp/**` 是用户本地 ignored scratch，不属于本 change。
+- `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:renderer`、`npm run build:server:open` 与 `git diff --check` 均通过；规范轴与标准轴复审均为 0 blocker、0 nonblocker。

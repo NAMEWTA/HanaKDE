@@ -26,7 +26,7 @@
 | 07 | 0 基础契约 | [迁移 Server、Desk 与 Workbench 兼容入口](./ticket/07-migrate-server-desk-workbench.md) | 05, 06 | KW-RULE-RESOURCE | P0 | 已完成 |
 | 08 | 0 基础契约 | [迁移 Renderer 资源客户端与 Desk 兼容状态](./ticket/08-migrate-renderer-resource-client.md) | 05, 06, 07 | KW-RULE-RESOURCE | P0 | 已完成 |
 | 09 | 0 基础契约 | [迁移 Mobile 与 LAN 知识契约](./ticket/09-migrate-mobile-lan-contract.md) | 05, 06, 07 | KW-US-010, KW-RULE-RESOURCE | P0 | 已完成 |
-| 10 | 0 基础契约 | [贯通知识操作计划与提交曳光弹](./ticket/10-trace-knowledge-operation-protocol.md) | 04, 06 | KW-US-143, KW-RULE-OBS, KW-RULE-OP, KW-RULE-RECOVERY | P0 | 未开始 |
+| 10 | 0 基础契约 | [贯通知识操作计划与提交曳光弹](./ticket/10-trace-knowledge-operation-protocol.md) | 04, 06 | KW-US-143, KW-RULE-OBS, KW-RULE-OP, KW-RULE-RECOVERY | P0 | 已完成 |
 | 11 | 0 基础契约 | [建立 Markdown 知识语义 IR](./ticket/11-define-markdown-semantic-ir.md) | 02, 03 | KW-RULE-MARKDOWN | P0 | 已完成 |
 | 12 | 0 基础契约 | [抽取策略驱动的共享 CM6 表面](./ticket/12-extract-policy-driven-cm6-surface.md) | 01, 02, 11 | KW-US-057, KW-RULE-MARKDOWN | P0 | 未开始 |
 | 13 | 0 基础契约 | [建立性能预算与基准夹具](./ticket/13-establish-performance-fixtures.md) | 01, 03 | KW-RULE-PERF, KW-RULE-TEST | P0 | 已完成 |
