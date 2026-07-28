@@ -4,7 +4,12 @@ const EVENT_TYPES = new Set(["resource.changed", "resource.deleted", "resource.r
 const CHANGE_TYPES = new Set(["created", "modified"]);
 const SOURCES = new Set(["agent_tool", "provider_watch", "api", "plugin", "bash_reconcile", "mount", "session_file", "unknown"]);
 
-export function toResourceEventWsMessage(input, _sessionPath = null, suppliedOperationId = null) {
+export function toResourceEventWsMessage(
+  input,
+  _sessionPath = null,
+  suppliedOperationId = null,
+  suppliedStudioId = null,
+) {
   const event = ownDataRecord(input, 20);
   if (!event || typeof event.type !== "string" || !EVENT_TYPES.has(event.type)) return null;
   if (!Number.isSafeInteger(event.sequence) || event.sequence < 0) return null;
@@ -13,6 +18,12 @@ export function toResourceEventWsMessage(input, _sessionPath = null, suppliedOpe
 
   const base = {
     type: "resource.resync_required",
+    ...(typeof suppliedStudioId === "string"
+      && suppliedStudioId.length > 0
+      && suppliedStudioId.length <= 256
+      && !/[\/\\\p{Cc}]/u.test(suppliedStudioId)
+      ? { studioId: suppliedStudioId }
+      : {}),
     stale: true,
     resync: "resource-stat-required",
     source: event.source,

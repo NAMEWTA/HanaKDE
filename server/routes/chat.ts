@@ -539,7 +539,10 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
   function hardenStudio(msg) {
     if (!msg || typeof msg !== "object") return msg;
     if (msg.studioId) return msg;
-    if (!msg.sessionPath) return msg;
+    if (
+      !msg.sessionPath
+      && msg.type !== "resource.resync_required"
+    ) return msg;
     const studioId = engine.getRuntimeContext?.()?.studioId;
     if (!studioId) return msg;
     return { ...msg, studioId };
@@ -1089,7 +1092,12 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
       return;
     }
 
-    const resourceEventMessage = toResourceEventWsMessage(event, sessionPath);
+    const resourceEventMessage = toResourceEventWsMessage(
+      event,
+      sessionPath,
+      null,
+      engine.getRuntimeContext?.()?.studioId || null,
+    );
     if (resourceEventMessage) {
       broadcast(resourceEventMessage);
       return;

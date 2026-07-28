@@ -4,6 +4,8 @@ import path from "path";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { upsertStudioMount } from "../core/studio-mounts.ts";
+import { normalizePrincipal } from "../core/security-principal.ts";
+import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
 import {
   createKnowledgeWorkspaceRoute,
 } from "../server/routes/knowledge-workspace.ts";
@@ -171,6 +173,223 @@ describe("knowledge workspace source route", () => {
       mountId: "mount_research",
       path: "papers/a.md",
     });
+  });
+
+  it("creates a source-scoped paired watch, emits changes, and binds cleanup to its principal", async () => {
+    const { engine, main } = setup();
+    const emitted: unknown[] = [];
+    const closeWatch = vi.fn();
+    let notifyWatch: ((changedPath?: string) => void) | null = null;
+    const watchRegistry = new ResourceWatchRegistry({
+      debounceMs: 0,
+      emitEvent: (event) => emitted.push(event),
+      resolveWatchTarget: (resource) => {
+        const ref = resource as { kind: "local-file"; path: string };
+        return {
+          ref,
+          filePath: ref.path,
+          resourceKey: `local_fs:${ref.path}`,
+          resource: ref,
+          isDirectory: true,
+          toResource: (changedPath) => ({
+            resourceKey: `local_fs:${changedPath}`,
+            resource: { kind: "local-file", path: changedPath },
+            filePath: changedPath,
+          }),
+        };
+      },
+      watchPath: (_targetPath, handler) => {
+        notifyWatch = handler as (changedPath?: string) => void;
+        return { close: closeWatch };
+      },
+      statPath: () => ({
+        exists: true,
+        isDirectory: false,
+        mtimeMs: 12,
+        size: 7,
+      }),
+    });
+    Object.assign(engine, {
+      subscribeResourceWatch: (input) => watchRegistry.subscribe(input),
+      unsubscribeResourceWatch: (subscriptionId) =>
+        watchRegistry.unsubscribe(subscriptionId),
+    });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      const deviceId = c.req.header("x-test-device") || "device-a";
+      (c as unknown as {
+        set(key: string, value: unknown): void;
+      }).set("authPrincipal", normalizePrincipal({
+        kind: "device",
+        deviceId,
+        userId: "user_1",
+        studioId: "studio_1",
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        connectionKind: "lan",
+        credentialKind: "device_credential",
+        trustState: "paired",
+        scopes: ["files.read"],
+      }));
+      await next();
+    });
+    app.route("/api", createResourceIoRoute(engine));
+
+    const subscribed = await app.request("/api/resource-io/subscribe", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-test-device": "device-a",
+      },
+      body: JSON.stringify({
+        purpose: "knowledge-source-watch",
+        sourceKeys: ["main"],
+      }),
+    });
+    expect(subscribed.status).toBe(200);
+    const subscription = await subscribed.json() as {
+      subscriptionId: string;
+    };
+    expect(subscription).toMatchObject({
+      ok: true,
+      subscriptionId: expect.any(String),
+      leaseDurationMs: 30_000,
+      leaseExpiresAt: expect.any(String),
+    });
+    expect(JSON.stringify(subscription)).not.toContain(main);
+    expect(watchRegistry.diagnostics()).toMatchObject({
+      subscriptions: 1,
+      watches: [{ refCount: 1, isDirectory: true }],
+    });
+
+    notifyWatch?.("changed.md");
+    await vi.waitFor(() => expect(emitted).toHaveLength(1));
+    expect(emitted[0]).toMatchObject({
+      type: "resource.changed",
+      changeType: "modified",
+      source: "provider_watch",
+    });
+
+    const foreignCleanup = await app.request(
+      `/api/resource-io/subscriptions/${subscription.subscriptionId}`,
+      {
+        method: "DELETE",
+        headers: { "x-test-device": "device-b" },
+      },
+    );
+    expect(await foreignCleanup.json()).toEqual({
+      ok: true,
+      released: false,
+    });
+    expect(watchRegistry.diagnostics().subscriptions).toBe(1);
+    expect(closeWatch).not.toHaveBeenCalled();
+
+    const ownerCleanup = await app.request(
+      `/api/resource-io/subscriptions/${subscription.subscriptionId}`,
+      {
+        method: "DELETE",
+        headers: { "x-test-device": "device-a" },
+      },
+    );
+    expect(await ownerCleanup.json()).toEqual({
+      ok: true,
+      released: true,
+    });
+    expect(watchRegistry.diagnostics().subscriptions).toBe(0);
+    expect(closeWatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renews an owned remote watch lease and reclaims its watcher after expiry", async () => {
+    const { engine } = setup();
+    let closeAttempts = 0;
+    const closeWatch = vi.fn(() => {
+      closeAttempts += 1;
+      if (closeAttempts === 1) throw new Error("watch close failed");
+    });
+    const leaseCallbacks: Array<() => void> = [];
+    const watchRegistry = new ResourceWatchRegistry({
+      emitEvent: () => {},
+      resolveWatchTarget: (resource) => {
+        const ref = resource as { kind: "local-file"; path: string };
+        return {
+          ref,
+          filePath: ref.path,
+          resourceKey: `local_fs:${ref.path}`,
+          resource: ref,
+          isDirectory: true,
+        };
+      },
+      watchPath: () => ({ close: closeWatch }),
+    });
+    Object.assign(engine, {
+      subscribeResourceWatch: (input) => watchRegistry.subscribe(input),
+      unsubscribeResourceWatch: (subscriptionId) =>
+        watchRegistry.unsubscribe(subscriptionId),
+    });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as {
+        set(key: string, value: unknown): void;
+      }).set("authPrincipal", normalizePrincipal({
+        kind: "device",
+        deviceId: "device-a",
+        userId: "user_1",
+        studioId: "studio_1",
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        connectionKind: "lan",
+        credentialKind: "device_credential",
+        trustState: "paired",
+        scopes: ["files.read"],
+      }));
+      await next();
+    });
+    app.route("/api", createResourceIoRoute(engine, {
+      remoteWatchLeaseMs: 1_000,
+      setLeaseTimeout: ((callback: () => void) => {
+        leaseCallbacks.push(callback);
+        return { unref: () => {} };
+      }) as unknown as typeof setTimeout,
+      clearLeaseTimeout: () => {},
+      now: () => 1_000,
+    }));
+
+    const subscribed = await app.request("/api/resource-io/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        purpose: "knowledge-source-watch",
+        sourceKeys: ["main"],
+      }),
+    });
+    const subscription = await subscribed.json() as {
+      subscriptionId: string;
+    };
+    expect(watchRegistry.diagnostics().subscriptions).toBe(1);
+    expect(leaseCallbacks).toHaveLength(1);
+
+    const renewed = await app.request(
+      `/api/resource-io/subscriptions/${subscription.subscriptionId}/renew`,
+      { method: "POST" },
+    );
+    expect(await renewed.json()).toMatchObject({
+      ok: true,
+      renewed: true,
+      leaseDurationMs: 1_000,
+    });
+    expect(leaseCallbacks).toHaveLength(2);
+
+    leaseCallbacks[0]();
+    expect(watchRegistry.diagnostics().subscriptions).toBe(1);
+    expect(() => leaseCallbacks[1]()).not.toThrow();
+    expect(watchRegistry.diagnostics().subscriptions).toBe(1);
+    expect(leaseCallbacks).toHaveLength(3);
+    leaseCallbacks[2]();
+    expect(watchRegistry.diagnostics()).toMatchObject({
+      subscriptions: 0,
+      watches: [],
+    });
+    expect(closeWatch).toHaveBeenCalledTimes(2);
   });
 
   it("authorizes address operations by capability and rejects non-contract body fields", async () => {
@@ -392,8 +611,9 @@ describe("knowledge workspace source route", () => {
     );
     expect(denied.status).toBe(403);
     expect(await denied.json()).toMatchObject({
-      error: "insufficient_scope",
-      capability: "files.write",
+      code: "knowledge_resource_out_of_scope",
+      httpStatus: 403,
+      retryable: false,
     });
   });
 });

@@ -5,6 +5,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../../stores';
+import { applyStudioWorkspace } from '../../stores/desk-actions';
 import { MobileApp } from '../../mobile/MobileApp';
 import { installMobilePlatform } from '../../mobile/mobile-platform';
 import registry from '../../../shared/theme-registry';
@@ -199,6 +200,150 @@ describe('MobileApp', () => {
     await waitForMobileChatReady();
   });
 
+  it('keeps login single-flight so an older auth mutation cannot finish after a newer intent', async () => {
+    let sessionCalls = 0;
+    let loginCalls = 0;
+    let resolveLogin: ((response: Response) => void) | undefined;
+    fetchMock.mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/web-auth/session')) {
+        sessionCalls += 1;
+        return Promise.resolve(jsonResponse(sessionCalls === 1
+          ? { authenticated: false, principal: null }
+          : {
+              authenticated: true,
+              principal: principal(['chat', 'resources.read', 'files.read', 'files.write']),
+            }));
+      }
+      if (url.includes('/api/web-auth/login')) {
+        loginCalls += 1;
+        return new Promise<Response>((resolve) => {
+          resolveLogin = resolve;
+        });
+      }
+      return Promise.resolve(jsonResponse(jsonResponseForMobile(url, options)));
+    });
+
+    render(<MobileApp />);
+
+    const secret = await screen.findByLabelText('访问密钥');
+    fireEvent.change(secret, { target: { value: 'first-key' } });
+    const submit = screen.getByRole('button', { name: '登录' });
+    fireEvent.click(submit);
+    await waitFor(() => expect(loginCalls).toBe(1));
+    expect(submit).toBeDisabled();
+    expect(secret).toBeDisabled();
+
+    fireEvent.submit(submit.closest('form')!);
+    expect(loginCalls).toBe(1);
+    await act(async () => {
+      resolveLogin?.(jsonResponse({ ok: true }));
+      await Promise.resolve();
+    });
+
+    expect(await waitForMobileChatReady()).toHaveTextContent('sidebar.newChat');
+    expect(loginCalls).toBe(1);
+    expect(useStore.getState()).toMatchObject({
+      knowledgeWorkspaceKey: 'server_1:studio_1',
+      knowledgeSourcesStatus: 'ready',
+      activeServerConnection: expect.objectContaining({
+        serverId: 'server_1',
+      }),
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  it('releases source watches before a failed bootstrap can switch credentials', async () => {
+    let sessionCalls = 0;
+    let sessionListCalls = 0;
+    let sourceSubscriptionCalls = 0;
+    let rejectFirstSessionList: ((reason?: unknown) => void) | undefined;
+    let resolveFirstSourceSubscription: ((response: Response) => void) | undefined;
+    fetchMock.mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/web-auth/session')) {
+        sessionCalls += 1;
+        return Promise.resolve(jsonResponse(sessionCalls === 1
+          ? { authenticated: false, principal: null }
+          : {
+              authenticated: true,
+              principal: principal(['chat', 'resources.read', 'files.read', 'files.write']),
+            }));
+      }
+      if (url.includes('/api/web-auth/login')) {
+        return Promise.resolve(jsonResponse({ ok: true }));
+      }
+      if (url.includes('/api/resource-io/subscribe')) {
+        sourceSubscriptionCalls += 1;
+        if (sourceSubscriptionCalls === 1) {
+          return new Promise<Response>((resolve) => {
+            resolveFirstSourceSubscription = resolve;
+          });
+        }
+      }
+      if (url.endsWith('/api/sessions')) {
+        sessionListCalls += 1;
+        if (sessionListCalls === 1) {
+          return new Promise<Response>((_resolve, reject) => {
+            rejectFirstSessionList = reject;
+          });
+        }
+      }
+      return Promise.resolve(jsonResponse(jsonResponseForMobile(url, options)));
+    });
+
+    render(<MobileApp />);
+
+    const secret = await screen.findByLabelText('访问密钥');
+    fireEvent.change(secret, { target: { value: 'first-key' } });
+    fireEvent.click(screen.getByRole('button', { name: '登录' }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(
+        ([input]) => String(input).includes('/api/resource-io/subscribe'),
+      )).toBe(true);
+    });
+
+    await act(async () => {
+      rejectFirstSessionList?.(new Error('sessions failed'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByText('sessions failed')).not.toBeInTheDocument();
+    await act(async () => {
+      resolveFirstSourceSubscription?.(jsonResponse({
+        ok: true,
+        subscriptionId: 'mobile-test-subscription',
+      }));
+      await Promise.resolve();
+    });
+    expect(await screen.findByText('sessions failed')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /\/api\/resource-io\/subscriptions\/mobile-test-subscription$/,
+        ),
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+    const cleanupIndex = fetchMock.mock.calls.findIndex(
+      ([input]) => String(input).includes(
+        '/api/resource-io/subscriptions/mobile-test-subscription',
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText('访问密钥'), {
+      target: { value: 'second-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '登录' }));
+    expect(await waitForMobileChatReady()).toHaveTextContent('sidebar.newChat');
+    const loginIndexes = fetchMock.mock.calls
+      .map(([input], index) => (
+        String(input).includes('/api/web-auth/login') ? index : -1
+      ))
+      .filter((index) => index >= 0);
+    expect(loginIndexes).toHaveLength(2);
+    expect(cleanupIndex).toBeLessThan(loginIndexes[1]);
+  });
+
   it('returns stale browser sessions without file scopes to login', async () => {
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -250,7 +395,7 @@ describe('MobileApp', () => {
       return Promise.resolve(jsonResponse(jsonResponseForMobile(url, options)));
     });
 
-    render(<MobileApp />);
+    const mounted = render(<MobileApp />);
 
     expect(await waitForMobileChatReady()).toHaveTextContent('sidebar.newChat');
     expect(screen.getByTestId('desktop-input-area')).toHaveAttribute('data-surface', 'mobile');
@@ -259,17 +404,135 @@ describe('MobileApp', () => {
     expect(screen.getByLabelText('titlebar.currentChatTitle')).toHaveTextContent('sidebar.newChat');
     expect(document.querySelector('.sidebar')).toBeInTheDocument();
     expect(document.querySelector('.jian-sidebar')).toBeInTheDocument();
-    expect(useStore.getState().homeFolder).toBe('/workspace');
-    expect(useStore.getState().selectedFolder).toBe('/workspace');
+    expect(useStore.getState().homeFolder).toBeNull();
+    expect(useStore.getState().selectedFolder).toBeNull();
     expect(useStore.getState().agents[0]).toMatchObject({
       id: 'hana',
-      homeFolder: '/workspace',
+      homeFolder: null,
       chatModel: { id: 'deepseek-chat', provider: 'deepseek' },
     });
     expect(useStore.getState().sessions.some(session => session.path === '/hana/sessions/one.jsonl')).toBe(true);
     expect(useStore.getState().sessionLocatorsById.sess_mobile_one).toEqual({ path: '/hana/sessions/one.jsonl' });
+    expect(useStore.getState()).toMatchObject({
+      knowledgeWorkspaceKey: 'server_1:studio_1',
+      knowledgeSourcesStatus: 'ready',
+      knowledgeSources: [expect.objectContaining({
+        sourceKey: 'main',
+        role: 'main',
+      })],
+    });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/resource-io\/events\?since=\d+$/),
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+    await waitFor(() => {
+      const subscribeCall = fetchMock.mock.calls.find(
+        ([input]) => String(input).includes('/api/resource-io/subscribe'),
+      );
+      expect(subscribeCall).toBeTruthy();
+      expect(JSON.parse(String(subscribeCall?.[1]?.body))).toEqual({
+        purpose: 'knowledge-source-watch',
+        sourceKeys: ['main'],
+      });
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    await act(async () => {
+      await applyStudioWorkspace({ mountId: 'default', label: 'Main' });
+    });
     fireEvent.click(screen.getByTitle('sidebar.jian'));
     expect(await screen.findByText('note.md')).toBeInTheDocument();
+    mounted.unmount();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /\/api\/resource-io\/subscriptions\/mobile-test-subscription$/,
+        ),
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  it('keeps chat and Workbench available when the Open knowledge source endpoint is unavailable', async () => {
+    fetchMock.mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/web-auth/session')) {
+        return Promise.resolve(jsonResponse({
+          authenticated: true,
+          principal: principal(['chat', 'resources.read', 'files.read', 'files.write']),
+        }));
+      }
+      if (url.includes('/api/knowledge-workspace/sources')) {
+        return Promise.resolve(jsonResponse({
+          code: 'knowledge_resource_unavailable',
+          httpStatus: 503,
+          retryable: true,
+        }, 503));
+      }
+      return Promise.resolve(jsonResponse(jsonResponseForMobile(url, options)));
+    });
+
+    render(<MobileApp />);
+
+    expect(await waitForMobileChatReady()).toHaveTextContent('sidebar.newChat');
+    expect(useStore.getState()).toMatchObject({
+      knowledgeWorkspaceKey: 'server_1:studio_1',
+      knowledgeSourcesStatus: 'error',
+      knowledgeSourcesErrorCode: 'knowledge_resource_unavailable',
+    });
+    await act(async () => {
+      await applyStudioWorkspace({ mountId: 'default', label: 'Main' });
+    });
+    fireEvent.click(screen.getByTitle('sidebar.jian'));
+    expect(await screen.findByText('note.md')).toBeInTheDocument();
+  });
+
+  it('does not block Mobile readiness on a hanging Knowledge request and aborts it on cleanup', async () => {
+    let knowledgeSignal: AbortSignal | undefined;
+    let rejectKnowledge: ((reason?: unknown) => void) | undefined;
+    fetchMock.mockImplementation((input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/web-auth/session')) {
+        return Promise.resolve(jsonResponse({
+          authenticated: true,
+          principal: principal(['chat', 'resources.read', 'files.read', 'files.write']),
+        }));
+      }
+      if (url.includes('/api/knowledge-workspace/sources')) {
+        knowledgeSignal = options?.signal ?? undefined;
+        return new Promise((_resolve, reject) => {
+          rejectKnowledge = reject;
+          options?.signal?.addEventListener('abort', () => {
+            reject(options.signal?.reason);
+          }, { once: true });
+        });
+      }
+      return Promise.resolve(jsonResponse(jsonResponseForMobile(url, options)));
+    });
+
+    const mounted = render(<MobileApp />);
+
+    expect(await waitForMobileChatReady()).toHaveTextContent('sidebar.newChat');
+    await act(async () => {
+      await applyStudioWorkspace({ mountId: 'default', label: 'Main' });
+    });
+    fireEvent.click(screen.getByTitle('sidebar.jian'));
+    expect(await screen.findByText('note.md')).toBeInTheDocument();
+    expect(knowledgeSignal).toBeInstanceOf(AbortSignal);
+    expect(knowledgeSignal?.aborted).toBe(false);
+
+    mounted.unmount();
+
+    expect(knowledgeSignal?.aborted).toBe(true);
+    await waitFor(() => {
+      expect(useStore.getState()).toMatchObject({
+        knowledgeWorkspaceKey: 'server_1:studio_1',
+        knowledgeSourcesStatus: 'idle',
+        knowledgeSourcesErrorCode: null,
+      });
+    });
+    rejectKnowledge?.(new Error('test cleanup'));
   });
 
   it('hydrates persisted mobile runtime configuration from bootstrap', async () => {
@@ -280,8 +543,6 @@ describe('MobileApp', () => {
       }
       return Promise.resolve(jsonResponse(jsonResponseForMobile(url, options, {
         bootstrap: {
-          homeFolder: '/persisted-workspace',
-          cwdHistory: ['/persisted-workspace', '/older-workspace'],
           memoryMasterEnabled: false,
           memoryEnabled: false,
           thinkingLevel: 'high',
@@ -307,9 +568,9 @@ describe('MobileApp', () => {
     await waitForMobileChatReady();
 
     expect(useStore.getState()).toMatchObject({
-      homeFolder: '/persisted-workspace',
-      selectedFolder: '/persisted-workspace',
-      cwdHistory: ['/persisted-workspace', '/older-workspace'],
+      homeFolder: null,
+      selectedFolder: null,
+      cwdHistory: [],
       memoryMasterEnabled: false,
       memoryEnabled: false,
       thinkingLevel: 'high',
@@ -601,6 +862,9 @@ describe('MobileApp', () => {
     render(<MobileApp />);
 
     await waitForMobileChatReady();
+    await act(async () => {
+      await applyStudioWorkspace({ mountId: 'default', label: 'Main' });
+    });
     fireEvent.click(screen.getByTitle('sidebar.jian'));
     fireEvent.click(await screen.findByRole('treeitem', { name: /note\.md/ }));
 
@@ -830,7 +1094,7 @@ function principal(scopes: string[], credentialKind = 'device_credential') {
 
 function jsonResponseForMobile(
   url: string,
-  _options?: RequestInit,
+  options?: RequestInit,
   overrides: { bootstrap?: Record<string, unknown> } = {},
 ): unknown {
   if (url.includes('/api/server/identity')) {
@@ -841,9 +1105,9 @@ function jsonResponseForMobile(
       label: 'Hana Studio',
       studioLabel: 'Hana Studio',
       userLabel: 'Owner',
-      connectionKind: 'local',
-      trustState: 'local',
-      credentialKind: 'loopback_token',
+      connectionKind: 'lan',
+      trustState: 'paired',
+      credentialKind: 'device_credential',
       capabilities: ['chat', 'resources', 'files'],
     };
   }
@@ -854,8 +1118,8 @@ function jsonResponseForMobile(
       userName: 'Owner',
       currentAgentId: 'hana',
       agentYuan: 'hanako',
-      homeFolder: '/workspace',
-      cwdHistory: ['/workspace'],
+      homeFolder: null,
+      cwdHistory: [],
       avatars: { agent: false, user: false },
       agents: [{
         id: 'hana',
@@ -863,19 +1127,43 @@ function jsonResponseForMobile(
         yuan: 'hanako',
         isPrimary: true,
         hasAvatar: false,
-        homeFolder: '/workspace',
+        homeFolder: null,
         chatModel: { id: 'deepseek-chat', provider: 'deepseek' },
       }],
       appearance: { theme: registry.DEFAULT_THEME, serif: true, paperTexture: false },
       ...overrides.bootstrap,
     };
   }
+  if (url.includes('/api/knowledge-workspace/sources')) {
+    return {
+      sources: [{
+        sourceKey: 'main',
+        displayName: 'Main',
+        role: 'main',
+        capabilities: ['stat', 'read', 'write', 'list', 'watch'],
+        availability: 'available',
+      }],
+    };
+  }
+  if (url.includes('/api/resource-io/events')) {
+    return { stale: false, latestSequence: 0, events: [] };
+  }
+  if (url.includes('/api/resource-io/subscribe')) {
+    const body = options?.body ? JSON.parse(String(options.body)) : {};
+    return Array.isArray(body.sourceKeys)
+      ? { ok: true, subscriptionId: 'mobile-test-subscription' }
+      : { code: 'resource_path_not_remote_safe' };
+  }
+  if (url.includes('/api/resource-io/subscriptions/')) {
+    return { ok: true, released: true };
+  }
   if (url.includes('/api/models')) {
     return { models: [{ id: 'deepseek-chat', name: 'DeepSeek', provider: 'deepseek', isCurrent: true }], activeModel: null };
   }
-  if (url.includes('/api/desk/files')) {
+  if (url.includes('/api/workbench/files')) {
     return {
-      basePath: '/workspace',
+      mountId: 'default',
+      mount: { label: 'Main' },
       subdir: '',
       files: [{ name: 'note.md', isDir: false, size: 12, mtime: '2026-05-16T00:00:00.000Z' }],
     };
@@ -891,17 +1179,17 @@ function jsonResponseForMobile(
   }
   if (url.includes('/api/sessions')) {
     return [
-      { path: '/hana/sessions/one.jsonl', sessionId: 'sess_mobile_one', title: '日常记录', firstMessage: '', modified: '2026-05-16T00:00:00.000Z', messageCount: 2, agentId: 'hana', agentName: 'Hana', cwd: '/workspace' },
+      { path: '/hana/sessions/one.jsonl', sessionId: 'sess_mobile_one', title: '日常记录', firstMessage: '', modified: '2026-05-16T00:00:00.000Z', messageCount: 2, agentId: 'hana', agentName: 'Hana', cwd: null },
     ];
   }
   return {};
 }
 
-function jsonResponse(data: unknown): Response {
+function jsonResponse(data: unknown, status = 200): Response {
   return {
-    ok: true,
-    status: 200,
-    statusText: 'OK',
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status >= 200 && status < 300 ? 'OK' : 'Error',
     json: async () => data,
     text: async () => typeof data === 'string' ? data : JSON.stringify(data),
     headers: new Headers(),

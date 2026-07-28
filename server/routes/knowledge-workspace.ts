@@ -101,6 +101,30 @@ export async function resolveKnowledgeResourceAddressForRequest(
   return registry.resolveAddress(parsed.value);
 }
 
+export async function resolveKnowledgeSourceRootForRequest(
+  c,
+  engine,
+  sourceKey: unknown,
+  capability: "files.read" | "files.write",
+) {
+  const parsed = parseKnowledgeResourceAddress({
+    sourceKey,
+    relativePath: "__source_watch__",
+  });
+  if (parsed.ok === false) {
+    throw Object.assign(new Error(parsed.error.code), parsed.error);
+  }
+  const requestContext = authorizeAddress(c, engine, capability);
+  const registry = await registryFor(
+    c,
+    engine,
+    requestContext,
+    registryStateFor(engine),
+  );
+  await registry.revalidate(parsed.value.sourceKey);
+  return registry.rootRef(parsed.value.sourceKey);
+}
+
 function authorizeAddress(
   c,
   engine,
@@ -145,13 +169,14 @@ function authorize(c, engine, capability: "files.read" | "files.write") {
     studioId: requestContext.studioId,
   });
   if (decision.allowed) return { requestContext };
+  const error = createKnowledgeWorkspaceError(
+    "knowledge_resource_out_of_scope",
+    "knowledge workspace capability is outside the authenticated scope",
+    { capability },
+  );
   return {
     requestContext,
-    response: c.json({
-      error: "insufficient_scope",
-      reason: decision.reason,
-      capability,
-    }, 403),
+    response: knowledgeRouteError(c, error),
   };
 }
 

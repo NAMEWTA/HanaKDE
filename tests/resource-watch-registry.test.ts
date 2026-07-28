@@ -44,6 +44,40 @@ describe("ResourceWatchRegistry", () => {
     expect(registry.diagnostics()).toMatchObject({ subscriptions: 0, watches: [] });
   });
 
+  it("keeps a subscription and watch retryable until the backend handle closes", () => {
+    let closeAttempts = 0;
+    const close = vi.fn(() => {
+      closeAttempts += 1;
+      if (closeAttempts === 1) throw new Error("close failed");
+    });
+    const registry = new ResourceWatchRegistry({
+      emitEvent: vi.fn(),
+      watchPath: vi.fn(() => ({ close })),
+    });
+    const subscription = registry.subscribe({
+      purpose: "knowledge-source-watch",
+      resources: [{
+        kind: "local-file",
+        path: path.join("/workspace", "notes"),
+      }],
+    });
+
+    expect(() => registry.unsubscribe(subscription.subscriptionId))
+      .toThrow("close failed");
+    expect(registry.diagnostics()).toMatchObject({
+      subscriptions: 1,
+      watches: [{ refCount: 1 }],
+      lastErrorCode: "resource_watch_failed",
+    });
+
+    expect(registry.unsubscribe(subscription.subscriptionId)).toBe(true);
+    expect(close).toHaveBeenCalledTimes(2);
+    expect(registry.diagnostics()).toMatchObject({
+      subscriptions: 0,
+      watches: [],
+    });
+  });
+
   it("uses the resolved win32 path for local-file watch paths and resource keys", async () => {
     vi.resetModules();
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue("D:\\a\\openhanako\\openhanako");

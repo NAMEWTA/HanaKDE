@@ -77,6 +77,11 @@ export function wsClientCanReceiveEvent(client, event, { resolvedSessionId = nul
     return principalHasScope(principal, "chat.read");
   }
 
+  if (event.type === "resource.resync_required") {
+    if (!eventStudioId || !sameStudio(principal, eventStudioId)) return false;
+    return principalHasScope(principal, "files.read");
+  }
+
   if (event.resourceId) {
     return principalHasScope(principal, "resources.read") || principalHasScope(principal, "resources.content");
   }

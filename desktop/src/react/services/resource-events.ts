@@ -16,16 +16,34 @@ export type ResourceRef =
   | { kind: 'local-file'; path: string }
   | { kind: 'mount'; mountId: string; path: string };
 
+type WatchRef =
+  | ResourceRef
+  | { kind: 'knowledge-source'; sourceKey: string };
+
 type WatchEntry = {
-  ref: ResourceRef;
+  ref: WatchRef;
   refCount: number;
   subscriptionId: string | null;
+  leaseDurationMs: number | null;
+  leaseExpiresAt: number | null;
+  leaseRenewTimer: ReturnType<typeof setTimeout> | null;
+  subscriptionRetryAttempt: number;
   disposed: boolean;
+  suspended: boolean;
   released: boolean;
+  releaseKeepalive: boolean;
+  releasePromise: Promise<void> | null;
   ready: Promise<void>;
 };
 
 const watches = new Map<string, WatchEntry>();
+const pendingWatchCleanup = new Set<Promise<void>>();
+const WATCH_RELEASE_RETRY_MIN_MS = 250;
+const WATCH_RELEASE_RETRY_MAX_MS = 2_000;
+const WATCH_RENEW_RETRY_MS = 1_000;
+const WATCH_SUBSCRIBE_RETRY_MIN_MS = 500;
+const WATCH_SUBSCRIBE_RETRY_MAX_MS = 5_000;
+let pageLifecycleCleanupBound = false;
 
 type ResourceEvent = {
   type?: string;
@@ -137,9 +155,12 @@ const resourceEventClient = createResourceEventClient({
   resubscribeWatches: resubscribeActiveWatches,
 });
 
-function normalizeResourceRef(ref: ResourceRef): ResourceRef {
+function normalizeResourceRef(ref: WatchRef): WatchRef {
   if (ref.kind === 'local-file') {
     return { kind: 'local-file', path: ref.path };
+  }
+  if (ref.kind === 'knowledge-source') {
+    return { kind: 'knowledge-source', sourceKey: ref.sourceKey };
   }
   return {
     kind: 'mount',
@@ -148,16 +169,23 @@ function normalizeResourceRef(ref: ResourceRef): ResourceRef {
   };
 }
 
-export function resourceWatchKey(ref: ResourceRef): string {
+export function resourceWatchKey(ref: WatchRef): string {
   const normalized = normalizeResourceRef(ref);
   if (normalized.kind === 'local-file') {
     const slashed = normalized.path.replace(/\\/g, '/').replace(/\/+$/g, '');
     return `local-file:${/^[A-Za-z]:/.test(slashed) ? slashed.toLowerCase() : slashed}`;
   }
+  if (normalized.kind === 'knowledge-source') {
+    return `knowledge-source:${normalized.sourceKey}`;
+  }
   return `mount:${normalized.mountId}:${normalized.path}`;
 }
 
 export function retainResourceWatch(ref: ResourceRef): () => void {
+  return retainWatch(ref);
+}
+
+function retainWatch(ref: WatchRef): () => void {
   const normalizedRef = normalizeResourceRef(ref);
   const key = resourceWatchKey(normalizedRef);
   const existing = watches.get(key);
@@ -170,36 +198,78 @@ export function retainResourceWatch(ref: ResourceRef): () => void {
     ref: normalizedRef,
     refCount: 1,
     subscriptionId: null,
+    leaseDurationMs: null,
+    leaseExpiresAt: null,
+    leaseRenewTimer: null,
+    subscriptionRetryAttempt: 0,
     disposed: false,
+    suspended: false,
     released: false,
+    releaseKeepalive: false,
+    releasePromise: null,
     ready: Promise.resolve(),
   };
   entry.ready = subscribeEntry(entry);
   watches.set(key, entry);
+  bindPageLifecycleCleanup();
   return () => releaseResourceWatch(key);
 }
 
-function subscribeEntry(entry: WatchEntry): Promise<void> {
+async function subscribeEntry(entry: WatchEntry): Promise<void> {
+  if (
+    entry.disposed
+    || entry.suspended
+    || entry.subscriptionId
+  ) {
+    return;
+  }
   entry.released = false;
-  return hanaFetch('/api/resource-io/subscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ purpose: 'resource-watch', resources: [entry.ref] }),
-    throwOnHttpError: false,
-  })
-    .then(res => res.json())
-    .then((data) => {
-      if (typeof data?.subscriptionId === 'string') entry.subscriptionId = data.subscriptionId;
-      else console.warn('[resource-events] watch failed:', data?.error || entry.ref);
-      if (entry.disposed) releaseEntry(entry);
-    })
-    .catch((err) => {
-      if (!entry.disposed) console.warn('[resource-events] watch failed:', err);
+  const body = entry.ref.kind === 'knowledge-source'
+    ? {
+        purpose: 'knowledge-source-watch',
+        sourceKeys: [entry.ref.sourceKey],
+      }
+    : {
+        purpose: 'resource-watch',
+        resources: [entry.ref],
+      };
+  try {
+    const response = await hanaFetch('/api/resource-io/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      throwOnHttpError: false,
     });
+    const data = await response.json().catch(() => null);
+    if (
+      response.ok === false
+      || (typeof response.status === 'number' && response.status >= 400)
+      || typeof data?.subscriptionId !== 'string'
+    ) {
+      throw new Error(
+        typeof data?.error === 'string'
+          ? data.error
+          : 'Resource watch subscription was not confirmed',
+      );
+    }
+    entry.subscriptionId = data.subscriptionId;
+    entry.subscriptionRetryAttempt = 0;
+    configureEntryLease(entry, data);
+    if (entry.disposed || entry.suspended) await releaseEntry(entry);
+  } catch (err) {
+    if (!entry.disposed && !entry.suspended) {
+      console.warn('[resource-events] watch failed:', err);
+      scheduleEntrySubscriptionRetry(entry);
+    }
+  }
 }
 
 export function retainLocalFileResourceWatch(filePath: string): () => void {
   return retainResourceWatch({ kind: 'local-file', path: filePath });
+}
+
+export function retainKnowledgeSourceWatch(sourceKey: string): () => void {
+  return retainWatch({ kind: 'knowledge-source', sourceKey });
 }
 
 function releaseResourceWatch(key: string): void {
@@ -210,37 +280,285 @@ function releaseResourceWatch(key: string): void {
     return;
   }
   watches.delete(key);
+  unbindPageLifecycleCleanupIfIdle();
   entry.disposed = true;
-  void entry.ready.then(() => releaseEntry(entry));
+  trackWatchCleanup(entry.ready.then(() => releaseEntry(entry)));
 }
 
-function releaseEntry(entry: WatchEntry): void {
-  if (entry.released || !entry.subscriptionId) return;
-  entry.released = true;
-  void hanaFetch(`/api/resource-io/subscriptions/${encodeURIComponent(entry.subscriptionId)}`, {
-    method: 'DELETE',
-    throwOnHttpError: false,
-  }).catch((err) => {
-    console.warn('[resource-events] unwatch failed:', err);
-  });
+function releaseEntry(entry: WatchEntry): Promise<void> {
+  if (entry.releasePromise) return entry.releasePromise;
+  clearEntryLeaseRenewal(entry);
+  if (entry.released || !entry.subscriptionId) return Promise.resolve();
+  entry.releasePromise = releaseEntryWithConfirmation(entry)
+    .finally(() => {
+      entry.releasePromise = null;
+    });
+  return entry.releasePromise;
+}
+
+async function releaseEntryWithConfirmation(entry: WatchEntry): Promise<void> {
+  let retryMs = WATCH_RELEASE_RETRY_MIN_MS;
+  do {
+    const subscriptionId = entry.subscriptionId;
+    if (!subscriptionId) return;
+    try {
+      const response = await hanaFetch(
+        `/api/resource-io/subscriptions/${encodeURIComponent(subscriptionId)}`,
+        {
+          method: 'DELETE',
+          throwOnHttpError: false,
+          ...(entry.releaseKeepalive ? { keepalive: true } : {}),
+        },
+      );
+      const data = await response.json().catch(() => null);
+      if (
+        response.ok !== false
+        && (typeof response.status !== 'number' || response.status < 400)
+        && data?.ok === true
+        && data?.released === true
+      ) {
+        if (entry.subscriptionId === subscriptionId) {
+          entry.subscriptionId = null;
+          entry.released = true;
+          entry.leaseDurationMs = null;
+          entry.leaseExpiresAt = null;
+        }
+        return;
+      }
+      console.warn('[resource-events] unwatch was not confirmed:', data);
+    } catch (err) {
+      console.warn('[resource-events] unwatch failed:', err);
+    }
+    if (entry.releaseKeepalive) return;
+    if (entry.leaseExpiresAt && Date.now() >= entry.leaseExpiresAt) {
+      entry.subscriptionId = null;
+      entry.released = true;
+      entry.leaseDurationMs = null;
+      entry.leaseExpiresAt = null;
+      return;
+    }
+    await waitForWatchRetry(retryMs);
+    retryMs = Math.min(retryMs * 2, WATCH_RELEASE_RETRY_MAX_MS);
+  } while (entry.subscriptionId);
+}
+
+function trackWatchCleanup(cleanup: Promise<void>): void {
+  pendingWatchCleanup.add(cleanup);
+  void cleanup.finally(() => pendingWatchCleanup.delete(cleanup));
+}
+
+export async function waitForResourceWatchCleanup(): Promise<void> {
+  while (pendingWatchCleanup.size > 0) {
+    await Promise.all([...pendingWatchCleanup]);
+  }
 }
 
 async function resubscribeActiveWatches(): Promise<void> {
-  const entries = [...watches.values()].filter(entry => !entry.disposed);
-  await Promise.all(entries.map(async (entry) => {
-    const previousSubscriptionId = entry.subscriptionId;
-    entry.subscriptionId = null;
-    if (previousSubscriptionId) {
-      await hanaFetch(`/api/resource-io/subscriptions/${encodeURIComponent(previousSubscriptionId)}`, {
-        method: 'DELETE',
-        throwOnHttpError: false,
-      }).catch((err) => {
-        console.warn('[resource-events] stale unwatch failed:', err);
-      });
-    }
-    if (!entry.disposed) entry.ready = subscribeEntry(entry);
-    await entry.ready;
+  const entries = [...watches.values()].filter(
+    entry => !entry.disposed && !entry.suspended,
+  );
+  await Promise.all(entries.map((entry) => {
+    clearEntryLeaseRenewal(entry);
+    const previousReady = entry.ready;
+    const nextReady = previousReady.then(async () => {
+      if (entry.disposed || entry.suspended) {
+        releaseEntry(entry);
+        return;
+      }
+      const previousSubscriptionId = entry.subscriptionId;
+      if (previousSubscriptionId) {
+        await releaseEntry(entry);
+      }
+      if (!entry.disposed && !entry.suspended) {
+        entry.released = false;
+        await subscribeEntry(entry);
+      }
+    });
+    entry.ready = nextReady;
+    return nextReady;
   }));
+}
+
+function configureEntryLease(entry: WatchEntry, data: unknown): void {
+  const record = data && typeof data === 'object' ? data as Record<string, unknown> : null;
+  const leaseDurationMs = Number(record?.leaseDurationMs);
+  const leaseExpiresAt = typeof record?.leaseExpiresAt === 'string'
+    ? Date.parse(record.leaseExpiresAt)
+    : NaN;
+  if (
+    !Number.isFinite(leaseDurationMs)
+    || leaseDurationMs < 1_000
+    || !Number.isFinite(leaseExpiresAt)
+  ) {
+    entry.leaseDurationMs = null;
+    entry.leaseExpiresAt = null;
+    return;
+  }
+  entry.leaseDurationMs = Math.floor(leaseDurationMs);
+  // Use a local lease window for retry cutoffs; the ISO timestamp remains a
+  // public diagnostic, but server/client wall clocks need not be synchronized.
+  entry.leaseExpiresAt = Date.now() + entry.leaseDurationMs;
+  scheduleEntryLeaseRenewal(entry);
+}
+
+function scheduleEntryLeaseRenewal(entry: WatchEntry, retry = false): void {
+  clearEntryLeaseRenewal(entry);
+  if (
+    entry.disposed
+    || entry.suspended
+    || !entry.subscriptionId
+    || !entry.leaseDurationMs
+    || !entry.leaseExpiresAt
+  ) {
+    return;
+  }
+  const delayMs = retry
+    ? Math.max(
+        250,
+        Math.min(
+          WATCH_RENEW_RETRY_MS,
+          Math.max(0, entry.leaseExpiresAt - Date.now()),
+        ),
+      )
+    : Math.max(250, Math.floor(entry.leaseDurationMs / 3));
+  entry.leaseRenewTimer = setTimeout(() => {
+    entry.leaseRenewTimer = null;
+    const renewal = entry.ready.then(() => renewEntryLease(entry));
+    entry.ready = renewal;
+    void renewal.catch((err) => {
+      console.warn('[resource-events] watch lease renewal failed:', err);
+    });
+  }, delayMs);
+}
+
+async function renewEntryLease(entry: WatchEntry): Promise<void> {
+  const subscriptionId = entry.subscriptionId;
+  if (entry.disposed || entry.suspended || !subscriptionId) return;
+  try {
+    const response = await hanaFetch(
+      `/api/resource-io/subscriptions/${encodeURIComponent(subscriptionId)}/renew`,
+      {
+        method: 'POST',
+        throwOnHttpError: false,
+      },
+    );
+    const data = await response.json().catch(() => null);
+    if (
+      response.ok !== false
+      && (typeof response.status !== 'number' || response.status < 400)
+      && data?.ok === true
+      && data?.renewed === true
+    ) {
+      configureEntryLease(entry, data);
+      return;
+    }
+    if (data?.ok === true && data?.renewed === false) {
+      entry.subscriptionId = null;
+      entry.leaseDurationMs = null;
+      entry.leaseExpiresAt = null;
+      scheduleEntrySubscriptionRetry(entry);
+      return;
+    }
+  } catch (err) {
+    console.warn('[resource-events] watch lease renewal failed:', err);
+  }
+  if (entry.leaseExpiresAt && Date.now() >= entry.leaseExpiresAt) {
+    entry.subscriptionId = null;
+    entry.leaseDurationMs = null;
+    entry.leaseExpiresAt = null;
+    scheduleEntrySubscriptionRetry(entry);
+    return;
+  }
+  scheduleEntryLeaseRenewal(entry, true);
+}
+
+function scheduleEntrySubscriptionRetry(entry: WatchEntry): void {
+  clearEntryLeaseRenewal(entry);
+  if (entry.disposed || entry.suspended || entry.subscriptionId) return;
+  const exponent = Math.min(entry.subscriptionRetryAttempt, 8);
+  const delayMs = Math.min(
+    WATCH_SUBSCRIBE_RETRY_MIN_MS * (2 ** exponent),
+    WATCH_SUBSCRIBE_RETRY_MAX_MS,
+  );
+  entry.subscriptionRetryAttempt += 1;
+  entry.leaseRenewTimer = setTimeout(() => {
+    entry.leaseRenewTimer = null;
+    const retry = entry.ready.then(() => {
+      if (entry.disposed || entry.suspended || entry.subscriptionId) return;
+      return subscribeEntry(entry);
+    });
+    entry.ready = retry;
+    void retry.catch((err) => {
+      console.warn('[resource-events] watch resubscribe failed:', err);
+    });
+  }, delayMs);
+}
+
+function clearEntryLeaseRenewal(entry: WatchEntry): void {
+  if (entry.leaseRenewTimer) clearTimeout(entry.leaseRenewTimer);
+  entry.leaseRenewTimer = null;
+}
+
+function waitForWatchRetry(delayMs: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, delayMs));
+}
+
+function bindPageLifecycleCleanup(): void {
+  if (pageLifecycleCleanupBound || typeof window === 'undefined') return;
+  window.addEventListener('pagehide', releaseAllWatchesOnPageHide);
+  window.addEventListener('pageshow', resumeWatchesFromPageCache);
+  pageLifecycleCleanupBound = true;
+}
+
+function unbindPageLifecycleCleanupIfIdle(): void {
+  if (
+    !pageLifecycleCleanupBound
+    || watches.size > 0
+    || typeof window === 'undefined'
+  ) {
+    return;
+  }
+  window.removeEventListener('pagehide', releaseAllWatchesOnPageHide);
+  window.removeEventListener('pageshow', resumeWatchesFromPageCache);
+  pageLifecycleCleanupBound = false;
+}
+
+function releaseAllWatchesOnPageHide(event: PageTransitionEvent): void {
+  const entries = [...watches.values()];
+  if (!event.persisted) {
+    watches.clear();
+    unbindPageLifecycleCleanupIfIdle();
+  }
+  for (const entry of entries) {
+    if (event.persisted) entry.suspended = true;
+    else entry.disposed = true;
+    entry.releaseKeepalive = true;
+    clearEntryLeaseRenewal(entry);
+    trackWatchCleanup(entry.ready.then(() => releaseEntry(entry)));
+  }
+}
+
+function resumeWatchesFromPageCache(event: PageTransitionEvent): void {
+  if (!event.persisted) return;
+  for (const entry of watches.values()) {
+    if (!entry.suspended || entry.disposed) continue;
+    entry.suspended = false;
+    entry.releaseKeepalive = false;
+    const resume = entry.ready.then(async () => {
+      if (entry.subscriptionId) await releaseEntry(entry);
+      // A pagehide keepalive attempt may have completed without confirmation
+      // while this resume was queued; retry once in normal confirmed mode.
+      if (entry.subscriptionId) await releaseEntry(entry);
+      if (!entry.disposed && !entry.subscriptionId) {
+        entry.released = false;
+        await subscribeEntry(entry);
+      }
+    });
+    entry.ready = resume;
+    void resume.catch((err) => {
+      console.warn('[resource-events] page-cache watch resume failed:', err);
+    });
+  }
 }
 
 export function isResourceEventMessage(

@@ -14,6 +14,7 @@ import { applyChatLayout } from '../chat/layout';
 import { applyEditorTypography } from '../editor/typography';
 import type { ThinkingLevel } from '../stores/model-slice';
 import type { Agent, Session, SessionPermissionMode } from '../types';
+import { initializeMobileKnowledgeAccess } from './knowledge-access';
 
 export interface MobilePrincipal {
   kind?: string | null;
@@ -56,24 +57,41 @@ export interface MobileBootstrap {
 
 let mobileHandlersConfigured = false;
 
-export async function readMobileAuthSession(): Promise<MobileAuthSession> {
-  return rawJson<MobileAuthSession>('/api/web-auth/session');
+export async function readMobileAuthSession(signal?: AbortSignal): Promise<MobileAuthSession> {
+  return rawJson<MobileAuthSession>('/api/web-auth/session', { signal });
 }
 
-export async function initializeMobileRuntime(principal: MobilePrincipal): Promise<{
+export async function initializeMobileRuntime(
+  principal: MobilePrincipal,
+  {
+    signal,
+    isCurrent = () => true,
+  }: {
+    signal?: AbortSignal;
+    isCurrent?: () => boolean;
+  } = {},
+): Promise<{
   identity: ServerIdentity;
   bootstrap: MobileBootstrap;
 }> {
   configureMobileMessageHandlers();
 
-  const identity = await rawJson<ServerIdentity>('/api/server/identity');
+  const identity = await rawJson<ServerIdentity>('/api/server/identity', { signal });
+  assertMobileRuntimeActive(signal, isCurrent);
+  const bootstrap = await rawJson<MobileBootstrap>('/api/mobile/bootstrap', { signal });
+  assertMobileRuntimeActive(signal, isCurrent);
+  const permissionDefault = await rawJson<{ permissionMode?: SessionPermissionMode }>(
+    '/api/preferences/session-permission-default',
+    { signal },
+  );
+  assertMobileRuntimeActive(signal, isCurrent);
+
   warnIfServerProtocolMismatch(identity);
   const connection = createBrowserServerConnection({
     identity,
     principal,
     origin: window.location.origin,
   });
-
   useStore.setState({
     serverConnections: upsertServerConnection(useStore.getState().serverConnections, connection),
     activeServerConnectionId: connection.connectionId,
@@ -90,18 +108,17 @@ export async function initializeMobileRuntime(principal: MobilePrincipal): Promi
     welcomeVisible: true,
   });
 
-  const bootstrapRes = await hanaFetch('/api/mobile/bootstrap');
-  const bootstrap = await bootstrapRes.json() as MobileBootstrap;
-  const permissionDefault = await rawJson<{ permissionMode?: SessionPermissionMode }>('/api/preferences/session-permission-default');
   applySyncedAppearancePreferences(bootstrap.appearance);
   applyEditorTypography(bootstrap.editor);
   applyChatLayout(bootstrap.chat);
 
   if (window.i18n?.load) {
     await window.i18n.load(bootstrap.locale || 'zh-CN');
+    assertMobileRuntimeActive(signal, isCurrent);
     useStore.setState({ locale: window.i18n.locale });
   }
 
+  assertMobileRuntimeActive(signal, isCurrent);
   await applyAgentIdentity({
     agentName: bootstrap.agentName || 'Hanako',
     agentId: bootstrap.currentAgentId || undefined,
@@ -109,6 +126,7 @@ export async function initializeMobileRuntime(principal: MobilePrincipal): Promi
     yuan: bootstrap.agentYuan,
     ui: { avatars: false, agents: false, welcome: true },
   });
+  assertMobileRuntimeActive(signal, isCurrent);
   useStore.setState({
     agents: Array.isArray(bootstrap.agents) ? bootstrap.agents : [],
   });
@@ -136,12 +154,18 @@ export async function initializeMobileRuntime(principal: MobilePrincipal): Promi
     useStore.getState().setPendingNewSessionPermissionMode(permissionDefault.permissionMode);
   }
 
+  void initializeMobileKnowledgeAccess({
+    workspaceKey: `${identity.serverId}:${identity.studioId}`,
+    signal,
+  }).catch(() => undefined);
+
   await Promise.all([
-    loadModels(),
-    loadMobileSessions({ selectFirst: false }),
-    activateMobileWelcomeDesk(),
+    loadModels({ signal, shouldApply: isCurrent }),
+    loadMobileSessions({ selectFirst: false, signal, isCurrent }),
+    activateMobileWelcomeDesk({ signal, isCurrent }),
   ]);
 
+  assertMobileRuntimeActive(signal, isCurrent);
   connectWebSocket();
 
   return { identity, bootstrap };
@@ -149,11 +173,16 @@ export async function initializeMobileRuntime(principal: MobilePrincipal): Promi
 
 export async function loadMobileSessions({
   selectFirst = false,
+  signal,
+  isCurrent = () => true,
 }: {
   selectFirst?: boolean;
+  signal?: AbortSignal;
+  isCurrent?: () => boolean;
 } = {}): Promise<Session[]> {
-  const res = await hanaFetch('/api/sessions');
+  const res = await hanaFetch('/api/sessions', { signal });
   const sessions = await res.json() as Session[];
+  assertMobileRuntimeActive(signal, isCurrent);
   const next = Array.isArray(sessions) ? sessions : [];
   useStore.getState().setSessions(next);
 
@@ -168,13 +197,16 @@ export async function loadMobileSessions({
 
   if (target && target !== state.currentSessionPath) {
     await switchMobileSession(target, targetSession);
+    assertMobileRuntimeActive(signal, isCurrent);
   } else if (target && !sessionScopedValue(useStore.getState(), useStore.getState().chatSessions, target)) {
     syncMobilePermissionMode(targetSession);
     await activateMobileSessionDesk(targetSession);
     await loadMessages(target);
+    assertMobileRuntimeActive(signal, isCurrent);
   } else if (target) {
     syncMobilePermissionMode(targetSession);
     await activateMobileSessionDesk(targetSession);
+    assertMobileRuntimeActive(signal, isCurrent);
   } else if (!target) {
     useStore.setState({
       currentSessionPath: null,
@@ -279,10 +311,29 @@ async function activateMobileSessionDesk(session: Pick<Session, 'cwd'> | null | 
   await activateWorkspaceDesk(session?.cwd || null);
 }
 
-async function activateMobileWelcomeDesk(): Promise<void> {
+async function activateMobileWelcomeDesk({
+  signal,
+  isCurrent = () => true,
+}: {
+  signal?: AbortSignal;
+  isCurrent?: () => boolean;
+} = {}): Promise<void> {
+  assertMobileRuntimeActive(signal, isCurrent);
   const state = useStore.getState();
   await activateWorkspaceDesk(state.selectedFolder || state.homeFolder || null);
+  assertMobileRuntimeActive(signal, isCurrent);
   useStore.setState({ previewOpen: false });
+}
+
+function assertMobileRuntimeActive(
+  signal: AbortSignal | undefined,
+  isCurrent: () => boolean,
+): void {
+  if (!signal?.aborted && isCurrent()) return;
+  throw signal?.reason ?? new DOMException(
+    'Mobile runtime initialization superseded',
+    'AbortError',
+  );
 }
 
 function syncMobilePermissionMode(session: Pick<Session, 'permissionMode'> | null | undefined): void {

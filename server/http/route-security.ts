@@ -100,6 +100,10 @@ export function classifyHttpRoute({ method = "GET", path = "" } = {}) {
   if (isAvatarReadRoute(verb, routePath)) return scoped("chat");
   if (isAvatarWriteRoute(verb, routePath)) return scoped("settings.write");
   if (isAvatarRoutePath(routePath)) return LOCAL_ONLY;
+  const knowledgeWorkspacePolicy = classifyKnowledgeWorkspaceRoute(verb, routePath);
+  if (knowledgeWorkspacePolicy) return knowledgeWorkspacePolicy;
+  const resourceIoPolicy = classifyResourceIoRoute(verb, routePath);
+  if (resourceIoPolicy) return resourceIoPolicy;
   if (isWorkbenchFileReadRoute(verb, routePath)) return scoped("files.read");
   if (isWorkbenchFileWriteRoute(verb, routePath)) return scoped("files.write");
   if (isStudioWorkspaceReadRoute(verb, routePath)) return scoped("files.read");
@@ -273,6 +277,73 @@ function isAvatarReadRoute(verb, routePath) {
 
 function isAvatarWriteRoute(verb, routePath) {
   return (verb === "POST" || verb === "DELETE") && isAvatarRoutePath(routePath);
+}
+
+function classifyKnowledgeWorkspaceRoute(verb, routePath) {
+  if (!routePath.startsWith("/api/knowledge-workspace/")) return null;
+  if (routePath === "/api/knowledge-workspace/sources") {
+    if (verb === "GET") return scoped("files.read");
+    if (verb === "POST") return scoped("files.write");
+    return LOCAL_ONLY;
+  }
+  if (/^\/api\/knowledge-workspace\/sources\/[^/]+$/.test(routePath)) {
+    return verb === "DELETE" ? scoped("files.write") : LOCAL_ONLY;
+  }
+  return LOCAL_ONLY;
+}
+
+function classifyResourceIoRoute(verb, routePath) {
+  if (!routePath.startsWith("/api/resource-io/")) return null;
+  if (
+    (verb === "GET" && (
+      routePath === "/api/resource-io/events"
+      || routePath === "/api/resource-io/watch-diagnostics"
+    ))
+    || (verb === "POST" && (
+      routePath === "/api/resource-io/subscribe"
+      || routePath === "/api/resource-io/stat"
+      || routePath === "/api/resource-io/read"
+      || routePath === "/api/resource-io/list"
+      || routePath === "/api/resource-io/search"
+    ))
+    || (
+      verb === "DELETE"
+      && /^\/api\/resource-io\/subscriptions\/[^/]+$/.test(routePath)
+    )
+    || (
+      verb === "POST"
+      && /^\/api\/resource-io\/subscriptions\/[^/]+\/renew$/.test(routePath)
+    )
+  ) {
+    return scoped("files.read");
+  }
+  if (
+    (verb === "POST" && (
+      routePath === "/api/resource-io/watch"
+    ))
+    || (verb === "DELETE" && (
+      /^\/api\/resource-io\/watch\/[^/]+$/.test(routePath)
+    ))
+  ) {
+    return STUDIO_OWNER;
+  }
+  if (
+    verb === "POST"
+    && (
+      routePath === "/api/resource-io/write"
+      || routePath === "/api/resource-io/write-expected-version"
+      || routePath === "/api/resource-io/rename"
+      || routePath === "/api/resource-io/move"
+      || routePath === "/api/resource-io/trash"
+      || routePath === "/api/resource-io/mkdir"
+      || routePath === "/api/resource-io/delete"
+      || routePath === "/api/resource-io/copy"
+      || routePath === "/api/resource-io/transfer"
+    )
+  ) {
+    return scoped("files.write");
+  }
+  return LOCAL_ONLY;
 }
 
 export function scopeAllows(scopes, required) {

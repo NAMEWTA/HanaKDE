@@ -2628,6 +2628,82 @@ describe("chat route model switch guard", () => {
     handlers.onClose({}, ws);
   });
 
+  it("delivers path-free resource resync events to paired file readers in the runtime Studio", () => {
+    let createHandlers;
+    let subscriber;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const hub = {
+      subscribe: vi.fn((fn) => {
+        subscriber = fn;
+      }),
+      send: vi.fn(async () => {}),
+    };
+    const principal = {
+      kind: "device",
+      deviceId: "device_1",
+      userId: "user_1",
+      studioId: "studio_1",
+      serverId: "server_1",
+      serverNodeId: "node_1",
+      connectionKind: "lan",
+      credentialKind: "device_credential",
+      trustState: "paired",
+      scopes: ["files.read"],
+    };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getRuntimeContext: () => ({
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        userId: "user_1",
+        studioId: "studio_1",
+        connectionKind: "local",
+        credentialKind: "loopback_token",
+      }),
+      getSessionByPath: vi.fn(() => ({ entries: [] })),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({
+      req: { method: "GET", url: "http://hana.local/ws" },
+      get: (key) => key === "authPrincipal" ? principal : null,
+    });
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+    subscriber?.({
+      type: "resource.changed",
+      changeType: "modified",
+      resourceKey: "local_fs:/private/workspace/note.md",
+      resource: {
+        kind: "local-file",
+        path: "/private/workspace/note.md",
+      },
+      source: "provider_watch",
+      sequence: 1,
+      occurredAt: "2026-07-28T00:00:00.000Z",
+    }, null);
+
+    const payload = ws.send.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .find((entry) => entry.type === "resource.resync_required");
+    expect(payload).toMatchObject({
+      type: "resource.resync_required",
+      studioId: "studio_1",
+      source: "provider_watch",
+      sequence: 1,
+    });
+    expect(JSON.stringify(payload)).not.toContain("/private/workspace");
+    handlers.onClose({}, ws);
+  });
+
   it("broadcasts session metadata updates emitted outside tool execution", () => {
     let createHandlers;
     let subscriber;

@@ -43,9 +43,13 @@ export function createApiResourceOperationContext({
 
 export function createHonoResourceOperationContext(c, {
   reason = null,
+  allowScopedKnowledgeMutation = false,
 } = {}) {
   const rawAuthPrincipal = honoContextValue(c, "authPrincipal");
-  const authPrincipal = authorizedResourcePrincipal(rawAuthPrincipal);
+  const authPrincipal = authorizedResourcePrincipal(
+    rawAuthPrincipal,
+    allowScopedKnowledgeMutation,
+  );
   const transportConnectionKind = honoContextValue(
     c,
     "transportConnectionKind",
@@ -79,7 +83,10 @@ function honoContextValue(c, key) {
   }
 }
 
-function authorizedResourcePrincipal(rawPrincipal) {
+function authorizedResourcePrincipal(
+  rawPrincipal,
+  allowScopedKnowledgeMutation = false,
+) {
   if (
     !rawPrincipal
     || typeof rawPrincipal !== "object"
@@ -108,8 +115,11 @@ function authorizedResourcePrincipal(rawPrincipal) {
   if (
     typeof principal.studioId !== "string"
     || principal.studioId.length === 0
-    || !hasStudioOwnerScope(principal.scopes)
     || !scopeSetAllows(principal.scopes, "files.write")
+    || (
+      !allowScopedKnowledgeMutation
+      && !hasStudioOwnerScope(principal.scopes)
+    )
   ) {
     throw invalidResourceAuthContext();
   }

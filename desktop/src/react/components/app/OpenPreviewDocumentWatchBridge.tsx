@@ -6,6 +6,7 @@ import {
   openPreviewDocumentWatchResources,
   refreshPreviewDocumentTarget,
 } from '../../utils/preview-document-refresh';
+import { isLocalOwnerConnection } from '../../services/server-connection';
 
 export function OpenPreviewDocumentWatchBridge() {
   const previewItems = useStore(s => s.previewItems);
@@ -14,15 +15,24 @@ export function OpenPreviewDocumentWatchBridge() {
   const deskWorkspaceMountId = useStore(s => s.deskWorkspaceMountId);
   const deskWorkspaceNativeRoot = useStore(s => s.deskWorkspaceNativeRoot);
   const studioWorkspaces = useStore(s => s.studioWorkspaces);
+  const activeServerConnection = useStore(s => s.activeServerConnection);
   const subscriptionsRef = useRef<Map<string, () => void>>(new Map());
   const watchResources = useMemo(
     () => openPreviewDocumentWatchResources(),
     [previewItems, openTabs, deskBasePath, deskWorkspaceMountId, deskWorkspaceNativeRoot, studioWorkspaces],
   );
-  const watchResourcesKey = watchResources.map(item => resourceWatchKey(item.ref)).join('\n');
+  const legacyWatchEnabled = !activeServerConnection
+    || isLocalOwnerConnection(activeServerConnection);
+  const watchResourcesKey = `${legacyWatchEnabled}\n${watchResources
+    .map(item => resourceWatchKey(item.ref))
+    .join('\n')}`;
 
   useEffect(() => {
-    const nextKeys = new Set(watchResources.map(item => resourceWatchKey(item.ref)));
+    const nextKeys = new Set(
+      legacyWatchEnabled
+        ? watchResources.map(item => resourceWatchKey(item.ref))
+        : [],
+    );
     for (const [key, unsubscribe] of subscriptionsRef.current) {
       if (nextKeys.has(key)) continue;
       unsubscribe();
@@ -31,7 +41,7 @@ export function OpenPreviewDocumentWatchBridge() {
 
     for (const item of watchResources) {
       const key = resourceWatchKey(item.ref);
-      if (!subscriptionsRef.current.has(key)) {
+      if (legacyWatchEnabled && !subscriptionsRef.current.has(key)) {
         subscriptionsRef.current.set(key, retainResourceWatch(item.ref));
       }
       void refreshPreviewDocumentTarget(

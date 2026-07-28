@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const localPrincipal = Object.freeze({
   kind: "local_user",
@@ -39,6 +39,17 @@ function mobilePrincipal() {
 
 function desktopOwnerPrincipal(extraScopes = []) {
   return devicePrincipal([...desktopOwnerScopes, ...extraScopes]);
+}
+
+function makeRequestContext(method, path) {
+  return {
+    req: {
+      method,
+      url: `http://hana.local${path}`,
+      header: vi.fn(() => undefined),
+      query: vi.fn(() => undefined),
+    },
+  };
 }
 
 describe("HTTP route security policy", () => {
@@ -652,6 +663,163 @@ describe("HTTP route security policy", () => {
       path: "/api/preferences/workspace-ui-state",
       principal: writer,
     })).toMatchObject({ allowed: true });
+  });
+
+  it("classifies every public Knowledge and ResourceIO seam by file capability", async () => {
+    const { authorizeHttpRoute, classifyHttpRoute } = await import("../server/http/route-security.ts");
+    const reader = devicePrincipal(["files.read"]);
+    const writer = devicePrincipal(["files.write"]);
+    const readRoutes = [
+      ["GET", "/api/knowledge-workspace/sources"],
+      ["GET", "/api/resource-io/events"],
+      ["GET", "/api/resource-io/watch-diagnostics"],
+      ["POST", "/api/resource-io/subscribe"],
+      ["DELETE", "/api/resource-io/subscriptions/sub_1"],
+      ["POST", "/api/resource-io/subscriptions/sub_1/renew"],
+      ["POST", "/api/resource-io/stat"],
+      ["POST", "/api/resource-io/read"],
+      ["POST", "/api/resource-io/list"],
+      ["POST", "/api/resource-io/search"],
+    ];
+    const writeRoutes = [
+      ["POST", "/api/knowledge-workspace/sources"],
+      ["DELETE", "/api/knowledge-workspace/sources/research"],
+      ["POST", "/api/resource-io/write"],
+      ["POST", "/api/resource-io/write-expected-version"],
+      ["POST", "/api/resource-io/rename"],
+      ["POST", "/api/resource-io/move"],
+      ["POST", "/api/resource-io/trash"],
+      ["POST", "/api/resource-io/mkdir"],
+      ["POST", "/api/resource-io/delete"],
+      ["POST", "/api/resource-io/copy"],
+      ["POST", "/api/resource-io/transfer"],
+    ];
+
+    for (const [method, path] of readRoutes) {
+      expect(classifyHttpRoute({ method, path }), `${method} ${path}`)
+        .toEqual({ kind: "scope", scope: "files.read" });
+      expect(authorizeHttpRoute({ method, path, principal: reader }), `${method} ${path}`)
+        .toMatchObject({ allowed: true });
+      expect(authorizeHttpRoute({ method, path, principal: writer }), `${method} ${path}`)
+        .toMatchObject({
+          allowed: false,
+          error: "insufficient_scope",
+          requiredScope: "files.read",
+        });
+    }
+    for (const [method, path] of writeRoutes) {
+      expect(classifyHttpRoute({ method, path }), `${method} ${path}`)
+        .toEqual({ kind: "scope", scope: "files.write" });
+      expect(authorizeHttpRoute({ method, path, principal: writer }), `${method} ${path}`)
+        .toMatchObject({ allowed: true });
+      expect(authorizeHttpRoute({ method, path, principal: reader }), `${method} ${path}`)
+        .toMatchObject({
+          allowed: false,
+          error: "insufficient_scope",
+          requiredScope: "files.write",
+        });
+    }
+    for (const [method, path] of [
+      ["POST", "/api/resource-io/watch"],
+      ["DELETE", "/api/resource-io/watch/watch_1"],
+    ]) {
+      expect(classifyHttpRoute({ method, path }), `${method} ${path}`)
+        .toEqual({ kind: "studio_owner" });
+      expect(authorizeHttpRoute({ method, path, principal: reader }), `${method} ${path}`)
+        .toMatchObject({
+          allowed: false,
+          error: "studio_owner_required",
+        });
+      expect(authorizeHttpRoute({
+        method,
+        path,
+        principal: desktopOwnerPrincipal(),
+      }), `${method} ${path}`).toMatchObject({ allowed: true });
+    }
+
+    for (const [method, path] of [
+      ["PATCH", "/api/knowledge-workspace/sources"],
+      ["GET", "/api/resource-io/transfer"],
+      ["POST", "/api/resource-io/unknown"],
+    ]) {
+      expect(classifyHttpRoute({ method, path }), `${method} ${path}`)
+        .toEqual({ kind: "local_only" });
+    }
+  });
+
+  it("lets paired LAN principals reach Knowledge through the production request-principal chain", async () => {
+    const { resolveHttpRequestPrincipal } = await import("../server/http/request-principal.ts");
+    const authenticateRequestDetailed = vi.fn()
+      .mockReturnValueOnce({
+        principal: devicePrincipal(["files.read"]),
+        denied: null,
+      })
+      .mockReturnValueOnce({
+        principal: devicePrincipal(["files.read"]),
+        denied: null,
+      })
+      .mockReturnValueOnce({
+        principal: devicePrincipal(["files.write"]),
+        denied: null,
+      })
+      .mockReturnValueOnce({
+        principal: devicePrincipal(["files.read"]),
+        denied: null,
+      })
+      .mockReturnValueOnce({
+        principal: devicePrincipal(["files.read"]),
+        denied: null,
+      });
+    const options = {
+      connectionKind: "lan",
+      serverAuthService: { authenticateRequestDetailed },
+    };
+
+    expect(resolveHttpRequestPrincipal(
+      makeRequestContext("GET", "/api/knowledge-workspace/sources"),
+      {},
+      options,
+    )).toMatchObject({
+      ok: true,
+      principal: { kind: "device", scopes: ["files.read"] },
+    });
+    expect(resolveHttpRequestPrincipal(
+      makeRequestContext("POST", "/api/resource-io/transfer"),
+      {},
+      options,
+    )).toEqual({
+      ok: false,
+      status: 403,
+      body: {
+        error: "insufficient_scope",
+        reason: "missing_required_scope",
+        requiredScope: "files.write",
+      },
+    });
+    expect(resolveHttpRequestPrincipal(
+      makeRequestContext("POST", "/api/resource-io/transfer"),
+      {},
+      options,
+    )).toMatchObject({
+      ok: true,
+      principal: { kind: "device", scopes: ["files.write"] },
+    });
+    expect(resolveHttpRequestPrincipal(
+      makeRequestContext("POST", "/api/resource-io/subscribe"),
+      {},
+      options,
+    )).toMatchObject({
+      ok: true,
+      principal: { kind: "device", scopes: ["files.read"] },
+    });
+    expect(resolveHttpRequestPrincipal(
+      makeRequestContext("GET", "/api/resource-io/events?since=0"),
+      {},
+      options,
+    )).toMatchObject({
+      ok: true,
+      principal: { kind: "device", scopes: ["files.read"] },
+    });
   });
 
   it("allows scoped clients to register isolated HTML previews without exposing the rendered document API", async () => {

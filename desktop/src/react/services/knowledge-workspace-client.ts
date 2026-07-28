@@ -12,6 +12,7 @@ import {
   type KnowledgeErrorCode,
   type KnowledgeSafeErrorDetails,
 } from '../../../../shared/knowledge-workspace-errors.ts';
+import { isOperationCorrelationId } from '../../../../shared/knowledge-diagnostics.ts';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 
 export interface KnowledgeWorkspaceResponse {
@@ -128,7 +129,23 @@ export interface KnowledgeResourceClient {
       encoding?: 'utf-8' | 'base64';
     },
   ): Promise<RendererResourceWriteResult>;
+  transfer(
+    sourceAddress: KnowledgeResourceAddress,
+    targetDirectoryAddress: KnowledgeResourceAddress,
+    targetName: string,
+    options: KnowledgeWorkspaceRequestOptions & {
+      operationId: string;
+      expectedTargetVersion?: string | null;
+    },
+  ): Promise<RendererResourceTransferResult>;
 }
+
+export type RendererResourceTransferResult = {
+  ok: true;
+  target: KnowledgeResourceAddress;
+  version?: string;
+  bytesTransferred: number;
+};
 
 export type KnowledgeResourceEventDescriptor =
   | { kind: 'mount'; mountId: string; path: string; isDirectory?: boolean }
@@ -401,6 +418,60 @@ export function createKnowledgeWorkspaceClient({
         ),
       );
       return parseResourceWriteResult(body);
+    },
+    async transfer(
+      sourceAddress,
+      targetDirectoryAddress,
+      targetName,
+      options,
+    ) {
+      const safeSourceAddress = validateKnowledgeAddress(sourceAddress);
+      const safeTargetDirectoryAddress = validateKnowledgeAddress(
+        targetDirectoryAddress,
+      );
+      if (
+        typeof targetName !== 'string'
+        || targetName.length === 0
+        || targetName === '.'
+        || targetName === '..'
+        || targetName.includes('/')
+        || targetName.includes('\\')
+        || /\p{Cc}/u.test(targetName)
+      ) {
+        throw invalidResponse('targetName');
+      }
+      if (!isOperationCorrelationId(options?.operationId)) {
+        throw invalidResponse('operationId');
+      }
+      if (
+        options.expectedTargetVersion !== undefined
+        && options.expectedTargetVersion !== null
+        && (
+          typeof options.expectedTargetVersion !== 'string'
+          || options.expectedTargetVersion.length === 0
+        )
+      ) {
+        throw invalidResponse('expectedTargetVersion');
+      }
+      const body = await requestJson(
+        fetchImpl,
+        '/api/resource-io/transfer',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sourceAddress: safeSourceAddress,
+            targetDirectoryAddress: safeTargetDirectoryAddress,
+            targetName,
+            operationId: options.operationId,
+            ...(options.expectedTargetVersion !== undefined
+              ? { expectedTargetVersion: options.expectedTargetVersion }
+              : {}),
+          }),
+          signal: options.signal,
+        },
+      );
+      return parseResourceTransferResult(body);
     },
   };
 
@@ -706,6 +777,29 @@ function parseResourceWriteResult(input: unknown): RendererResourceWriteResult {
   };
 }
 
+function parseResourceTransferResult(input: unknown): RendererResourceTransferResult {
+  if (
+    !isRecord(input)
+    || input.ok !== true
+    || !isNonNegativeSafeInteger(input.bytesTransferred)
+  ) {
+    throw invalidResponse('transfer');
+  }
+  const target = validateKnowledgeAddress(input.target as KnowledgeResourceAddress);
+  if (
+    input.version !== undefined
+    && (typeof input.version !== 'string' || input.version.length === 0)
+  ) {
+    throw invalidResponse('transfer.version');
+  }
+  return {
+    ok: true,
+    target,
+    ...(typeof input.version === 'string' ? { version: input.version } : {}),
+    bytesTransferred: input.bytesTransferred,
+  };
+}
+
 function parseResourceVersion(input: unknown): RendererResourceVersion | undefined {
   if (input === undefined) return undefined;
   if (!isRecord(input)) throw invalidResponse('version');
@@ -892,6 +986,7 @@ const RESOURCE_RENAMED_EVENT_FIELDS = new Set([
 
 const RESOURCE_RESYNC_EVENT_FIELDS = new Set([
   'type',
+  'studioId',
   'stale',
   'resync',
   'source',
@@ -952,11 +1047,22 @@ function parseResourceResyncEvent(input: unknown): number | null {
     || input.stale !== true
     || input.resync !== 'resource-stat-required'
     || !parseResourceEventBase(input)
+    || !isOptionalSafeStudioId(input.studioId)
     || !isOptionalOperationCorrelationId(input.sourceId)
   ) {
     return null;
   }
   return input.sequence as number;
+}
+
+function isOptionalSafeStudioId(value: unknown): boolean {
+  return value === undefined
+    || (
+      typeof value === 'string'
+      && value.length > 0
+      && value.length <= 256
+      && !/[\/\\\p{Cc}]/u.test(value)
+    );
 }
 
 function isOptionalOperationCorrelationId(value: unknown): boolean {

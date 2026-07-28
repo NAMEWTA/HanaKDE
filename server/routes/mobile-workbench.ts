@@ -59,6 +59,7 @@ export function createMobileWorkbenchRoute(engine) {
 
   const listWorkbenchFiles = async (c) => {
     try {
+      rejectRemoteLegacyKnowledgeLocators(c, engine);
       const auth = authorizeWorkbench(
         c,
         engine,
@@ -77,6 +78,7 @@ export function createMobileWorkbenchRoute(engine) {
 
   const searchWorkbenchFiles = async (c) => {
     try {
+      rejectRemoteLegacyKnowledgeLocators(c, engine);
       const auth = authorizeWorkbench(
         c,
         engine,
@@ -99,19 +101,19 @@ export function createMobileWorkbenchRoute(engine) {
   route.on("HEAD", "/workbench/content", (c) => serveContent(c, engine, true));
 
   const runWorkbenchAction = async (c) => {
-    const body = await safeJson(c);
-    const auth = authorizeWorkbench(
-      c,
-      engine,
-      "files.write",
-      body.selectedAgentId,
-    );
-    if (auth.response) return auth.response;
-    const files = fileService(engine, auth.requestContext, c);
-    const mountId = workbenchMountIdFromBody(body);
-    const subdir = body.subdir || "";
-
     try {
+      const body = await safeJson(c);
+      rejectRemoteLegacyKnowledgeLocators(c, engine, body);
+      const auth = authorizeWorkbench(
+        c,
+        engine,
+        "files.write",
+        body.selectedAgentId,
+      );
+      if (auth.response) return auth.response;
+      const files = fileService(engine, auth.requestContext, c);
+      const mountId = workbenchMountIdFromBody(body);
+      const subdir = body.subdir || "";
       switch (body.action) {
         case "mkdir":
           return await writeActionResponse(c, engine, "mobile_workbench.mkdir", auth, mountId, (options) => files.mkdir(mountId, subdir, body, options));
@@ -139,6 +141,7 @@ export function createMobileWorkbenchRoute(engine) {
   const uploadWorkbenchFiles = async (c) => {
     try {
       const body = await safeJson(c);
+      rejectRemoteLegacyKnowledgeLocators(c, engine, body);
       const auth = authorizeWorkbench(
         c,
         engine,
@@ -215,6 +218,7 @@ function sanitizeAgents(agents, disclosePaths = false) {
 
 async function serveContent(c, engine, headOnly) {
   try {
+    rejectRemoteLegacyKnowledgeLocators(c, engine);
     const auth = authorizeWorkbench(
       c,
       engine,
@@ -248,6 +252,73 @@ async function serveContent(c, engine, headOnly) {
   } catch (err) {
     return workbenchError(c, err);
   }
+}
+
+const LEGACY_KNOWLEDGE_LOCATOR_FIELDS = new Set([
+  "address",
+  "sourceKey",
+  "relativePath",
+  "path",
+  "root",
+  "rootPath",
+  "absolutePath",
+  "resolvedPath",
+  "filePath",
+  "rootIdentity",
+  "opaqueRootId",
+  "scopeToken",
+  "nativeBridgeToken",
+  "nativeBridgeCredential",
+]);
+
+function rejectRemoteLegacyKnowledgeLocators(c, engine, body = null) {
+  const principal = createRequestContext(c, engine).authPrincipal;
+  if (
+    !principal
+    || principal.kind === "unknown"
+    || isLocalOwnerPrincipal(principal)
+  ) {
+    return;
+  }
+  for (const field of LEGACY_KNOWLEDGE_LOCATOR_FIELDS) {
+    if (c.req.query(field) !== undefined) {
+      throw new MountAwareFileError("invalid path", {
+        code: "invalid_path",
+        status: 400,
+      });
+    }
+  }
+  if (containsLegacyKnowledgeLocator(body)) {
+    throw new MountAwareFileError("invalid path", {
+      code: "invalid_path",
+      status: 400,
+    });
+  }
+}
+
+function containsLegacyKnowledgeLocator(
+  input,
+  depth = 0,
+  seen = new WeakSet(),
+) {
+  if (
+    input === null
+    || typeof input !== "object"
+  ) {
+    return false;
+  }
+  if (depth > 4) return true;
+  if (seen.has(input)) return false;
+  seen.add(input);
+  if (Array.isArray(input)) {
+    return input.some((entry) =>
+      containsLegacyKnowledgeLocator(entry, depth + 1, seen));
+  }
+  for (const [field, value] of Object.entries(input)) {
+    if (LEGACY_KNOWLEDGE_LOCATOR_FIELDS.has(field)) return true;
+    if (containsLegacyKnowledgeLocator(value, depth + 1, seen)) return true;
+  }
+  return false;
 }
 
 function authorizeWorkbench(c, engine, capability, selectedAgentId = null) {

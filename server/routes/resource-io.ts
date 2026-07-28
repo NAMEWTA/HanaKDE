@@ -1,7 +1,10 @@
 import crypto from "crypto";
 import { TextDecoder } from "util";
 import { Hono } from "hono";
-import { principalOwnsLocalConnection } from "../../core/security-principal.ts";
+import {
+  normalizePrincipal,
+  principalOwnsLocalConnection,
+} from "../../core/security-principal.ts";
 import { isOperationCorrelationId } from "../../shared/knowledge-diagnostics.ts";
 import { parseKnowledgeResourceAddress } from "../../shared/knowledge-workspace-contract.ts";
 import { KnowledgeWorkspaceError, snapshotOwnData, toKnowledgeErrorEnvelope, toPublicKnowledgeErrorEnvelope } from "../../shared/knowledge-workspace-errors.ts";
@@ -9,10 +12,12 @@ import { safeJson } from "../hono-helpers.ts";
 import { createHonoResourceOperationContext } from "../http/resource-operation-context.ts";
 import {
   resolveKnowledgeResourceAddressForRequest,
+  resolveKnowledgeSourceRootForRequest,
 } from "./knowledge-workspace.ts";
 
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const DEFAULT_REMOTE_RESOURCE_WATCH_LEASE_MS = 30_000;
 const MUTATION_AUTHORITY_FIELDS = new Set([
   "principal",
   "principalId",
@@ -52,7 +57,16 @@ const MUTATION_ROUTE_FIELDS = Object.freeze({
   mkdir: new Set(["resource", "ref", "target", "reason", "operationId", "expectedVersion"]),
   delete: new Set(["resource", "ref", "target", "reason", "operationId", "expectedVersion"]),
   copy: new Set(["from", "to", "oldResource", "newResource", "reason", "operationId", "expectedVersion"]),
-  transfer: new Set(["source", "targetDirectory", "targetName", "reason", "operationId", "expectedTargetVersion"]),
+  transfer: new Set([
+    "source",
+    "targetDirectory",
+    "sourceAddress",
+    "targetDirectoryAddress",
+    "targetName",
+    "reason",
+    "operationId",
+    "expectedTargetVersion",
+  ]),
 });
 
 const KNOWLEDGE_ADDRESS_ROUTE_FIELDS = Object.freeze({
@@ -71,17 +85,87 @@ const KNOWLEDGE_ADDRESS_ROUTE_FIELDS = Object.freeze({
   ]),
 });
 
-export function createResourceIoRoute(engine) {
+export function createResourceIoRoute(engine, {
+  remoteWatchLeaseMs = DEFAULT_REMOTE_RESOURCE_WATCH_LEASE_MS,
+  setLeaseTimeout = setTimeout,
+  clearLeaseTimeout = clearTimeout,
+  now = Date.now,
+} = {}) {
   const route = new Hono();
   const releases = new Map();
+  const remoteSubscriptionOwners = new Map();
+  const leaseDurationMs = Math.max(
+    1_000,
+    Math.floor(Number(remoteWatchLeaseMs) || DEFAULT_REMOTE_RESOURCE_WATCH_LEASE_MS),
+  );
+
+  const retainReleasedSubscriptionTombstone = (subscriptionId, record) => {
+    clearLeaseTimeout(record.timer);
+    record.active = false;
+    record.expiresAt = now() + leaseDurationMs;
+    record.timer = setLeaseTimeout(() => {
+      if (remoteSubscriptionOwners.get(subscriptionId) === record) {
+        remoteSubscriptionOwners.delete(subscriptionId);
+      }
+    }, leaseDurationMs);
+    record.timer?.unref?.();
+  };
+
+  const releaseRemoteSubscription = (subscriptionId, record) => {
+    if (remoteSubscriptionOwners.get(subscriptionId) !== record) return false;
+    if (record.active) {
+      clearLeaseTimeout(record.timer);
+      try {
+        engine.unsubscribeResourceWatch?.(subscriptionId);
+      } catch {
+        const retryMs = Math.max(250, Math.min(1_000, leaseDurationMs));
+        record.expiresAt = now() + retryMs;
+        record.timer = setLeaseTimeout(() => {
+          releaseRemoteSubscription(subscriptionId, record);
+        }, retryMs);
+        record.timer?.unref?.();
+        return false;
+      }
+      retainReleasedSubscriptionTombstone(subscriptionId, record);
+    }
+    return true;
+  };
+
+  const armRemoteSubscriptionLease = (subscriptionId, ownerKey) => {
+    const previous = remoteSubscriptionOwners.get(subscriptionId);
+    if (previous) clearLeaseTimeout(previous.timer);
+    const expiresAt = now() + leaseDurationMs;
+    const record = {
+      ownerKey,
+      expiresAt,
+      timer: null,
+      active: true,
+    };
+    record.timer = setLeaseTimeout(() => {
+      releaseRemoteSubscription(subscriptionId, record);
+    }, leaseDurationMs);
+    record.timer?.unref?.();
+    remoteSubscriptionOwners.set(subscriptionId, record);
+    return record;
+  };
 
   route.post("/resource-io/subscribe", async (c) => {
     try {
       const body = await safeJson(c);
-      validateWatchRequest(c, body, { subscription: true });
-      const subscribe = engine.subscribeResourceWatch?.(body);
+      const subscription = await resolveSubscriptionRequest(c, engine, body);
+      if (!isLocalLoopbackRequest(c) && !subscription.ownerKey) {
+        return c.json({ error: "resource watch owner unavailable" }, 403);
+      }
+      const subscribe = engine.subscribeResourceWatch?.(subscription.input);
       if (!subscribe?.subscriptionId) {
         return c.json({ error: "resource watch unavailable" }, 500);
+      }
+      let remoteLease = null;
+      if (subscription.ownerKey) {
+        remoteLease = armRemoteSubscriptionLease(
+          subscribe.subscriptionId,
+          subscription.ownerKey,
+        );
       }
       const result = { ok: true, ...subscribe };
       return c.json(
@@ -90,6 +174,8 @@ export function createResourceIoRoute(engine) {
           : {
               ok: true,
               subscriptionId: subscribe.subscriptionId,
+              leaseDurationMs,
+              leaseExpiresAt: new Date(remoteLease.expiresAt).toISOString(),
             },
       );
     } catch (err) {
@@ -99,8 +185,48 @@ export function createResourceIoRoute(engine) {
 
   route.delete("/resource-io/subscriptions/:subscriptionId", (c) => {
     const subscriptionId = c.req.param("subscriptionId");
-    const released = Boolean(engine.unsubscribeResourceWatch?.(subscriptionId));
-    return c.json({ ok: true, released });
+    if (!isLocalLoopbackRequest(c)) {
+      const ownerKey = remoteResourceSubscriptionOwnerKey(c);
+      const record = remoteSubscriptionOwners.get(subscriptionId);
+      if (
+        !ownerKey
+        || !record
+        || record.ownerKey !== ownerKey
+      ) {
+        return c.json({ ok: true, released: false });
+      }
+      return c.json({
+        ok: true,
+        released: releaseRemoteSubscription(subscriptionId, record),
+      });
+    }
+    try {
+      engine.unsubscribeResourceWatch?.(subscriptionId);
+      // Local owner deletion is idempotent. A false engine result means that a
+      // previous Server epoch or lost response already removed the watch.
+      return c.json({ ok: true, released: true });
+    } catch {
+      return c.json({ ok: true, released: false }, 500);
+    }
+  });
+
+  route.post("/resource-io/subscriptions/:subscriptionId/renew", (c) => {
+    const subscriptionId = c.req.param("subscriptionId");
+    if (isLocalLoopbackRequest(c)) {
+      return c.json({ ok: true, renewed: false });
+    }
+    const ownerKey = remoteResourceSubscriptionOwnerKey(c);
+    const record = remoteSubscriptionOwners.get(subscriptionId);
+    if (!ownerKey || !record || !record.active || record.ownerKey !== ownerKey) {
+      return c.json({ ok: true, renewed: false });
+    }
+    const renewed = armRemoteSubscriptionLease(subscriptionId, ownerKey);
+    return c.json({
+      ok: true,
+      renewed: true,
+      leaseDurationMs,
+      leaseExpiresAt: new Date(renewed.expiresAt).toISOString(),
+    });
   });
 
   route.get("/resource-io/watch-diagnostics", (c) => {
@@ -160,9 +286,13 @@ export function createResourceIoRoute(engine) {
     const watchId = c.req.param("watchId");
     const release = releases.get(watchId);
     if (!release) return c.json({ ok: true, released: false });
-    releases.delete(watchId);
-    release();
-    return c.json({ ok: true, released: true });
+    try {
+      release();
+      releases.delete(watchId);
+      return c.json({ ok: true, released: true });
+    } catch {
+      return c.json({ ok: true, released: false }, 500);
+    }
   });
 
   route.post("/resource-io/stat", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
@@ -212,9 +342,15 @@ export function createResourceIoRoute(engine) {
       resource,
       decodeWriteContent(body),
       body?.expectedVersion,
-      operationContextFromBody(body, c),
+      operationContextFromBody(body, c, {
+        allowScopedKnowledgeMutation: body?.address !== undefined,
+      }),
     );
-  }, { rejectMutationAuthority: true, responseKind: "mutation" }));
+  }, {
+    rejectMutationAuthority: true,
+    allowScopedKnowledgeMutation: true,
+    responseKind: "mutation",
+  }));
 
   route.post("/resource-io/rename", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
     return resourceIO.rename(body?.from || body?.oldResource, body?.to || body?.newResource, operationContextFromBody(body, c));
@@ -248,16 +384,32 @@ export function createResourceIoRoute(engine) {
   }, { rejectMutationAuthority: true, responseKind: "mutation", allowedFields: MUTATION_ROUTE_FIELDS.copy }));
 
   route.post("/resource-io/transfer", async (c) => resourceJson(c, engine, async (resourceIO, body) => {
-    const context = operationContextFromBody(body, c);
-    return resourceIO.transfer({
-      source: strictMutationResourceRef(body?.source, "source"),
-      targetDirectory: strictMutationResourceRef(body?.targetDirectory, "targetDirectory"),
+    const context = operationContextFromBody(body, c, {
+      allowScopedKnowledgeMutation:
+        body?.sourceAddress !== undefined
+        || body?.targetDirectoryAddress !== undefined,
+    });
+    const transferInput = await readTransferInput(c, engine, body);
+    const result = await resourceIO.transfer({
+      source: transferInput.source,
+      targetDirectory: transferInput.targetDirectory,
       targetName: body?.targetName,
       expectedTargetVersion: body?.expectedTargetVersion,
       operationId: body?.operationId,
       signal: c.req.raw?.signal,
     }, context);
-  }, { rejectMutationAuthority: true, responseKind: "transfer", allowedFields: MUTATION_ROUTE_FIELDS.transfer }));
+    return {
+      ...result,
+      ...(transferInput.targetAddress
+        ? { knowledgeTargetAddress: transferInput.targetAddress }
+        : {}),
+    };
+  }, {
+    rejectMutationAuthority: true,
+    allowScopedKnowledgeMutation: true,
+    responseKind: "transfer",
+    allowedFields: MUTATION_ROUTE_FIELDS.transfer,
+  }));
 
   return route;
 }
@@ -290,9 +442,82 @@ async function readResourceRef(c, engine, body, {
   return body?.resource || body?.ref || body?.target || body;
 }
 
-function operationContextFromBody(body, c) {
+async function readTransferInput(c, engine, body) {
+  const usesKnowledgeAddress = body?.sourceAddress !== undefined
+    || body?.targetDirectoryAddress !== undefined;
+  if (!usesKnowledgeAddress) {
+    return {
+      source: strictMutationResourceRef(body?.source, "source"),
+      targetDirectory: strictMutationResourceRef(
+        body?.targetDirectory,
+        "targetDirectory",
+      ),
+      targetAddress: null,
+    };
+  }
+  if (
+    body?.sourceAddress === undefined
+    || body?.targetDirectoryAddress === undefined
+    || body?.source !== undefined
+    || body?.targetDirectory !== undefined
+  ) {
+    throw new KnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "Resource transfer must use either Knowledge addresses or ResourceRefs",
+      { field: "sourceAddress" },
+    );
+  }
+  const sourceAddress = parseKnowledgeAddressOrThrow(
+    body.sourceAddress,
+    "sourceAddress",
+  );
+  const targetDirectoryAddress = parseKnowledgeAddressOrThrow(
+    body.targetDirectoryAddress,
+    "targetDirectoryAddress",
+  );
+  const targetAddress = parseKnowledgeAddressOrThrow({
+    sourceKey: targetDirectoryAddress.sourceKey,
+    relativePath: [
+      targetDirectoryAddress.relativePath,
+      body?.targetName,
+    ].filter(Boolean).join("/"),
+  }, "targetName");
+  const [source, targetDirectory] = await Promise.all([
+    resolveKnowledgeResourceAddressForRequest(
+      c,
+      engine,
+      sourceAddress,
+      "files.read",
+    ),
+    resolveKnowledgeResourceAddressForRequest(
+      c,
+      engine,
+      targetDirectoryAddress,
+      "files.write",
+    ),
+  ]);
+  return { source, targetDirectory, targetAddress };
+}
+
+function parseKnowledgeAddressOrThrow(input, field) {
+  const parsed = parseKnowledgeResourceAddress(input);
+  if (parsed.ok === false) {
+    throw Object.assign(new Error("Knowledge resource address is invalid"), {
+      ...parsed.error,
+      details: { field },
+    });
+  }
+  return parsed.value;
+}
+
+function operationContextFromBody(
+  body,
+  c,
+  { allowScopedKnowledgeMutation = false } = {},
+) {
   const context = createHonoResourceOperationContext(c, {
     reason: body?.reason || "resource_io_route",
+    allowScopedKnowledgeMutation,
   });
   const operationId = mutationOperationId(body);
   const expectedVersion = mutationExpectedVersion(body);
@@ -380,6 +605,7 @@ function decodeBase64Content(content) {
 
 async function resourceJson(c, engine, handler, {
   rejectMutationAuthority = false,
+  allowScopedKnowledgeMutation = false,
   responseKind = null,
   allowedFields = null,
 } = {}) {
@@ -389,6 +615,13 @@ async function resourceJson(c, engine, handler, {
       rejectMutationAuthorityFields(body, { recursive: true });
       createHonoResourceOperationContext(c, {
         reason: body?.reason || "resource_io_route",
+        allowScopedKnowledgeMutation:
+          allowScopedKnowledgeMutation
+          && (
+            body?.address !== undefined
+            || body?.sourceAddress !== undefined
+            || body?.targetDirectoryAddress !== undefined
+          ),
       });
     }
     if (allowedFields) rejectUnexpectedFields(body, allowedFields);
@@ -662,7 +895,9 @@ function projectResourceResponse(c, result, responseKind) {
     case "transfer":
       return compactObject({
         ok: true,
-        target: safeRemoteTransferTarget(result?.target),
+        target:
+          result?.knowledgeTargetAddress
+          || safeRemoteTransferTarget(result?.target),
         version:
           typeof result?.version === "string" ? result.version : undefined,
         bytesTransferred: finiteNumberOrUndefined(result?.bytesTransferred),
@@ -822,6 +1057,75 @@ function validateWatchRequest(c, body, { subscription = false } = {}) {
       : "resource_io_watch",
   });
   rejectUnsafeRemoteResourceRefs(c, body, { subscription });
+}
+
+async function resolveSubscriptionRequest(c, engine, body) {
+  rejectMutationAuthorityFields(body, { recursive: true });
+  const sourceKeys = body?.sourceKeys;
+  if (sourceKeys !== undefined) {
+    rejectUnexpectedFields(
+      body,
+      new Set(["purpose", "sourceKeys"]),
+    );
+    if (
+      !Array.isArray(sourceKeys)
+      || sourceKeys.length === 0
+      || sourceKeys.length > 64
+      || new Set(sourceKeys).size !== sourceKeys.length
+    ) {
+      throw new KnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "Knowledge source watch requires unique source keys",
+        { field: "sourceKeys" },
+      );
+    }
+    const resources = await Promise.all(sourceKeys.map((sourceKey) =>
+      resolveKnowledgeSourceRootForRequest(
+        c,
+        engine,
+        sourceKey,
+        "files.read",
+      )));
+    return {
+      input: {
+        ...(typeof body?.purpose === "string"
+          ? { purpose: body.purpose }
+          : {}),
+        resources,
+      },
+      ownerKey: isLocalLoopbackRequest(c)
+        ? null
+        : remoteResourceSubscriptionOwnerKey(c),
+    };
+  }
+
+  if (!isLocalLoopbackRequest(c)) {
+    throw Object.assign(
+      new Error("Remote resource watches require Knowledge source keys"),
+      {
+        code: "resource_path_not_remote_safe",
+        status: 403,
+        safeMessage:
+          "Remote resource watches require Knowledge source keys",
+      },
+    );
+  }
+  validateWatchRequest(c, body, { subscription: true });
+  return { input: body, ownerKey: null };
+}
+
+function remoteResourceSubscriptionOwnerKey(c) {
+  const raw = honoAuthPrincipal(c);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const principal = normalizePrincipal(raw);
+  if (
+    principal.kind === "unknown"
+    || !principal.principalId
+    || !principal.studioId
+  ) {
+    return null;
+  }
+  return `${principal.studioId}\0${principal.principalId}`;
 }
 
 function rejectUnsafeRemoteResourceRefs(c, body, {

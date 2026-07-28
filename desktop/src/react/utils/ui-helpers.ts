@@ -23,10 +23,17 @@ export function showError(message: string): void {
 
 // ── 模型加载 ──
 
-export async function loadModels(): Promise<void> {
+export async function loadModels({
+  signal,
+  shouldApply = () => true,
+}: {
+  signal?: AbortSignal;
+  shouldApply?: () => boolean;
+} = {}): Promise<void> {
   try {
-    const res = await hanaFetch('/api/models');
+    const res = await hanaFetch('/api/models', { signal });
     const data = await res.json();
+    if (signal?.aborted || !shouldApply()) return;
     const { pendingNewSession } = useStore.getState();
     const activeModel = data.activeModel;
     let models = data.models || [];
@@ -47,4 +54,3 @@ export async function loadModels(): Promise<void> {
     });
   } catch { /* silent */ }
 }
-

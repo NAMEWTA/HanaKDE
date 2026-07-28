@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { toResourceEventWsMessage } from "../server/resource-events-ws.ts";
+import {
+  createWsClientRecord,
+  wsClientCanReceiveEvent,
+} from "../server/ws-scope.ts";
 
 describe("toResourceEventWsMessage", () => {
   it("forwards resource.changed events with their resource identity", () => {
@@ -75,6 +79,41 @@ describe("toResourceEventWsMessage", () => {
       sequence: 10,
       occurredAt: "2026-06-21T09:03:00.000Z",
     }, null)).toMatchObject({ type: "resource.resync_required", stale: true });
+  });
+
+  it("binds the safe resync projection to its Studio for paired file readers", () => {
+    const message = toResourceEventWsMessage({
+      type: "resource.changed",
+      changeType: "modified",
+      resourceKey: "local_fs:/private/workspace/a.md",
+      resource: {
+        kind: "local-file",
+        path: "/private/workspace/a.md",
+      },
+      source: "provider_watch",
+      sequence: 11,
+      occurredAt: "2026-07-28T00:00:00.000Z",
+    }, null, null, "studio_1");
+    const client = createWsClientRecord({
+      principal: {
+        kind: "device",
+        deviceId: "device_1",
+        userId: "user_1",
+        studioId: "studio_1",
+        serverNodeId: "node_1",
+        connectionKind: "lan",
+        credentialKind: "device_credential",
+        scopes: ["files.read"],
+      },
+    });
+
+    expect(message).toMatchObject({
+      type: "resource.resync_required",
+      studioId: "studio_1",
+      sequence: 11,
+    });
+    expect(wsClientCanReceiveEvent(client, message)).toBe(true);
+    expect(JSON.stringify(message)).not.toContain("/private/workspace");
   });
 
   it("ignores non-resource events", () => {

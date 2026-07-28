@@ -230,19 +230,21 @@ describe("resource-io route", () => {
       diagnostics: { subscriptions: 1 },
     });
 
-    const subscription = await (
-      await app.request("/api/resource-io/subscribe", {
+    const subscriptionResponse = await app.request(
+      "/api/resource-io/subscribe",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           purpose: "remote",
           resources: [{ kind: "mount", mountId: "safe", path: "a.md" }],
         }),
-      })
-    ).json();
-    expect(subscription).toEqual({
-      ok: true,
-      subscriptionId: "sub-remote",
+      },
+    );
+    expect(subscriptionResponse.status).toBe(403);
+    const subscription = await subscriptionResponse.json();
+    expect(subscription).toMatchObject({
+      code: "resource_path_not_remote_safe",
     });
 
     expect(
@@ -289,6 +291,26 @@ describe("resource-io route", () => {
     expect(unsubscribeResourceWatch).toHaveBeenCalledWith("sub-1");
   });
 
+  it("treats a missing local subscription after a Server epoch change as idempotently released", async () => {
+    const unsubscribeResourceWatch = vi.fn(() => false);
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      unsubscribeResourceWatch,
+    }));
+
+    const response = await app.request(
+      "/api/resource-io/subscriptions/sub-from-old-server",
+      { method: "DELETE" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, released: true });
+    expect(unsubscribeResourceWatch).toHaveBeenCalledWith(
+      "sub-from-old-server",
+    );
+  });
+
   it("retains and releases backend resource watches", async () => {
     const release = vi.fn();
     const retainResourceWatch = vi.fn(() => release);
@@ -317,6 +339,43 @@ describe("resource-io route", () => {
     expect(releaseRes.status).toBe(200);
     expect(releaseData).toEqual({ ok: true, released: true });
     expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a legacy watch release retryable when backend close fails", async () => {
+    const release = vi.fn()
+      .mockImplementationOnce(() => {
+        throw new Error("close failed");
+      })
+      .mockImplementationOnce(() => undefined);
+    const app = new Hono();
+    useLocalOwnerAuth(app);
+    app.route("/api", createResourceIoRoute({
+      retainResourceWatch: vi.fn(() => release),
+    }));
+    const watchData = await (
+      await app.request("/api/resource-io/watch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resource: { kind: "local-file", path: "/tmp/a.md" },
+        }),
+      })
+    ).json();
+
+    const first = await app.request(
+      `/api/resource-io/watch/${watchData.watchId}`,
+      { method: "DELETE" },
+    );
+    expect(first.status).toBe(500);
+    expect(await first.json()).toEqual({ ok: true, released: false });
+
+    const second = await app.request(
+      `/api/resource-io/watch/${watchData.watchId}`,
+      { method: "DELETE" },
+    );
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual({ ok: true, released: true });
+    expect(release).toHaveBeenCalledTimes(2);
   });
 
   it("fails closed before retaining or subscribing unsafe remote watches", async () => {
@@ -408,7 +467,7 @@ describe("resource-io route", () => {
     expect(release).not.toHaveBeenCalled();
   });
 
-  it("allows authenticated remote watches only for canonical provider-neutral refs", async () => {
+  it("keeps legacy provider refs owner-only even when they are canonical", async () => {
     const release = vi.fn();
     const retainResourceWatch = vi.fn(() => release);
     const subscribeResourceWatch = vi.fn(() => ({
@@ -441,14 +500,11 @@ describe("resource-io route", () => {
       headers,
       body: JSON.stringify({ resources: [resource] }),
     });
-    expect(subscribe.status).toBe(200);
-    expect(await subscribe.json()).toEqual({
-      ok: true,
-      subscriptionId: "sub-safe",
+    expect(subscribe.status).toBe(403);
+    expect(await subscribe.json()).toMatchObject({
+      code: "resource_path_not_remote_safe",
     });
-    expect(subscribeResourceWatch).toHaveBeenCalledWith({
-      resources: [resource],
-    });
+    expect(subscribeResourceWatch).not.toHaveBeenCalled();
   });
 
   it("rejects a backslash mount path before the real provider can reinterpret it", async () => {

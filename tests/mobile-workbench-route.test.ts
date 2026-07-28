@@ -19,6 +19,29 @@ function makeApp(engine) {
   });
 }
 
+async function makeKnowledgeApp(engine, principal) {
+  const app = new Hono();
+  const [
+    { createMobileWorkbenchRoute },
+    { createKnowledgeWorkspaceRoute },
+    { createResourceIoRoute },
+  ] = await Promise.all([
+    import("../server/routes/mobile-workbench.ts"),
+    import("../server/routes/knowledge-workspace.ts"),
+    import("../server/routes/resource-io.ts"),
+  ]);
+  app.use("*", async (c, next) => {
+    (c as unknown as {
+      set(key: string, value: unknown): void;
+    }).set("authPrincipal", principal);
+    await next();
+  });
+  app.route("/api", createMobileWorkbenchRoute(engine));
+  app.route("/api", createKnowledgeWorkspaceRoute(engine));
+  app.route("/api", createResourceIoRoute(engine));
+  return app;
+}
+
 async function makeRouteResourceIO({ hanakoHome, workspace, eventBus = {}, studioId = "studio_1" }: Record<string, any>) {
   const { createSandboxResourceIO } = await import("../lib/resource-io/sandbox-resource-io.ts");
   return createSandboxResourceIO({
@@ -371,6 +394,290 @@ describe("mobile workbench route", () => {
       cwdHistory: [],
       agents: [{ id: "hana", homeFolder: null }],
     });
+  });
+
+  it("lets a paired LAN client consume the Open knowledge DTO without Electron state or native paths", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    const hanakoHome = path.join(tmpDir, "hana");
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.writeFileSync(path.join(workspace, "note.md"), "mobile knowledge", "utf-8");
+    const principal = normalizePrincipal({
+      kind: "device",
+      credentialKind: "device_credential",
+      connectionKind: "lan",
+      trustState: "paired",
+      serverNodeId: "node_1",
+      userId: "user_1",
+      studioId: "studio_1",
+      deviceId: "device_1",
+      scopes: ["files.read", "files.write"],
+    });
+    const resourceIO = await makeRouteResourceIO({
+      hanakoHome,
+      workspace,
+      studioId: "studio_1",
+    });
+    const app = await makeKnowledgeApp({
+      hanakoHome,
+      deskCwd: workspace,
+      homeCwd: workspace,
+      resourceIO,
+      getRuntimeContext: () => ({
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        userId: "user_1",
+        studioId: "studio_1",
+      }),
+    }, principal);
+
+    const sources = await app.request("/api/knowledge-workspace/sources");
+    expect(sources.status).toBe(200);
+    expect(await sources.json()).toEqual({
+      sources: [{
+        sourceKey: "main",
+        displayName: "Main",
+        role: "main",
+        capabilities: expect.arrayContaining(["stat", "read", "write", "list"]),
+        availability: "available",
+      }],
+    });
+
+    const read = await app.request("/api/resource-io/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: { sourceKey: "main", relativePath: "note.md" },
+        encoding: "utf-8",
+      }),
+    });
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      content: "mobile knowledge",
+      encoding: "utf-8",
+    });
+    expect(JSON.stringify(await (await app.request("/api/knowledge-workspace/sources")).json()))
+      .not.toContain(workspace);
+  });
+
+  it("keeps same-path resources isolated and copies cross-source bytes without rewriting or deleting the source", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    const research = path.join(tmpDir, "research");
+    const hanakoHome = path.join(tmpDir, "hana");
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.mkdirSync(research, { recursive: true });
+    fs.mkdirSync(path.join(workspace, "copies"), { recursive: true });
+    const mainBody = "# Main\n\n[[main-link]]";
+    const researchBody = "# Research\n\n[[research-link]]";
+    fs.writeFileSync(path.join(workspace, "same.md"), mainBody, "utf-8");
+    fs.writeFileSync(path.join(research, "same.md"), researchBody, "utf-8");
+    upsertStudioMount(hanakoHome, {
+      mountId: "mount_research",
+      hostStudioId: "studio_1",
+      sourceKind: "storage",
+      provider: "local_fs",
+      rootLocator: { path: research },
+      label: "Research",
+      presentation: "folder",
+      capabilities: ["list", "read", "write"],
+    });
+    const principal = normalizePrincipal({
+      kind: "device",
+      credentialKind: "device_credential",
+      connectionKind: "lan",
+      trustState: "paired",
+      serverNodeId: "node_1",
+      userId: "user_1",
+      studioId: "studio_1",
+      deviceId: "device_1",
+      scopes: ["files.read", "files.write"],
+    });
+    const resourceIO = await makeRouteResourceIO({
+      hanakoHome,
+      workspace,
+      studioId: "studio_1",
+    });
+    const app = await makeKnowledgeApp({
+      hanakoHome,
+      deskCwd: workspace,
+      homeCwd: workspace,
+      resourceIO,
+      getRuntimeContext: () => ({
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        userId: "user_1",
+        studioId: "studio_1",
+      }),
+    }, principal);
+    const registered = await app.request("/api/knowledge-workspace/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceKey: "research",
+        displayName: "Research",
+        mountId: "mount_research",
+      }),
+    });
+    expect(registered.status).toBe(201);
+
+    const readAddress = async (sourceKey, relativePath) => {
+      const response = await app.request("/api/resource-io/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: { sourceKey, relativePath },
+          encoding: "utf-8",
+        }),
+      });
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    expect(await readAddress("main", "same.md")).toMatchObject({ content: mainBody });
+    expect(await readAddress("research", "same.md")).toMatchObject({ content: researchBody });
+
+    const copied = await app.request("/api/resource-io/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceAddress: { sourceKey: "research", relativePath: "same.md" },
+        targetDirectoryAddress: { sourceKey: "main", relativePath: "copies" },
+        targetName: "research-copy.md",
+        operationId: "123e4567-e89b-42d3-a456-426614174000",
+      }),
+    });
+    const copiedBody = await copied.json();
+    expect({ status: copied.status, body: copiedBody }).toMatchObject({
+      status: 200,
+    });
+    expect(copiedBody).toMatchObject({
+      ok: true,
+      target: { sourceKey: "main", relativePath: "copies/research-copy.md" },
+      bytesTransferred: Buffer.byteLength(researchBody),
+    });
+    expect(await readAddress("main", "copies/research-copy.md"))
+      .toMatchObject({ content: researchBody });
+    expect(await readAddress("research", "same.md"))
+      .toMatchObject({ content: researchBody });
+    expect(fs.readFileSync(path.join(research, "same.md"), "utf-8"))
+      .toBe(researchBody);
+    expect(JSON.stringify(copiedBody)).not.toContain(research);
+    expect(JSON.stringify(copiedBody)).not.toContain("mount_research");
+
+    const legacyLocatorCopy = await app.request("/api/resource-io/transfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: {
+          kind: "mount",
+          mountId: "mount_research",
+          path: "same.md",
+        },
+        targetDirectory: {
+          kind: "mount",
+          mountId: "mount_research",
+          path: "",
+        },
+        targetName: "locator-copy.md",
+        operationId: "123e4567-e89b-42d3-a456-426614174001",
+      }),
+    });
+    expect(legacyLocatorCopy.status).toBe(403);
+    expect(fs.existsSync(path.join(research, "locator-copy.md")))
+      .toBe(false);
+  });
+
+  it("rejects absolute paths and Knowledge locators at both LAN public and legacy Workbench boundaries", async () => {
+    tmpDir = makeTmpDir();
+    const workspace = path.join(tmpDir, "workspace");
+    const hanakoHome = path.join(tmpDir, "hana");
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.writeFileSync(path.join(workspace, "note.md"), "unchanged", "utf-8");
+    const principal = normalizePrincipal({
+      kind: "device",
+      credentialKind: "device_credential",
+      connectionKind: "lan",
+      trustState: "paired",
+      serverNodeId: "node_1",
+      userId: "user_1",
+      studioId: "studio_1",
+      deviceId: "device_1",
+      scopes: ["files.read", "files.write"],
+    });
+    const resourceIO = await makeRouteResourceIO({
+      hanakoHome,
+      workspace,
+      studioId: "studio_1",
+    });
+    const app = await makeKnowledgeApp({
+      hanakoHome,
+      deskCwd: workspace,
+      homeCwd: workspace,
+      resourceIO,
+      getRuntimeContext: () => ({ studioId: "studio_1" }),
+    }, principal);
+
+    const publicResponse = await app.request("/api/resource-io/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: { sourceKey: "main", relativePath: workspace + "/note.md" },
+      }),
+    });
+    expect(publicResponse.status).toBe(400);
+    expect(await publicResponse.json()).toMatchObject({
+      code: "invalid_relative_path",
+      httpStatus: 400,
+      retryable: false,
+    });
+
+    const legacyResponse = await app.request("/api/mobile/workbench/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "writeText",
+        sourceKey: "main",
+        relativePath: "note.md",
+        absolutePath: path.join(workspace, "note.md"),
+        name: "note.md",
+        content: "must not write",
+      }),
+    });
+    expect(legacyResponse.status).toBe(400);
+    expect(await legacyResponse.json()).toEqual({
+      error: "invalid_path",
+      detail: "Resource operation failed",
+    });
+    expect(fs.readFileSync(path.join(workspace, "note.md"), "utf-8"))
+      .toBe("unchanged");
+
+    const deepLegacyResponse = await app.request("/api/mobile/workbench/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "writeText",
+        name: "note.md",
+        content: "must not write deeply",
+        metadata: {
+          level1: {
+            level2: {
+              level3: {
+                level4: {
+                  absolutePath: path.join(workspace, "note.md"),
+                },
+              },
+            },
+          },
+        },
+      }),
+    });
+    expect(deepLegacyResponse.status).toBe(400);
+    expect(await deepLegacyResponse.json()).toEqual({
+      error: "invalid_path",
+      detail: "Resource operation failed",
+    });
+    expect(fs.readFileSync(path.join(workspace, "note.md"), "utf-8"))
+      .toBe("unchanged");
   });
 
   it("keeps provider failures stable at the legacy Workbench boundary", async () => {

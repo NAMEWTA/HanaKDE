@@ -125,6 +125,43 @@ describe("websocket scope filtering", () => {
     expect(wsClientCanReceiveEvent(client, { type: "plugin_ui_changed" })).toBe(false);
   });
 
+  it("delivers path-free resource resync events only to same-Studio file readers", () => {
+    const client = createWsClientRecord({
+      principal: {
+        kind: "device",
+        credentialKind: "device_credential",
+        connectionKind: "lan",
+        userId: "user_1",
+        studioId: "studio_1",
+        serverNodeId: "node_1",
+        scopes: ["files.read"],
+      },
+    });
+    const event = {
+      type: "resource.resync_required",
+      studioId: "studio_1",
+      stale: true,
+      resync: "resource-stat-required",
+      source: "provider_watch",
+      sequence: 1,
+    };
+    expect(wsClientCanReceiveEvent(client, event)).toBe(true);
+    expect(wsClientCanReceiveEvent(client, {
+      ...event,
+      studioId: "studio_2",
+    })).toBe(false);
+    expect(wsClientCanReceiveEvent(client, {
+      ...event,
+      studioId: undefined,
+    })).toBe(false);
+    expect(wsClientCanReceiveEvent(createWsClientRecord({
+      principal: {
+        ...client.principal,
+        scopes: ["chat.read"],
+      },
+    }), event)).toBe(false);
+  });
+
   it("denies session events that lack explicit studioId for non-local-owner clients", () => {
     // 收紧 wsClientCanReceiveEvent：session 事件必须显式 set studioId，
     // 否则非 local owner 一律拒收（fail-closed），避免 publisher 漏 set

@@ -12,6 +12,7 @@ import { togglePreviewPanel } from '../stores/preview-actions';
 import { openSettingsModal } from '../stores/settings-modal-actions';
 import { useStore } from '../stores';
 import { createNewSession, reconcileCurrentSessionMessages } from '../stores/session-actions';
+import { waitForResourceWatchCleanup } from '../services/resource-events';
 import {
   initializeMobileRuntime,
   loadMobileSessions,
@@ -55,35 +56,79 @@ export function MobileApp(): React.ReactElement {
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [mobileUpdateAvailable, setMobileUpdateAvailable] = useState(() => window.__hanaMobileUpdateAvailable === true);
+  const bootstrapAbortControllerRef = useRef<AbortController | null>(null);
+  const bootstrapEpochRef = useRef(0);
+  const loginAbortControllerRef = useRef<AbortController | null>(null);
+  const loginAttemptEpochRef = useRef(0);
+  const loginSubmittingRef = useRef(false);
 
   const bootstrap = useCallback(async () => {
-    await ensureMobileAuthLocale();
-    const session = await readMobileAuthSession();
-    if (!session.authenticated || !session.principal) {
-      setAuthState('login');
-      return;
+    const epoch = ++bootstrapEpochRef.current;
+    bootstrapAbortControllerRef.current?.abort(new DOMException('Mobile bootstrap superseded', 'AbortError'));
+    const controller = new AbortController();
+    bootstrapAbortControllerRef.current = controller;
+    const isCurrent = () => (
+      epoch === bootstrapEpochRef.current
+      && bootstrapAbortControllerRef.current === controller
+      && !controller.signal.aborted
+    );
+    try {
+      await ensureMobileAuthLocale();
+      assertMobileBootstrapCurrent(isCurrent);
+      if (window.i18n?.locale) {
+        useStore.setState({ locale: window.i18n.locale });
+      }
+      const session = await readMobileAuthSession(controller.signal);
+      assertMobileBootstrapCurrent(isCurrent);
+      if (!session.authenticated || !session.principal) {
+        setAuthState('login');
+        return;
+      }
+      if (!principalHasRequiredScopes(session.principal, MOBILE_REQUIRED_SCOPES)) {
+        await apiJson('/api/web-auth/logout', {
+          method: 'POST',
+          signal: controller.signal,
+        }).catch(() => null);
+        assertMobileBootstrapCurrent(isCurrent);
+        setPrincipal(null);
+        setLoginError((window.t ?? ((p: string) => p))('mobile.auth.scopeError'));
+        setAuthState('login');
+        return;
+      }
+      await initializeMobileRuntime(session.principal, {
+        signal: controller.signal,
+        isCurrent,
+      });
+      assertMobileBootstrapCurrent(isCurrent);
+      setPrincipal(session.principal);
+      setAuthState('ready');
+    } catch (error) {
+      if (!controller.signal.aborted) controller.abort(error);
+      await waitForResourceWatchCleanup();
+      throw error;
     }
-    if (!principalHasRequiredScopes(session.principal, MOBILE_REQUIRED_SCOPES)) {
-      await apiJson('/api/web-auth/logout', { method: 'POST' }).catch(() => null);
-      setPrincipal(null);
-      setLoginError((window.t ?? ((p: string) => p))('mobile.auth.scopeError'));
-      setAuthState('login');
-      return;
-    }
-    await initializeMobileRuntime(session.principal);
-    setPrincipal(session.principal);
-    setAuthState('ready');
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     bootstrap().catch((err) => {
+      if (isAbortError(err)) return;
       console.warn('[mobile] bootstrap failed', err);
       if (!cancelled) setAuthState('login');
     });
     return () => {
       cancelled = true;
+      bootstrapEpochRef.current += 1;
+      bootstrapAbortControllerRef.current?.abort(
+        new DOMException('Mobile app unmounted', 'AbortError'),
+      );
+      loginAttemptEpochRef.current += 1;
+      loginAbortControllerRef.current?.abort(
+        new DOMException('Mobile app unmounted', 'AbortError'),
+      );
+      loginSubmittingRef.current = false;
     };
   }, [bootstrap]);
 
@@ -103,6 +148,12 @@ export function MobileApp(): React.ReactElement {
 
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (loginSubmittingRef.current) return;
+    loginSubmittingRef.current = true;
+    setLoginSubmitting(true);
+    const attempt = ++loginAttemptEpochRef.current;
+    const controller = new AbortController();
+    loginAbortControllerRef.current = controller;
     setLoginError(null);
     try {
       const body = loginMode === 'device'
@@ -111,12 +162,23 @@ export function MobileApp(): React.ReactElement {
       await apiJson('/api/web-auth/login', {
         method: 'POST',
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      if (attempt !== loginAttemptEpochRef.current || controller.signal.aborted) return;
       setLoginSecret('');
       setLoginPassword('');
       await bootstrap();
     } catch (err) {
-      setLoginError(err instanceof Error ? err.message : (window.t ?? ((p: string) => p))('mobile.auth.loginFailed'));
+      if (isAbortError(err)) return;
+      if (attempt === loginAttemptEpochRef.current) {
+        setLoginError(err instanceof Error ? err.message : (window.t ?? ((p: string) => p))('mobile.auth.loginFailed'));
+      }
+    } finally {
+      if (attempt === loginAttemptEpochRef.current) {
+        loginAbortControllerRef.current = null;
+        loginSubmittingRef.current = false;
+        setLoginSubmitting(false);
+      }
     }
   };
 
@@ -132,6 +194,7 @@ export function MobileApp(): React.ReactElement {
         username={loginUsername}
         password={loginPassword}
         error={loginError}
+        submitting={loginSubmitting}
         onModeChange={(mode) => { setLoginMode(mode); setLoginError(null); }}
         onSecretChange={setLoginSecret}
         onUsernameChange={setLoginUsername}
@@ -150,6 +213,15 @@ export function MobileApp(): React.ReactElement {
       />
     </ErrorBoundary>
   );
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function assertMobileBootstrapCurrent(isCurrent: () => boolean): void {
+  if (isCurrent()) return;
+  throw new DOMException('Mobile bootstrap superseded', 'AbortError');
 }
 
 function MobileDesktopShell({
@@ -410,6 +482,7 @@ function MobileLoginScreen({
   username,
   password,
   error,
+  submitting,
   onModeChange,
   onSecretChange,
   onUsernameChange,
@@ -421,6 +494,7 @@ function MobileLoginScreen({
   username: string;
   password: string;
   error: string | null;
+  submitting: boolean;
   onModeChange: (mode: LoginMode) => void;
   onSecretChange: (value: string) => void;
   onUsernameChange: (value: string) => void;
@@ -428,9 +502,9 @@ function MobileLoginScreen({
   onSubmit: (event: React.FormEvent) => void;
 }) {
   const t = window.t ?? ((p: string) => p);
-  const loginDisabled = mode === 'device'
+  const loginDisabled = submitting || (mode === 'device'
     ? !secret.trim()
-    : !username.trim() || !password;
+    : !username.trim() || !password);
 
   return (
     <main className="onboarding">
@@ -442,10 +516,10 @@ function MobileLoginScreen({
           : t('mobile.auth.passwordHelp')}</p>
 
         <div className="provider-grid" role="tablist" aria-label={t('mobile.auth.tabLabel')}>
-          <button type="button" role="tab" aria-selected={mode === 'device'} className={`provider-card${mode === 'device' ? ' selected' : ''}`} onClick={() => onModeChange('device')}>
+          <button type="button" role="tab" disabled={submitting} aria-selected={mode === 'device'} className={`provider-card${mode === 'device' ? ' selected' : ''}`} onClick={() => onModeChange('device')}>
             {t('mobile.auth.deviceTab')}
           </button>
-          <button type="button" role="tab" aria-selected={mode === 'password'} className={`provider-card${mode === 'password' ? ' selected' : ''}`} onClick={() => onModeChange('password')}>
+          <button type="button" role="tab" disabled={submitting} aria-selected={mode === 'password'} className={`provider-card${mode === 'password' ? ' selected' : ''}`} onClick={() => onModeChange('password')}>
             {t('mobile.auth.passwordTab')}
           </button>
         </div>
@@ -453,17 +527,17 @@ function MobileLoginScreen({
         {mode === 'device' ? (
           <label className="custom-field">
             <span className="ob-field-label">{t('mobile.auth.deviceField')}</span>
-            <input className="ob-input" value={secret} onChange={(event) => onSecretChange(event.target.value)} autoComplete="one-time-code" spellCheck={false} />
+            <input className="ob-input" disabled={submitting} value={secret} onChange={(event) => onSecretChange(event.target.value)} autoComplete="one-time-code" spellCheck={false} />
           </label>
         ) : (
           <>
             <label className="custom-field">
               <span className="ob-field-label">{t('mobile.auth.usernameField')}</span>
-              <input className="ob-input" value={username} onChange={(event) => onUsernameChange(event.target.value)} autoComplete="username" spellCheck={false} />
+              <input className="ob-input" disabled={submitting} value={username} onChange={(event) => onUsernameChange(event.target.value)} autoComplete="username" spellCheck={false} />
             </label>
             <label className="custom-field">
               <span className="ob-field-label">{t('mobile.auth.passwordField')}</span>
-              <input className="ob-input" value={password} onChange={(event) => onPasswordChange(event.target.value)} type="password" autoComplete="current-password" />
+              <input className="ob-input" disabled={submitting} value={password} onChange={(event) => onPasswordChange(event.target.value)} type="password" autoComplete="current-password" />
             </label>
             <p className="onboarding-subtitle">{t('mobile.auth.plaintextWarning')}</p>
           </>
@@ -507,11 +581,6 @@ function ensureMobileAuthLocale(): Promise<void> {
     .catch((err) => {
       if (mobileAuthLocaleLoad?.i18n === i18n) mobileAuthLocaleLoad = null;
       console.warn('[mobile] initial auth locale load failed', err);
-    })
-    .then(() => {
-      if (window.i18n?.locale) {
-        useStore.setState({ locale: window.i18n.locale });
-      }
     });
   mobileAuthLocaleLoad = { i18n, promise };
   return promise;

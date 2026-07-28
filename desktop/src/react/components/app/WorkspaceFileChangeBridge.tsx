@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../../stores';
 import { resourceWatchKey, retainResourceWatch, type ResourceRef } from '../../services/resource-events';
+import { isLocalOwnerConnection } from '../../services/server-connection';
 
 function normalizeSubdir(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -40,10 +41,15 @@ export function WorkspaceFileChangeBridge() {
   const deskWorkspaceMountId = useStore(s => s.deskWorkspaceMountId);
   const deskWorkspaceNativeRoot = useStore(s => s.deskWorkspaceNativeRoot);
   const deskExpandedPaths = useStore(s => s.deskExpandedPaths);
+  const activeServerConnection = useStore(s => s.activeServerConnection);
   const subscriptionsRef = useRef<Map<string, () => void>>(new Map());
   const watchedRefs = useMemo(
-    () => workspaceWatchRefs(deskWorkspaceMountId ? '' : deskBasePath, deskWorkspaceMountId || '', deskExpandedPaths),
-    [deskBasePath, deskExpandedPaths, deskWorkspaceMountId, deskWorkspaceNativeRoot],
+    () => (
+      !activeServerConnection || isLocalOwnerConnection(activeServerConnection)
+        ? workspaceWatchRefs(deskWorkspaceMountId ? '' : deskBasePath, deskWorkspaceMountId || '', deskExpandedPaths)
+        : []
+    ),
+    [activeServerConnection, deskBasePath, deskExpandedPaths, deskWorkspaceMountId, deskWorkspaceNativeRoot],
   );
   const watchedRefsKey = watchedRefs.map(resourceWatchKey).join('\n');
 

@@ -129,8 +129,17 @@ export class ResourceWatchRegistry {
   unsubscribe(subscriptionId: string): boolean {
     const subscription = this.subscriptions.get(subscriptionId);
     if (!subscription) return false;
+    try {
+      while (subscription.releases.length > 0) {
+        const release = subscription.releases[subscription.releases.length - 1];
+        release();
+        subscription.releases.pop();
+      }
+    } catch (err) {
+      this.recordError(err);
+      throw err;
+    }
     this.subscriptions.delete(subscriptionId);
-    for (const release of subscription.releases.reverse()) release();
     return true;
   }
 
@@ -203,9 +212,9 @@ export class ResourceWatchRegistry {
       entry.refCount -= 1;
       return;
     }
+    entry.handle.close();
     this.entries.delete(resourceKey);
     if (entry.timer) clearTimeout(entry.timer);
-    entry.handle.close();
   }
 
   schedule(entry: Entry, changedPath?: WatchChangeInput): void {
