@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `0150b9c5`（Ticket 20 实现验证点） |
+| Commit | `64b3d9c4`（Ticket 21 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -17,7 +17,7 @@
 | Milestone | Gate | Status | Artifact/command |
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
-| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–20） | Knowledge 壳、真实多来源只读树、stat-first Asset Viewer、共享 DocumentSession/DocumentView registry、手动 expected-version 保存，以及递归编辑组/tabs/preview/面包屑组合层已交付；普通打开全局复用，显式侧边打开才建立共享 session 的第二 view，dirty session 在布局收拢后保留。Ticket 20 精确 8/8、相关 130/130；当前干净全仓 1025 files passed、1 skipped，10277 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–21） | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs，以及外部变化三方冲突已交付；clean 自动重载，dirty 保留 baseline/local/disk 并阻断直接保存，merge/local/disk 显式选择复用同一手动保存执行器。Ticket 21 精确 10/10、相关 202/202；当前产品范围全仓 1026 files passed、1 skipped，10288 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
@@ -159,9 +159,9 @@
 | KW-US-130 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；异常以持久非模态 alert 呈现，可手动关闭且编辑焦点不被夺取 |
 | KW-US-131 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；重复冲突更新同一 session/document 通知，不堆叠多条 alert |
 | KW-US-132 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx`（10/10）；后续成功只清除该文档 saveError，不影响其他文档通知 |
-| KW-US-133 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 未执行 | — |
-| KW-US-134 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 未执行 | — |
-| KW-US-135 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 未执行 | — |
+| KW-US-133 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx`（1 file、10/10）；clean 外部正文/格式变化 stat-first 自动重载，来源级无关事件不制造假冲突，stale response 不覆盖新状态 |
+| KW-US-134 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx`（10/10）；dirty 时原子保留 baseline/local/disk、diskVersion/diskFormat，继续编辑更新 local，直接保存被阻断 |
+| KW-US-135 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx`（10/10）；merge/local/disk 三个显式动作全部进入同一手动保存执行器，写入不可用时不丢所选 buffer |
 | KW-US-136 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-137 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
 | KW-US-138 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
@@ -317,4 +317,5 @@
 - 2026-07-28 Ticket 20 的 E2E-KW-004 尚未执行：递归 groups/tabs、preview、全局复用、显式侧边 view 与 breadcrumb 组合层已进入真实 Knowledge shell，但资源树单击/双击/Space/Enter 的公开打开入口由 Tickets 48/49 拥有，仓库目前仍只有 E2E-KW-001 spec。为避免私有 route/test shortcut 或越权提前实现树交互，本票登记精确 8/8、相关 130/130 与干净全仓 10277 tests passed；依赖完成后必须通过真实产品入口执行 E2E-KW-004，最终发布前不得保留此缺口。
 - 2026-07-28 Ticket 20 文档回填后的前两次 `npx vitest run tests/knowledge-baseline-contract.test.ts` 在隔离 child import 用例触及固定 10 秒超时；排查确认三个此前为提取全仓统计而启动、但因输出管道提前返回的 Vitest 进程仍在后台并行占用 CPU。只终止本轮启动的冗余测试进程后，同一基线命令立即通过（11/11，child import 926 ms），随后单一前台全仓命令通过。这是已解决的测试编排资源争用，不是产品断言失败或发布豁免。
 - 2026-07-28 Ticket 20 全仓复验期间曾误传 `--reporter=basic`；Vitest 4 将其解析为无法加载的自定义 reporter，测试在 discovery 前退出。移除该无效参数后使用默认 reporter 的同一全仓命令通过（1025 files passed、1 skipped；10277 tests passed、6 skipped）。该记录仅说明命令更正，不属于产品测试失败或发布豁免。
+- 2026-07-28 Ticket 21 的 E2E-KW-007 尚未执行：外部变化监听、clean reload、dirty 三方状态与显式 resolver 已进入真实 Knowledge groups 组合层，但真实资源树单击/双击/Space/Enter 打开 Markdown 的公开用户入口由 Tickets 48/49 拥有，仓库目前仍只有 E2E-KW-001 spec。为避免私有 route/test shortcut 或提前实现后续 owner，本票登记精确 10/10、相关 202/202 与产品范围全仓 10288 tests passed；依赖完成后必须通过真实产品入口执行 E2E-KW-007，最终发布前不得保留此缺口。
 - 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
