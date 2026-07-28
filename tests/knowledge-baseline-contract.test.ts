@@ -196,9 +196,12 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     });
   });
 
-  it("excludes the gitignored SilverBullet snapshot through shared Vitest discovery", async () => {
+  it("excludes non-Vitest suites through shared Vitest discovery", async () => {
     const vitestConfig = (await import("../vitest.config.js")).default;
     expect(vitestConfig.test?.exclude).toContain("silverbullet/**");
+    expect(vitestConfig.test?.exclude).toContain(
+      "tests/knowledge-workspace-e2e/specs/**",
+    );
   });
 
   it("defines the three frozen projects and failure artifacts through Playwright's public config", async () => {

@@ -33,6 +33,26 @@
     "hideSource": "隱藏原始碼",
     "copySource": "複製原始碼"
   },
+  "knowledge": {
+    "tab": "知識",
+    "workspaceLabel": "知識工作區",
+    "sources": {
+      "heading": "內容來源",
+      "loading": "正在載入來源…",
+      "error": "無法載入內容來源"
+    },
+    "source": { "main": "主要來源" },
+    "retry": "重試",
+    "tree": {
+      "heading": "資源樹",
+      "empty": "尚無已展開資源"
+    },
+    "editor": {
+      "groupLabel": "編輯群組",
+      "emptyTitle": "開啟資源",
+      "emptyDescription": "請從資源樹選擇頁面或資產。"
+    }
+  },
   "quickChat": {
     "title": "快速聊天",
     "close": "關閉快速聊天",

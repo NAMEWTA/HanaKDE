@@ -1,0 +1,112 @@
+import type {
+  KnowledgeSourceDto,
+} from '../../../../../shared/knowledge-workspace-contract.ts';
+import styles from './KnowledgeWorkspace.module.css';
+
+const tr = (key: string) => window.t?.(key) ?? key;
+
+export interface KnowledgeLayoutProps {
+  sources: KnowledgeSourceDto[];
+  sourcesStatus: 'idle' | 'loading' | 'ready' | 'error';
+  onRetry(): void;
+}
+
+function visibleSources(sources: KnowledgeSourceDto[]): KnowledgeSourceDto[] {
+  const main = sources.find((source) => source.sourceKey === 'main');
+  const mounted = sources.filter((source) => source.sourceKey !== 'main');
+  return [
+    main ?? {
+      sourceKey: 'main',
+      displayName: tr('knowledge.source.main'),
+      role: 'main',
+      capabilities: [],
+      availability: 'available',
+    },
+    ...mounted,
+  ];
+}
+
+export function KnowledgeLayout({
+  sources,
+  sourcesStatus,
+  onRetry,
+}: KnowledgeLayoutProps) {
+  const renderedSources = visibleSources(sources);
+  const sourcesHeadingId = 'knowledge-sources-heading';
+
+  return (
+    <main
+      className={styles.workspace}
+      aria-label={tr('knowledge.workspaceLabel')}
+      data-knowledge-workspace=""
+    >
+      <section
+        className={styles.sourcesPanel}
+        role="region"
+        aria-labelledby={sourcesHeadingId}
+      >
+        <h2 className={styles.panelHeading} id={sourcesHeadingId}>
+          {tr('knowledge.sources.heading')}
+        </h2>
+        <ul className={styles.sourceList}>
+          {renderedSources.map((source) => (
+            <li
+              className={styles.sourceItem}
+              data-availability={source.availability}
+              data-source-key={source.sourceKey}
+              key={source.sourceKey}
+            >
+              <span className={styles.sourceIndicator} aria-hidden="true" />
+              <span className={styles.sourceName}>{source.displayName}</span>
+              {source.role === 'main' && source.displayName !== tr('knowledge.source.main') && (
+                <span className={styles.sourceRole}>
+                  {tr('knowledge.source.main')}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        {sourcesStatus === 'loading' && (
+          <p className={styles.status} role="status">
+            {tr('knowledge.sources.loading')}
+          </p>
+        )}
+        {sourcesStatus === 'error' && (
+          <div className={styles.sourceError} role="alert">
+            <span>{tr('knowledge.sources.error')}</span>
+            <button className={styles.retryButton} type="button" onClick={onRetry}>
+              {tr('knowledge.retry')}
+            </button>
+          </div>
+        )}
+      </section>
+
+      <nav className={styles.treePanel} aria-label={tr('knowledge.tree.heading')}>
+        <h2 className={styles.panelHeading}>{tr('knowledge.tree.heading')}</h2>
+        <div
+          className={styles.tree}
+          role="tree"
+          aria-label={tr('knowledge.tree.heading')}
+        >
+          <p className={styles.emptyTree}>{tr('knowledge.tree.empty')}</p>
+        </div>
+      </nav>
+
+      <section
+        className={styles.editorGroup}
+        role="group"
+        aria-label={tr('knowledge.editor.groupLabel')}
+        tabIndex={0}
+      >
+        <div className={styles.emptyEditor}>
+          <h1 className={styles.emptyTitle}>
+            {tr('knowledge.editor.emptyTitle')}
+          </h1>
+          <p className={styles.emptyDescription}>
+            {tr('knowledge.editor.emptyDescription')}
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}

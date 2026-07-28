@@ -33,6 +33,26 @@
     "hideSource": "Hide source",
     "copySource": "Copy source"
   },
+  "knowledge": {
+    "tab": "Knowledge",
+    "workspaceLabel": "Knowledge workspace",
+    "sources": {
+      "heading": "Sources",
+      "loading": "Loading sources…",
+      "error": "Sources are unavailable"
+    },
+    "source": { "main": "Main" },
+    "retry": "Retry",
+    "tree": {
+      "heading": "Resource tree",
+      "empty": "No resources expanded"
+    },
+    "editor": {
+      "groupLabel": "Editor group",
+      "emptyTitle": "Open a resource",
+      "emptyDescription": "Choose a page or asset from the resource tree."
+    }
+  },
   "quickChat": {
     "title": "Quick Chat",
     "close": "Close Quick Chat",

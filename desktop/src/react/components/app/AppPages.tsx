@@ -11,6 +11,7 @@ import { ChannelHeader } from '../channels/ChannelHeader';
 import { MainContent } from '../../MainContent';
 import { ChatPage } from './ChatPage';
 import { WorkspaceCompanionRail } from './WorkspaceCompanionRail';
+import { KnowledgeWorkspace } from '../knowledge-workspace/KnowledgeWorkspace';
 
 const tr = (key: string, vars?: Record<string, string | number>) => window.t?.(key, vars) ?? key;
 
@@ -135,6 +136,7 @@ export function AppPages() {
     <>
       <MainContent>
         {currentTab === 'chat' && <ChatPage />}
+        {currentTab === 'knowledge' && <KnowledgeWorkspace />}
         {currentTab === 'channels' && <ChannelPage />}
         {isPluginTab && <PluginPage pluginId={currentTab.slice(7)} />}
         <ActivityPanel />
@@ -144,7 +146,7 @@ export function AppPages() {
       </MainContent>
 
       {currentTab === 'chat' && <PreviewPanel />}
-      <WorkspaceCompanionRail />
+      {currentTab !== 'knowledge' && <WorkspaceCompanionRail />}
     </>
   );
 }

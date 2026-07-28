@@ -59,9 +59,12 @@ async function installSkillFile(filePath: string, sessionPath?: string | null): 
 }
 
 function blockChatAttachmentDropOutsideChat(): boolean {
-  if (useStore.getState().currentTab !== 'channels') return false;
-  useStore.getState().addToast(t('channel.filesUnsupported'), 'error');
-  return true;
+  const currentTab = useStore.getState().currentTab;
+  if (currentTab === 'channels') {
+    useStore.getState().addToast(t('channel.filesUnsupported'), 'error');
+    return true;
+  }
+  return currentTab === 'knowledge';
 }
 
 function chatAudioMimeTypeForName(name: string): string {
@@ -250,6 +253,7 @@ export function MainContent({ children }: { children: React.ReactNode }) {
   const welcomeVisible = useStore(s => s.welcomeVisible);
   const currentTab = useStore(s => s.currentTab);
   const welcomeMode = welcomeVisible && currentTab === 'chat';
+  const knowledgeMode = currentTab === 'knowledge';
 
   const finishDragSession = useCallback(() => {
     dragCounter.current = 0;
@@ -271,20 +275,26 @@ export function MainContent({ children }: { children: React.ReactNode }) {
 
   const onDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    if (knowledgeMode) return;
     dragCounter.current++;
     if (dragCounter.current === 1) setDragActive(true);
-  }, []);
+  }, [knowledgeMode]);
   const onDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    if (knowledgeMode) {
+      finishDragSession();
+      return;
+    }
     dragCounter.current = Math.max(0, dragCounter.current - 1);
     if (dragCounter.current === 0) finishDragSession();
-  }, [finishDragSession]);
+  }, [finishDragSession, knowledgeMode]);
   const onDragOver = useCallback((e: React.DragEvent) => e.preventDefault(), []);
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     finishDragSession();
+    if (knowledgeMode) return;
     void handleDrop(e);
-  }, [finishDragSession]);
+  }, [finishDragSession, knowledgeMode]);
 
   return (
     <div
@@ -298,7 +308,7 @@ export function MainContent({ children }: { children: React.ReactNode }) {
     >
       <BrowserCard />
       <ComputerUseOverlay />
-      <div className={`drop-overlay${dragActive ? ' visible' : ''}`}>
+      <div className={`drop-overlay${dragActive && !knowledgeMode ? ' visible' : ''}`}>
         <div className="drop-overlay-inner">
           <span className="drop-icon">📎</span>
           <DropText />

@@ -33,6 +33,26 @@
     "hideSource": "ソースを隠す",
     "copySource": "ソースをコピー"
   },
+  "knowledge": {
+    "tab": "ナレッジ",
+    "workspaceLabel": "ナレッジワークスペース",
+    "sources": {
+      "heading": "ソース",
+      "loading": "ソースを読み込み中…",
+      "error": "ソースを読み込めません"
+    },
+    "source": { "main": "メイン" },
+    "retry": "再試行",
+    "tree": {
+      "heading": "リソースツリー",
+      "empty": "展開されたリソースはありません"
+    },
+    "editor": {
+      "groupLabel": "エディターグループ",
+      "emptyTitle": "リソースを開く",
+      "emptyDescription": "リソースツリーからページまたはアセットを選択してください。"
+    }
+  },
   "quickChat": {
     "title": "クイックチャット",
     "close": "クイックチャットを閉じる",

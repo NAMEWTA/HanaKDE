@@ -23,6 +23,10 @@ vi.mock('../../components/plugin/PluginPageView', () => ({
   ),
 }));
 
+vi.mock('../../components/knowledge-workspace/KnowledgeWorkspace', () => ({
+  KnowledgeWorkspace: () => <section data-testid="knowledge-workspace" />,
+}));
+
 vi.mock('../../components/chat/ChatArea', () => ({
   ChatArea: () => <section data-testid="chat-area" />,
 }));
@@ -128,5 +132,16 @@ describe('AppPages page ownership', () => {
     ).toBeTruthy();
     expect(screen.queryByTestId('preview-panel')).not.toBeInTheDocument();
     expect(screen.getByTestId('right-workspace-panel')).toBeInTheDocument();
+  });
+
+  it('owns the full Knowledge page without chat preview or compact workspace companion', () => {
+    useStore.setState({ currentTab: 'knowledge' } as never);
+
+    render(<AppPages />);
+
+    expect(screen.getByTestId('knowledge-workspace')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-area')).not.toBeInTheDocument();
+    expect(document.querySelector('#previewPanel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('right-workspace-panel')).not.toBeInTheDocument();
   });
 });

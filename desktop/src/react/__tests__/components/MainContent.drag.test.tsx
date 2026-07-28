@@ -224,4 +224,21 @@ describe('MainContent app file drag attachments', () => {
     expect(hanaFetch).not.toHaveBeenCalled();
     expect(addToast).toHaveBeenCalledWith('channel.filesUnsupported', 'error');
   });
+
+  it('keeps Knowledge isolated from the chat attachment drop surface', async () => {
+    useStore.setState({ currentTab: 'knowledge' } as never);
+    const { container } = render(<MainContent><div>knowledge</div></MainContent>);
+    const root = container.querySelector('.main-content');
+    const overlay = container.querySelector('.drop-overlay');
+    const file = new File(['knowledge'], 'notes.md');
+    const dataTransfer = fileDataTransfer([file]);
+
+    fireEvent.dragEnter(root!, { dataTransfer });
+    expect(overlay).not.toHaveClass('visible');
+    fireEvent.drop(root!, { dataTransfer });
+
+    await Promise.resolve();
+    expect(useStore.getState().attachedFiles).toEqual([]);
+    expect(hanaFetch).not.toHaveBeenCalled();
+  });
 });

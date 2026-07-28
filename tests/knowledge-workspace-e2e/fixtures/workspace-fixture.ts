@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import YAML from "js-yaml";
 
 export type KnowledgeWorkspaceSandbox = {
   rootDir: string;
@@ -49,6 +50,11 @@ export async function createKnowledgeWorkspaceSandbox(
         ...mountedSources,
       ].map((directory) => fs.mkdir(directory, { recursive: true })),
     );
+    await seedPrimaryAgent({
+      hanaHome,
+      mainSource,
+      productRoot: process.cwd(),
+    });
 
     return {
       rootDir,
@@ -79,4 +85,60 @@ export async function createKnowledgeWorkspaceSandbox(
     });
     throw error;
   }
+}
+
+async function seedPrimaryAgent({
+  hanaHome,
+  mainSource,
+  productRoot,
+}: {
+  hanaHome: string;
+  mainSource: string;
+  productRoot: string;
+}): Promise<void> {
+  const agentDir = path.join(hanaHome, "agents", "hanako");
+  await Promise.all([
+    fs.mkdir(path.join(agentDir, "memory"), { recursive: true }),
+    fs.mkdir(path.join(agentDir, "sessions"), { recursive: true }),
+    fs.mkdir(path.join(agentDir, "avatars"), { recursive: true }),
+    fs.mkdir(path.join(agentDir, "desk"), { recursive: true }),
+    fs.mkdir(path.join(hanaHome, "user"), { recursive: true }),
+  ]);
+  const template = YAML.load(
+    await fs.readFile(
+      path.join(productRoot, "lib", "config.example.yaml"),
+      "utf8",
+    ),
+  ) as Record<string, unknown>;
+  const desk = (
+    template.desk
+    && typeof template.desk === "object"
+    && !Array.isArray(template.desk)
+  )
+    ? template.desk as Record<string, unknown>
+    : {};
+  template.desk = {
+    ...desk,
+    home_folder: mainSource,
+    heartbeat_enabled: false,
+  };
+  await fs.writeFile(
+    path.join(agentDir, "config.yaml"),
+    YAML.dump(template, {
+      indent: 2,
+      lineWidth: -1,
+      sortKeys: false,
+      quotingType: '"',
+    }),
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(hanaHome, "user", "preferences.json"),
+    `${JSON.stringify({
+      primaryAgent: "hanako",
+      locale: "en",
+      setupComplete: true,
+    }, null, 2)}\n`,
+    "utf8",
+  );
 }

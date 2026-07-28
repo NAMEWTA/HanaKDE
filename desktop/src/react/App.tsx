@@ -68,6 +68,7 @@ function App() {
   const jianOpen = useStore(s => s.jianOpen);
   const currentTab = useStore(s => s.currentTab);
   const isPluginTab = typeof currentTab === 'string' && currentTab.startsWith('plugin:');
+  const showsChatSidebar = currentTab === 'chat' || currentTab === 'channels';
   const { side: floatSide, show: showFloat, scheduleHide: scheduleFloatHide, cancelHide: cancelFloatHide, hide: hideFloat } = useFloatSidebar();
 
   useEffect(() => {
@@ -107,7 +108,7 @@ function App() {
         {/* ── App body ── */}
         <div className="app">
           <ChatSidebar
-            open={sidebarOpen && !isPluginTab}
+            open={sidebarOpen && showsChatSidebar && !isPluginTab}
             onNewSession={createNewSession}
             onCollapse={() => toggleSidebar()}
             onOpenSettings={() => openSettingsModal()}
