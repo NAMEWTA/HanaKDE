@@ -1,0 +1,116 @@
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { bracketMatching, syntaxHighlighting } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import {
+  drawSelection,
+  EditorView,
+  highlightActiveLine,
+  keymap,
+  lineNumbers,
+} from '@codemirror/view';
+import type { MarkdownImageContext } from '../utils/markdown';
+import { csvTableField } from './csv-field';
+import { markdownCoverField } from './cover-field';
+import { codeHighlight, markdownHighlight } from './highlight';
+import { createLinkClickHandler, type MarkdownLinkOpenHandler } from './link-handler';
+import {
+  markdownBlockDecoField,
+  markdownDecoPlugin,
+  markdownImageContextFacet,
+} from './md-decorations';
+import {
+  markdownBlockHandlePlugin,
+  type MarkdownBlockMenuRequest,
+} from './markdown-block-handles';
+import { markdownBlockSelectionPlugin } from './markdown-block-selection';
+import { mermaidDecoField } from './mermaid-field';
+import { tableDecoField } from './table-field';
+import { codeTheme, markdownTheme } from './theme';
+
+export interface MarkdownEditorCompartments {
+  lang: Compartment;
+  highlight: Compartment;
+  gutter: Compartment;
+  conceal: Compartment;
+  theme: Compartment;
+}
+
+export interface CreateMarkdownEditorExtensionsOptions {
+  mode: 'markdown' | 'code' | 'csv' | 'text';
+  readOnly: boolean;
+  compartments: MarkdownEditorCompartments;
+  imageContext: MarkdownImageContext;
+  attachmentExtension?: Extension;
+  changeExtension?: Extension;
+  observeExtension: Extension;
+  onOpenBlockMenu: (request: MarkdownBlockMenuRequest) => void;
+  onOpenLink?: MarkdownLinkOpenHandler;
+}
+
+export function createMarkdownEditorCompartments(): MarkdownEditorCompartments {
+  return {
+    lang: new Compartment(),
+    highlight: new Compartment(),
+    gutter: new Compartment(),
+    conceal: new Compartment(),
+    theme: new Compartment(),
+  };
+}
+
+export function createMarkdownEditorExtensions(
+  options: CreateMarkdownEditorExtensionsOptions,
+): Extension[] {
+  const {
+    mode,
+    readOnly,
+    compartments,
+    imageContext,
+    attachmentExtension,
+    changeExtension,
+    observeExtension,
+    onOpenBlockMenu,
+    onOpenLink,
+  } = options;
+  const isMarkdown = mode === 'markdown';
+  const isCsv = mode === 'csv';
+  const extensions: Extension[] = [
+    ...(isMarkdown ? [] : [drawSelection()]),
+    history(),
+    bracketMatching(),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    EditorView.contentAttributes.of({ spellcheck: 'false' }),
+    EditorView.lineWrapping,
+    ...(attachmentExtension ? [attachmentExtension] : []),
+    ...(readOnly
+      ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+      : changeExtension ? [changeExtension] : []),
+    observeExtension,
+    compartments.gutter.of(isMarkdown || isCsv ? [] : lineNumbers()),
+    compartments.lang.of(
+      isMarkdown ? markdown({ base: markdownLanguage, codeLanguages: languages }) : [],
+    ),
+    compartments.highlight.of(
+      syntaxHighlighting(isMarkdown ? markdownHighlight : codeHighlight),
+    ),
+    compartments.conceal.of(isMarkdown ? [
+      markdownImageContextFacet.of(imageContext),
+      markdownDecoPlugin,
+      markdownCoverField,
+      markdownBlockDecoField,
+      mermaidDecoField,
+    ] : []),
+    ...(isMarkdown && !readOnly ? [
+      markdownBlockSelectionPlugin(),
+      markdownBlockHandlePlugin({ onOpenMenu: onOpenBlockMenu }),
+    ] : []),
+    ...(isMarkdown ? [tableDecoField] : []),
+    ...(isCsv ? [csvTableField] : []),
+    compartments.theme.of(isMarkdown || isCsv ? markdownTheme : codeTheme),
+    createLinkClickHandler(onOpenLink),
+  ];
+
+  if (!isMarkdown && !isCsv) extensions.push(highlightActiveLine());
+  return extensions;
+}
