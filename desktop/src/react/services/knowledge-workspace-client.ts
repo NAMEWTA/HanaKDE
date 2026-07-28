@@ -147,6 +147,109 @@ export type RendererResourceTransferResult = {
   bytesTransferred: number;
 };
 
+export type RendererKnowledgeRenameOperationRequest = {
+  kind: 'rename';
+  from: KnowledgeResourceAddress;
+  to: KnowledgeResourceAddress;
+  expectedVersion: RendererResourceVersion;
+};
+
+export type RendererKnowledgeOperationState =
+  | 'PLANNED'
+  | 'PREPARING'
+  | 'PREPARED'
+  | 'COMMITTING'
+  | 'COMMITTED'
+  | 'FINALIZED'
+  | 'ROLLING_BACK'
+  | 'ROLLED_BACK'
+  | 'RECOVERY_REQUIRED'
+  | 'FAILED_PERMANENTLY';
+
+export type RendererKnowledgeOperationItemState =
+  | 'pending'
+  | 'prepared'
+  | 'applying'
+  | 'applied'
+  | 'rolling-back'
+  | 'rolled-back'
+  | 'failed'
+  | 'recovery-required';
+
+export type RendererKnowledgeOperationProjectionState =
+  | 'pending'
+  | 'applied'
+  | 'retrying';
+
+export type RendererKnowledgeOperationPlan = {
+  schemaVersion: 1;
+  operationId: string;
+  requestHash: string;
+  kind: 'rename';
+  createdAt: string;
+  expiresAt: string;
+  checkpointRequired: true;
+  items: Array<{
+    from: KnowledgeResourceAddress;
+    to: KnowledgeResourceAddress;
+    expectedVersion: RendererResourceVersion;
+  }>;
+  preview: {
+    resourceChanges: number;
+    linkWrites: number;
+  };
+};
+
+export type RendererKnowledgeOperationSummary = {
+  schemaVersion: 1;
+  operationId: string;
+  requestHash: string;
+  kind: 'rename';
+  state: RendererKnowledgeOperationState;
+  createdAt?: string;
+  expiresAt?: string;
+  completedAt?: string;
+  items: Array<{
+    from: KnowledgeResourceAddress;
+    to: KnowledgeResourceAddress;
+    state: RendererKnowledgeOperationItemState;
+    checkpointId?: string;
+    errorCode?: string;
+    rollbackStatus?: 'not-required' | 'rolled-back' | 'failed';
+  }>;
+  summary?: {
+    succeeded: number;
+    failed: number;
+    rolledBack: number;
+    recoveryRequired: number;
+  };
+  projections: {
+    session: RendererKnowledgeOperationProjectionState;
+    event: RendererKnowledgeOperationProjectionState;
+    index: RendererKnowledgeOperationProjectionState;
+  };
+};
+
+export interface KnowledgeOperationClient {
+  plan(
+    request: RendererKnowledgeRenameOperationRequest,
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeOperationPlan>;
+  commit(
+    operationId: string,
+    requestHash: string,
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeOperationSummary>;
+  cancel(
+    operationId: string,
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeOperationSummary>;
+  get(
+    operationId: string,
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeOperationSummary>;
+}
+
 export type KnowledgeResourceEventDescriptor =
   | { kind: 'mount'; mountId: string; path: string; isDirectory?: boolean }
   | { kind: 'resource'; resourceId: string; isDirectory?: boolean };
@@ -190,6 +293,7 @@ export type KnowledgeResourceEventCatchUp =
 
 export interface KnowledgeWorkspaceClient {
   resources: KnowledgeResourceClient;
+  operations: KnowledgeOperationClient;
   listSources(options?: KnowledgeWorkspaceRequestOptions): Promise<KnowledgeSourceDto[]>;
   registerSource(
     input: RegisterKnowledgeSourceInput,
@@ -475,8 +579,65 @@ export function createKnowledgeWorkspaceClient({
     },
   };
 
+  const operations: KnowledgeOperationClient = {
+    async plan(request, options = {}) {
+      const safeRequest = validateKnowledgeOperationRequest(request);
+      const body = await requestJson(
+        fetchImpl,
+        '/api/knowledge-workspace/operations/plan',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(safeRequest),
+          signal: options.signal,
+        },
+      );
+      return parseKnowledgeOperationPlanEnvelope(body);
+    },
+    async commit(operationId, requestHash, options = {}) {
+      validateOperationId(operationId);
+      validateRequestHash(requestHash);
+      const body = await requestJson(
+        fetchImpl,
+        `/api/knowledge-workspace/operations/${encodeURIComponent(operationId)}/commit`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestHash }),
+          signal: options.signal,
+        },
+      );
+      return parseKnowledgeOperationEnvelope(body, 'result');
+    },
+    async cancel(operationId, options = {}) {
+      validateOperationId(operationId);
+      const body = await requestJson(
+        fetchImpl,
+        `/api/knowledge-workspace/operations/${encodeURIComponent(operationId)}/cancel`,
+        {
+          method: 'POST',
+          signal: options.signal,
+        },
+      );
+      return parseKnowledgeOperationEnvelope(body, 'result');
+    },
+    async get(operationId, options = {}) {
+      validateOperationId(operationId);
+      const body = await requestJson(
+        fetchImpl,
+        `/api/knowledge-workspace/operations/${encodeURIComponent(operationId)}`,
+        {
+          method: 'GET',
+          signal: options.signal,
+        },
+      );
+      return parseKnowledgeOperationEnvelope(body, 'operation');
+    },
+  };
+
   return {
     resources,
+    operations,
     async listSources(options = {}) {
       const body = await requestJson(fetchImpl, '/api/knowledge-workspace/sources', {
         method: 'GET',
@@ -798,6 +959,458 @@ function parseResourceTransferResult(input: unknown): RendererResourceTransferRe
     ...(typeof input.version === 'string' ? { version: input.version } : {}),
     bytesTransferred: input.bytesTransferred,
   };
+}
+
+const OPERATION_STATES = new Set<RendererKnowledgeOperationState>([
+  'PLANNED',
+  'PREPARING',
+  'PREPARED',
+  'COMMITTING',
+  'COMMITTED',
+  'FINALIZED',
+  'ROLLING_BACK',
+  'ROLLED_BACK',
+  'RECOVERY_REQUIRED',
+  'FAILED_PERMANENTLY',
+]);
+const OPERATION_ITEM_STATES = new Set<RendererKnowledgeOperationItemState>([
+  'pending',
+  'prepared',
+  'applying',
+  'applied',
+  'rolling-back',
+  'rolled-back',
+  'failed',
+  'recovery-required',
+]);
+const OPERATION_PROJECTION_STATES =
+  new Set<RendererKnowledgeOperationProjectionState>([
+    'pending',
+    'applied',
+    'retrying',
+  ]);
+const OPERATION_ROLLBACK_STATUSES = new Set([
+  'not-required',
+  'rolled-back',
+  'failed',
+]);
+const OPERATION_HASH_PATTERN = /^[a-f0-9]{64}$/;
+
+function validateKnowledgeOperationRequest(
+  input: RendererKnowledgeRenameOperationRequest,
+): RendererKnowledgeRenameOperationRequest {
+  if (!isRecord(input) || input.kind !== 'rename') {
+    throw invalidResponse('operation.kind');
+  }
+  rejectResponseFields(
+    input,
+    new Set(['kind', 'from', 'to', 'expectedVersion']),
+    'operation',
+  );
+  const from = validateKnowledgeAddress(input.from);
+  const to = validateKnowledgeAddress(input.to);
+  if (
+    from.sourceKey !== to.sourceKey
+    || from.relativePath === to.relativePath
+  ) {
+    throw invalidResponse('operation.to');
+  }
+  const expectedVersion = parseResourceVersion(input.expectedVersion);
+  if (!expectedVersion || Object.keys(expectedVersion).length === 0) {
+    throw invalidResponse('operation.expectedVersion');
+  }
+  rejectResponseFields(
+    input.expectedVersion,
+    new Set(['mtimeMs', 'size', 'sha256', 'etag', 'sequence']),
+    'operation.expectedVersion',
+  );
+  return {
+    kind: 'rename',
+    from,
+    to,
+    expectedVersion,
+  };
+}
+
+function parseKnowledgeOperationPlanEnvelope(
+  input: unknown,
+): RendererKnowledgeOperationPlan {
+  if (!isRecord(input)) throw invalidResponse('plan');
+  rejectResponseFields(input, new Set(['plan']), 'plan');
+  const plan = input.plan;
+  if (!isRecord(plan)) throw invalidResponse('plan');
+  rejectResponseFields(
+    plan,
+    new Set([
+      'schemaVersion',
+      'operationId',
+      'requestHash',
+      'kind',
+      'createdAt',
+      'expiresAt',
+      'checkpointRequired',
+      'items',
+      'preview',
+    ]),
+    'plan',
+  );
+  validateOperationIdentity(plan);
+  if (
+    plan.checkpointRequired !== true
+    || !isIsoTimestampValue(plan.createdAt)
+    || !isIsoTimestampValue(plan.expiresAt)
+    || Date.parse(plan.expiresAt) - Date.parse(plan.createdAt) !== 15 * 60 * 1_000
+    || !Array.isArray(plan.items)
+    || plan.items.length !== 1
+    || !isRecord(plan.preview)
+  ) {
+    throw invalidResponse('plan');
+  }
+  rejectResponseFields(
+    plan.preview,
+    new Set(['resourceChanges', 'linkWrites']),
+    'plan.preview',
+  );
+  if (
+    !isNonNegativeSafeInteger(plan.preview.resourceChanges)
+    || plan.preview.resourceChanges !== plan.items.length
+    || !isNonNegativeSafeInteger(plan.preview.linkWrites)
+  ) {
+    throw invalidResponse('plan.preview');
+  }
+  const items = plan.items.map((item, index) =>
+    parseKnowledgeOperationPlanItem(item, index)
+  );
+  return {
+    schemaVersion: 1,
+    operationId: plan.operationId as string,
+    requestHash: plan.requestHash as string,
+    kind: 'rename',
+    createdAt: plan.createdAt as string,
+    expiresAt: plan.expiresAt as string,
+    checkpointRequired: true,
+    items,
+    preview: {
+      resourceChanges: plan.preview.resourceChanges,
+      linkWrites: plan.preview.linkWrites,
+    },
+  };
+}
+
+function parseKnowledgeOperationPlanItem(
+  input: unknown,
+  index: number,
+): RendererKnowledgeOperationPlan['items'][number] {
+  if (!isRecord(input)) throw invalidResponse(`plan.items.${index}`);
+  rejectResponseFields(
+    input,
+    new Set(['from', 'to', 'expectedVersion']),
+    `plan.items.${index}`,
+  );
+  const expectedVersion = parseResourceVersion(input.expectedVersion);
+  if (!expectedVersion || Object.keys(expectedVersion).length === 0) {
+    throw invalidResponse(`plan.items.${index}.expectedVersion`);
+  }
+  rejectResponseFields(
+    input.expectedVersion as Record<string, unknown>,
+    new Set(['mtimeMs', 'size', 'sha256', 'etag', 'sequence']),
+    `plan.items.${index}.expectedVersion`,
+  );
+  return {
+    from: validateKnowledgeAddress(input.from as KnowledgeResourceAddress),
+    to: validateKnowledgeAddress(input.to as KnowledgeResourceAddress),
+    expectedVersion,
+  };
+}
+
+function parseKnowledgeOperationEnvelope(
+  input: unknown,
+  field: 'result' | 'operation',
+): RendererKnowledgeOperationSummary {
+  if (!isRecord(input)) throw invalidResponse(field);
+  rejectResponseFields(input, new Set([field]), field);
+  return parseKnowledgeOperationSummary(input[field], field);
+}
+
+function parseKnowledgeOperationSummary(
+  input: unknown,
+  field: string,
+): RendererKnowledgeOperationSummary {
+  if (!isRecord(input)) throw invalidResponse(field);
+  rejectResponseFields(
+    input,
+    new Set([
+      'schemaVersion',
+      'operationId',
+      'requestHash',
+      'kind',
+      'state',
+      'createdAt',
+      'expiresAt',
+      'completedAt',
+      'items',
+      'summary',
+      'projections',
+    ]),
+    field,
+  );
+  validateOperationIdentity(input);
+  if (
+    typeof input.state !== 'string'
+    || !OPERATION_STATES.has(input.state as RendererKnowledgeOperationState)
+    || !Array.isArray(input.items)
+    || input.items.length === 0
+    || !isRecord(input.projections)
+  ) {
+    throw invalidResponse(field);
+  }
+  for (const timestamp of ['createdAt', 'expiresAt', 'completedAt'] as const) {
+    if (
+      input[timestamp] !== undefined
+      && !isIsoTimestampValue(input[timestamp])
+    ) {
+      throw invalidResponse(`${field}.${timestamp}`);
+    }
+  }
+  rejectResponseFields(
+    input.projections,
+    new Set(['session', 'event', 'index']),
+    `${field}.projections`,
+  );
+  const projections = {
+    session: parseProjectionState(input.projections.session, field),
+    event: parseProjectionState(input.projections.event, field),
+    index: parseProjectionState(input.projections.index, field),
+  };
+  const items = input.items.map((item, index) =>
+    parseKnowledgeOperationSummaryItem(item, field, index)
+  );
+  const summary = input.summary === undefined
+    ? undefined
+    : parseKnowledgeOperationResultSummary(input.summary, field, items.length);
+  if ((input.completedAt === undefined) !== (summary === undefined)) {
+    throw invalidResponse(`${field}.summary`);
+  }
+  return {
+    schemaVersion: 1,
+    operationId: input.operationId as string,
+    requestHash: input.requestHash as string,
+    kind: 'rename',
+    state: input.state as RendererKnowledgeOperationState,
+    ...(typeof input.createdAt === 'string' ? { createdAt: input.createdAt } : {}),
+    ...(typeof input.expiresAt === 'string' ? { expiresAt: input.expiresAt } : {}),
+    ...(typeof input.completedAt === 'string'
+      ? { completedAt: input.completedAt }
+      : {}),
+    items,
+    ...(summary ? { summary } : {}),
+    projections,
+  };
+}
+
+function parseKnowledgeOperationSummaryItem(
+  input: unknown,
+  field: string,
+  index: number,
+): RendererKnowledgeOperationSummary['items'][number] {
+  if (!isRecord(input)) throw invalidResponse(`${field}.items.${index}`);
+  rejectResponseFields(
+    input,
+    new Set([
+      'itemId',
+      'from',
+      'to',
+      'expectedVersion',
+      'state',
+      'checkpointId',
+      'appliedVersion',
+      'errorCode',
+      'rollbackStatus',
+      'steps',
+    ]),
+    `${field}.items.${index}`,
+  );
+  if (
+    typeof input.state !== 'string'
+    || !OPERATION_ITEM_STATES.has(
+      input.state as RendererKnowledgeOperationItemState,
+    )
+  ) {
+    throw invalidResponse(`${field}.items.${index}.state`);
+  }
+  for (const key of ['itemId', 'checkpointId', 'errorCode'] as const) {
+    if (
+      input[key] !== undefined
+      && (typeof input[key] !== 'string' || input[key].length === 0)
+    ) {
+      throw invalidResponse(`${field}.items.${index}.${key}`);
+    }
+  }
+  if (
+    input.rollbackStatus !== undefined
+    && (
+      typeof input.rollbackStatus !== 'string'
+      || !OPERATION_ROLLBACK_STATUSES.has(input.rollbackStatus)
+    )
+  ) {
+    throw invalidResponse(`${field}.items.${index}.rollbackStatus`);
+  }
+  for (const key of ['expectedVersion', 'appliedVersion'] as const) {
+    if (input[key] !== undefined) {
+      const version = parseResourceVersion(input[key]);
+      if (!version || Object.keys(version).length === 0) {
+        throw invalidResponse(`${field}.items.${index}.${key}`);
+      }
+      rejectResponseFields(
+        input[key] as Record<string, unknown>,
+        new Set(['mtimeMs', 'size', 'sha256', 'etag', 'sequence']),
+        `${field}.items.${index}.${key}`,
+      );
+    }
+  }
+  if (input.steps !== undefined) {
+    if (!Array.isArray(input.steps)) {
+      throw invalidResponse(`${field}.items.${index}.steps`);
+    }
+    input.steps.forEach((step, stepIndex) =>
+      validateKnowledgeOperationStep(step, field, index, stepIndex)
+    );
+  }
+  return {
+    from: validateKnowledgeAddress(input.from as KnowledgeResourceAddress),
+    to: validateKnowledgeAddress(input.to as KnowledgeResourceAddress),
+    state: input.state as RendererKnowledgeOperationItemState,
+    ...(typeof input.checkpointId === 'string'
+      ? { checkpointId: input.checkpointId }
+      : {}),
+    ...(typeof input.errorCode === 'string'
+      ? { errorCode: input.errorCode }
+      : {}),
+    ...(typeof input.rollbackStatus === 'string'
+      ? {
+          rollbackStatus: input.rollbackStatus as
+            | 'not-required'
+            | 'rolled-back'
+            | 'failed',
+        }
+      : {}),
+  };
+}
+
+function validateKnowledgeOperationStep(
+  input: unknown,
+  field: string,
+  itemIndex: number,
+  stepIndex: number,
+): void {
+  const stepField = `${field}.items.${itemIndex}.steps.${stepIndex}`;
+  if (!isRecord(input)) throw invalidResponse(stepField);
+  rejectResponseFields(
+    input,
+    new Set(['stepId', 'kind', 'state', 'intentAt', 'outcomeAt', 'errorCode']),
+    stepField,
+  );
+  if (
+    typeof input.stepId !== 'string'
+    || !['checkpoint', 'primary-rename', 'link-write'].includes(
+      String(input.kind),
+    )
+    || !['intent', 'applied', 'rolled-back', 'failed'].includes(
+      String(input.state),
+    )
+    || !isIsoTimestampValue(input.intentAt)
+    || (
+      input.outcomeAt !== undefined
+      && !isIsoTimestampValue(input.outcomeAt)
+    )
+    || (
+      input.errorCode !== undefined
+      && (typeof input.errorCode !== 'string' || input.errorCode.length === 0)
+    )
+  ) {
+    throw invalidResponse(stepField);
+  }
+}
+
+function parseKnowledgeOperationResultSummary(
+  input: unknown,
+  field: string,
+  itemCount: number,
+): NonNullable<RendererKnowledgeOperationSummary['summary']> {
+  if (!isRecord(input)) throw invalidResponse(`${field}.summary`);
+  rejectResponseFields(
+    input,
+    new Set(['succeeded', 'failed', 'rolledBack', 'recoveryRequired']),
+    `${field}.summary`,
+  );
+  if (
+    !isNonNegativeSafeInteger(input.succeeded)
+    || !isNonNegativeSafeInteger(input.failed)
+    || !isNonNegativeSafeInteger(input.rolledBack)
+    || !isNonNegativeSafeInteger(input.recoveryRequired)
+    || input.succeeded + input.failed !== itemCount
+    || input.rolledBack > input.failed
+    || input.recoveryRequired > input.failed
+  ) {
+    throw invalidResponse(`${field}.summary`);
+  }
+  return {
+    succeeded: input.succeeded,
+    failed: input.failed,
+    rolledBack: input.rolledBack,
+    recoveryRequired: input.recoveryRequired,
+  };
+}
+
+function parseProjectionState(
+  input: unknown,
+  field: string,
+): RendererKnowledgeOperationProjectionState {
+  if (
+    typeof input !== 'string'
+    || !OPERATION_PROJECTION_STATES.has(
+      input as RendererKnowledgeOperationProjectionState,
+    )
+  ) {
+    throw invalidResponse(`${field}.projections`);
+  }
+  return input as RendererKnowledgeOperationProjectionState;
+}
+
+function validateOperationIdentity(input: Record<string, unknown>): void {
+  if (
+    input.schemaVersion !== 1
+    || input.kind !== 'rename'
+    || !isOperationCorrelationId(input.operationId)
+    || typeof input.requestHash !== 'string'
+    || !OPERATION_HASH_PATTERN.test(input.requestHash)
+  ) {
+    throw invalidResponse('operation.identity');
+  }
+}
+
+function validateOperationId(input: unknown): asserts input is string {
+  if (!isOperationCorrelationId(input)) throw invalidResponse('operationId');
+}
+
+function validateRequestHash(input: unknown): asserts input is string {
+  if (typeof input !== 'string' || !OPERATION_HASH_PATTERN.test(input)) {
+    throw invalidResponse('requestHash');
+  }
+}
+
+function isIsoTimestampValue(input: unknown): input is string {
+  return typeof input === 'string' && isIsoTimestamp(input);
+}
+
+function rejectResponseFields(
+  input: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+  field: string,
+): void {
+  if (Object.keys(input).some((key) => !allowed.has(key))) {
+    throw invalidResponse(field);
+  }
 }
 
 function parseResourceVersion(input: unknown): RendererResourceVersion | undefined {

@@ -4,6 +4,9 @@ import {
   parseRegisterSourceRequest,
   SourceRegistry,
 } from "../../core/knowledge-workspace/source-registry.ts";
+import {
+  KnowledgeOperationCoordinator,
+} from "../../core/knowledge-workspace/knowledge-operation-coordinator.ts";
 import { createSandboxResourceIO } from "../../lib/resource-io/sandbox-resource-io.ts";
 import {
   parseKnowledgeResourceAddress,
@@ -36,6 +39,18 @@ const registryStates = new WeakMap<object, {
   signature: string | null;
 }>();
 
+type OperationEntry = {
+  workspaceKey: string;
+  signature: string;
+  coordinator: KnowledgeOperationCoordinator;
+};
+
+const operationStates = new WeakMap<object, {
+  current: Promise<OperationEntry> | null;
+  workspaceKey: string | null;
+  signature: string | null;
+}>();
+
 export function createKnowledgeWorkspaceRoute(engine) {
   const route = new Hono();
   const registryState = registryStateFor(engine);
@@ -45,7 +60,13 @@ export function createKnowledgeWorkspaceRoute(engine) {
       const auth = authorize(c, engine, "files.read");
       if (auth.response) return auth.response;
       const registry = await registryFor(c, engine, auth.requestContext, registryState);
-      return c.json({ sources: registry.list() });
+      const coordinator = await currentOperationCoordinator(engine);
+      const sources = registry.list().map((source) =>
+        coordinator?.isSourceRecovering?.(source.sourceKey)
+          ? { ...source, availability: "recovering" as const }
+          : source
+      );
+      return c.json({ sources });
     } catch (error) {
       return knowledgeRouteError(c, error);
     }
@@ -80,7 +101,165 @@ export function createKnowledgeWorkspaceRoute(engine) {
     }
   });
 
+  route.post("/knowledge-workspace/operations/plan", async (c) => {
+    try {
+      const auth = authorize(c, engine, "files.write");
+      if (auth.response) return auth.response;
+      const registry = await registryFor(
+        c,
+        engine,
+        auth.requestContext,
+        registryState,
+      );
+      const coordinator = await operationCoordinatorFor(
+        engine,
+        registry,
+        auth.requestContext,
+      );
+      const context = createApiResourceOperationContext({
+        requestContext: auth.requestContext,
+        requestId: requestIdFromHono(c),
+        reason: "knowledge-operation-plan",
+      }) as ResourceOperationContext;
+      const plan = await coordinator.plan(await safeJson(c), context);
+      return c.json({ plan }, 201);
+    } catch (error) {
+      return knowledgeRouteError(c, error);
+    }
+  });
+
+  route.post(
+    "/knowledge-workspace/operations/:operationId/commit",
+    async (c) => {
+      try {
+        const auth = authorize(c, engine, "files.write");
+        if (auth.response) return auth.response;
+        const registry = await registryFor(
+          c,
+          engine,
+          auth.requestContext,
+          registryState,
+        );
+        const coordinator = await operationCoordinatorFor(
+          engine,
+          registry,
+          auth.requestContext,
+        );
+        const context = createApiResourceOperationContext({
+          requestContext: auth.requestContext,
+          requestId: requestIdFromHono(c),
+          reason: "knowledge-operation-commit",
+        }) as ResourceOperationContext;
+        const result = await coordinator.commit(
+          c.req.param("operationId"),
+          await safeJson(c),
+          context,
+        );
+        return c.json({ result });
+      } catch (error) {
+        return knowledgeRouteError(c, error);
+      }
+    },
+  );
+
+  route.post(
+    "/knowledge-workspace/operations/:operationId/cancel",
+    async (c) => {
+      try {
+        const auth = authorize(c, engine, "files.write");
+        if (auth.response) return auth.response;
+        const registry = await registryFor(
+          c,
+          engine,
+          auth.requestContext,
+          registryState,
+        );
+        const coordinator = await operationCoordinatorFor(
+          engine,
+          registry,
+          auth.requestContext,
+        );
+        const context = createApiResourceOperationContext({
+          requestContext: auth.requestContext,
+          requestId: requestIdFromHono(c),
+          reason: "knowledge-operation-cancel",
+        }) as ResourceOperationContext;
+        const result = await coordinator.cancel(
+          c.req.param("operationId"),
+          context,
+        );
+        return c.json({ result });
+      } catch (error) {
+        return knowledgeRouteError(c, error);
+      }
+    },
+  );
+
+  route.get(
+    "/knowledge-workspace/operations/:operationId",
+    async (c) => {
+      try {
+        const auth = authorize(c, engine, "files.read");
+        if (auth.response) return auth.response;
+        const registry = await registryFor(
+          c,
+          engine,
+          auth.requestContext,
+          registryState,
+        );
+        const coordinator = await operationCoordinatorFor(
+          engine,
+          registry,
+          auth.requestContext,
+        );
+        const context = createApiResourceOperationContext({
+          requestContext: auth.requestContext,
+          requestId: requestIdFromHono(c),
+          reason: "knowledge-operation-status",
+        }) as ResourceOperationContext;
+        const operation = await coordinator.get(
+          c.req.param("operationId"),
+          context,
+        );
+        return c.json({ operation });
+      } catch (error) {
+        return knowledgeRouteError(c, error);
+      }
+    },
+  );
+
   return route;
+}
+
+/**
+ * Production composition calls this before createKnowledgeWorkspaceRoute()
+ * is mounted. Direct route tests may inject engine.knowledgeOperationCoordinator;
+ * otherwise the first operation request uses the same cached barrier.
+ */
+export async function prepareKnowledgeOperationRecovery(
+  engine,
+): Promise<KnowledgeOperationCoordinator> {
+  if (
+    engine?.knowledgeOperationCoordinator
+    && typeof engine.knowledgeOperationCoordinator.recover === "function"
+  ) {
+    await engine.knowledgeOperationCoordinator.recover();
+    return engine.knowledgeOperationCoordinator;
+  }
+  const requestContext = startupRequestContext(engine);
+  const registry = await registryFor(
+    null,
+    engine,
+    requestContext,
+    registryStateFor(engine),
+  );
+  const coordinator = await operationCoordinatorFor(
+    engine,
+    registry,
+    requestContext,
+  );
+  await coordinator.recover();
+  return coordinator;
 }
 
 export async function resolveKnowledgeResourceAddressForRequest(
@@ -157,6 +336,36 @@ function registryStateFor(engine) {
     registryStates.set(engine, state);
   }
   return state;
+}
+
+function operationStateFor(engine) {
+  if (!engine || (typeof engine !== "object" && typeof engine !== "function")) {
+    throw routeError("knowledge workspace engine required", 500);
+  }
+  let state = operationStates.get(engine);
+  if (!state) {
+    state = {
+      current: null,
+      workspaceKey: null,
+      signature: null,
+    };
+    operationStates.set(engine, state);
+  }
+  return state;
+}
+
+async function currentOperationCoordinator(
+  engine,
+): Promise<KnowledgeOperationCoordinator | null> {
+  if (
+    engine?.knowledgeOperationCoordinator
+    && typeof engine.knowledgeOperationCoordinator.isSourceRecovering
+      === "function"
+  ) {
+    return engine.knowledgeOperationCoordinator;
+  }
+  const state = operationStates.get(engine);
+  return state?.current ? (await state.current).coordinator : null;
 }
 
 function authorize(c, engine, capability: "files.read" | "files.write") {
@@ -273,6 +482,164 @@ async function createRegistryEntry({
         requestId: requestIdFromHono(c),
       }) as ResourceOperationContext,
     }),
+  };
+}
+
+async function operationCoordinatorFor(
+  engine,
+  registry: SourceRegistry,
+  requestContext,
+): Promise<KnowledgeOperationCoordinator> {
+  if (
+    engine.knowledgeOperationCoordinator
+    && typeof engine.knowledgeOperationCoordinator.recover === "function"
+  ) {
+    await engine.knowledgeOperationCoordinator.recover();
+    return engine.knowledgeOperationCoordinator;
+  }
+  const runtime = engine.getRuntimeContext?.() || {};
+  const compatibilityMain = resolveWorkbenchCompatibilityMain(engine);
+  const studioId = requestContext?.studioId || runtime.studioId || "default";
+  const sessionPath = compatibilityMain.sessionPath || "";
+  const signature = JSON.stringify(compatibilityMain.root);
+  const workspaceKey = `${studioId}\0${sessionPath || "default"}`;
+  const state = operationStateFor(engine);
+  if (
+    state.current
+    && state.workspaceKey === workspaceKey
+    && state.signature === signature
+  ) {
+    return (await state.current).coordinator;
+  }
+  const pending = createOperationEntry({
+    engine,
+    registry,
+    signature,
+    workspaceKey,
+  });
+  state.current = pending;
+  state.workspaceKey = workspaceKey;
+  state.signature = signature;
+  try {
+    return (await pending).coordinator;
+  } catch (error) {
+    if (state.current === pending) {
+      state.current = null;
+      state.workspaceKey = null;
+      state.signature = null;
+    }
+    throw error;
+  }
+}
+
+async function createOperationEntry({
+  engine,
+  registry,
+  signature,
+  workspaceKey,
+}): Promise<OperationEntry> {
+  if (!engine.hanakoHome) throw routeError("hanakoHome required", 500);
+  const resourceIO = typeof engine.getResourceIO === "function"
+    ? engine.getResourceIO()
+    : engine.resourceIO;
+  if (
+    !resourceIO
+    || typeof resourceIO.stat !== "function"
+    || typeof resourceIO.rename !== "function"
+  ) {
+    throw routeError("knowledge operation ResourceIO unavailable", 503);
+  }
+  const coordinator = new KnowledgeOperationCoordinator({
+    hanakoHome: engine.hanakoHome,
+    sourceRegistry: registry,
+    resourceIO,
+    createCheckpoint: async ({
+      resource,
+      reason,
+    }) => {
+      if (typeof engine.createUserEditCheckpoint !== "function") {
+        throw createKnowledgeWorkspaceError(
+          "knowledge_operation_precondition_failed",
+          "knowledge checkpoint service is unavailable",
+        );
+      }
+      let filePath: string | null = resource.kind === "local-file"
+        ? resource.path
+        : null;
+      if (!filePath && typeof resourceIO.materialize === "function") {
+        const materialized = await resourceIO.materialize(resource);
+        filePath = typeof materialized?.filePath === "string"
+          ? materialized.filePath
+          : null;
+      }
+      if (!filePath) {
+        throw createKnowledgeWorkspaceError(
+          "knowledge_operation_precondition_failed",
+          "knowledge checkpoint source cannot be materialized",
+        );
+      }
+      const checkpoint = await engine.createUserEditCheckpoint({
+        filePath,
+        reason,
+      });
+      if (
+        !checkpoint
+        || typeof checkpoint.id !== "string"
+        || checkpoint.id.length === 0
+      ) {
+        throw createKnowledgeWorkspaceError(
+          "knowledge_operation_precondition_failed",
+          "knowledge checkpoint could not be created",
+        );
+      }
+      return checkpoint.id;
+    },
+    rebindSessions: async (projection, context) => {
+      await engine.rebindKnowledgeOperationSessions?.(projection, context);
+    },
+    publishEvent: async (projection, context) => {
+      if (typeof engine.publishKnowledgeOperationEvent === "function") {
+        await engine.publishKnowledgeOperationEvent(projection, context);
+        return;
+      }
+      resourceIO.emitRenamed?.({
+        oldResourceKey:
+          `${projection.from.sourceKey}:${projection.from.relativePath}`,
+        newResourceKey:
+          `${projection.to.sourceKey}:${projection.to.relativePath}`,
+        oldResource: projection.fromRef,
+        newResource: projection.toRef,
+      }, context);
+    },
+    invalidateIndex: async (projection, context) => {
+      await engine.invalidateKnowledgeOperationIndex?.(projection, context);
+    },
+  });
+  await coordinator.recover();
+  return { workspaceKey, signature, coordinator };
+}
+
+function startupRequestContext(engine) {
+  const runtime = engine.getRuntimeContext?.() || {};
+  const studioId = typeof runtime.studioId === "string"
+    ? runtime.studioId
+    : "default";
+  const userId = typeof runtime.userId === "string"
+    ? runtime.userId
+    : "local";
+  return {
+    studioId,
+    userId,
+    sessionPath: null,
+    authPrincipal: {
+      kind: "local_user",
+      principalId: `local:${userId}:${studioId}`,
+      userId,
+      studioId,
+      scopes: ["studio.owner", "files.read", "files.write"],
+      connectionKind: "local",
+      credentialKind: "loopback_token",
+    },
   };
 }
 

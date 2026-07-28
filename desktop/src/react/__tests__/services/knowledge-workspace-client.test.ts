@@ -260,6 +260,222 @@ describe('knowledge workspace client', () => {
     });
   });
 
+  it('plans, commits, reads, and cancels operations through the public Renderer seam', async () => {
+    const operationId = '8de89f1b-c8ee-42ba-9c13-795eafd712df';
+    const requestHash = 'a'.repeat(64);
+    const from = { sourceKey: 'main', relativePath: 'notes/old.md' };
+    const to = { sourceKey: 'main', relativePath: 'notes/new.md' };
+    const projections = { session: 'applied', event: 'applied', index: 'applied' };
+    const result = {
+      schemaVersion: 1,
+      operationId,
+      requestHash,
+      kind: 'rename',
+      state: 'FINALIZED',
+      completedAt: '2026-07-28T00:00:03.000Z',
+      items: [{
+        from,
+        to,
+        state: 'applied',
+        checkpointId: 'checkpoint-1',
+      }],
+      summary: {
+        succeeded: 1,
+        failed: 0,
+        rolledBack: 0,
+        recoveryRequired: 0,
+      },
+      projections,
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        plan: {
+          schemaVersion: 1,
+          operationId,
+          requestHash,
+          kind: 'rename',
+          createdAt: '2026-07-28T00:00:00.000Z',
+          expiresAt: '2026-07-28T00:15:00.000Z',
+          checkpointRequired: true,
+          items: [{ from, to, expectedVersion: { etag: 'v1' } }],
+          preview: { resourceChanges: 1, linkWrites: 0 },
+        },
+      }, 201))
+      .mockResolvedValueOnce(jsonResponse({ result }))
+      .mockResolvedValueOnce(jsonResponse({
+        operation: {
+          schemaVersion: 1,
+          operationId,
+          requestHash,
+          kind: 'rename',
+          state: 'PREPARED',
+          createdAt: '2026-07-28T00:00:00.000Z',
+          expiresAt: '2026-07-28T00:15:00.000Z',
+          items: [{
+            itemId: 'item-1',
+            from,
+            to,
+            expectedVersion: { etag: 'v1' },
+            state: 'prepared',
+            checkpointId: 'checkpoint-1',
+            steps: [{
+              stepId: 'checkpoint',
+              kind: 'checkpoint',
+              state: 'applied',
+              intentAt: '2026-07-28T00:00:01.000Z',
+              outcomeAt: '2026-07-28T00:00:02.000Z',
+            }],
+          }],
+          projections: { session: 'pending', event: 'pending', index: 'pending' },
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        result: {
+          ...result,
+          state: 'ROLLED_BACK',
+          items: [{
+            from,
+            to,
+            state: 'rolled-back',
+            errorCode: 'knowledge_operation_precondition_failed',
+            rollbackStatus: 'not-required',
+          }],
+          summary: {
+            succeeded: 0,
+            failed: 1,
+            rolledBack: 1,
+            recoveryRequired: 0,
+          },
+          projections: { session: 'pending', event: 'pending', index: 'pending' },
+        },
+      }));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.operations.plan({
+      kind: 'rename',
+      from,
+      to,
+      expectedVersion: { etag: 'v1' },
+    })).resolves.toMatchObject({ operationId, requestHash });
+    await expect(client.operations.commit(operationId, requestHash))
+      .resolves.toMatchObject({
+        operationId,
+        state: 'FINALIZED',
+        summary: { succeeded: 1 },
+      });
+    await expect(client.operations.get(operationId)).resolves.toEqual({
+      schemaVersion: 1,
+      operationId,
+      requestHash,
+      kind: 'rename',
+      state: 'PREPARED',
+      createdAt: '2026-07-28T00:00:00.000Z',
+      expiresAt: '2026-07-28T00:15:00.000Z',
+      items: [{
+        from,
+        to,
+        state: 'prepared',
+        checkpointId: 'checkpoint-1',
+      }],
+      projections: { session: 'pending', event: 'pending', index: 'pending' },
+    });
+    await expect(client.operations.cancel(operationId))
+      .resolves.toMatchObject({ state: 'ROLLED_BACK' });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      '/api/knowledge-workspace/operations/plan',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          kind: 'rename',
+          from,
+          to,
+          expectedVersion: { etag: 'v1' },
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      `/api/knowledge-workspace/operations/${operationId}/commit`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ requestHash }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      `/api/knowledge-workspace/operations/${operationId}`,
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
+      `/api/knowledge-workspace/operations/${operationId}/cancel`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('rejects operation responses carrying native authority fields instead of projecting them into UI state', async () => {
+    const client = createKnowledgeWorkspaceClient({
+      fetchImpl: vi.fn(async () => jsonResponse({
+        plan: {
+          schemaVersion: 1,
+          operationId: '8de89f1b-c8ee-42ba-9c13-795eafd712df',
+          requestHash: 'a'.repeat(64),
+          kind: 'rename',
+          createdAt: '2026-07-28T00:00:00.000Z',
+          expiresAt: '2026-07-28T00:15:00.000Z',
+          checkpointRequired: true,
+          rootIdentity: '/Users/alice/Secret',
+          items: [{
+            from: { sourceKey: 'main', relativePath: 'old.md' },
+            to: { sourceKey: 'main', relativePath: 'new.md' },
+            expectedVersion: { etag: 'v1' },
+          }],
+          preview: { resourceChanges: 1, linkWrites: 0 },
+        },
+      })),
+    });
+
+    const error = await client.operations.plan({
+      kind: 'rename',
+      from: { sourceKey: 'main', relativePath: 'old.md' },
+      to: { sourceKey: 'main', relativePath: 'new.md' },
+      expectedVersion: { etag: 'v1' },
+    }).catch((caught) => caught);
+
+    expect(error).toMatchObject({
+      code: 'knowledge_operation_precondition_failed',
+      details: { field: 'plan' },
+    });
+    expect(String(error)).not.toContain('/Users/alice/Secret');
+  });
+
+  it('propagates caller cancellation while planning an operation', async () => {
+    const controller = new AbortController();
+    const reason = new DOMException('cancelled', 'AbortError');
+    const client = createKnowledgeWorkspaceClient({
+      fetchImpl: vi.fn(async (_path: string, options?: RequestInit) =>
+        await new Promise<Response>((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            'abort',
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        })),
+    });
+    const pending = client.operations.plan({
+      kind: 'rename',
+      from: { sourceKey: 'main', relativePath: 'old.md' },
+      to: { sourceKey: 'main', relativePath: 'new.md' },
+      expectedVersion: { etag: 'v1' },
+    }, { signal: controller.signal });
+
+    controller.abort(reason);
+
+    await expect(pending).rejects.toBe(reason);
+  });
+
   it('recovers the resource-event cursor after a stale WebSocket gap without creating another watcher', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       stale: true,

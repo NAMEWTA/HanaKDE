@@ -202,6 +202,11 @@ export type ResourceMutationPreconditions = {
   expectedVersion?: ResourceVersion | null;
 };
 
+export type ResourceMovePreconditions = {
+  expectedSourceVersion?: ResourceVersion;
+  expectedTargetVersion?: ResourceVersion | null;
+};
+
 export type ResourceTrashResult = {
   resourceKey: string;
   resource: ResourceDescriptor;
@@ -364,8 +369,16 @@ export type ResourceProvider = {
   search?: (ref: ResourceRef, options?: Record<string, unknown>) => Promise<ResourceSearchResult>;
   materialize?: (ref: ResourceRef) => Promise<MaterializeResult>;
   copy?: (from: ResourceRef, to: ResourceRef, options?: ResourceMutationPreconditions) => Promise<ResourceMutationResult>;
-  rename?: (from: ResourceRef, to: ResourceRef) => Promise<ResourceMoveResult>;
-  move?: (from: ResourceRef, to: ResourceRef) => Promise<ResourceMoveResult>;
+  rename?: (
+    from: ResourceRef,
+    to: ResourceRef,
+    options?: ResourceMovePreconditions,
+  ) => Promise<ResourceMoveResult>;
+  move?: (
+    from: ResourceRef,
+    to: ResourceRef,
+    options?: ResourceMovePreconditions,
+  ) => Promise<ResourceMoveResult>;
   trash?: (ref: ResourceRef, options?: ResourceTrashOptions) => Promise<ResourceTrashResult>;
   exportTree?: (ref: ResourceRef, options?: ResourceExportTreeOptions) => AsyncIterable<ResourceExportEntry>;
   importTreeAtomically?: (
@@ -401,6 +414,8 @@ export type ResourceOperationContext = {
   auditRead?: boolean;
   operationId?: string;
   expectedVersion?: ResourceVersion | null;
+  expectedSourceVersion?: ResourceVersion;
+  expectedTargetVersion?: ResourceVersion | null;
 };
 
 export type ResourceAuditOutcome = "allowed" | "denied" | "conflict";

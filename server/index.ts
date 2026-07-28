@@ -923,7 +923,7 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     confirmStore,
     appVersion,
   };
-  registerOpenRoutes(app, ctx);
+  await registerOpenRoutes(app, ctx);
   app.route("/api", createMobileWorkbenchRoute(engine));
   root.registerClosedRoutes?.(app, ctx);
   // internal-browser WS — see unified upgrade handler in server startup below

@@ -289,6 +289,20 @@ function classifyKnowledgeWorkspaceRoute(verb, routePath) {
   if (/^\/api\/knowledge-workspace\/sources\/[^/]+$/.test(routePath)) {
     return verb === "DELETE" ? scoped("files.write") : LOCAL_ONLY;
   }
+  if (routePath === "/api/knowledge-workspace/operations/plan") {
+    return verb === "POST" ? scoped("files.write") : LOCAL_ONLY;
+  }
+  if (
+    /^\/api\/knowledge-workspace\/operations\/[^/]+$/.test(routePath)
+  ) {
+    return verb === "GET" ? scoped("files.read") : LOCAL_ONLY;
+  }
+  if (
+    /^\/api\/knowledge-workspace\/operations\/[^/]+\/(?:commit|cancel)$/
+      .test(routePath)
+  ) {
+    return verb === "POST" ? scoped("files.write") : LOCAL_ONLY;
+  }
   return LOCAL_ONLY;
 }
 

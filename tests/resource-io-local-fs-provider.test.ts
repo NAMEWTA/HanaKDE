@@ -275,6 +275,46 @@ describe("LocalFsProvider", () => {
       .toMatchObject({ originalName: "renamed.md", rootId: "default" });
     expect(fs.existsSync(path.join(cwd, "archive", "renamed.md"))).toBe(false);
   });
+
+  it("rechecks source and target versions inside the provider rename boundary", async () => {
+    const { cwd, provider } = makeProvider();
+    fs.writeFileSync(path.join(cwd, "source.md"), "before", "utf8");
+    const planned = await provider.stat({
+      kind: "local-file",
+      path: "source.md",
+    });
+    fs.writeFileSync(path.join(cwd, "source.md"), "changed after plan", "utf8");
+
+    await expect(provider.rename(
+      { kind: "local-file", path: "source.md" },
+      { kind: "local-file", path: "target.md" },
+      {
+        expectedSourceVersion: planned.version,
+        expectedTargetVersion: null,
+      },
+    )).rejects.toMatchObject({
+      code: "knowledge_version_conflict",
+    });
+    expect(fs.readFileSync(path.join(cwd, "source.md"), "utf8"))
+      .toBe("changed after plan");
+    expect(fs.existsSync(path.join(cwd, "target.md"))).toBe(false);
+
+    fs.writeFileSync(path.join(cwd, "occupied.md"), "occupied", "utf8");
+    const current = await provider.stat({
+      kind: "local-file",
+      path: "source.md",
+    });
+    await expect(provider.rename(
+      { kind: "local-file", path: "source.md" },
+      { kind: "local-file", path: "occupied.md" },
+      {
+        expectedSourceVersion: current.version,
+        expectedTargetVersion: null,
+      },
+    )).rejects.toMatchObject({
+      code: "knowledge_resource_conflict",
+    });
+  });
 });
 
 function makeProviderWithPolicy() {

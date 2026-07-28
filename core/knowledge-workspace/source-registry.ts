@@ -162,6 +162,17 @@ export class SourceRegistry {
     return cloneRef(source.root);
   }
 
+  rootIdentity(sourceKey: string): ProviderRootIdentity {
+    const source = this.#active.get(sourceKey);
+    if (!source) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_not_found",
+        "knowledge source is not active",
+      );
+    }
+    return Object.freeze({ ...source.identity });
+  }
+
   async resolveAddress(address: KnowledgeResourceAddress): Promise<ResourceRef> {
     const parsed = parseKnowledgeResourceAddress(address);
     if (parsed.ok === false) {

@@ -316,7 +316,17 @@ export class ResourceIO {
     if (providerIdForResourceRef(fromRef) !== providerIdForResourceRef(toRef)) {
       throw crossProviderMoveUnsupported(providerIdForResourceRef(fromRef), providerIdForResourceRef(toRef));
     }
-    const result = await this.callProvider<ResourceMoveResult>(toRef, capability, options, fromRef, toRef);
+    const result = await this.callProvider<ResourceMoveResult>(
+      toRef,
+      capability,
+      options,
+      fromRef,
+      toRef,
+      {
+        expectedSourceVersion: options.expectedSourceVersion,
+        expectedTargetVersion: options.expectedTargetVersion,
+      },
+    );
     this.auditAllowed(capability, {
       resourceKey: result.newResourceKey,
       resource: result.newResource,

@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { upsertStudioMount } from "../core/studio-mounts.ts";
 import { normalizePrincipal } from "../core/security-principal.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
+import { ResourceIO } from "../lib/resource-io/resource-io.ts";
+import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import {
   createKnowledgeWorkspaceRoute,
 } from "../server/routes/knowledge-workspace.ts";
@@ -93,6 +95,227 @@ describe("knowledge workspace source route", () => {
       ok: true,
       sourceKey: "research",
     });
+  });
+
+  it("projects a recovering operation source as degraded without exposing journal identity", async () => {
+    const { engine } = setup();
+    Object.assign(engine, {
+      knowledgeOperationCoordinator: {
+        isSourceRecovering: (sourceKey: string) => sourceKey === "main",
+      },
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const response = await app.request("/api/knowledge-workspace/sources");
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(text)).toEqual({
+      sources: [expect.objectContaining({
+        sourceKey: "main",
+        availability: "recovering",
+      })],
+    });
+    expect(text).not.toContain("rootIdentity");
+    expect(text).not.toContain("recoveryReason");
+  });
+
+  it("exposes the shared operation plan/commit/status/cancel protocol without path DTOs", async () => {
+    const { engine, main } = setup();
+    const operationId = "123e4567-e89b-42d3-a456-426614174000";
+    const requestHash = "a".repeat(64);
+    const plan = vi.fn(async (request) => ({
+      schemaVersion: 1,
+      operationId,
+      requestHash,
+      kind: "rename",
+      createdAt: "2026-07-28T00:00:00.000Z",
+      expiresAt: "2026-07-28T00:15:00.000Z",
+      checkpointRequired: true,
+      items: [{
+        from: request.from,
+        to: request.to,
+        expectedVersion: request.expectedVersion,
+      }],
+      preview: { resourceChanges: 1, linkWrites: 0 },
+    }));
+    const result = {
+      schemaVersion: 1,
+      operationId,
+      requestHash,
+      kind: "rename",
+      state: "FINALIZED",
+      completedAt: "2026-07-28T00:00:01.000Z",
+      items: [],
+      summary: {
+        succeeded: 1,
+        failed: 0,
+        rolledBack: 0,
+        recoveryRequired: 0,
+      },
+      projections: {
+        session: "applied",
+        event: "applied",
+        index: "applied",
+      },
+    };
+    const commit = vi.fn(async () => result);
+    const cancel = vi.fn(async () => ({ ...result, state: "ROLLED_BACK" }));
+    const get = vi.fn(async () => result);
+    Object.assign(engine, {
+      knowledgeOperationCoordinator: {
+        recover: vi.fn(async () => ({
+          scanned: 0,
+          finalized: 0,
+          rolledBack: 0,
+          recoveryRequired: 0,
+          expired: 0,
+        })),
+        plan,
+        commit,
+        cancel,
+        get,
+      },
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    const body = {
+      kind: "rename",
+      from: { sourceKey: "main", relativePath: "old.md" },
+      to: { sourceKey: "main", relativePath: "new.md" },
+      expectedVersion: { mtimeMs: 1, size: 3 },
+    };
+
+    const planned = await app.request(
+      "/api/knowledge-workspace/operations/plan",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-request-id": "request-1",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    expect(planned.status).toBe(201);
+    expect(await planned.json()).toEqual({
+      plan: expect.objectContaining({ operationId, requestHash }),
+    });
+    expect(plan).toHaveBeenCalledWith(
+      body,
+      expect.objectContaining({
+        source: "api",
+        reason: "knowledge-operation-plan",
+        requestId: "request-1",
+      }),
+    );
+
+    const committed = await app.request(
+      `/api/knowledge-workspace/operations/${operationId}/commit`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestHash }),
+      },
+    );
+    expect(committed.status).toBe(200);
+    const committedText = await committed.text();
+    expect(JSON.parse(committedText)).toEqual({ result });
+    expect(committedText).not.toContain(main);
+
+    const status = await app.request(
+      `/api/knowledge-workspace/operations/${operationId}`,
+    );
+    expect(status.status).toBe(200);
+    expect(await status.json()).toEqual({ operation: result });
+
+    const cancelled = await app.request(
+      `/api/knowledge-workspace/operations/${operationId}/cancel`,
+      { method: "POST" },
+    );
+    expect(cancelled.status).toBe(200);
+    expect(await cancelled.json()).toEqual({
+      result: { ...result, state: "ROLLED_BACK" },
+    });
+  });
+
+  it("commits a real same-source rename through the public operation route", async () => {
+    const { engine, main } = setup();
+    const oldPath = path.join(main, "old.md");
+    const newPath = path.join(main, "new.md");
+    fs.writeFileSync(oldPath, "real route", "utf8");
+    const resourceIO = new ResourceIO({
+      providers: {
+        local_fs: new LocalFsProvider({ cwd: main }),
+      },
+    });
+    const version = (await resourceIO.stat({
+      kind: "local-file",
+      path: oldPath,
+    })).version;
+    Object.assign(engine, {
+      resourceIO,
+      createUserEditCheckpoint: vi.fn(async () => ({
+        id: "checkpoint-route",
+      })),
+    });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as {
+        set(key: string, value: unknown): void;
+      }).set("authPrincipal", normalizePrincipal({
+        kind: "local_user",
+        userId: "user_1",
+        studioId: "studio_1",
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        connectionKind: "local",
+        credentialKind: "loopback_token",
+        scopes: ["studio.owner", "files.read", "files.write"],
+      }));
+      await next();
+    });
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const planned = await app.request(
+      "/api/knowledge-workspace/operations/plan",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "rename",
+          from: { sourceKey: "main", relativePath: "old.md" },
+          to: { sourceKey: "main", relativePath: "new.md" },
+          expectedVersion: version,
+        }),
+      },
+    );
+    expect(planned.status).toBe(201);
+    const plan = (await planned.json()).plan;
+    const committed = await app.request(
+      `/api/knowledge-workspace/operations/${plan.operationId}/commit`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestHash: plan.requestHash }),
+      },
+    );
+    expect(committed.status).toBe(200);
+    const responseText = await committed.text();
+    expect(JSON.parse(responseText).result).toMatchObject({
+      operationId: plan.operationId,
+      state: "FINALIZED",
+      items: [{
+        from: { sourceKey: "main", relativePath: "old.md" },
+        to: { sourceKey: "main", relativePath: "new.md" },
+        state: "applied",
+        checkpointId: "checkpoint-route",
+      }],
+    });
+    expect(responseText).not.toContain(main);
+    expect(fs.existsSync(oldPath)).toBe(false);
+    expect(fs.readFileSync(newPath, "utf8")).toBe("real route");
   });
 
   it("resolves public KnowledgeResourceAddress values before ResourceIO access", async () => {

@@ -27,6 +27,7 @@ import type {
   ResourceListResult,
   ResourceMutationResult,
   ResourceMutationPreconditions,
+  ResourceMovePreconditions,
   ResourceOpenReadOptions,
   ResourceOpenReadResult,
   ResourceReadResult,
@@ -299,15 +300,32 @@ export class LocalFsProvider {
     return this.mutationResult(targetPath, existed ? "modified" : "created");
   }
 
-  async rename(from: ResourceRef | unknown, to: ResourceRef | unknown): Promise<ResourceMoveResult> {
-    return this.move(from, to);
+  async rename(
+    from: ResourceRef | unknown,
+    to: ResourceRef | unknown,
+    options: ResourceMovePreconditions = {},
+  ): Promise<ResourceMoveResult> {
+    return this.move(from, to, options);
   }
 
-  async move(from: ResourceRef | unknown, to: ResourceRef | unknown): Promise<ResourceMoveResult> {
+  async move(
+    from: ResourceRef | unknown,
+    to: ResourceRef | unknown,
+    options: ResourceMovePreconditions = {},
+  ): Promise<ResourceMoveResult> {
     const sourcePath = this.resolvePath(from);
     const targetPath = this.resolvePath(to);
     this.assertAllowed(sourcePath, "delete");
     this.assertAllowed(targetPath, "write");
+    assertMutationTargetVersion(
+      sourcePath,
+      options.expectedSourceVersion,
+    );
+    assertMutationTargetVersion(
+      targetPath,
+      options.expectedTargetVersion,
+      { missingAllowed: true },
+    );
     if (!fs.existsSync(sourcePath)) throw resourceNotFound(sourcePath);
     if (fs.existsSync(targetPath)) throw targetAlreadyExists(targetPath);
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });

@@ -15,6 +15,7 @@ import type {
   ResourceListResult,
   ResourceMutationResult,
   ResourceMutationPreconditions,
+  ResourceMovePreconditions,
   ResourceOpenReadOptions,
   ResourceOpenReadResult,
   ResourceReadResult,
@@ -245,23 +246,33 @@ export class MountProvider {
     ));
   }
 
-  async rename(from: ResourceRef, to: ResourceRef): Promise<ResourceMoveResult> {
+  async rename(
+    from: ResourceRef,
+    to: ResourceRef,
+    options: ResourceMovePreconditions = {},
+  ): Promise<ResourceMoveResult> {
     assertSameMount(from, to);
     const source = this.resolveLocalMount(from, "write");
     const target = this.resolveLocalMount(to, "write");
     return this.mapMoveResult(from, to, await target.provider.rename(
       { kind: "local-file", path: source.path },
       { kind: "local-file", path: target.path },
+      options,
     ));
   }
 
-  async move(from: ResourceRef, to: ResourceRef): Promise<ResourceMoveResult> {
+  async move(
+    from: ResourceRef,
+    to: ResourceRef,
+    options: ResourceMovePreconditions = {},
+  ): Promise<ResourceMoveResult> {
     assertSameMount(from, to);
     const source = this.resolveLocalMount(from, "write");
     const target = this.resolveLocalMount(to, "write");
     return this.mapMoveResult(from, to, await target.provider.move(
       { kind: "local-file", path: source.path },
       { kind: "local-file", path: target.path },
+      options,
     ));
   }
 

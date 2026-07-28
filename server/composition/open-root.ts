@@ -47,7 +47,10 @@ import { createUsageRoute } from "../routes/usage.ts";
 import { createWebAuthRoute } from "../routes/web-auth.ts";
 import { createWebSocketAuthRoute } from "../routes/ws-auth.ts";
 import { createStudioWorkspacesRoute } from "../routes/studio-workspaces.ts";
-import { createKnowledgeWorkspaceRoute } from "../routes/knowledge-workspace.ts";
+import {
+  createKnowledgeWorkspaceRoute,
+  prepareKnowledgeOperationRecovery,
+} from "../routes/knowledge-workspace.ts";
 import { createMobileStaticRoute, resolveMobileStaticRouteOptions } from "../routes/mobile-static.ts";
 import { createHtmlPreviewRoute } from "../routes/html-preview.ts";
 import { createAccessRoute } from "../routes/access.ts";
@@ -64,7 +67,10 @@ function decideMobileStaticRouteOptions() {
   });
 }
 
-export function registerOpenRoutes(app: Hono, ctx: CompositionContext): void {
+export async function registerOpenRoutes(
+  app: Hono,
+  ctx: CompositionContext,
+): Promise<void> {
   const {
     engine,
     hub,
@@ -76,6 +82,10 @@ export function registerOpenRoutes(app: Hono, ctx: CompositionContext): void {
     confirmStore,
     appVersion,
   } = ctx;
+
+  // Operation recovery owns persisted file facts. Finish the barrier before
+  // registering any Knowledge mutation route in either Open or Full.
+  await prepareKnowledgeOperationRecovery(engine);
 
   const { restRoute: chatRestRoute, wsRoute: chatWsRoute } = createChatRoute(engine, hub, { upgradeWebSocket });
   app.route("", createMobileStaticRoute(decideMobileStaticRouteOptions()));

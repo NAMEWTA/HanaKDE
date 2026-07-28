@@ -334,6 +334,36 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     ),
   }),
   defineStore({
+    id: "knowledge-operation-journal",
+    ownerModule: "core/knowledge-workspace/durable-operation-journal.ts",
+    pathPatterns: [
+      "knowledge-workspace/operations/v1/{operationId}/**",
+    ],
+    pathKind: "tree",
+    format: "mixed-directory",
+    schemaSource: directorySource(
+      "core/knowledge-workspace/durable-operation-journal.ts",
+      "schemaVersion 1 journal/result validators, atomic current/previous publication, and operation directory retention protocol",
+    ),
+    openEntry: [
+      "KnowledgeOperationCoordinator.recover",
+      "KnowledgeOperationCoordinator.plan",
+    ],
+    protocolModules: [
+      "lib/knowledge-workspace/knowledge-operation-plan.ts",
+      "core/knowledge-workspace/knowledge-operation-coordinator.ts",
+    ],
+    firstPossibleOpenPhase: "runtime_ready",
+    firstPossibleWritePhase: "runtime_ready",
+    checkpointPolicy: "Checkpoint all non-terminal journals, retained public results, and referenced artifact metadata as one operation directory tree.",
+    restorePolicy: "Restore the complete tree before registering Knowledge mutation routes, then run the coordinator recovery barrier before accepting writes.",
+    identityContract: "A server-issued UUIDv4 operationId names one owner-, requestHash-, and provider-root-identity-bound operation directory.",
+    siteRules: rules(
+      ["core/knowledge-workspace/durable-operation-journal.ts"],
+      "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+    ),
+  }),
+  defineStore({
     id: "web-session-registry",
     ownerModule: "core/web-session-store.ts",
     pathPatterns: ["web-sessions.json"],
