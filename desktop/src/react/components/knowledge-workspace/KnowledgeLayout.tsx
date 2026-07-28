@@ -124,6 +124,7 @@ export function KnowledgeLayout({
         registry={documentRegistry}
         client={treeClient}
         workspaceKey={treeWorkspaceKey}
+        conflictServices={treeServices}
       />
     </main>
   );

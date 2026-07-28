@@ -110,6 +110,8 @@ export interface MarkdownEditorSurfaceQuoteRange {
 
 export interface MarkdownEditorSurfaceProps {
   content: string;
+  incomingContentMode?: 'protect-local' | 'registry-authoritative';
+  savedContent?: string;
   filePath?: string;
   remoteContentRef?: RemoteWorkbenchContentRef | null;
   fileVersion?: FileVersion | null;
@@ -397,7 +399,7 @@ function isEditorCoverRailDrop(view: EditorView, event: DragEvent): boolean {
 /* ── Editor Component ── */
 
 export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, MarkdownEditorSurfaceProps>(
-  function MarkdownEditorSurface({ content, filePath, remoteContentRef, fileVersion, policy, mode, language, onSelectionChange, onSelectionCommit, onQuoteRange, onStatsChange, onContentChange, onContentRejected, onViewDestroy, initialScrollSnapshot, contentHash, onScrollSnapshotChange, readOnly = false }, ref) {
+  function MarkdownEditorSurface({ content, incomingContentMode = 'protect-local', savedContent, filePath, remoteContentRef, fileVersion, policy, mode, language, onSelectionChange, onSelectionCommit, onQuoteRange, onStatsChange, onContentChange, onContentRejected, onViewDestroy, initialScrollSnapshot, contentHash, onScrollSnapshotChange, readOnly = false }, ref) {
     const gateResult = useMemo(
       () => policy.contentGate({ content }),
       [content, policy],
@@ -462,6 +464,12 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         diskVersionRef.current = fileVersion;
       }
     }, [fileVersion]);
+
+    useEffect(() => {
+      if (savedContent !== undefined) {
+        lastSavedContentRef.current = savedContent;
+      }
+    }, [savedContent]);
 
     // Per-instance compartments for dynamic reconfiguration
     const cRef = useRef(createMarkdownEditorCompartments());
@@ -712,6 +720,17 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         return;
       }
 
+      if (incomingContentMode === 'registry-authoritative') {
+        docRevisionRef.current += 1;
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        pendingIncomingContentRef.current = null;
+        replaceDocumentPreservingSelection(view, nextContent);
+        return;
+      }
+
       const hasLocalUnsavedEdits = !readOnly && current !== lastSavedContentRef.current;
       if (hasLocalUnsavedEdits) {
         const merged = mode === 'markdown' && isMarkdownCoverOnlyUpdate(lastSavedContentRef.current, nextContent)
@@ -765,7 +784,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
       if (options.publish) {
         contentCbRef.current?.(nextContent, diskVersionRef.current);
       }
-    }, [mode, readOnly, saveToFile]);
+    }, [incomingContentMode, mode, readOnly, saveToFile]);
 
     // Create editor
     useLayoutEffect(() => {

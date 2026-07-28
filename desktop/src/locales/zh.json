@@ -93,6 +93,24 @@
       "dismissSaveError": "关闭 {name} 的保存错误",
       "mixedLineEndings": "{name} 包含混合换行符，首次保存时将统一为 {ending}。"
     },
+    "conflict": {
+      "resolverLabel": "文档冲突解决器",
+      "label": "解决 {name} 的冲突",
+      "title": "磁盘上的 {name} 已发生变化",
+      "description": "请比较三个版本，再明确选择要保存的内容。系统不会自动合并或覆盖。",
+      "baseline": "基线",
+      "local": "本地",
+      "disk": "磁盘",
+      "merged": "合并结果",
+      "baselineLabel": "{name} 的基线版本",
+      "localLabel": "{name} 的本地版本",
+      "diskLabel": "{name} 的磁盘版本",
+      "mergedLabel": "{name} 的合并结果",
+      "mergeAndSave": "使用合并结果并保存",
+      "useLocal": "使用本地版本并保存",
+      "useDisk": "使用磁盘版本",
+      "refreshError": "无法检查 {name} 的磁盘变化：{reason}。"
+    },
     "asset": {
       "label": "资产查看器",
       "loading": "正在加载资产…",

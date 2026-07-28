@@ -17,6 +17,10 @@ import {
 } from '../../stores/knowledge-document-registry';
 import { KnowledgeAssetViewer } from './KnowledgeAssetViewer';
 import {
+  KnowledgeConflictResolver,
+  type KnowledgeConflictResolverProps,
+} from './KnowledgeConflictResolver';
+import {
   KnowledgeDocumentEditor,
   KnowledgeDocumentNotices,
 } from './KnowledgeDocumentEditor';
@@ -76,6 +80,10 @@ export interface KnowledgeEditorGroupsProps {
   client?: KnowledgeWorkspaceClient;
   workspaceKey: string;
   onLocateResource?(target: KnowledgeBreadcrumbTarget): void;
+  conflictServices?: Pick<
+    KnowledgeConflictResolverProps,
+    'watchSource' | 'subscribeToChanges' | 'refreshDelayMs'
+  >;
 }
 
 interface KnowledgeEditorGroupNode {
@@ -259,6 +267,7 @@ export const KnowledgeEditorGroups = forwardRef<
   client,
   workspaceKey,
   onLocateResource,
+  conflictServices,
 }, ref) {
   const nextGroupId = useRef(1);
   const nextSplitId = useRef(1);
@@ -652,6 +661,11 @@ export const KnowledgeEditorGroups = forwardRef<
   return (
     <div className={styles.knowledgeEditorGroups}>
       {renderNode(layout.root)}
+      <KnowledgeConflictResolver
+        registry={registry}
+        client={client}
+        {...conflictServices}
+      />
       <KnowledgeDocumentNotices registry={registry} />
     </div>
   );

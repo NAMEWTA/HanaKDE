@@ -550,18 +550,13 @@ describe('KnowledgeDocumentEditor manual save tracer', () => {
     second.unmount();
   });
 
-  it('keeps buffer dirty on repeated conflict, reuses one notice, and clears it after success', async () => {
+  it('keeps buffer dirty, blocks repeated direct saves during conflict, and clears the reused notice after explicit resolution', async () => {
     const content = bytes('hello');
     const write = vi.fn()
       .mockResolvedValueOnce({
         ok: false,
         conflict: true,
         version: { etag: 'external', size: content.byteLength },
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        conflict: true,
-        version: { etag: 'external-2', size: content.byteLength },
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -580,19 +575,31 @@ describe('KnowledgeDocumentEditor manual save tracer', () => {
       'Could not save example.md: the file changed on disk. Your changes are still in the editor.',
     );
     fireEvent.keyDown(editor, { key: 's', ctrlKey: true });
-    await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(write).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole('alert')).toHaveLength(1);
     let session = registry.getState().sessions[knowledgeDocumentKey(address)];
     expect(session.buffer).toBe('edited');
     expect(session.baseline).toBe('hello');
     expect(session.dirty).toBe(true);
+    expect(session.conflict).toMatchObject({
+      baseline: 'hello',
+      local: 'edited',
+      disk: 'hello',
+      diskVersion: { etag: 'external', size: content.byteLength },
+    });
 
     fireEvent.click(screen.getByRole('button', {
       name: 'Dismiss save error for example.md',
     }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(registry.getState().resolveDocumentConflict(address, {
+      kind: 'local',
+    })).toBe(true);
     fireEvent.keyDown(editor, { key: 's', ctrlKey: true });
-    await waitFor(() => expect(write).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     session = registry.getState().sessions[knowledgeDocumentKey(address)];
     expect(session.dirty).toBe(false);

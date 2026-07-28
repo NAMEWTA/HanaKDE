@@ -93,6 +93,24 @@
       "dismissSaveError": "關閉 {name} 的儲存錯誤",
       "mixedLineEndings": "{name} 包含混合換行符號，首次儲存時將統一為 {ending}。"
     },
+    "conflict": {
+      "resolverLabel": "文件衝突解決器",
+      "label": "解決 {name} 的衝突",
+      "title": "磁碟上的 {name} 已變更",
+      "description": "請比較三個版本，再明確選擇要儲存的內容。系統不會自動合併或覆寫。",
+      "baseline": "基線",
+      "local": "本機",
+      "disk": "磁碟",
+      "merged": "合併結果",
+      "baselineLabel": "{name} 的基線版本",
+      "localLabel": "{name} 的本機版本",
+      "diskLabel": "{name} 的磁碟版本",
+      "mergedLabel": "{name} 的合併結果",
+      "mergeAndSave": "使用合併結果並儲存",
+      "useLocal": "使用本機版本並儲存",
+      "useDisk": "使用磁碟版本",
+      "refreshError": "無法檢查 {name} 的磁碟變更：{reason}。"
+    },
     "asset": {
       "label": "資產檢視器",
       "loading": "正在載入資產…",

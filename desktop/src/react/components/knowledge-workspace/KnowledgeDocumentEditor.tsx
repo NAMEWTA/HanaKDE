@@ -7,7 +7,6 @@ import {
 } from 'react';
 import { useStore } from 'zustand';
 import {
-  KNOWLEDGE_MARKDOWN_MAX_BYTES,
   MarkdownEditorSurface,
   knowledgeMarkdownContentGate,
   type MarkdownEditorSurfaceHandle,
@@ -17,7 +16,6 @@ import type {
   KnowledgeResourceAddress,
 } from '../../../../../shared/knowledge-workspace-contract.ts';
 import {
-  KnowledgeWorkspaceClientError,
   knowledgeWorkspaceClient,
   type KnowledgeWorkspaceClient,
   type RendererResourceVersion,
@@ -29,9 +27,10 @@ import {
   type KnowledgeDocumentSession,
 } from '../../stores/knowledge-document-registry';
 import {
-  decodeKnowledgeMarkdownFile,
-  encodeKnowledgeMarkdownFile,
-} from '../../utils/knowledge-markdown-file';
+  KnowledgeDocumentReadError,
+  readKnowledgeMarkdownSnapshot,
+  saveKnowledgeDocument,
+} from '../../utils/knowledge-document-operations';
 import styles from './KnowledgeWorkspace.module.css';
 
 type EditorLoadState =
@@ -64,15 +63,9 @@ function fileNameFromAddress(address: KnowledgeResourceAddress): string {
   return address.relativePath.split('/').at(-1) ?? address.relativePath;
 }
 
-function safeSize(version: RendererResourceVersion | undefined): number | null {
-  return Number.isSafeInteger(version?.size) && Number(version?.size) >= 0
-    ? Number(version?.size)
-    : null;
-}
-
 function loadErrorReason(error: unknown): string {
-  if (error instanceof KnowledgeWorkspaceClientError) {
-    return tr('knowledge.document.loadErrorCode', { code: error.code });
+  if (error instanceof KnowledgeDocumentReadError) {
+    return tr(`knowledge.document.${error.reason}`);
   }
   return tr('knowledge.document.loadError');
 }
@@ -89,15 +82,6 @@ function reportSaveError(
       ? 'knowledge.document.saveConflict'
       : 'knowledge.document.saveUnavailable',
   });
-}
-
-function sameVersionSize(
-  version: RendererResourceVersion | undefined,
-  fallbackSize: number,
-  byteLength: number,
-): boolean {
-  const expectedSize = version?.size ?? fallbackSize;
-  return expectedSize === byteLength;
 }
 
 export function KnowledgeDocumentEditor({
@@ -184,79 +168,19 @@ export function KnowledgeDocumentEditor({
     setLoadState({ status: 'loading' });
     void (async () => {
       try {
-        const stat = await client.resources.stat(requestAddress, {
-          signal: controller.signal,
-        });
-        if (isStale()) return;
-        if (!stat.exists) {
-          setLoadState({
-            status: 'error',
-            reason: tr('knowledge.document.missing'),
-          });
-          return;
-        }
-        if (stat.isDirectory) {
-          setLoadState({
-            status: 'error',
-            reason: tr('knowledge.document.notFile'),
-          });
-          return;
-        }
-        const size = safeSize(stat.version);
-        if (size === null) {
-          setLoadState({
-            status: 'error',
-            reason: tr('knowledge.document.sizeUnavailable'),
-          });
-          return;
-        }
-        if (size > KNOWLEDGE_MARKDOWN_MAX_BYTES) {
-          setLoadState({
-            status: 'error',
-            reason: tr('knowledge.document.tooLarge'),
-          });
-          return;
-        }
-
-        const read = await client.resources.read(requestAddress, {
-          encoding: 'base64',
-          signal: controller.signal,
-        });
-        if (isStale()) return;
-        if (read.encoding !== 'base64') {
-          setLoadState({
-            status: 'error',
-            reason: tr('knowledge.document.invalidEncoding'),
-          });
-          return;
-        }
-        const decoded = decodeKnowledgeMarkdownFile(read.content);
-        if (
-          !decoded.ok
-          || !sameVersionSize(read.version, size, decoded.byteLength)
-        ) {
-          setLoadState({
-            status: 'error',
-            reason: decoded.ok
-              ? tr('knowledge.document.changedWhileOpening')
-              : tr(`knowledge.document.${decoded.reason}`),
-          });
-          return;
-        }
-        const diskVersion = read.version ?? stat.version;
-        if (!diskVersion) {
-          setLoadState({
-            status: 'error',
-            reason: tr('knowledge.document.versionUnavailable'),
-          });
-          return;
-        }
+        const snapshot = await readKnowledgeMarkdownSnapshot(
+          client,
+          requestAddress,
+          {
+            signal: controller.signal,
+          },
+        );
         if (isStale()) return;
         registry.getState().establishDocumentSession({
           address: requestAddress,
-          buffer: decoded.content,
-          diskVersion,
-          format: decoded.format,
+          buffer: snapshot.buffer,
+          diskVersion: snapshot.diskVersion,
+          format: snapshot.format,
         });
         if (isStale()) return;
         if (openView()) setLoadState({ status: 'ready' });
@@ -289,52 +213,12 @@ export function KnowledgeDocumentEditor({
         registry.getState().context.windowId,
       )}:${addressKey}`,
       mode: 'manual',
-      execute: async () => {
-        const current = registry.getState().sessions[addressKey];
-        if (!current?.diskVersion) {
-          reportSaveError(registry, requestAddress, 'unavailable');
-          return { ok: false };
-        }
-        if (!current.dirty && !current.format.mixedLineEndings) {
-          registry.getState().clearDocumentSaveError(requestAddress);
-          return { ok: true };
-        }
-        const savedBuffer = current.buffer;
-        const encoded = encodeKnowledgeMarkdownFile(
-          savedBuffer,
-          current.format,
-        );
-        if (!encoded.ok) {
-          reportSaveError(registry, requestAddress, 'unavailable');
-          return { ok: false };
-        }
-        const result = await client.resources.writeExpectedVersion(
-          requestAddress,
-          encoded.base64,
-          current.diskVersion,
-          { encoding: 'base64' },
-        );
-        if (!result.ok) {
-          reportSaveError(registry, requestAddress, 'conflict');
-          return { ok: false, conflict: true };
-        }
-        if (!result.version) {
-          reportSaveError(registry, requestAddress, 'unavailable');
-          return { ok: false };
-        }
-        registry.getState().commitSavedDocument(
-          requestAddress,
-          savedBuffer,
-          result.version,
-        );
-        try {
-          onSaved?.(requestAddress, result.version);
-        } catch {
-          // Saving already succeeded; an index refresh signal must not rewrite it
-          // into a false document-save failure.
-        }
-        return { ok: true };
-      },
+      execute: async () => saveKnowledgeDocument({
+        registry,
+        address: requestAddress,
+        client,
+        onSaved,
+      }),
       onError: error => {
         reportSaveError(registry, requestAddress, error.code);
       },
@@ -394,6 +278,8 @@ export function KnowledgeDocumentEditor({
       <MarkdownEditorSurface
         ref={editorRef}
         content={session.buffer}
+        incomingContentMode="registry-authoritative"
+        savedContent={session.baseline}
         mode="markdown"
         filePath={requestAddress.relativePath}
         policy={savePolicy}

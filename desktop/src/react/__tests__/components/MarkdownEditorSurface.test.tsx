@@ -212,6 +212,81 @@ describe('MarkdownEditorSurface', () => {
     });
   });
 
+  it('keeps the default incoming-content guard but lets a registry-authoritative surface apply an explicit resolution', async () => {
+    const guardedRef = createRef<MarkdownEditorSurfaceHandle>();
+    const guardedError = vi.fn();
+    const guardedPolicy = policy({
+      scopeKey: 'preview:guarded',
+      mode: 'manual',
+      execute: vi.fn(async () => ({ ok: true as const })),
+      onError: guardedError,
+    });
+    const guarded = render(
+      <MarkdownEditorSurface
+        ref={guardedRef}
+        content="baseline"
+        mode="markdown"
+        policy={guardedPolicy}
+      />,
+    );
+    act(() => guardedRef.current?.getView()?.dispatch({
+      changes: { from: 0, to: 8, insert: 'local' },
+    }));
+    guarded.rerender(
+      <MarkdownEditorSurface
+        ref={guardedRef}
+        content="disk"
+        mode="markdown"
+        policy={guardedPolicy}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(guardedRef.current?.getView()?.state.doc.toString()).toBe('local');
+    expect(guardedError).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'conflict',
+    }));
+    guarded.unmount();
+
+    const authoritativeRef = createRef<MarkdownEditorSurfaceHandle>();
+    const authoritativeError = vi.fn();
+    const authoritativePolicy = policy({
+      scopeKey: 'knowledge:authoritative',
+      mode: 'manual',
+      execute: vi.fn(async () => ({ ok: true as const })),
+      onError: authoritativeError,
+    });
+    const authoritative = render(
+      <MarkdownEditorSurface
+        ref={authoritativeRef}
+        content="baseline"
+        savedContent="baseline"
+        incomingContentMode="registry-authoritative"
+        mode="markdown"
+        policy={authoritativePolicy}
+      />,
+    );
+    act(() => authoritativeRef.current?.getView()?.dispatch({
+      changes: { from: 0, to: 8, insert: 'local' },
+    }));
+    authoritative.rerender(
+      <MarkdownEditorSurface
+        ref={authoritativeRef}
+        content="disk"
+        savedContent="disk"
+        incomingContentMode="registry-authoritative"
+        mode="markdown"
+        policy={authoritativePolicy}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(authoritativeRef.current?.getView()?.state.doc.toString()).toBe('disk');
+    expect(authoritativeError).not.toHaveBeenCalled();
+  });
+
   it('routes Mod-s through the explicit manual-save policy', async () => {
     const execute = vi.fn(async () => ({
       ok: true as const,

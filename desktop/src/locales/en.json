@@ -93,6 +93,24 @@
       "dismissSaveError": "Dismiss save error for {name}",
       "mixedLineEndings": "{name} contains mixed line endings. Its first save will normalize them to {ending}."
     },
+    "conflict": {
+      "resolverLabel": "Document conflict resolver",
+      "label": "Resolve conflict for {name}",
+      "title": "{name} changed on disk",
+      "description": "Compare all three versions, then explicitly choose what to save. Nothing is merged or overwritten automatically.",
+      "baseline": "Baseline",
+      "local": "Local",
+      "disk": "Disk",
+      "merged": "Merged result",
+      "baselineLabel": "Baseline version of {name}",
+      "localLabel": "Local version of {name}",
+      "diskLabel": "Disk version of {name}",
+      "mergedLabel": "Merged result for {name}",
+      "mergeAndSave": "Use merged result and save",
+      "useLocal": "Use local and save",
+      "useDisk": "Use disk",
+      "refreshError": "Could not check disk changes for {name}: {reason}."
+    },
     "asset": {
       "label": "Asset viewer",
       "loading": "Loading asset…",

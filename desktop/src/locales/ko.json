@@ -93,6 +93,24 @@
       "dismissSaveError": "{name} 저장 오류 닫기",
       "mixedLineEndings": "{name}에 혼합 줄 바꿈이 있습니다. 처음 저장할 때 {ending}(으)로 통일됩니다."
     },
+    "conflict": {
+      "resolverLabel": "문서 충돌 해결기",
+      "label": "{name} 충돌 해결",
+      "title": "디스크의 {name}이(가) 변경되었습니다",
+      "description": "세 버전을 비교한 뒤 저장할 내용을 명시적으로 선택하세요. 자동 병합이나 덮어쓰기는 하지 않습니다.",
+      "baseline": "기준",
+      "local": "로컬",
+      "disk": "디스크",
+      "merged": "병합 결과",
+      "baselineLabel": "{name}의 기준 버전",
+      "localLabel": "{name}의 로컬 버전",
+      "diskLabel": "{name}의 디스크 버전",
+      "mergedLabel": "{name}의 병합 결과",
+      "mergeAndSave": "병합 결과 사용 및 저장",
+      "useLocal": "로컬 버전 사용 및 저장",
+      "useDisk": "디스크 버전 사용",
+      "refreshError": "{name}의 디스크 변경을 확인할 수 없습니다: {reason}."
+    },
     "asset": {
       "label": "에셋 뷰어",
       "loading": "에셋 불러오는 중…",

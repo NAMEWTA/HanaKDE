@@ -23,6 +23,22 @@ const REQUIRED_KEYS = [
   'tabs.close',
   'tabs.openSide',
   'breadcrumb.label',
+  'conflict.resolverLabel',
+  'conflict.label',
+  'conflict.title',
+  'conflict.description',
+  'conflict.baseline',
+  'conflict.local',
+  'conflict.disk',
+  'conflict.merged',
+  'conflict.baselineLabel',
+  'conflict.localLabel',
+  'conflict.diskLabel',
+  'conflict.mergedLabel',
+  'conflict.mergeAndSave',
+  'conflict.useLocal',
+  'conflict.useDisk',
+  'conflict.refreshError',
 ] as const;
 
 function nestedString(

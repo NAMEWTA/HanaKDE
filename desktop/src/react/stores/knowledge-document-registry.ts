@@ -72,7 +72,26 @@ export interface KnowledgeDocumentConflict {
   local: string;
   disk: string;
   diskVersion: KnowledgeDocumentVersion | null;
+  diskFormat: KnowledgeDocumentFormat;
 }
+
+export interface KnowledgeExternalDocumentSnapshot {
+  buffer: string;
+  diskVersion: KnowledgeDocumentVersion;
+  format: KnowledgeDocumentFormat;
+  forceConflict?: boolean;
+}
+
+export type KnowledgeExternalDocumentResult =
+  | 'missing'
+  | 'unchanged'
+  | 'reloaded'
+  | 'conflict';
+
+export type KnowledgeDocumentConflictResolution =
+  | { kind: 'merge'; content: string }
+  | { kind: 'local' }
+  | { kind: 'disk' };
 
 export interface KnowledgeDocumentSession {
   key: string;
@@ -163,6 +182,14 @@ export interface KnowledgeDocumentRegistryState {
     error: KnowledgeDocumentSaveError,
   ) => boolean;
   clearDocumentSaveError: (address: KnowledgeResourceAddress) => boolean;
+  reconcileExternalDocument: (
+    address: KnowledgeResourceAddress,
+    snapshot: KnowledgeExternalDocumentSnapshot,
+  ) => KnowledgeExternalDocumentResult;
+  resolveDocumentConflict: (
+    address: KnowledgeResourceAddress,
+    resolution: KnowledgeDocumentConflictResolution,
+  ) => boolean;
   closeDocumentView: (viewId: string) => boolean;
   disposeDocumentSession: (address: KnowledgeResourceAddress) => boolean;
   dispose: () => void;
@@ -293,6 +320,15 @@ function validateFormat(
     throw new TypeError('format is invalid');
   }
   return { ...format };
+}
+
+function sameFormat(
+  left: KnowledgeDocumentFormat,
+  right: KnowledgeDocumentFormat,
+): boolean {
+  return left.hadBom === right.hadBom
+    && left.lineEnding === right.lineEnding
+    && left.mixedLineEndings === right.mixedLineEndings;
 }
 
 function requireString(value: unknown, field: string): string {
@@ -602,6 +638,9 @@ export function createKnowledgeDocumentRegistry(
         ...session,
         buffer: nextBuffer,
         dirty: nextBuffer !== session.baseline,
+        conflict: session.conflict
+          ? { ...session.conflict, local: nextBuffer }
+          : null,
         history: {
           revision: nextRevision,
           undo: [...session.history.undo, entry],
@@ -627,6 +666,9 @@ export function createKnowledgeDocumentRegistry(
         ...session,
         buffer,
         dirty: buffer !== session.baseline,
+        conflict: session.conflict
+          ? { ...session.conflict, local: buffer }
+          : null,
         history: {
           revision: session.history.revision + 1,
           undo: session.history.undo.slice(0, -1),
@@ -652,6 +694,9 @@ export function createKnowledgeDocumentRegistry(
         ...session,
         buffer,
         dirty: buffer !== session.baseline,
+        conflict: session.conflict
+          ? { ...session.conflict, local: buffer }
+          : null,
         history: {
           revision: session.history.revision + 1,
           undo: [...session.history.undo, entry],
@@ -685,6 +730,9 @@ export function createKnowledgeDocumentRegistry(
               mixedLineEndings: false,
             },
             saveError: null,
+            conflict: session.conflict?.disk === savedBuffer
+              ? null
+              : session.conflict,
           },
         },
       });
@@ -727,6 +775,175 @@ export function createKnowledgeDocumentRegistry(
           ...state.sessions,
           [key]: { ...session, saveError: null },
         },
+      });
+      return true;
+    },
+
+    reconcileExternalDocument(address, snapshot) {
+      const key = knowledgeDocumentKey(address);
+      const state = get();
+      const session = state.sessions[key];
+      if (!session) return 'missing';
+      const disk = requireString(snapshot?.buffer, 'snapshot.buffer');
+      const diskVersion = cloneVersion(snapshot?.diskVersion);
+      if (!diskVersion) {
+        throw new TypeError('snapshot.diskVersion is required');
+      }
+      const diskFormat = validateFormat(snapshot?.format);
+      const forceConflict = snapshot?.forceConflict === true;
+      const diskMatchesBaseline = disk === session.baseline
+        && sameFormat(diskFormat, session.format);
+
+      if (session.conflict) {
+        if (
+          session.conflict.disk === disk
+          && JSON.stringify(session.conflict.diskVersion) === JSON.stringify(diskVersion)
+        ) {
+          return 'unchanged';
+        }
+        set({
+          sessions: {
+            ...state.sessions,
+            [key]: {
+              ...session,
+              conflict: {
+                ...session.conflict,
+                local: session.buffer,
+                disk,
+                diskVersion,
+                diskFormat,
+              },
+            },
+          },
+        });
+        return 'conflict';
+      }
+
+      if (!forceConflict && diskMatchesBaseline) {
+        set({
+          sessions: {
+            ...state.sessions,
+            [key]: {
+              ...session,
+              diskVersion,
+              format: diskFormat,
+            },
+          },
+        });
+        return 'unchanged';
+      }
+
+      if (session.dirty || (forceConflict && session.format.mixedLineEndings)) {
+        set({
+          sessions: {
+            ...state.sessions,
+            [key]: {
+              ...session,
+              conflict: {
+                baseline: session.baseline,
+                local: session.buffer,
+                disk,
+                diskVersion,
+                diskFormat,
+              },
+            },
+          },
+        });
+        return 'conflict';
+      }
+
+      if (session.buffer === disk) {
+        set({
+          sessions: {
+            ...state.sessions,
+            [key]: {
+              ...session,
+              baseline: disk,
+              diskVersion,
+              format: diskFormat,
+            },
+          },
+        });
+        return 'unchanged';
+      }
+
+      const edit = createTextEdit(session.buffer, disk);
+      set({
+        sessions: {
+          ...state.sessions,
+          [key]: {
+            ...session,
+            buffer: disk,
+            baseline: disk,
+            diskVersion,
+            format: diskFormat,
+            history: {
+              revision: session.history.revision + 1,
+              undo: [],
+              redo: [],
+            },
+            dirty: false,
+            conflict: null,
+          },
+        },
+        views: mapViewsForEdit(state.views, session.key, edit),
+      });
+      return 'reloaded';
+    },
+
+    resolveDocumentConflict(address, resolution) {
+      const key = knowledgeDocumentKey(address);
+      const state = get();
+      const session = state.sessions[key];
+      const conflict = session?.conflict;
+      if (!session || !conflict) return false;
+      if (
+        !resolution
+        || (resolution.kind !== 'merge'
+          && resolution.kind !== 'local'
+          && resolution.kind !== 'disk')
+      ) {
+        throw new TypeError('conflict resolution is invalid');
+      }
+      const buffer = resolution.kind === 'merge'
+        ? requireString(resolution.content, 'resolution.content')
+        : resolution.kind === 'local'
+          ? session.buffer
+          : conflict.disk;
+      const edit = createTextEdit(session.buffer, buffer);
+      let views = state.views;
+      let history = session.history;
+      if (buffer !== session.buffer) {
+        const nextRevision = session.history.revision + 1;
+        const entry: KnowledgeDocumentHistoryEntry = {
+          id: nextRevision,
+          originViewId: 'conflict-resolver',
+          forward: edit,
+          inverse: invertTextEdit(edit),
+        };
+        views = mapViewsForEdit(state.views, session.key, edit);
+        history = {
+          revision: nextRevision,
+          undo: [...session.history.undo, entry],
+          redo: [],
+        };
+      }
+      set({
+        sessions: {
+          ...state.sessions,
+          [key]: {
+            ...session,
+            buffer,
+            baseline: conflict.disk,
+            diskVersion: cloneVersion(conflict.diskVersion),
+            format: validateFormat(conflict.diskFormat),
+            history,
+            dirty: buffer !== conflict.disk,
+            saveError: null,
+            conflict: null,
+          },
+        },
+        views,
       });
       return true;
     },

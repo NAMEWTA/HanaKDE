@@ -93,6 +93,24 @@
       "dismissSaveError": "{name} の保存エラーを閉じる",
       "mixedLineEndings": "{name} には混在する改行コードがあります。初回保存時に {ending} へ統一されます。"
     },
+    "conflict": {
+      "resolverLabel": "ドキュメント競合リゾルバー",
+      "label": "{name} の競合を解決",
+      "title": "ディスク上の {name} が変更されました",
+      "description": "3 つのバージョンを比較し、保存する内容を明示的に選択してください。自動的なマージや上書きは行いません。",
+      "baseline": "ベースライン",
+      "local": "ローカル",
+      "disk": "ディスク",
+      "merged": "マージ結果",
+      "baselineLabel": "{name} のベースライン版",
+      "localLabel": "{name} のローカル版",
+      "diskLabel": "{name} のディスク版",
+      "mergedLabel": "{name} のマージ結果",
+      "mergeAndSave": "マージ結果を使用して保存",
+      "useLocal": "ローカル版を使用して保存",
+      "useDisk": "ディスク版を使用",
+      "refreshError": "{name} のディスク変更を確認できませんでした：{reason}。"
+    },
     "asset": {
       "label": "アセットビューアー",
       "loading": "アセットを読み込み中…",

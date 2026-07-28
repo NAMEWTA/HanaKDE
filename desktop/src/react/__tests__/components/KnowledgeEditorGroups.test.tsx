@@ -105,6 +105,10 @@ describe('KnowledgeEditorGroups', () => {
         client={createClient()}
         workspaceKey="workspace-a"
         onLocateResource={vi.fn()}
+        conflictServices={{
+          watchSource: () => () => undefined,
+          subscribeToChanges: () => () => undefined,
+        }}
       />,
     );
     return { registry, controller };
