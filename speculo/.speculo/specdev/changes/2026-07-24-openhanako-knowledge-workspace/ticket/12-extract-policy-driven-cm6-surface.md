@@ -1,7 +1,7 @@
 # Ticket 12: 抽取策略驱动的共享 CM6 表面
 
 - **被阻塞于：** [`01-freeze-real-repository-baseline.md`](./01-freeze-real-repository-baseline.md)、[`02-audit-silverbullet-reference.md`](./02-audit-silverbullet-reference.md)、[`11-define-markdown-semantic-ir.md`](./11-define-markdown-semantic-ir.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,21 @@
 
 ## 验收标准
 
-- [ ] Preview 继续 600ms autosave 和原附件语义；Knowledge 手动保存；撤销历史与现有 decorations 无回归。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] Preview 继续 600ms autosave 和原附件语义；Knowledge 手动保存；撤销历史与现有 decorations 无回归。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- 实现提交：`7618d296`。
+- `MarkdownEditorSurface` 成为共享 CM6 生命周期内核，`create-markdown-editor-extensions.ts` 集中组装 history、Markdown language/highlight、既有 decorations、表格、数学、Mermaid、主题与 link handler；save、attachment、open-link 和 content-gate 均通过公开策略注入。
+- `PreviewEditor` 收敛为薄适配器，继续使用 600ms autosave、expected-version、checkpoint 和原附件语义；Knowledge 策略使用显式手动保存，二者共享同一 undo/decorations 扩展集合。
+- Knowledge Markdown content gate 以 fatal UTF-8 解码并在分配编辑缓冲前拒绝大于 10 MiB 的输入；BOM 被识别并从编辑正文移除，编码前拒绝非法 surrogate。scope binding 同时阻止切换文档时旧 autosave 草稿写入新目标。
+- 精确验收：`npx vitest run desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx`，8/8 通过；覆盖 autosave/manual save、策略注入、目标切换、strict UTF-8、10 MiB 边界和 BOM。
+- 相关回归：`npx vitest run desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx desktop/src/react/__tests__/components/PreviewEditor.file-sync.test.tsx desktop/src/react/__tests__/components/PreviewEditor.cover-drop.test.tsx desktop/src/react/__tests__/editor desktop/src/react/__tests__/utils/markdown-attachments.test.ts desktop/src/react/__tests__/utils/markdown-cover-drop.test.ts tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`，15 files、151/151 通过。
+- 全仓回归：`npx vitest run --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**' --exclude 'temp/**'`，1014 files passed、1 skipped，10198 tests passed、6 skipped。
+- `npm run typecheck`、`npm run lint:boundary`、目标文件 ESLint、`npm run build:renderer` 与 `git diff --check` 均通过；Renderer build 仅有既有 Vite 提示。
+- 标准轴与规范轴复审均通过，0 blocker、0 nonblocker。

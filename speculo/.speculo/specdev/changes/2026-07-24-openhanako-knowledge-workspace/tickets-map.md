@@ -28,7 +28,7 @@
 | 09 | 0 基础契约 | [迁移 Mobile 与 LAN 知识契约](./ticket/09-migrate-mobile-lan-contract.md) | 05, 06, 07 | KW-US-010, KW-RULE-RESOURCE | P0 | 已完成 |
 | 10 | 0 基础契约 | [贯通知识操作计划与提交曳光弹](./ticket/10-trace-knowledge-operation-protocol.md) | 04, 06 | KW-US-143, KW-RULE-OBS, KW-RULE-OP, KW-RULE-RECOVERY | P0 | 已完成 |
 | 11 | 0 基础契约 | [建立 Markdown 知识语义 IR](./ticket/11-define-markdown-semantic-ir.md) | 02, 03 | KW-RULE-MARKDOWN | P0 | 已完成 |
-| 12 | 0 基础契约 | [抽取策略驱动的共享 CM6 表面](./ticket/12-extract-policy-driven-cm6-surface.md) | 01, 02, 11 | KW-US-057, KW-RULE-MARKDOWN | P0 | 未开始 |
+| 12 | 0 基础契约 | [抽取策略驱动的共享 CM6 表面](./ticket/12-extract-policy-driven-cm6-surface.md) | 01, 02, 11 | KW-US-057, KW-RULE-MARKDOWN | P0 | 已完成 |
 | 13 | 0 基础契约 | [建立性能预算与基准夹具](./ticket/13-establish-performance-fixtures.md) | 01, 03 | KW-RULE-PERF, KW-RULE-TEST | P0 | 已完成 |
 | 14 | 0 基础契约 | [建立威胁模型与恶意工作区门禁](./ticket/14-establish-malicious-workspace-tests.md) | 03, 04, 05 | KW-US-171, KW-RULE-SEC, KW-RULE-TEST | P0 | 未开始 |
 | 15 | 1 Workspace/文档 | [交付知识视图壳与空白 main 会话](./ticket/15-deliver-knowledge-shell.md) | 05, 08 | KW-US-011, KW-US-167, KW-US-168, KW-US-169 | P1 | 未开始 |

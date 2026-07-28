@@ -72,7 +72,7 @@
 | KW-US-054 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 未执行 | — |
 | KW-US-055 | 27 | `desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts` | E2E-KW-005 | 未执行 | — |
 | KW-US-056 | 27 | `desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts` | E2E-KW-005 | 未执行 | — |
-| KW-US-057 | 12 | `desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx` | 契约/集成 | 未执行 | — |
+| KW-US-057 | 12 | `desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx`（8/8）；覆盖 strict UTF-8、10 MiB 精确边界/超限拒绝、非法 UTF-8、BOM 去除、拒绝时不创建编辑缓冲、autosave/manual save 与目标切换隔离 |
 | KW-US-058 | 19 | `desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx` | E2E-KW-005 | 未执行 | — |
 | KW-US-059 | 28 | `desktop/src/react/__tests__/editor/knowledge-enter-commands.test.ts` | 契约/集成 | 未执行 | — |
 | KW-US-060 | 28 | `desktop/src/react/__tests__/editor/knowledge-enter-commands.test.ts` | 契约/集成 | 未执行 | — |
@@ -218,7 +218,7 @@
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 通过 | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193；Ticket 09 Mobile/LAN 共享 DTO、来源隔离、provider-neutral transfer、租约 watcher、权限/取消/冲突/不可用与清理故障注入，定向 12 files、274/274；干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1010 files passed、1 skipped，10161 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过 |
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Tickets 04、10） | Ticket 04 相关回归 249/249；Ticket 10 operation/journal/recovery 22/22、相关定向 255/255；稳定错误/诊断、同一 operation correlation、watch sequence/cursor、rollback 与无路径 resync 已验证；Ticket 43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
-| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Ticket 11） | `volta run npx vitest run tests/markdown-knowledge-ir.test.ts tests/knowledge-baseline-contract.test.ts`（29/29）；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证；后续 owner tickets 尚未执行 |
+| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12） | Ticket 11 Markdown IR 29/29；Ticket 12 精确表面测试 8/8、相关定向 15 files、151/151；共享 CommonMark/GFM IR、精确 UTF-16 范围、语法排除、线性复杂度与取消已验证，单一 CM6 surface/extension factory 注入 save、attachment、open-link、content-gate 策略并保留既有 decorations 与 undo；Tickets 23–39 尚未执行 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 未执行 | — |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
