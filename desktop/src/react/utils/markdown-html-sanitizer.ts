@@ -568,6 +568,7 @@ const MERMAID_SVG_TAGS = new Set([
   'mask',
   'title',
   'desc',
+  'style',
 ]);
 
 const MERMAID_SVG_ATTRS = new Set([
@@ -631,6 +632,75 @@ const SAFE_SVG_FRAGMENT_RE = /^#[A-Za-z][A-Za-z0-9_.:-]{0,127}$/;
 const SAFE_SVG_URL_RE = /^url\(\s*#[A-Za-z][A-Za-z0-9_.:-]{0,127}\s*\)$/;
 const SVG_ACTIVE_VALUE_RE = /(?:javascript|vbscript|data|file|https?):/i;
 const SVG_CONTROL_RE = /\p{Cc}/u;
+const MERMAID_CSS_VALUE_RE = /(?:url\s*\(|expression\s*\(|@import|javascript:|vbscript:|data:|file:|https?:|[<>])/i;
+const MERMAID_CSS_PROPERTY_RE = /^(?:--[a-z][a-z0-9-]*|[a-z][a-z0-9-]*)$/;
+const MERMAID_CSS_FORBIDDEN_PROPERTY_RE =
+  /^(?:behavior|-moz-binding|animation(?:-.+)?|transition(?:-.+)?|stroke-dashoffset)$/;
+
+function sanitizeMermaidDeclarations(raw: string): string {
+  const declarations: string[] = [];
+  for (const candidate of raw.split(';')) {
+    const separator = candidate.indexOf(':');
+    if (separator < 0) continue;
+    const property = candidate.slice(0, separator).trim().toLowerCase();
+    const value = candidate.slice(separator + 1).trim();
+    if (
+      !MERMAID_CSS_PROPERTY_RE.test(property)
+      || MERMAID_CSS_FORBIDDEN_PROPERTY_RE.test(property)
+      || !value
+      || SVG_CONTROL_RE.test(value)
+      || MERMAID_CSS_VALUE_RE.test(value)
+      || value.includes('{')
+      || value.includes('}')
+    ) {
+      continue;
+    }
+    declarations.push(`${property}:${value}`);
+  }
+  return declarations.join(';');
+}
+
+function findCssBlockEnd(css: string, openingBrace: number): number {
+  let depth = 1;
+  for (let index = openingBrace + 1; index < css.length; index += 1) {
+    if (css[index] === '{') depth += 1;
+    if (css[index] === '}') depth -= 1;
+    if (depth === 0) return index;
+  }
+  return -1;
+}
+
+function sanitizeMermaidStyleSheet(raw: string, rootId: string): string {
+  if (!SAFE_SVG_ID_RE.test(rootId) || raw.length > 256 * 1024) return '';
+  const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules: string[] = [];
+  let cursor = 0;
+  while (cursor < css.length) {
+    const openingBrace = css.indexOf('{', cursor);
+    if (openingBrace < 0) break;
+    const selector = css.slice(cursor, openingBrace).trim();
+    const closingBrace = findCssBlockEnd(css, openingBrace);
+    if (closingBrace < 0) return '';
+    const body = css.slice(openingBrace + 1, closingBrace);
+    cursor = closingBrace + 1;
+
+    // Drop all at-rules, including Mermaid's optional keyframe animation.
+    if (!selector || selector.startsWith('@')) continue;
+    const scoped = selector
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean);
+    if (
+      scoped.length === 0
+      || scoped.some(value => !value.startsWith(`#${rootId}`))
+    ) {
+      continue;
+    }
+    const declarations = sanitizeMermaidDeclarations(body);
+    if (declarations) rules.push(`${scoped.join(',')}{${declarations}}`);
+  }
+  return rules.join('');
+}
 
 function safeMermaidSvgAttribute(name: string, value: string): boolean {
   if (SVG_CONTROL_RE.test(value) || SVG_ACTIVE_VALUE_RE.test(value)) {
@@ -649,7 +719,7 @@ function safeMermaidSvgAttribute(name: string, value: string): boolean {
   return MERMAID_SVG_ATTRS.has(name);
 }
 
-function sanitizeMermaidSvgNode(node: ChildNode): void {
+function sanitizeMermaidSvgNode(node: ChildNode, rootId: string): void {
   if (node.nodeType === 3) return;
   if (node.nodeType !== 1) {
     node.remove();
@@ -659,6 +729,15 @@ function sanitizeMermaidSvgNode(node: ChildNode): void {
   const tagName = element.tagName.toLowerCase();
   if (!MERMAID_SVG_TAGS.has(tagName)) {
     element.remove();
+    return;
+  }
+  if (tagName === 'style') {
+    const style = sanitizeMermaidStyleSheet(element.textContent ?? '', rootId);
+    if (!style) {
+      element.remove();
+    } else {
+      element.textContent = style;
+    }
     return;
   }
   for (const attr of Array.from(element.attributes)) {
@@ -673,12 +752,21 @@ function sanitizeMermaidSvgNode(node: ChildNode): void {
       }
       continue;
     }
+    if (name === 'style') {
+      const style = sanitizeMermaidDeclarations(attr.value);
+      if (style) {
+        element.setAttribute('style', style);
+      } else {
+        element.removeAttribute(attr.name);
+      }
+      continue;
+    }
     if (!safeMermaidSvgAttribute(name, attr.value)) {
       element.removeAttribute(attr.name);
     }
   }
   for (const child of Array.from(element.childNodes)) {
-    sanitizeMermaidSvgNode(child);
+    sanitizeMermaidSvgNode(child, rootId);
   }
 }
 
@@ -695,6 +783,7 @@ export function sanitizeMermaidSvg(svg: string): string | null {
   template.innerHTML = svg;
   const root = template.content.querySelector('svg');
   if (!root) return null;
-  sanitizeMermaidSvgNode(root);
+  const rootId = root.getAttribute('id') ?? '';
+  sanitizeMermaidSvgNode(root, rootId);
   return root.isConnected || root.parentNode ? root.outerHTML : null;
 }

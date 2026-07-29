@@ -103,6 +103,15 @@
       "sourceUnavailable": "{name}의 소스를 사용할 수 없습니다. 동일한 소스가 복구된 경우에만 변경되지 않은 페이지를 다시 불러옵니다.",
       "orphan": "{name}은(는) 저장되지 않은 고립 문서입니다. 사용 가능하고 쓰기 가능한 소스에 새 페이지로 저장하세요."
     },
+    "mermaid": {
+      "editSource": "Mermaid 소스 편집",
+      "loading": "Mermaid 다이어그램 렌더링 중…",
+      "renderError": "Mermaid 다이어그램을 렌더링할 수 없습니다. 소스를 편집해 수정하세요."
+    },
+    "math": {
+      "editSource": "수식 소스 편집",
+      "renderError": "수식을 렌더링할 수 없습니다. 소스를 편집해 수정하세요."
+    },
     "commands": {
       "menuLabel": "Markdown 명령",
       "empty": "일치하는 명령이 없습니다",

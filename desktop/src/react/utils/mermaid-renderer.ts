@@ -6,6 +6,11 @@ interface MermaidRenderResult {
   bindFunctions?: (element: Element) => void;
 }
 
+export type MermaidStaticRenderResult =
+  | { status: 'rendered'; svg: string }
+  | { status: 'error'; message: string }
+  | { status: 'cancelled' };
+
 interface MermaidApi {
   initialize(config: MermaidConfig): void;
   render(id: string, source: string): Promise<MermaidRenderResult>;
@@ -16,6 +21,18 @@ type MermaidLoader = () => Promise<MermaidApi>;
 const MERMAID_CONFIG: MermaidConfig = {
   startOnLoad: false,
   securityLevel: 'strict',
+  htmlLabels: false,
+  secure: [
+    'securityLevel',
+    'startOnLoad',
+    'flowchart',
+    'htmlLabels',
+    'theme',
+    'themeCSS',
+    'themeVariables',
+    'fontFamily',
+    'altFontFamily',
+  ],
   flowchart: {
     htmlLabels: false,
   },
@@ -25,6 +42,11 @@ let mermaidPromise: Promise<MermaidApi> | null = null;
 let testLoader: MermaidLoader | null = null;
 let idSeq = 0;
 let renderSeq = 0;
+const MERMAID_RENDER_CACHE_LIMIT = 64;
+const renderCache = new Map<
+  string,
+  Promise<Exclude<MermaidStaticRenderResult, { status: 'cancelled' }>>
+>();
 
 async function loadMermaid(): Promise<MermaidApi> {
   if (!mermaidPromise) {
@@ -46,6 +68,66 @@ function nextMermaidId(): string {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+async function renderStaticMermaidUncached(
+  source: string,
+): Promise<Exclude<MermaidStaticRenderResult, { status: 'cancelled' }>> {
+  try {
+    const mermaid = await loadMermaid();
+    // Mermaid may return bindFunctions for interactive diagrams. The Knowledge
+    // workspace is deliberately static, so only the SVG is accepted.
+    const { svg } = await mermaid.render(nextMermaidId(), source);
+    const sanitizedSvg = sanitizeMermaidSvg(svg);
+    if (!sanitizedSvg) throw new Error('unsafe Mermaid SVG');
+    return { status: 'rendered', svg: sanitizedSvg };
+  } catch (error) {
+    return { status: 'error', message: errorMessage(error) };
+  }
+}
+
+function cachedStaticMermaid(
+  source: string,
+): Promise<Exclude<MermaidStaticRenderResult, { status: 'cancelled' }>> {
+  const cached = renderCache.get(source);
+  if (cached) {
+    renderCache.delete(source);
+    renderCache.set(source, cached);
+    return cached;
+  }
+
+  const task = renderStaticMermaidUncached(source);
+  renderCache.set(source, task);
+  if (renderCache.size > MERMAID_RENDER_CACHE_LIMIT) {
+    const oldest = renderCache.keys().next().value as string | undefined;
+    if (oldest !== undefined) renderCache.delete(oldest);
+  }
+  return task;
+}
+
+/**
+ * Render an exact Mermaid source string through the bundled strict renderer.
+ * Cancellation stops delivery to the caller; Mermaid's public API itself is
+ * not abortable, so the sanitized result may still populate the bounded cache.
+ */
+export async function renderMermaidSvg(
+  source: string,
+  signal?: AbortSignal,
+): Promise<MermaidStaticRenderResult> {
+  if (signal?.aborted) return { status: 'cancelled' };
+  const task = cachedStaticMermaid(source);
+  if (!signal) return task;
+
+  let onAbort: (() => void) | undefined;
+  const cancelled = new Promise<MermaidStaticRenderResult>((resolve) => {
+    onAbort = () => resolve({ status: 'cancelled' });
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([task, cancelled]);
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  }
 }
 
 function readSource(diagram: Element): string {
@@ -138,15 +220,12 @@ async function renderMermaidDiagram(diagram: HTMLElement): Promise<void> {
   rendered.textContent = '';
 
   try {
-    const mermaid = await loadMermaid();
-    const { svg } = await mermaid.render(nextMermaidId(), source);
+    const result = await renderMermaidSvg(source);
     if (diagram.dataset.mermaidRenderSeq !== currentRenderSeq || readSource(diagram) !== source) return;
-    const sanitizedSvg = sanitizeMermaidSvg(svg);
-    if (!sanitizedSvg) {
-      throw new Error('unsafe Mermaid SVG');
-    }
+    if (result.status === 'cancelled') return;
+    if (result.status === 'error') throw new Error(result.message);
     if (diagram.dataset.mermaidRenderSeq !== currentRenderSeq || readSource(diagram) !== source) return;
-    rendered.innerHTML = sanitizedSvg;
+    rendered.innerHTML = result.svg;
     sourceBlock?.setAttribute('hidden', '');
     if (sourceBlock) ensureSourceToolbar(diagram, sourceBlock, source);
     diagram.dataset.mermaidStatus = 'rendered';
@@ -170,4 +249,6 @@ export function __setMermaidLoaderForTests(loader: MermaidLoader | null): void {
   testLoader = loader;
   mermaidPromise = null;
   idSeq = 0;
+  renderSeq = 0;
+  renderCache.clear();
 }

@@ -103,6 +103,15 @@
       "sourceUnavailable": "{name} 所屬來源無法使用；只有同一來源恢復後才會重新載入這個乾淨頁面。",
       "orphan": "{name} 已成為懸空未儲存文件，請將它另存為可用且可寫來源中的新頁面。"
     },
+    "mermaid": {
+      "editSource": "編輯 Mermaid 原始碼",
+      "loading": "正在算繪 Mermaid 圖表…",
+      "renderError": "無法算繪 Mermaid 圖表。請編輯原始碼以修正。"
+    },
+    "math": {
+      "editSource": "編輯數學公式原始碼",
+      "renderError": "無法算繪公式。請編輯原始碼以修正。"
+    },
     "commands": {
       "menuLabel": "Markdown 命令",
       "empty": "沒有符合的命令",

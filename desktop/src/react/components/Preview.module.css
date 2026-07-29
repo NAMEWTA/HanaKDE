@@ -985,8 +985,9 @@
     background: var(--overlay-light);
 }
 
-:global(.cm-mermaid-widget .mermaid-source[hidden]) {
-    display: none;
+:global(.cm-mermaid-widget:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 :global(.cm-mermaid-widget .mermaid-rendered) {
@@ -1001,9 +1002,21 @@
 }
 
 :global(.cm-mermaid-widget.is-error .mermaid-rendered) {
-    margin-bottom: var(--space-4);
     color: var(--coral);
     font-size: 0.82em;
+}
+
+:global(.cm-mermaid-widget.is-loading .mermaid-rendered) {
+    color: var(--text-muted);
+    font-size: 0.82em;
+}
+
+@media (max-width: 560px) {
+    :global(.cm-mermaid-widget) {
+        max-width: 100%;
+        margin: var(--space-2) 0;
+        padding: var(--space-4);
+    }
 }
 
 /* CSV 表格 widget（编辑器内渲染） */

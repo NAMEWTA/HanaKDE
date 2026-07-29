@@ -32,7 +32,6 @@ import {
   type KnowledgeLinkFieldConfig,
 } from './knowledge-link-field';
 import {
-  markdownBlockDecoField,
   markdownDecoPlugin,
   markdownImageContextFacet,
 } from './md-decorations';
@@ -58,7 +57,8 @@ import {
   type MarkdownBlockMenuRequest,
 } from './markdown-block-handles';
 import { markdownBlockSelectionPlugin } from './markdown-block-selection';
-import { mermaidDecoField } from './mermaid-field';
+import { knowledgeMermaidField } from './knowledge-mermaid-field';
+import { knowledgeMathField } from './knowledge-math-field';
 import { taskField } from './task-field';
 import { codeTheme, markdownTheme } from './theme';
 
@@ -116,8 +116,8 @@ export function createMarkdownLivePreviewExtensions(
     taskField,
     frontmatterField,
     markdownCoverField,
-    markdownBlockDecoField,
-    mermaidDecoField,
+    knowledgeMermaidField,
+    knowledgeMathField,
     knowledgeTableField,
     knowledgeCodeBlockField,
   ];

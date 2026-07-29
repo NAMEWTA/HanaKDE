@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe('collectLivePreviewRanges', () => {
-  it('collects Obsidian highlights and math ranges on inactive lines', () => {
+  it('collects Obsidian highlights and safe background spans', () => {
     const ranges = collectLivePreviewRanges([
       'GDP ==平减指数== and $x+1$',
       '$$',
@@ -30,24 +30,23 @@ describe('collectLivePreviewRanges', () => {
 
     expect(ranges).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'mark', text: '平减指数' }),
-      expect.objectContaining({ kind: 'inlineMath', source: 'x+1' }),
-      expect.objectContaining({ kind: 'blockMath', source: 'y^2' }),
       expect.objectContaining({ kind: 'mark', text: '高亮', color: '#fff88f' }),
     ]));
   });
 
-  it('reveals only the inline element touched by the selection', () => {
-    const source = 'GDP ==平减指数== and $x+1$';
+  it('reveals only the highlighted element touched by the selection', () => {
+    const source = '==first== and ==second==';
     const ranges = collectLivePreviewRanges(source, new Set([1]), {
-      selectionRanges: [{ from: 7, to: 7 }],
+      selectionRanges: [{ from: 3, to: 3 }],
     });
 
-    expect(ranges).toEqual([
-      expect.objectContaining({ kind: 'inlineMath', source: 'x+1' }),
-    ]);
+    expect(ranges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'mark', text: 'second' }),
+    ]));
+    expect(ranges).toHaveLength(3);
   });
 
-  it('does not collect math or highlight ranges inside code blocks', () => {
+  it('does not collect highlight ranges inside code blocks', () => {
     const ranges = collectLivePreviewRanges([
       '```js',
       'const price = "$x+1$"; // ==keep raw==',
@@ -57,7 +56,7 @@ describe('collectLivePreviewRanges', () => {
     expect(ranges).toEqual([]);
   });
 
-  it('does not collect math or highlight ranges inside inline code', () => {
+  it('does not collect highlight ranges inside inline code', () => {
     const ranges = collectLivePreviewRanges('Use `$x+1$` and `==raw==` outside ==mark==', new Set());
 
     expect(ranges).toEqual(expect.arrayContaining([

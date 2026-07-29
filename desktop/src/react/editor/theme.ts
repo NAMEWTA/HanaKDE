@@ -177,9 +177,28 @@ export const markdownTheme = EditorView.theme({
     '.cm-frontmatter-key, .cm-frontmatter-new-key': {
       gridColumn: '1 / -1',
     },
+    '.cm-math-block-widget': {
+      maxWidth: '100%',
+      padding: 'var(--space-2) 0',
+    },
   },
   '.cm-math-widget': {
     fontFamily: 'var(--editor-markdown-font-family, var(--font-serif))',
+    cursor: 'text',
+    borderRadius: 'var(--radius-sm)',
+  },
+  '.cm-math-widget:focus-visible': {
+    outline: '2px solid var(--accent)',
+    outlineOffset: '2px',
+  },
+  '.cm-math-inline-widget.is-error, .cm-math-block-widget.is-error': {
+    color: 'var(--danger, #b54a4a)',
+    backgroundColor: 'color-mix(in srgb, var(--danger, #b54a4a) 10%, transparent)',
+    fontSize: '0.82em',
+  },
+  '.cm-math-inline-widget.is-error': {
+    display: 'inline-block',
+    padding: '0 var(--space-2)',
   },
   '.cm-math-block-widget': {
     display: 'block',

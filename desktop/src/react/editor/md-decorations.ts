@@ -3,14 +3,10 @@ import {
 } from '@codemirror/view';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import {
-  EditorState,
   Facet,
   RangeSetBuilder,
-  StateField,
-  type Transaction,
 } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
-import katex from 'katex';
 import { hrDecoration } from './widgets/hr';
 import { handleBlockquote } from './widgets/blockquote';
 import { addImageDecoration, handleImage } from './widgets/image';
@@ -26,13 +22,14 @@ import {
   selectionTouchesRange,
 } from './knowledge-live-preview';
 
+/** @deprecated Import knowledgeMathField from knowledge-math-field instead. */
+export { knowledgeMathField as markdownBlockDecoField } from './knowledge-math-field';
+
 export type DecoRange = { from: number; to: number; deco: Decoration };
 export type LivePreviewRange =
   | { kind: 'hide'; from: number; to: number }
-  | { kind: 'mark'; from: number; to: number; text: string; color?: string }
-  | { kind: 'inlineMath' | 'blockMath'; from: number; to: number; source: string };
+  | { kind: 'mark'; from: number; to: number; text: string; color?: string };
 interface LivePreviewOptions {
-  includeBlockMath?: boolean;
   selectionRanges?: readonly Readonly<{ from: number; to: number }>[];
 }
 
@@ -149,38 +146,6 @@ function sourceRangesTouch(
   ));
 }
 
-function findInlineMath(
-  line: string,
-  lineOffset: number,
-  ranges: LivePreviewRange[],
-  excluded: InlineRange[],
-  selectionRanges: readonly Readonly<InlineRange>[],
-): void {
-  let i = 0;
-  while (i < line.length) {
-    const start = findNextOutside(line, '$', i, excluded);
-    if (start < 0) return;
-    if (line[start + 1] === '$') {
-      i = start + 2;
-      continue;
-    }
-    const end = findNextOutside(line, '$', start + 1, excluded);
-    if (end < 0) return;
-    const source = line.slice(start + 1, end).trim();
-    const absoluteFrom = lineOffset + start;
-    const absoluteTo = lineOffset + end + 1;
-    if (source && !sourceRangesTouch(absoluteFrom, absoluteTo, selectionRanges)) {
-      ranges.push({
-        kind: 'inlineMath',
-        from: absoluteFrom,
-        to: absoluteTo,
-        source,
-      });
-    }
-    i = end + 1;
-  }
-}
-
 function findMarks(
   line: string,
   lineOffset: number,
@@ -235,10 +200,9 @@ function findBackgroundSpans(
 
 export function collectLivePreviewRanges(
   src: string,
-  activeLines: Set<number>,
+  _activeLines: Set<number>,
   options: LivePreviewOptions = {},
 ): LivePreviewRange[] {
-  const includeBlockMath = options.includeBlockMath ?? true;
   const selectionRanges = options.selectionRanges ?? [];
   const lines = src.split('\n');
   const ranges: LivePreviewRange[] = [];
@@ -246,7 +210,6 @@ export function collectLivePreviewRanges(
   let inFence = false;
   let fenceChar: '`' | '~' | null = null;
   for (let idx = 0; idx < lines.length; idx += 1) {
-    const lineNo = idx + 1;
     const line = lines[idx];
     const fence = line.match(FENCE_RE);
     if (fence) {
@@ -267,27 +230,7 @@ export function collectLivePreviewRanges(
       continue;
     }
 
-    if (line.trim() === '$$') {
-      let endIdx = idx + 1;
-      while (endIdx < lines.length && lines[endIdx].trim() !== '$$') endIdx += 1;
-      if (endIdx < lines.length) {
-        let blockHasActiveLine = false;
-        for (let n = lineNo; n <= endIdx + 1; n += 1) {
-          if (activeLines.has(n)) blockHasActiveLine = true;
-        }
-        if (!blockHasActiveLine) {
-          const source = lines.slice(idx + 1, endIdx).join('\n').trim();
-          const blockTo = offset + lines.slice(idx, endIdx + 1).join('\n').length;
-          if (source && includeBlockMath) ranges.push({ kind: 'blockMath', from: offset, to: blockTo, source });
-          for (; idx < endIdx; idx += 1) offset += lines[idx].length + 1;
-          offset += lines[idx].length + 1;
-          continue;
-        }
-      }
-    }
-
     const inlineCodeRanges = collectInlineCodeRanges(line);
-    findInlineMath(line, offset, ranges, inlineCodeRanges, selectionRanges);
     findMarks(line, offset, ranges, inlineCodeRanges, selectionRanges);
     findBackgroundSpans(line, offset, ranges, inlineCodeRanges, selectionRanges);
     offset += line.length + 1;
@@ -295,100 +238,16 @@ export function collectLivePreviewRanges(
   return ranges;
 }
 
-class MathWidget extends WidgetType {
-  constructor(private source: string, private displayMode: boolean, private revealFrom: number | null = null) {
-    super();
-  }
-
-  toDOM(view: EditorView): HTMLElement {
-    const el = document.createElement(this.displayMode ? 'div' : 'span');
-    el.className = this.displayMode ? 'cm-math-widget cm-math-block-widget' : 'cm-math-widget';
-    if (this.displayMode && this.revealFrom !== null) {
-      el.tabIndex = 0;
-      el.setAttribute('role', 'button');
-      el.setAttribute('aria-label', 'Edit LaTeX block');
-      const revealSource = () => {
-        view.focus();
-        view.dispatch({
-          selection: { anchor: this.revealFrom ?? 0 },
-          scrollIntoView: true,
-        });
-      };
-      el.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        revealSource();
-      });
-      el.addEventListener('keydown', (event) => {
-        const keyboardEvent = event as KeyboardEvent;
-        if (keyboardEvent.key !== 'Enter' && keyboardEvent.key !== ' ') return;
-        event.preventDefault();
-        event.stopPropagation();
-        revealSource();
-      });
-    }
-    try {
-      el.innerHTML = katex.renderToString(this.source, {
-        displayMode: this.displayMode,
-        throwOnError: false,
-      });
-    } catch {
-      el.textContent = this.source;
-    }
-    return el;
-  }
-}
-
 function livePreviewDeco(range: LivePreviewRange): DecoRange {
   if (range.kind === 'hide') return { from: range.from, to: range.to, deco: hideMark };
-  if (range.kind === 'mark') {
-    const deco = range.color
-      ? Decoration.mark({
-          class: 'cm-md-mark',
-          attributes: { style: `--cm-md-mark-bg: ${range.color}` },
-        })
-      : markDeco;
-    return { from: range.from, to: range.to, deco };
-  }
-  return {
-    from: range.from,
-    to: range.to,
-    deco: Decoration.replace({
-      widget: new MathWidget(
-        range.source,
-        range.kind === 'blockMath',
-        range.kind === 'blockMath' ? range.from : null,
-      ),
-      block: range.kind === 'blockMath',
-    }),
-  };
+  const deco = range.color
+    ? Decoration.mark({
+        class: 'cm-md-mark',
+        attributes: { style: `--cm-md-mark-bg: ${range.color}` },
+      })
+    : markDeco;
+  return { from: range.from, to: range.to, deco };
 }
-
-function buildMarkdownBlockDecorations(state: EditorState): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
-  const activeLines = activeLineNumbers(state);
-  const ranges: DecoRange[] = collectLivePreviewRanges(state.doc.toString(), activeLines, {
-    selectionRanges: selectionSourceRanges(state),
-  })
-    .filter((range): range is Extract<LivePreviewRange, { kind: 'blockMath' }> => range.kind === 'blockMath')
-    .map(livePreviewDeco);
-
-  ranges.sort((a, b) => a.from - b.from || a.to - b.to);
-  for (const { from, to, deco } of ranges) builder.add(from, to, deco);
-
-  return builder.finish();
-}
-
-export const markdownBlockDecoField = StateField.define<DecorationSet>({
-  create(state) {
-    return buildMarkdownBlockDecorations(state);
-  },
-  update(value, tr: Transaction) {
-    if (tr.docChanged || tr.selection) return buildMarkdownBlockDecorations(tr.state);
-    return value;
-  },
-  provide: f => EditorView.decorations.from(f),
-});
 
 export function buildMarkdownDecorations(view: EditorView): DecorationSet {
   const activeLines = activeLineNumbers(view.state);
@@ -494,10 +353,11 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
 
   collectObsidianImageDecorations(view, imageContext, ranges);
 
-  for (const range of collectLivePreviewRanges(view.state.doc.toString(), activeLines, {
-    includeBlockMath: false,
-    selectionRanges,
-  })) {
+  for (const range of collectLivePreviewRanges(
+    view.state.doc.toString(),
+    activeLines,
+    { selectionRanges },
+  )) {
     ranges.push(livePreviewDeco(range));
   }
 

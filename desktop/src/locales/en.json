@@ -103,6 +103,15 @@
       "sourceUnavailable": "The source for {name} is unavailable. The clean page will reload only if that same source recovers.",
       "orphan": "{name} is an unsaved orphan. Save it as a new Page in an available writable source."
     },
+    "mermaid": {
+      "editSource": "Edit Mermaid source",
+      "loading": "Rendering Mermaid diagram…",
+      "renderError": "Mermaid diagram could not be rendered. Edit the source to fix it."
+    },
+    "math": {
+      "editSource": "Edit math source",
+      "renderError": "Formula could not be rendered. Edit the source to fix it."
+    },
     "commands": {
       "menuLabel": "Markdown commands",
       "empty": "No matching commands",
