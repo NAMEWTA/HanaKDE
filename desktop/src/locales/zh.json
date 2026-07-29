@@ -114,6 +114,10 @@
       "add": "添加",
       "invalidValue": "请输入唯一属性名以及 JSON 标量或一维标量数组。"
     },
+    "task": {
+      "open": "未完成的页面任务",
+      "completed": "已完成的页面任务"
+    },
     "unsaved": {
       "title": "是否保存更改？",
       "description": "{document} 有未保存的更改。继续前请选择保存、放弃或取消。",

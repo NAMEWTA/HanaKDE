@@ -13,7 +13,6 @@ import {
 import { syntaxTree } from '@codemirror/language';
 import katex from 'katex';
 import { hrDecoration } from './widgets/hr';
-import { handleCheckbox } from './widgets/checkbox';
 import { handleBlockquote } from './widgets/blockquote';
 import { handleCodeBlock } from './widgets/code-block';
 import { addImageDecoration, handleImage } from './widgets/image';
@@ -526,9 +525,6 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
           case 'HorizontalRule':
             ranges.push({ from: node.from, to: node.to, deco: hrDecoration });
             ranges.push({ from: line.from, to: line.from, deco: centerLineDeco });
-            return;
-          case 'TaskMarker':
-            handleCheckbox({ view, node, ranges });
             return;
           case 'Blockquote':
             handleBlockquote({ view, node, ranges });

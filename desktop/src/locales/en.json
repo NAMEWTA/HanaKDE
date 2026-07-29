@@ -114,6 +114,10 @@
       "add": "Add",
       "invalidValue": "Enter a unique property name and a JSON scalar or flat scalar array."
     },
+    "task": {
+      "open": "Open page task",
+      "completed": "Completed page task"
+    },
     "unsaved": {
       "title": "Save changes?",
       "description": "{document} has unsaved changes. Save, discard, or cancel before continuing.",

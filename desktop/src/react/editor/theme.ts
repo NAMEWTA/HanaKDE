@@ -83,6 +83,22 @@ export const markdownTheme = EditorView.theme({
     textDecorationStyle: 'dotted',
     cursor: 'not-allowed',
   },
+  '.cm-page-task': {
+    inlineSize: '1rem',
+    blockSize: '1rem',
+    margin: '0 var(--space-4) 0 0',
+    accentColor: 'var(--accent)',
+    verticalAlign: 'text-bottom',
+    cursor: 'pointer',
+  },
+  '.cm-page-task:focus-visible': {
+    outline: '2px solid var(--accent)',
+    outlineOffset: '2px',
+  },
+  '.cm-page-task:disabled': {
+    cursor: 'not-allowed',
+    opacity: '0.6',
+  },
   '.cm-frontmatter-properties': {
     display: 'grid',
     gap: 'var(--space-8)',
@@ -148,6 +164,10 @@ export const markdownTheme = EditorView.theme({
     color: 'var(--danger, #b54a4a)',
   },
   '@media (max-width: 560px)': {
+    '.cm-page-task': {
+      inlineSize: '1.125rem',
+      blockSize: '1.125rem',
+    },
     '.cm-knowledge-link': {
       textUnderlineOffset: '3px',
     },

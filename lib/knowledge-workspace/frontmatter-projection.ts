@@ -361,8 +361,10 @@ function parseSingleFieldLine(
   };
 }
 
-export function projectFrontmatter(source: string): FrontmatterProjection {
-  const token = frontmatterToken(source);
+export function projectFrontmatterFromToken(
+  source: string,
+  token: MarkdownFrontmatterToken | null,
+): FrontmatterProjection {
   if (!token) return sourceMode('absent', null);
   const content = source.slice(token.contentRange.from, token.contentRange.to);
 
@@ -413,6 +415,10 @@ export function projectFrontmatter(source: string): FrontmatterProjection {
     closingRange: token.closingRange,
     fields,
   };
+}
+
+export function projectFrontmatter(source: string): FrontmatterProjection {
+  return projectFrontmatterFromToken(source, frontmatterToken(source));
 }
 
 function formatEditableValue(value: FrontmatterEditableValue): string {

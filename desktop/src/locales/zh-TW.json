@@ -114,6 +114,10 @@
       "add": "新增",
       "invalidValue": "請輸入唯一屬性名稱以及 JSON 純量或一維純量陣列。"
     },
+    "task": {
+      "open": "未完成的頁面任務",
+      "completed": "已完成的頁面任務"
+    },
     "unsaved": {
       "title": "是否儲存變更？",
       "description": "{document} 有未儲存的變更。繼續前請選擇儲存、放棄或取消。",

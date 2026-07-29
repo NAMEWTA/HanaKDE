@@ -32,6 +32,7 @@ import {
 import { markdownBlockSelectionPlugin } from './markdown-block-selection';
 import { mermaidDecoField } from './mermaid-field';
 import { tableDecoField } from './table-field';
+import { taskField } from './task-field';
 import { codeTheme, markdownTheme } from './theme';
 
 export interface MarkdownEditorCompartments {
@@ -111,6 +112,7 @@ export function createMarkdownEditorExtensions(
       markdownImageContextFacet.of(imageContext),
       markdownDecoPlugin,
       ...(knowledgeLinks ? [createKnowledgeLinkField(knowledgeLinks)] : []),
+      taskField,
       frontmatterField,
       markdownCoverField,
       markdownBlockDecoField,
