@@ -535,7 +535,7 @@ describe('markdown block handle rail', () => {
     });
     const doc = [
       '| A | B |',
-      '| - | - |',
+      '| --- | --- |',
       '| 1 | 2 |',
       '',
       '```mermaid',

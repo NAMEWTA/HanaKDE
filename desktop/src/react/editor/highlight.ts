@@ -19,6 +19,14 @@ export const markdownHighlight = HighlightStyle.define([
   { tag: tags.quote, color: 'var(--text-muted)', fontStyle: 'italic' },
   { tag: tags.list, color: 'var(--text)' },
   { tag: tags.meta, color: 'var(--text-muted)' },
+  { tag: tags.keyword, color: '#8959a8' },
+  { tag: tags.string, color: '#718c00' },
+  { tag: tags.comment, color: 'var(--text-muted)', fontStyle: 'italic' },
+  { tag: tags.number, color: '#f5871f' },
+  { tag: tags.operator, color: '#3e999f' },
+  { tag: tags.definition(tags.variableName), color: '#4271ae' },
+  { tag: tags.function(tags.variableName), color: '#4271ae' },
+  { tag: tags.typeName, color: '#c82829' },
 ]);
 
 export const codeHighlight = HighlightStyle.define([

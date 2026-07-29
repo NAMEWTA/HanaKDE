@@ -1,7 +1,13 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { markdown } from '@codemirror/lang-markdown';
 import { bracketMatching, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
+import {
+  Emoji,
+  GFM,
+  Subscript,
+  Superscript,
+} from '@lezer/markdown';
 import {
   Compartment,
   EditorState,
@@ -44,13 +50,14 @@ import {
   type KnowledgeCommandTranslator,
   type KnowledgeSlashMenuRequest,
 } from './knowledge-command-registry';
+import { knowledgeCodeBlockField } from './knowledge-code-block-field';
+import { knowledgeTableField } from './knowledge-table-field';
 import {
   markdownBlockHandlePlugin,
   type MarkdownBlockMenuRequest,
 } from './markdown-block-handles';
 import { markdownBlockSelectionPlugin } from './markdown-block-selection';
 import { mermaidDecoField } from './mermaid-field';
-import { tableDecoField } from './table-field';
 import { taskField } from './task-field';
 import { codeTheme, markdownTheme } from './theme';
 
@@ -110,7 +117,8 @@ export function createMarkdownLivePreviewExtensions(
     markdownCoverField,
     markdownBlockDecoField,
     mermaidDecoField,
-    tableDecoField,
+    knowledgeTableField,
+    knowledgeCodeBlockField,
   ];
 }
 
@@ -166,7 +174,12 @@ export function createMarkdownEditorExtensions(
     observeExtension,
     compartments.gutter.of(isMarkdown || isCsv ? [] : lineNumbers()),
     compartments.lang.of(
-      isMarkdown ? markdown({ base: markdownLanguage, codeLanguages: languages }) : [],
+      isMarkdown
+        ? markdown({
+          extensions: [GFM, Subscript, Superscript, Emoji],
+          codeLanguages: languages,
+        })
+        : [],
     ),
     compartments.highlight.of(
       syntaxHighlighting(isMarkdown ? markdownHighlight : codeHighlight),

@@ -13,7 +13,6 @@ import { syntaxTree } from '@codemirror/language';
 import katex from 'katex';
 import { hrDecoration } from './widgets/hr';
 import { handleBlockquote } from './widgets/blockquote';
-import { handleCodeBlock } from './widgets/code-block';
 import { addImageDecoration, handleImage } from './widgets/image';
 import { handleLink } from './widgets/link';
 import {
@@ -426,14 +425,6 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
           case 'Blockquote':
             handleBlockquote({ view, node, ranges });
             return;
-          case 'FencedCode':
-            handleCodeBlock({
-              view,
-              node,
-              ranges,
-              activeLines,
-            });
-            return false; // don't traverse children
         }
 
         if (node.name === 'Image') {

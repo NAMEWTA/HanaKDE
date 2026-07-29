@@ -12,6 +12,7 @@ import {
   markdownDecoPlugin,
   markdownImageContextFacet,
 } from '../../editor/md-decorations';
+import { knowledgeCodeBlockField } from '../../editor/knowledge-code-block-field';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -271,6 +272,7 @@ describe('collectLivePreviewRanges', () => {
         extensions: [
           markdown({ base: markdownLanguage }),
           markdownDecoPlugin,
+          knowledgeCodeBlockField,
         ],
       }),
     });
@@ -311,6 +313,7 @@ describe('collectLivePreviewRanges', () => {
         extensions: [
           markdown({ base: markdownLanguage }),
           markdownDecoPlugin,
+          knowledgeCodeBlockField,
         ],
       }),
     });
@@ -342,6 +345,7 @@ describe('collectLivePreviewRanges', () => {
         extensions: [
           markdown({ base: markdownLanguage }),
           markdownDecoPlugin,
+          knowledgeCodeBlockField,
         ],
       }),
     });
@@ -367,6 +371,7 @@ describe('collectLivePreviewRanges', () => {
         extensions: [
           markdown({ base: markdownLanguage }),
           markdownDecoPlugin,
+          knowledgeCodeBlockField,
         ],
       }),
     });
@@ -378,7 +383,7 @@ describe('collectLivePreviewRanges', () => {
     view.destroy();
   });
 
-  it('shows a copy button on inactive fenced code blocks in the markdown editor', async () => {
+  it('does not add copy controls to inactive fenced code blocks in the markdown editor', async () => {
     window.t = ((key: string) => {
       if (key === 'attach.copy') return '复制';
       if (key === 'attach.copied') return '已复制';
@@ -403,24 +408,19 @@ describe('collectLivePreviewRanges', () => {
         extensions: [
           markdown({ base: markdownLanguage }),
           markdownDecoPlugin,
+          knowledgeCodeBlockField,
         ],
       }),
     });
 
     const button = parent.querySelector<HTMLButtonElement>('.cm-codeblock-copy-btn');
 
-    expect(button).toBeInstanceOf(HTMLButtonElement);
-    expect(button?.querySelector('svg.cm-codeblock-copy-icon')).toBeInstanceOf(SVGSVGElement);
-    expect(button?.querySelector('.cm-codeblock-copy-label')?.textContent).toBe('复制');
-    expect(button?.getAttribute('aria-label')).toBe('复制');
+    expect(button).toBeNull();
     button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await Promise.resolve();
 
-    expect(writeText).toHaveBeenCalledWith('const x = 1;');
-    expect(button?.dataset.copied).toBe('true');
-    expect(button?.querySelector('.cm-codeblock-copy-label')?.textContent).toBe('已复制');
-    expect(button?.getAttribute('aria-label')).toBe('已复制');
+    expect(writeText).not.toHaveBeenCalled();
 
     view.destroy();
   });
@@ -451,6 +451,7 @@ describe('collectLivePreviewRanges', () => {
         extensions: [
           markdown({ base: markdownLanguage }),
           markdownDecoPlugin,
+          knowledgeCodeBlockField,
         ],
       }),
     });

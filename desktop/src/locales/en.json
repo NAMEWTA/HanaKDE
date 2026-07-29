@@ -142,6 +142,9 @@
       "open": "Open page task",
       "completed": "Completed page task"
     },
+    "table": {
+      "editSource": "Edit table source"
+    },
     "unsaved": {
       "title": "Save changes?",
       "description": "{document} has unsaved changes. Save, discard, or cancel before continuing.",

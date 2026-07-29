@@ -142,6 +142,9 @@
       "open": "未完成的页面任务",
       "completed": "已完成的页面任务"
     },
+    "table": {
+      "editSource": "编辑表格源码"
+    },
     "unsaved": {
       "title": "是否保存更改？",
       "description": "{document} 有未保存的更改。继续前请选择保存、放弃或取消。",
