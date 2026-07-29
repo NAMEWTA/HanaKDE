@@ -1,7 +1,7 @@
 # Ticket 29: 交付 Tab 与 Shift+Tab 行级事务
 
 - **被阻塞于：** [`27-deliver-live-preview-modes.md`](./27-deliver-live-preview-modes.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -61,9 +61,26 @@
 
 ## 验收标准
 
-- [ ] 选区映射稳定；最小缩进不产生负层级；非编辑上下文 Tab 保留浏览器焦点语义。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 选区映射稳定；最小缩进不产生负层级；非编辑上下文 Tab 保留浏览器焦点语义。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `ee09a121`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **Surface 接入：** `knowledgeIndentCommand` / `knowledgeOutdentCommand` 以 Markdown-only、最高优先级 keymap 接入 Ticket 12 的单一 policy-driven Surface；只读 Markdown、text/code/csv 和非编辑上下文不接管 Tab，保留浏览器焦点语义。
+- **空选区缩进：** 普通 Markdown 与任意语言 fenced code 的每个 caret 都只插入两个 ASCII spaces；不写 tab，不按语言改变宽度。
+- **显式选区：** 非空单行选区按整行处理，多行与反向选区仅处理实际触及的行；选区末端恰在下一行行首时不包含该行，所有 selection/caret 通过同一 ChangeSet 稳定映射。
+- **反缩进：** Shift+Tab 对每个当前/触及行最多删除行首两个 ASCII spaces；零空格不产生负层级，实际 tab 保持 byte-exact。
+- **结构边界：** 不推断或联动列表后代、相邻行和未选中行，不修复 Markdown 结构，不重排已有有序列表编号；重复 Tab 可形成四个及以上前导空格。
+- **事务与故障：** 多行、多 selection 每次只有一个 input transaction/undo step；无可删除空格时为已处理 no-op，dispatch 抛错前 EditorState 不变并原样上抛。
+- **精确自动化：** `npx vitest run desktop/src/react/__tests__/editor/knowledge-indent-commands.test.ts`（1 file、18/18）。
+- **相关回归：** `npx vitest run desktop/src/react/__tests__/editor/knowledge-indent-commands.test.ts desktop/src/react/__tests__/editor/knowledge-enter-commands.test.ts desktop/src/react/__tests__/editor/markdown-commands.test.ts desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx tests/knowledge-tags-tasks.test.ts`（6 files、93/93）。
+- **产品范围全仓：** `npm test -- --exclude 'temp/**'`（1037 files passed、1 skipped；10458 tests passed、6 skipped）。用户 ignored `temp/HanaKDE-TodoList-0.0.1` 未修改。
+- **门禁与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check` 与 `npm run build:renderer` 通过；未改变 composition、preload/main 或 Server。
+- **Playwright：** 按本 ticket 固定契约不适用，未运行。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-29-openhanako-knowledge-workspace-implementation-29.md`
