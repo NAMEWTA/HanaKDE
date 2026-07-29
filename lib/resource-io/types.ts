@@ -361,7 +361,7 @@ export type ResourceProvider = {
     options?: ResourceOpenReadOptions,
   ) => Promise<ResourceOpenReadResult>;
   write?: (ref: ResourceRef, content: string | Buffer) => Promise<ResourceMutationResult>;
-  writeExpectedVersion?: (ref: ResourceRef, content: string | Buffer, expectedVersion: ResourceVersion) => Promise<ResourceWriteExpectedVersionResult>;
+  writeExpectedVersion?: (ref: ResourceRef, content: string | Buffer, expectedVersion: ResourceVersion | null) => Promise<ResourceWriteExpectedVersionResult>;
   edit?: (ref: ResourceRef, edits: ResourceEdit[]) => Promise<ResourceMutationResult>;
   mkdir?: (ref: ResourceRef, options?: ResourceMutationPreconditions) => Promise<ResourceMutationResult>;
   delete?: (ref: ResourceRef, options?: ResourceMutationPreconditions) => Promise<ResourceMutationResult>;

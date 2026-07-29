@@ -4,7 +4,10 @@ import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { KnowledgeResourceAddress } from '../../../../../shared/knowledge-workspace-contract.ts';
+import type {
+  KnowledgeResourceAddress,
+  KnowledgeSourceDto,
+} from '../../../../../shared/knowledge-workspace-contract.ts';
 import type { KnowledgeWorkspaceClient } from '../../services/knowledge-workspace-client';
 import {
   KnowledgeEditorGroups,
@@ -79,6 +82,7 @@ describe('KnowledgeEditorGroups', () => {
       'knowledge.document.loading': 'Loading document…',
       'knowledge.document.editorLabel': `Edit ${vars?.name}`,
       'knowledge.document.noticesLabel': 'Document notices',
+      'knowledge.unsaved.description': `Unsaved ${vars?.document}`,
     })[key] ?? key) as typeof window.t;
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
@@ -92,7 +96,13 @@ describe('KnowledgeEditorGroups', () => {
     vi.unstubAllGlobals();
   });
 
-  function setup() {
+  function setup(sources: KnowledgeSourceDto[] = [{
+    sourceKey: 'main',
+    displayName: 'Main workspace',
+    role: 'main',
+    capabilities: ['read', 'write', 'watch'],
+    availability: 'available',
+  }]) {
     const registry = createKnowledgeDocumentRegistry({
       ownerId: 'owner',
       windowId: 'groups-test',
@@ -104,6 +114,7 @@ describe('KnowledgeEditorGroups', () => {
         registry={registry}
         client={createClient()}
         workspaceKey="workspace-a"
+        sources={sources}
         onLocateResource={vi.fn()}
         conflictServices={{
           watchSource: () => () => undefined,
@@ -212,7 +223,7 @@ describe('KnowledgeEditorGroups', () => {
     });
   });
 
-  it('collapses an empty side group while retaining its dirty shared session', async () => {
+  it('prompts before the dirty last view, preserves it on cancel, and disposes it after discard', async () => {
     const { controller, registry } = setup();
     let opened = { viewId: '', groupId: '', reused: false };
     act(() => {
@@ -227,9 +238,227 @@ describe('KnowledgeEditorGroups', () => {
       controller.current!.closeView(opened.viewId);
     });
 
-    expect(screen.getAllByRole('group', { name: /Editor group/ })).toHaveLength(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(registry.getState().sessions[key]?.dirty).toBe(true);
+    expect(registry.getState().views[opened.viewId]).toBeDefined();
+    fireEvent.click(screen.getByRole('button', {
+      name: 'knowledge.unsaved.cancel',
+    }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(registry.getState().views[opened.viewId]).toBeDefined();
+
+    act(() => {
+      controller.current!.closeView(opened.viewId);
+    });
+    fireEvent.click(screen.getByRole('button', {
+      name: 'knowledge.unsaved.discard',
+    }));
+    expect(screen.getAllByRole('group', { name: /Editor group/ })).toHaveLength(1);
+    expect(registry.getState().sessions[key]).toBeUndefined();
     expect(registry.getState().views[opened.viewId]).toBeUndefined();
+  });
+
+  it('closes a dirty non-last shared view directly without prompting', async () => {
+    const { controller, registry } = setup();
+    let first = { viewId: '', groupId: '', reused: false };
+    let side = first;
+    act(() => {
+      first = controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+      side = controller.current!.openInSide(resource('notes/A.md'), {
+        fromGroupId: first.groupId,
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[first.viewId]).toBeDefined();
+      expect(registry.getState().views[side.viewId]).toBeDefined();
+    });
+    act(() => {
+      registry.getState().replaceDocumentBuffer(first.viewId, '# dirty\n');
+      controller.current!.closeView(side.viewId);
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(registry.getState().views[side.viewId]).toBeUndefined();
+    expect(registry.getState().sessions[
+      knowledgeDocumentKey(resource('notes/A.md').address)
+    ]?.buffer).toBe('# dirty\n');
+  });
+
+  it('turns a dirty document orphan when its source is no longer writable', async () => {
+    const { controller, registry } = setup([{
+      sourceKey: 'main',
+      displayName: 'Main workspace',
+      role: 'main',
+      capabilities: ['read'],
+      availability: 'available',
+    }]);
+    let opened = { viewId: '', groupId: '', reused: false };
+    act(() => {
+      opened = controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[opened.viewId]).toBeDefined();
+    });
+    act(() => {
+      registry.getState().replaceDocumentBuffer(opened.viewId, '# dirty\n');
+    });
+    await waitFor(() => {
+      expect(registry.getState().sessions[
+        knowledgeDocumentKey(resource('notes/A.md').address)
+      ]).toMatchObject({
+        buffer: '# dirty\n',
+        dirty: true,
+        orphan: true,
+        resourceState: 'orphan',
+      });
+    });
+  });
+
+  it('processes lifecycle close active-first and stops on cancel without rolling back discard', async () => {
+    const { controller, registry } = setup();
+    let first = { viewId: '', groupId: '', reused: false };
+    let second = first;
+    act(() => {
+      first = controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+      second = controller.current!.openResource(resource('notes/B.md'), {
+        mode: 'pinned',
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[first.viewId]).toBeDefined();
+      expect(registry.getState().views[second.viewId]).toBeDefined();
+    });
+    act(() => {
+      registry.getState().replaceDocumentBuffer(first.viewId, '# A dirty\n');
+      registry.getState().replaceDocumentBuffer(second.viewId, '# B dirty\n');
+    });
+
+    let closeResult!: Promise<boolean>;
+    act(() => {
+      closeResult = controller.current!.prepareToClose();
+    });
+    expect(screen.getByText('Unsaved Main workspace / notes/B.md'))
+      .toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {
+      name: 'knowledge.unsaved.discard',
+    }));
+    await waitFor(() => {
+      expect(screen.getByText('Unsaved Main workspace / notes/A.md'))
+        .toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', {
+      name: 'knowledge.unsaved.cancel',
+    }));
+
+    await expect(closeResult).resolves.toBe(false);
+    expect(registry.getState().sessions[
+      knowledgeDocumentKey(resource('notes/B.md').address)
+    ]).toMatchObject({ buffer: '# B\n', dirty: false });
+    expect(registry.getState().sessions[
+      knowledgeDocumentKey(resource('notes/A.md').address)
+    ]).toMatchObject({ buffer: '# A dirty\n', dirty: true });
+    expect(registry.getState().views[first.viewId]).toBeDefined();
+    expect(registry.getState().views[second.viewId]).toBeDefined();
+  });
+
+  it('rejects a concurrent close request without replacing the active decision', async () => {
+    const { controller, registry } = setup();
+    let opened = { viewId: '', groupId: '', reused: false };
+    act(() => {
+      opened = controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[opened.viewId]).toBeDefined();
+    });
+    act(() => {
+      registry.getState().replaceDocumentBuffer(opened.viewId, '# dirty\n');
+    });
+
+    let first!: Promise<boolean>;
+    let concurrent!: Promise<boolean>;
+    act(() => {
+      first = controller.current!.prepareToClose();
+      concurrent = controller.current!.prepareToClose();
+    });
+
+    await expect(concurrent).resolves.toBe(false);
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', {
+      name: 'knowledge.unsaved.cancel',
+    }));
+    await expect(first).resolves.toBe(false);
+  });
+
+  it('saves an orphan to an explicit new Page and rebinds its tab, session, and breadcrumb', async () => {
+    const { controller, registry } = setup();
+    let opened = { viewId: '', groupId: '', reused: false };
+    act(() => {
+      opened = controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[opened.viewId]).toBeDefined();
+    });
+    act(() => {
+      registry.getState().replaceDocumentBuffer(
+        opened.viewId,
+        '[[Old/Link.md]]\n# orphan\n',
+      );
+      registry.getState().markDocumentResourceUnavailable(
+        resource('notes/A.md').address,
+        'source-unavailable',
+      );
+    });
+
+    let closeResult!: Promise<boolean>;
+    act(() => {
+      closeResult = controller.current!.prepareToClose();
+    });
+    expect(screen.getByText('knowledge.unsaved.orphanTarget'))
+      .toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('knowledge.unsaved.relativePath'), {
+      target: { value: 'Recovered/A-copy.md' },
+    });
+    fireEvent.click(screen.getByRole('button', {
+      name: 'knowledge.unsaved.save',
+    }));
+
+    await act(async () => {
+      await expect(closeResult).resolves.toBe(true);
+    });
+    const target = {
+      sourceKey: 'main',
+      relativePath: 'Recovered/A-copy.md',
+    };
+    const targetSession = registry.getState().sessions[
+      knowledgeDocumentKey(target)
+    ];
+    expect(targetSession).toMatchObject({
+      address: target,
+      buffer: '[[Old/Link.md]]\n# orphan\n',
+      baseline: '[[Old/Link.md]]\n# orphan\n',
+      dirty: false,
+      orphan: false,
+      resourceState: 'available',
+    });
+    expect(registry.getState().views[opened.viewId].sessionKey).toBe(
+      knowledgeDocumentKey(target),
+    );
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'A-copy.md' }))
+        .toBeInTheDocument();
+      expect(screen.getByRole('navigation', {
+        name: 'Resource location',
+      })).toHaveTextContent('Main workspace›Recovered›A-copy.md');
+    });
   });
 
   it('pins a dragged preview and moves its view into the explicit target group', () => {

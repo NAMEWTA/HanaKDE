@@ -8,6 +8,7 @@ import {
 import { useStore } from 'zustand';
 import type {
   KnowledgeResourceAddress,
+  KnowledgeSourceDto,
 } from '../../../../../shared/knowledge-workspace-contract.ts';
 import {
   knowledgeWorkspaceClient,
@@ -46,12 +47,14 @@ export interface KnowledgeConflictResolverProps {
   watchSource?: KnowledgeConflictWatchSource;
   subscribeToChanges?: KnowledgeConflictSubscribeToChanges;
   refreshDelayMs?: number;
+  sources?: readonly KnowledgeSourceDto[];
   saveDocument?: (
     input: SaveKnowledgeDocumentInput,
   ) => Promise<SaveKnowledgeDocumentResult>;
 }
 
 type ExternalErrors = Record<string, KnowledgeDocumentReadFailureReason>;
+const EMPTY_KNOWLEDGE_SOURCES: readonly KnowledgeSourceDto[] = [];
 
 function tr(key: string, vars?: Record<string, string | number>): string {
   return window.t?.(key, vars) ?? key;
@@ -204,26 +207,63 @@ export function KnowledgeConflictResolver({
   subscribeToChanges = subscribeKnowledgeResourceTreeChanges,
   refreshDelayMs = 80,
   saveDocument = saveKnowledgeDocument,
+  sources = EMPTY_KNOWLEDGE_SOURCES,
 }: KnowledgeConflictResolverProps) {
   const sessions = useStore(registry, state => state.sessions);
   const sourceKeys = useMemo(() => Array.from(new Set(
     Object.values(sessions).map(session => session.address.sourceKey),
   )).sort(), [sessions]);
   const sourceKeysIdentity = sourceKeys.join('\n');
+  const watchableSourceKeys = sources.length === 0
+    ? sourceKeys
+    : sourceKeys.filter(sourceKey => sources.some(source => (
+        source.sourceKey === sourceKey
+        && source.availability === 'available'
+      )));
+  const watchableSourceKeysIdentity = watchableSourceKeys.join('\n');
+  const sourceAvailabilityIdentity = sources
+    .map(source => `${source.sourceKey}:${source.availability}`)
+    .sort()
+    .join('\n');
   const controllersRef = useRef<Map<string, AbortController>>(new Map());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [externalErrors, setExternalErrors] = useState<ExternalErrors>({});
 
   useEffect(() => {
-    const releases = sourceKeys.map(sourceKey => watchSource(sourceKey));
+    const releases = watchableSourceKeys.map(
+      sourceKey => watchSource(sourceKey),
+    );
     return () => {
       for (const release of releases) release();
     };
-  }, [sourceKeysIdentity, watchSource]); // eslint-disable-line react-hooks/exhaustive-deps -- the sorted identity reconciles source leases.
+  }, [watchableSourceKeysIdentity, watchSource]); // eslint-disable-line react-hooks/exhaustive-deps -- the sorted identity reconciles source leases.
 
   const refreshSession = useCallback(async (
     session: KnowledgeDocumentSession,
   ) => {
+    if (session.orphan || session.resourceState === 'missing') return;
+    const projectedSource = sources.find(source => (
+      source.sourceKey === session.address.sourceKey
+    ));
+    if (
+      sources.length > 0
+      && (
+        !projectedSource
+        || projectedSource.availability !== 'available'
+      )
+    ) {
+      registry.getState().markDocumentResourceUnavailable(
+        session.address,
+        'source-unavailable',
+      );
+      setExternalErrors(current => {
+        if (!(session.key in current)) return current;
+        const next = { ...current };
+        delete next[session.key];
+        return next;
+      });
+      return;
+    }
     controllersRef.current.get(session.key)?.abort();
     const controller = new AbortController();
     controllersRef.current.set(session.key, controller);
@@ -249,6 +289,29 @@ export function KnowledgeConflictResolver({
       const reason = error instanceof KnowledgeDocumentReadError
         ? error.reason
         : 'loadError';
+      if (reason === 'missing') {
+        registry.getState().markDocumentResourceUnavailable(
+          session.address,
+          'missing',
+        );
+        setExternalErrors(current => {
+          if (!(session.key in current)) return current;
+          const next = { ...current };
+          delete next[session.key];
+          return next;
+        });
+        return;
+      }
+      const currentSession = registry.getState().sessions[session.key];
+      if (currentSession?.resourceState === 'source-unavailable') {
+        setExternalErrors(current => {
+          if (!(session.key in current)) return current;
+          const next = { ...current };
+          delete next[session.key];
+          return next;
+        });
+        return;
+      }
       setExternalErrors(current => ({
         ...current,
         [session.key]: reason,
@@ -258,7 +321,7 @@ export function KnowledgeConflictResolver({
         controllersRef.current.delete(session.key);
       }
     }
-  }, [client, registry]);
+  }, [client, registry, sources]);
 
   const refreshOpenSessions = useCallback(() => {
     for (const session of Object.values(registry.getState().sessions)) {
@@ -268,7 +331,7 @@ export function KnowledgeConflictResolver({
 
   useEffect(() => {
     if (sourceKeys.length > 0) refreshOpenSessions();
-  }, [refreshOpenSessions, sourceKeysIdentity]); // eslint-disable-line react-hooks/exhaustive-deps -- a newly retained source performs one stat/read catch-up.
+  }, [refreshOpenSessions, sourceAvailabilityIdentity, sourceKeysIdentity]); // eslint-disable-line react-hooks/exhaustive-deps -- retained/restored sources perform one stat/read catch-up.
 
   useEffect(() => subscribeToChanges(() => {
     if (timerRef.current) clearTimeout(timerRef.current);

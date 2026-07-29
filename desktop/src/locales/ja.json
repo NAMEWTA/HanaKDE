@@ -91,7 +91,24 @@
       "saveUnavailable": "保存サービスを利用できません",
       "saveError": "{name} を保存できませんでした：{reason}。変更はエディターに保持されています。",
       "dismissSaveError": "{name} の保存エラーを閉じる",
-      "mixedLineEndings": "{name} には混在する改行コードがあります。初回保存時に {ending} へ統一されます。"
+      "mixedLineEndings": "{name} には混在する改行コードがあります。初回保存時に {ending} へ統一されます。",
+      "resourceMissing": "{name} は元のアドレスに存在しません。このタブは現在のセッションだけ保持されます。",
+      "sourceUnavailable": "{name} のソースを利用できません。同じソースが復旧した場合のみ、この未変更ページを再読み込みします。",
+      "orphan": "{name} は未保存の孤立ドキュメントです。利用可能で書き込み可能なソースに新しいページとして保存してください。"
+    },
+    "unsaved": {
+      "title": "変更を保存しますか？",
+      "description": "{document} に未保存の変更があります。続行する前に保存、破棄、またはキャンセルを選択してください。",
+      "orphanTarget": "孤立ドキュメントを新しいページとして保存",
+      "source": "書き込み可能なソース",
+      "relativePath": "ページのパス",
+      "noWritableSource": "このワークスペースに利用可能で書き込み可能なソースがありません。",
+      "save": "保存",
+      "saving": "保存中…",
+      "discard": "破棄",
+      "cancel": "キャンセル",
+      "conflict": "そのパスには既にページがあります。別のページパスを選択してください。",
+      "unavailable": "ページを保存できませんでした。エディターの内容は変更されていません。"
     },
     "conflict": {
       "resolverLabel": "ドキュメント競合リゾルバー",

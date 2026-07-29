@@ -216,10 +216,38 @@ export class LocalFsProvider {
     return this.mutationResult(filePath, existed ? "modified" : "created");
   }
 
-  async writeExpectedVersion(ref: ResourceRef | unknown, content: string | Buffer, expectedVersion: ResourceVersion): Promise<ResourceWriteExpectedVersionResult> {
+  async writeExpectedVersion(ref: ResourceRef | unknown, content: string | Buffer, expectedVersion: ResourceVersion | null): Promise<ResourceWriteExpectedVersionResult> {
     const filePath = this.resolvePath(ref);
     this.assertAllowed(filePath, "write");
     const currentVersion = statFileVersionOrNull(filePath);
+    if (expectedVersion === null) {
+      if (currentVersion) {
+        return {
+          ok: false,
+          conflict: true,
+          resourceKey: localResourceKey(filePath),
+          resource: this.resourceForPath(filePath),
+          version: currentVersion,
+          filePath,
+        };
+      }
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      try {
+        fs.writeFileSync(filePath, content, { flag: "wx" });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") throw error;
+        const racedVersion = statFileVersionOrNull(filePath);
+        return {
+          ok: false,
+          conflict: true,
+          resourceKey: localResourceKey(filePath),
+          resource: this.resourceForPath(filePath),
+          ...(racedVersion ? { version: racedVersion } : {}),
+          filePath,
+        };
+      }
+      return this.mutationResult(filePath, "created");
+    }
     if (!currentVersion || !fileVersionsMatch(currentVersion, expectedVersion)) {
       return {
         ok: false,

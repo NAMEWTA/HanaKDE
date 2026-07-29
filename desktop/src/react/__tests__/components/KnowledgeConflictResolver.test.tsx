@@ -222,6 +222,38 @@ describe('KnowledgeConflictResolver', () => {
     expect(releaseWatch).toHaveBeenCalledTimes(1);
   });
 
+  it('turns dirty content into an orphan before reading an unavailable source', async () => {
+    const registry = registryWithSession();
+    registry.getState().replaceDocumentBuffer('view', 'local');
+    const services = diskClient('disk');
+    render(
+      <KnowledgeConflictResolver
+        registry={registry}
+        client={services.client}
+        sources={[{
+          sourceKey: 'main',
+          displayName: 'Main',
+          role: 'main',
+          capabilities: ['read', 'write'],
+          availability: 'unavailable',
+        }]}
+        watchSource={() => () => undefined}
+        subscribeToChanges={() => () => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(
+      registry.getState().sessions[knowledgeDocumentKey(address)],
+    ).toMatchObject({
+      buffer: 'local',
+      dirty: true,
+      orphan: true,
+      resourceState: 'orphan',
+    }));
+    expect(services.stat).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('preserves and displays baseline/local/disk without automatic merge when dirty', async () => {
     const registry = registryWithSession();
     registry.getState().replaceDocumentBuffer('view', 'local');

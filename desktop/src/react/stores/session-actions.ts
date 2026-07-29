@@ -24,6 +24,11 @@ import { renderMarkdown } from '../utils/markdown';
 import type { ChatMessage, ContentBlock } from './chat-types';
 import { readMessageLiveVersion } from './message-live-version';
 import type { SessionMetaRecoveryStatus, SessionPermissionMode } from '../types';
+import {
+  hasKnowledgeWorkspaceCloseGuard,
+  requestKnowledgeWorkspaceClose,
+} from '../services/knowledge-workspace-lifecycle';
+import { normalizeWorkspacePath } from '../../../../shared/workspace-history.ts';
 
 // ── 防竞争计数器 ──
 
@@ -728,9 +733,6 @@ export function upsertOptimisticSessionFirstMessage(
 
 export async function switchSession(path: string): Promise<void> {
   const s = useStore.getState();
-  const myVersion = ++_switchVersion;
-  _switchAbortController?.abort();
-  _switchAbortController = null;
 
   if (path === s.currentSessionPath && !s.pendingNewSession) {
     useStore.setState(state => ({
@@ -740,8 +742,37 @@ export async function switchSession(path: string): Promise<void> {
     return;
   }
 
+  const myVersion = ++_switchVersion;
+  _switchAbortController?.abort();
+  _switchAbortController = null;
+
   useStore.getState().clearStaleMessageLocate(path);
   useStore.setState({ pendingSessionSwitchPath: path });
+
+  const targetProjection = findSessionProjection(path);
+  const targetMountId = normalizeSessionId(targetProjection?.workspaceMountId);
+  const targetRoot = normalizeWorkspacePath(targetProjection?.cwd);
+  const currentMountId = normalizeSessionId(s.deskWorkspaceMountId);
+  const currentRoot = normalizeWorkspacePath(s.deskBasePath);
+  const changesWorkspace = targetMountId
+    ? targetMountId !== currentMountId
+    : targetRoot !== null
+      ? (
+          currentMountId !== null
+          || targetRoot !== currentRoot
+        )
+      : true;
+  if (
+    changesWorkspace
+    && hasKnowledgeWorkspaceCloseGuard()
+    && !await requestKnowledgeWorkspaceClose('workspace-switch')
+  ) {
+    if (isCurrentSwitch(myVersion, path)) {
+      useStore.setState({ pendingSessionSwitchPath: null });
+    }
+    return;
+  }
+  if (!isCurrentSwitch(myVersion, path)) return;
 
   if (isDeletedAgentSession(path)) {
     await switchDeletedAgentSession(path, myVersion);

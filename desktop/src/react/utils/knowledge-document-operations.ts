@@ -57,6 +57,18 @@ export type SaveKnowledgeDocumentResult =
   | { ok: true }
   | { ok: false; conflict?: true };
 
+export interface CreateKnowledgeOrphanDocumentInput {
+  registry: KnowledgeDocumentRegistry;
+  from: KnowledgeResourceAddress;
+  to: KnowledgeResourceAddress;
+  client: KnowledgeWorkspaceClient;
+  signal?: AbortSignal;
+}
+
+export type CreateKnowledgeOrphanDocumentResult =
+  | { ok: true; version: RendererResourceVersion }
+  | { ok: false; reason: 'conflict' | 'unavailable' };
+
 function fileNameFromAddress(address: KnowledgeResourceAddress): string {
   return address.relativePath.split('/').at(-1) ?? address.relativePath;
 }
@@ -145,7 +157,7 @@ export async function saveKnowledgeDocument({
 }: SaveKnowledgeDocumentInput): Promise<SaveKnowledgeDocumentResult> {
   const key = knowledgeDocumentKey(address);
   const current = registry.getState().sessions[key];
-  if (!current?.diskVersion) {
+  if (!current?.diskVersion || current.orphan) {
     reportSaveError(registry, address, 'unavailable');
     return { ok: false };
   }
@@ -207,4 +219,56 @@ export async function saveKnowledgeDocument({
     // into a document-save failure.
   }
   return { ok: true };
+}
+
+/**
+ * Saves an orphan as a new Page. A null expected version means "the target
+ * must not exist", so ordinary create-name conflicts never overwrite data.
+ */
+export async function createKnowledgeOrphanDocument({
+  registry,
+  from,
+  to,
+  client,
+  signal,
+}: CreateKnowledgeOrphanDocumentInput): Promise<CreateKnowledgeOrphanDocumentResult> {
+  const session = registry.getState().sessions[knowledgeDocumentKey(from)];
+  if (!session?.orphan || session.resourceState !== 'orphan') {
+    return { ok: false, reason: 'unavailable' };
+  }
+  const fromKey = knowledgeDocumentKey(from);
+  const toKey = knowledgeDocumentKey(to);
+  if (
+    fromKey !== toKey
+    && registry.getState().sessions[toKey]
+  ) {
+    return { ok: false, reason: 'conflict' };
+  }
+  const encoded = encodeKnowledgeMarkdownFile(session.buffer, {
+    hadBom: false,
+    lineEnding: 'lf',
+    mixedLineEndings: false,
+  });
+  if (!encoded.ok) return { ok: false, reason: 'unavailable' };
+  let result;
+  try {
+    result = await client.resources.writeExpectedVersion(
+      to,
+      encoded.base64,
+      null,
+      { encoding: 'base64', signal },
+    );
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (!result.ok) return { ok: false, reason: 'conflict' };
+  if (!result.version) return { ok: false, reason: 'unavailable' };
+  const rebound = registry.getState().rebindOrphanDocument(
+    from,
+    to,
+    result.version,
+  );
+  return rebound
+    ? { ok: true, version: result.version }
+    : { ok: false, reason: 'unavailable' };
 }

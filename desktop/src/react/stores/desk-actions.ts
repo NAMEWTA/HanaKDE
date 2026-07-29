@@ -22,6 +22,10 @@ import {
 } from '../services/server-connection';
 import { isWebRuntime } from '../utils/platform-runtime';
 import { mergeWorkspaceHistory, normalizeWorkspacePath, removeWorkspaceHistoryEntries } from '../../../../shared/workspace-history.ts';
+import {
+  hasKnowledgeWorkspaceCloseGuard,
+  requestKnowledgeWorkspaceClose,
+} from '../services/knowledge-workspace-lifecycle';
 import { pendingNewSessionIdentityPatch } from './session-actions';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- store setState 回调及 IPC callback data */
@@ -255,13 +259,19 @@ export async function applyStudioWorkspace(workspace: Pick<StudioWorkspace, 'mou
   if (!mountId) return;
   const label = typeof workspace.label === 'string' && workspace.label.trim() ? workspace.label.trim() : mountId;
   const nativeRootPath = normalizeMountNativeRoot(workspace.nativeRootPath);
+  const activated = await activateWorkspaceDesk(null, {
+    mountId,
+    label,
+    nativeRootPath,
+    reload: false,
+  });
+  if (!activated) return;
   useStore.setState((s: any) => ({
     selectedWorkspaceMountId: mountId,
     selectedWorkspaceLabel: label,
     selectedFolder: null,
     workspaceFolders: s.workspaceFolders || [],
   }));
-  void activateWorkspaceDesk(null, { mountId, label, nativeRootPath, reload: false });
   const s = useStore.getState();
   if (!s.pendingNewSession) {
     useStore.setState({ currentSessionPath: null, ...pendingNewSessionIdentityPatch() });
@@ -354,17 +364,25 @@ export async function activateWorkspaceDesk(root: string | null | undefined, opt
   mountId?: string | null;
   label?: string | null;
   nativeRootPath?: string | null;
-} = {}): Promise<void> {
-  // Any workspace activation owns the visible desk state. Invalidate older file
-  // loads even when the caller delays the reload until after another step
-  // such as persisting workspace history.
-  _deskLoadVersion += 1;
-
+} = {}): Promise<boolean> {
   const mountId = normalizeMountId(options.mountId);
   const normalized = mountId ? null : normalizeFolder(root);
   const workspaceKey = deskStateRootKey(normalized, mountId);
   const s = useStore.getState();
   const currentRoot = deskStateRootKey(s.deskBasePath, s.deskWorkspaceMountId);
+  if (
+    currentRoot !== workspaceKey
+    && hasKnowledgeWorkspaceCloseGuard()
+    && !await requestKnowledgeWorkspaceClose(
+      workspaceKey ? 'workspace-switch' : 'workspace-close',
+    )
+  ) {
+    return false;
+  }
+
+  // A confirmed workspace activation owns the visible desk state. Invalidate
+  // older file loads only after the close guard permits the transition.
+  _deskLoadVersion += 1;
 
   if (currentRoot) {
     captureCurrentWorkspaceDeskState(currentRoot);
@@ -394,7 +412,7 @@ export async function activateWorkspaceDesk(root: string | null | undefined, opt
       previewReadingPositions: {},
     });
     updateDeskContextBtn();
-    return;
+    return true;
   }
 
   const latest = useStore.getState();
@@ -458,12 +476,13 @@ export async function activateWorkspaceDesk(root: string | null | undefined, opt
     }
   }
 
-  if (options.reload === false) return;
+  if (options.reload === false) return true;
   await loadDeskFiles('', normalized, mountId);
   const expandedPaths = useStore.getState().deskExpandedPaths || [];
   for (const subdir of expandedPaths) {
     await loadDeskTreeFiles(subdir, { force: true, overrideDir: normalized, overrideMountId: mountId });
   }
+  return true;
 }
 
 /**
@@ -1290,6 +1309,11 @@ export function toggleMemory(): void {
 export async function applyFolder(folder: string): Promise<void> {
   const normalized = normalizeFolder(folder);
   if (!normalized) return;
+  const activated = await activateWorkspaceDesk(normalized, {
+    mountId: null,
+    reload: false,
+  });
+  if (!activated) return;
   useStore.setState((s: any) => ({
     selectedFolder: normalized,
     selectedWorkspaceMountId: null,
@@ -1297,7 +1321,6 @@ export async function applyFolder(folder: string): Promise<void> {
     cwdHistory: mergeWorkspaceHistory(s.cwdHistory, [normalized]),
     workspaceFolders: (s.workspaceFolders || []).filter((p: string) => normalizeFolder(p) !== normalized),
   }));
-  void activateWorkspaceDesk(normalized, { mountId: null, reload: false });
   const s = useStore.getState();
   if (!s.pendingNewSession) {
     useStore.setState({ currentSessionPath: null, ...pendingNewSessionIdentityPatch() });

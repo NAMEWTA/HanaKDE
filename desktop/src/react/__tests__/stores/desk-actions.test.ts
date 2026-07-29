@@ -348,7 +348,7 @@ describe('desk-actions workspace roots', () => {
       .mockResolvedValueOnce(jsonResponse({ content: null }));
 
     const { applyFolder } = await import('../../stores/desk-actions');
-    applyFolder('/workspace/Desktop');
+    await applyFolder('/workspace/Desktop');
 
     expect(useStore.getState().selectedFolder).toBe('/workspace/Desktop');
     expect(useStore.getState().cwdHistory).toEqual(['/workspace/Desktop']);
@@ -367,7 +367,7 @@ describe('desk-actions workspace roots', () => {
       .mockResolvedValueOnce(jsonResponse({ content: null }));
 
     const { applyFolder } = await import('../../stores/desk-actions');
-    applyFolder('/workspace/Desktop');
+    await applyFolder('/workspace/Desktop');
 
     expect(useStore.getState().selectedFolder).toBe('/workspace/Desktop');
     expect(useStore.getState().cwdHistory).toEqual(['/workspace/Desktop']);
@@ -458,10 +458,12 @@ describe('desk-actions workspace roots', () => {
     const { applyFolder } = await import('../../stores/desk-actions');
     const run = applyFolder('/workspace/Desktop');
 
-    expect(useStore.getState().selectedFolder).toBe('/workspace/Desktop');
-    expect(useStore.getState().deskBasePath).toBe('/workspace/Desktop');
-    expect(useStore.getState().deskFiles).toEqual([]);
-    expect(mockHanaFetch).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => {
+      expect(useStore.getState().selectedFolder).toBe('/workspace/Desktop');
+      expect(useStore.getState().deskBasePath).toBe('/workspace/Desktop');
+      expect(useStore.getState().deskFiles).toEqual([]);
+      expect(mockHanaFetch).toHaveBeenCalledTimes(2);
+    });
     expect(mockHanaFetch).toHaveBeenNthCalledWith(
       1,
       '/api/preferences/workspace-ui-state?workspace=%2Fworkspace%2FDesktop&surface=electron',
@@ -484,6 +486,35 @@ describe('desk-actions workspace roots', () => {
     );
     expect(useStore.getState().deskBasePath).toBe('/workspace/Desktop');
     expect(useStore.getState().deskFiles).toEqual([{ name: 'note.md' }]);
+  });
+
+  it('does not commit or persist a folder switch when Knowledge close is cancelled', async () => {
+    useStore.setState({
+      selectedFolder: '/workspace/Current',
+      deskBasePath: '/workspace/Current',
+      deskFiles: [{ name: 'dirty.md' }],
+      cwdHistory: ['/workspace/Current'],
+    } as never);
+    const {
+      registerKnowledgeWorkspaceCloseGuard,
+    } = await import('../../services/knowledge-workspace-lifecycle');
+    const guard = vi.fn(async () => false);
+    const unregister = registerKnowledgeWorkspaceCloseGuard(guard);
+    try {
+      const { applyFolder } = await import('../../stores/desk-actions');
+      await applyFolder('/workspace/Cancelled');
+
+      expect(guard).toHaveBeenCalledWith('workspace-switch');
+      expect(useStore.getState()).toMatchObject({
+        selectedFolder: '/workspace/Current',
+        deskBasePath: '/workspace/Current',
+        deskFiles: [{ name: 'dirty.md' }],
+        cwdHistory: ['/workspace/Current'],
+      });
+      expect(mockHanaFetch).not.toHaveBeenCalled();
+    } finally {
+      unregister();
+    }
   });
 
   it('persists preview panel layout as part of the workspace UI state', async () => {

@@ -124,7 +124,7 @@ export interface KnowledgeResourceClient {
   writeExpectedVersion(
     address: KnowledgeResourceAddress,
     content: string,
-    expectedVersion: RendererResourceVersion,
+    expectedVersion: RendererResourceVersion | null,
     options?: KnowledgeWorkspaceRequestOptions & {
       encoding?: 'utf-8' | 'base64';
     },
@@ -496,8 +496,13 @@ export function createKnowledgeWorkspaceClient({
     async writeExpectedVersion(address, content, expectedVersion, options = {}) {
       const safeAddress = validateKnowledgeAddress(address);
       if (typeof content !== 'string') throw invalidResponse('content');
-      const safeExpectedVersion = parseResourceVersion(expectedVersion);
-      if (!safeExpectedVersion || Object.keys(safeExpectedVersion).length === 0) {
+      const safeExpectedVersion = expectedVersion === null
+        ? null
+        : parseResourceVersion(expectedVersion);
+      if (
+        safeExpectedVersion !== null
+        && (!safeExpectedVersion || Object.keys(safeExpectedVersion).length === 0)
+      ) {
         throw invalidResponse('expectedVersion');
       }
       const body = await requestJson(

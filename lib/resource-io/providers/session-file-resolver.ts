@@ -97,7 +97,7 @@ export class SessionFileResolverProvider {
   }
 
   async write(_ref?: ResourceRef, _content?: string | Buffer): Promise<ResourceMutationResult> { throw capabilityDenied("write", this.id); }
-  async writeExpectedVersion(_ref?: ResourceRef, _content?: string | Buffer, _expectedVersion?: ResourceVersion): Promise<never> { throw capabilityDenied("writeExpectedVersion", this.id); }
+  async writeExpectedVersion(_ref?: ResourceRef, _content?: string | Buffer, _expectedVersion?: ResourceVersion | null): Promise<never> { throw capabilityDenied("writeExpectedVersion", this.id); }
   async edit(_ref?: ResourceRef, _edits?: unknown[]): Promise<ResourceMutationResult> { throw capabilityDenied("edit", this.id); }
   async list(_ref?: ResourceRef): Promise<never> { throw capabilityDenied("list", this.id); }
   async search(_ref?: ResourceRef): Promise<never> { throw capabilityDenied("search", this.id); }

@@ -4,6 +4,11 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WindowControls } from '../../components/WindowControls';
+import {
+  registerKnowledgeWorkspaceCloseGuard,
+} from '../../services/knowledge-workspace-lifecycle';
+
+let unregisterGuard: (() => void) | null = null;
 
 describe('WindowControls', () => {
   beforeEach(() => {
@@ -19,6 +24,8 @@ describe('WindowControls', () => {
   });
 
   afterEach(() => {
+    unregisterGuard?.();
+    unregisterGuard = null;
     cleanup();
   });
 
@@ -34,5 +41,17 @@ describe('WindowControls', () => {
       expect(button).toHaveAttribute('tabindex', '-1');
       expect(fireEvent.mouseDown(button)).toBe(false);
     }
+  });
+
+  it('does not invoke native close when the Knowledge guard cancels', async () => {
+    const guard = vi.fn(async () => false);
+    unregisterGuard = registerKnowledgeWorkspaceCloseGuard(guard);
+    render(<WindowControls />);
+    const close = await screen.findByTitle('window.close');
+
+    fireEvent.click(close);
+
+    await waitFor(() => expect(guard).toHaveBeenCalledWith('window-close'));
+    expect(window.platform?.windowClose).not.toHaveBeenCalled();
   });
 });

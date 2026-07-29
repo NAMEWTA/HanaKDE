@@ -91,7 +91,24 @@
       "saveUnavailable": "the save service is unavailable",
       "saveError": "Could not save {name}: {reason}. Your changes are still in the editor.",
       "dismissSaveError": "Dismiss save error for {name}",
-      "mixedLineEndings": "{name} contains mixed line endings. Its first save will normalize them to {ending}."
+      "mixedLineEndings": "{name} contains mixed line endings. Its first save will normalize them to {ending}.",
+      "resourceMissing": "{name} no longer exists at this address. The tab is kept for this session.",
+      "sourceUnavailable": "The source for {name} is unavailable. The clean page will reload only if that same source recovers.",
+      "orphan": "{name} is an unsaved orphan. Save it as a new Page in an available writable source."
+    },
+    "unsaved": {
+      "title": "Save changes?",
+      "description": "{document} has unsaved changes. Save, discard, or cancel before continuing.",
+      "orphanTarget": "Save orphan as a new Page",
+      "source": "Writable source",
+      "relativePath": "Page path",
+      "noWritableSource": "No available writable source exists in this workspace.",
+      "save": "Save",
+      "saving": "Saving…",
+      "discard": "Discard",
+      "cancel": "Cancel",
+      "conflict": "A Page already exists at that path. Choose another Page path.",
+      "unavailable": "The Page could not be saved. Your editor content is unchanged."
     },
     "conflict": {
       "resolverLabel": "Document conflict resolver",

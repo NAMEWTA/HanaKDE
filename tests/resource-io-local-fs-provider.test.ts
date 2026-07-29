@@ -49,6 +49,19 @@ describe("LocalFsProvider", () => {
     };
   }
 
+  it("creates an absent expected-version target once and never overwrites a conflict", async () => {
+    const { cwd, provider } = makeProvider();
+    const ref = { kind: "local-file" as const, path: path.join(cwd, "Recovered.md") };
+
+    const created = await provider.writeExpectedVersion(ref, "# recovered\n", null);
+    expect(created).toMatchObject({ changeType: "created" });
+    expect(fs.readFileSync(ref.path, "utf8")).toBe("# recovered\n");
+
+    const conflict = await provider.writeExpectedVersion(ref, "# overwrite\n", null);
+    expect(conflict).toMatchObject({ ok: false, conflict: true });
+    expect(fs.readFileSync(ref.path, "utf8")).toBe("# recovered\n");
+  });
+
   it("declares the complete provider capability matrix", () => {
     const { provider } = makeProvider();
 

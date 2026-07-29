@@ -172,6 +172,45 @@ describe('KnowledgeWorkspace', () => {
     expect(listSources).toHaveBeenCalledTimes(2);
   });
 
+  it('refreshes source availability after a resource change signal', async () => {
+    const listeners = new Set<(event: { kind: 'resource-event' }) => void>();
+    const listSources = vi.fn()
+      .mockResolvedValueOnce([mainSource])
+      .mockResolvedValueOnce([{
+        ...mainSource,
+        availability: 'unavailable' as const,
+      }]);
+    render(
+      <KnowledgeWorkspace
+        client={clientWithListSources(listSources)}
+        treeServices={{
+          watchSource: () => () => {},
+          subscribeToChanges: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+          refreshDelayMs: 0,
+        }}
+        workspaceKey="workspace-source-refresh"
+      />,
+    );
+
+    await waitFor(() => {
+      const element = document.querySelector('[data-source-key="main"]');
+      expect(element).toHaveAttribute('data-availability', 'available');
+    });
+    act(() => {
+      for (const listener of listeners) {
+        listener({ kind: 'resource-event' });
+      }
+    });
+    await waitFor(() => {
+      expect(listSources).toHaveBeenCalledTimes(2);
+      expect(document.querySelector('[data-source-key="main"]'))
+        .toHaveAttribute('data-availability', 'unavailable');
+    });
+  });
+
   it('aborts an in-flight source request when the full view unmounts', async () => {
     let observedSignal: AbortSignal | undefined;
     const listSources = vi.fn(({ signal } = {}) => {

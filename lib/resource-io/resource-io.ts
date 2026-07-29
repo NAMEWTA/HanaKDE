@@ -103,7 +103,7 @@ export class ResourceIO {
     return result;
   }
 
-  async writeExpectedVersion(input: unknown, content: string | Buffer, expectedVersion: ResourceVersion, options: ResourceOperationContext = {}): Promise<ResourceWriteExpectedVersionResult> {
+  async writeExpectedVersion(input: unknown, content: string | Buffer, expectedVersion: ResourceVersion | null, options: ResourceOperationContext = {}): Promise<ResourceWriteExpectedVersionResult> {
     const ref = normalizeResourceRef(input);
     const result = await this.callProvider<ResourceWriteExpectedVersionResult>(ref, "writeExpectedVersion", options, ref, content, expectedVersion);
     if (isWriteConflict(result)) {

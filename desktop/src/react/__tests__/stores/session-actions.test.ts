@@ -1535,6 +1535,33 @@ function mockPermissionDefault(mode = 'ask') {
   });
 
   describe('switchSession 的 hasData 语义（#405 直接回归）', () => {
+    it('does not call the server or mutate session state when Knowledge close is cancelled', async () => {
+      Object.assign(mockState, {
+        currentSessionPath: '/current',
+        deskBasePath: '/workspace-current',
+        sessions: [{
+          path: '/next',
+          cwd: '/workspace-next',
+        }],
+      });
+      const {
+        registerKnowledgeWorkspaceCloseGuard,
+      } = await import('../../services/knowledge-workspace-lifecycle');
+      const guard = vi.fn(async () => false);
+      const unregister = registerKnowledgeWorkspaceCloseGuard(guard);
+      try {
+        await switchSession('/next');
+
+        expect(guard).toHaveBeenCalledWith('workspace-switch');
+        expect(mockFetch).not.toHaveBeenCalled();
+        expect(mockState.currentSessionPath).toBe('/current');
+        expect(mockState.pendingSessionSwitchPath).toBeNull();
+        expect(deskActionMocks.activateWorkspaceDesk).not.toHaveBeenCalled();
+      } finally {
+        unregister();
+      }
+    });
+
     it('点回已提交的当前 session 会取消在途切换，旧响应不能把焦点切走', async () => {
       Object.assign(mockState, {
         currentSessionPath: '/a',

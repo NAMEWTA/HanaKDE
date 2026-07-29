@@ -91,7 +91,24 @@
       "saveUnavailable": "儲存服務無法使用",
       "saveError": "無法儲存 {name}：{reason}。你的變更仍保留在編輯器中。",
       "dismissSaveError": "關閉 {name} 的儲存錯誤",
-      "mixedLineEndings": "{name} 包含混合換行符號，首次儲存時將統一為 {ending}。"
+      "mixedLineEndings": "{name} 包含混合換行符號，首次儲存時將統一為 {ending}。",
+      "resourceMissing": "{name} 已不在原位址；此分頁只在目前工作階段中保留。",
+      "sourceUnavailable": "{name} 所屬來源無法使用；只有同一來源恢復後才會重新載入這個乾淨頁面。",
+      "orphan": "{name} 已成為懸空未儲存文件，請將它另存為可用且可寫來源中的新頁面。"
+    },
+    "unsaved": {
+      "title": "是否儲存變更？",
+      "description": "{document} 有未儲存的變更。繼續前請選擇儲存、放棄或取消。",
+      "orphanTarget": "將懸空文件儲存為新頁面",
+      "source": "可寫來源",
+      "relativePath": "頁面路徑",
+      "noWritableSource": "目前工作區沒有可用且可寫的來源。",
+      "save": "儲存",
+      "saving": "正在儲存…",
+      "discard": "放棄",
+      "cancel": "取消",
+      "conflict": "該路徑已有頁面，請選擇其他頁面路徑。",
+      "unavailable": "無法儲存頁面，編輯器內容保持不變。"
     },
     "conflict": {
       "resolverLabel": "文件衝突解決器",

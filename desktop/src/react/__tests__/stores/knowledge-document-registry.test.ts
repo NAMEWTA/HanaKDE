@@ -380,4 +380,110 @@ describe('knowledge document registry', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     unsubscribe();
   });
+
+  it('keeps clean missing and unavailable resources as distinct placeholders', () => {
+    const registry = createKnowledgeDocumentRegistry({
+      ownerId: 'owner-a',
+      windowId: 'window-1',
+    });
+    const key = establish(registry);
+
+    expect(registry.getState().markDocumentResourceUnavailable(
+      address,
+      'missing',
+    )).toBe(true);
+    expect(registry.getState().sessions[key]).toMatchObject({
+      dirty: false,
+      orphan: false,
+      resourceState: 'missing',
+    });
+    expect(registry.getState().markDocumentResourceUnavailable(
+      address,
+      'source-unavailable',
+    )).toBe(true);
+    expect(registry.getState().sessions[key]).toMatchObject({
+      dirty: false,
+      orphan: false,
+      resourceState: 'source-unavailable',
+    });
+  });
+
+  it('irreversibly orphans a dirty document and ignores source recovery reloads', () => {
+    const registry = createKnowledgeDocumentRegistry({
+      ownerId: 'owner-a',
+      windowId: 'window-1',
+    });
+    const key = establish(registry);
+    registry.getState().openDocumentView({
+      viewId: 'view-a',
+      address,
+      groupId: 'group-a',
+    });
+    registry.getState().replaceDocumentBuffer('view-a', '# local\n');
+
+    registry.getState().markDocumentResourceUnavailable(
+      address,
+      'source-unavailable',
+    );
+    expect(registry.getState().sessions[key]).toMatchObject({
+      buffer: '# local\n',
+      dirty: true,
+      orphan: true,
+      resourceState: 'orphan',
+    });
+    expect(registry.getState().reconcileExternalDocument(address, {
+      buffer: '# recovered disk\n',
+      diskVersion: { etag: 'recovered', size: 17 },
+      format: {
+        hadBom: false,
+        lineEnding: 'lf',
+        mixedLineEndings: false,
+      },
+    })).toBe('unchanged');
+    expect(registry.getState().sessions[key]).toMatchObject({
+      buffer: '# local\n',
+      orphan: true,
+      resourceState: 'orphan',
+    });
+  });
+
+  it('rebinds an orphan and all of its views only after a successful new Page save', () => {
+    const registry = createKnowledgeDocumentRegistry({
+      ownerId: 'owner-a',
+      windowId: 'window-1',
+    });
+    const oldKey = establish(registry);
+    registry.getState().openDocumentView({
+      viewId: 'view-a',
+      address,
+      groupId: 'group-a',
+    });
+    registry.getState().replaceDocumentBuffer(
+      'view-a',
+      '[[Old/Link.md]]\n# local\n',
+    );
+    registry.getState().markDocumentResourceUnavailable(address, 'missing');
+    const target = {
+      sourceKey: 'archive',
+      relativePath: 'Recovered/Alpha.md',
+    };
+    const targetKey = knowledgeDocumentKey(target);
+
+    expect(registry.getState().rebindOrphanDocument(
+      address,
+      target,
+      { etag: 'created', size: 24 },
+    )).toBe(true);
+    expect(registry.getState().sessions[oldKey]).toBeUndefined();
+    expect(registry.getState().sessions[targetKey]).toMatchObject({
+      address: target,
+      buffer: '[[Old/Link.md]]\n# local\n',
+      baseline: '[[Old/Link.md]]\n# local\n',
+      dirty: false,
+      orphan: false,
+      resourceState: 'available',
+      diskVersion: { etag: 'created', size: 24 },
+    });
+    expect(registry.getState().views['view-a'].sessionKey).toBe(targetKey);
+  });
 });

@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../../stores';
 import { AppPages } from '../../components/app/AppPages';
@@ -143,5 +143,19 @@ describe('AppPages page ownership', () => {
     expect(screen.queryByTestId('chat-area')).not.toBeInTheDocument();
     expect(document.querySelector('#previewPanel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('right-workspace-panel')).not.toBeInTheDocument();
+  });
+
+  it('keeps the visited Knowledge workspace mounted while another top-level surface is active', () => {
+    useStore.setState({ currentTab: 'knowledge' } as never);
+    render(<AppPages />);
+    const workspace = screen.getByTestId('knowledge-workspace');
+
+    act(() => {
+      useStore.setState({ currentTab: 'chat' } as never);
+    });
+
+    expect(workspace).toBeInTheDocument();
+    expect(workspace.parentElement).toHaveAttribute('hidden');
+    expect(screen.getByTestId('chat-area')).toBeInTheDocument();
   });
 });

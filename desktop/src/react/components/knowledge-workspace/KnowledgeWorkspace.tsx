@@ -6,6 +6,14 @@ import {
 } from '../../services/knowledge-workspace-client';
 import { useStore } from '../../stores';
 import { createKnowledgeDocumentRegistry } from '../../stores/knowledge-document-registry';
+import {
+  allowOneKnowledgeWindowClose,
+  consumeKnowledgeWindowCloseAllowance,
+  requestKnowledgeWorkspaceClose,
+} from '../../services/knowledge-workspace-lifecycle';
+import {
+  subscribeKnowledgeResourceTreeChanges,
+} from '../../services/resource-events';
 import { KnowledgeLayout } from './KnowledgeLayout';
 import type { KnowledgeResourceTreeProps } from './KnowledgeResourceTree';
 
@@ -32,6 +40,7 @@ export function KnowledgeWorkspace({
   const sources = useStore((state) => state.knowledgeSources);
   const sourcesStatus = useStore((state) => state.knowledgeSourcesStatus);
   const requestController = useRef<AbortController | null>(null);
+  const sourceRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const connectionKey = activeServerConnectionId ?? 'local';
   const mainKey = deskWorkspaceMountId
@@ -88,6 +97,43 @@ export function KnowledgeWorkspace({
       requestController.current = null;
     };
   }, [loadSources, workspaceKey]);
+
+  useEffect(() => {
+    const subscribe = treeServices?.subscribeToChanges
+      ?? subscribeKnowledgeResourceTreeChanges;
+    const delay = Math.max(0, treeServices?.refreshDelayMs ?? 120);
+    const unsubscribe = subscribe(() => {
+      if (sourceRefreshTimer.current) {
+        clearTimeout(sourceRefreshTimer.current);
+      }
+      sourceRefreshTimer.current = setTimeout(() => {
+        sourceRefreshTimer.current = null;
+        void loadSources();
+      }, delay);
+    });
+    return () => {
+      unsubscribe();
+      if (sourceRefreshTimer.current) {
+        clearTimeout(sourceRefreshTimer.current);
+        sourceRefreshTimer.current = null;
+      }
+    };
+  }, [loadSources, treeServices]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (consumeKnowledgeWindowCloseAllowance()) return;
+      event.preventDefault();
+      (event as unknown as { returnValue: boolean }).returnValue = false;
+      void requestKnowledgeWorkspaceClose('window-close').then((proceed) => {
+        if (!proceed || !window.platform?.windowClose) return;
+        allowOneKnowledgeWindowClose();
+        window.platform.windowClose();
+      });
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   return (
     <KnowledgeLayout

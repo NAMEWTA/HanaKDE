@@ -731,6 +731,37 @@ describe('knowledge workspace client', () => {
     });
   });
 
+  it('uses a null expected version for conflict-safe new Page creation', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      resourceKey: 'mount:docs:Recovered.md',
+      resource: { kind: 'mount', mountId: 'docs', path: 'Recovered.md' },
+      changeType: 'created',
+      version: { mtimeMs: 13, size: 4, etag: 'created' },
+    }));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.resources.writeExpectedVersion(
+      { sourceKey: 'main', relativePath: 'Recovered.md' },
+      '# A',
+      null,
+    )).resolves.toMatchObject({
+      ok: true,
+      changeType: 'created',
+    });
+    expect(fetchImpl).toHaveBeenCalledWith('/api/resource-io/write-expected-version', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        address: { sourceKey: 'main', relativePath: 'Recovered.md' },
+        content: '# A',
+        encoding: 'utf-8',
+        expectedVersion: null,
+      }),
+      signal: undefined,
+      throwOnHttpError: false,
+    });
+  });
+
   it('returns an expected-version conflict as data so the document session can enter explicit resolution', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       ok: false,

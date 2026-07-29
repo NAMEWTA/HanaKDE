@@ -1,11 +1,17 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import {
+  transitionKnowledgeDocumentForSourceLoss,
+  type KnowledgeDocumentResourceState as LifecycleDocumentResourceState,
+} from '../../../../core/knowledge-workspace/knowledge-workspace-lifecycle.ts';
+import {
   parseKnowledgeResourceAddress,
   type KnowledgeResourceAddress,
 } from '../../../../shared/knowledge-workspace-contract.ts';
 
 export type KnowledgeDocumentMode = 'live-preview' | 'source';
 export type KnowledgeDocumentLineEnding = 'lf' | 'crlf';
+export type KnowledgeDocumentResourceState =
+  LifecycleDocumentResourceState;
 
 export interface KnowledgeDocumentVersion {
   mtimeMs?: number;
@@ -105,6 +111,7 @@ export interface KnowledgeDocumentSession {
   saveError: KnowledgeDocumentSaveError | null;
   conflict: KnowledgeDocumentConflict | null;
   orphan: boolean;
+  resourceState: KnowledgeDocumentResourceState;
 }
 
 export interface KnowledgeDocumentView {
@@ -189,6 +196,16 @@ export interface KnowledgeDocumentRegistryState {
   resolveDocumentConflict: (
     address: KnowledgeResourceAddress,
     resolution: KnowledgeDocumentConflictResolution,
+  ) => boolean;
+  discardDocumentChanges: (address: KnowledgeResourceAddress) => boolean;
+  markDocumentResourceUnavailable: (
+    address: KnowledgeResourceAddress,
+    reason: 'missing' | 'source-unavailable',
+  ) => boolean;
+  rebindOrphanDocument: (
+    from: KnowledgeResourceAddress,
+    to: KnowledgeResourceAddress,
+    diskVersion: KnowledgeDocumentVersion,
   ) => boolean;
   closeDocumentView: (viewId: string) => boolean;
   disposeDocumentSession: (address: KnowledgeResourceAddress) => boolean;
@@ -558,6 +575,7 @@ export function createKnowledgeDocumentRegistry(
         saveError: null,
         conflict: null,
         orphan: false,
+        resourceState: 'available',
       };
       set(state => ({
         sessions: { ...state.sessions, [key]: session },
@@ -733,6 +751,7 @@ export function createKnowledgeDocumentRegistry(
             conflict: session.conflict?.disk === savedBuffer
               ? null
               : session.conflict,
+            resourceState: 'available',
           },
         },
       });
@@ -784,6 +803,7 @@ export function createKnowledgeDocumentRegistry(
       const state = get();
       const session = state.sessions[key];
       if (!session) return 'missing';
+      if (session.orphan) return 'unchanged';
       const disk = requireString(snapshot?.buffer, 'snapshot.buffer');
       const diskVersion = cloneVersion(snapshot?.diskVersion);
       if (!diskVersion) {
@@ -827,6 +847,7 @@ export function createKnowledgeDocumentRegistry(
               ...session,
               diskVersion,
               format: diskFormat,
+              resourceState: 'available',
             },
           },
         });
@@ -861,6 +882,7 @@ export function createKnowledgeDocumentRegistry(
               baseline: disk,
               diskVersion,
               format: diskFormat,
+              resourceState: 'available',
             },
           },
         });
@@ -884,6 +906,7 @@ export function createKnowledgeDocumentRegistry(
             },
             dirty: false,
             conflict: null,
+            resourceState: 'available',
           },
         },
         views: mapViewsForEdit(state.views, session.key, edit),
@@ -945,6 +968,107 @@ export function createKnowledgeDocumentRegistry(
         },
         views,
       });
+      return true;
+    },
+
+    discardDocumentChanges(address) {
+      const key = knowledgeDocumentKey(address);
+      const state = get();
+      const session = state.sessions[key];
+      if (!session) return false;
+      const edit = createTextEdit(session.buffer, session.baseline);
+      set({
+        sessions: {
+          ...state.sessions,
+          [key]: {
+            ...session,
+            buffer: session.baseline,
+            dirty: false,
+            saveError: null,
+            conflict: null,
+            history: {
+              revision: session.history.revision + 1,
+              undo: [],
+              redo: [],
+            },
+          },
+        },
+        views: mapViewsForEdit(state.views, session.key, edit),
+      });
+      return true;
+    },
+
+    markDocumentResourceUnavailable(address, reason) {
+      if (reason !== 'missing' && reason !== 'source-unavailable') {
+        throw new TypeError('resource unavailability reason is invalid');
+      }
+      const key = knowledgeDocumentKey(address);
+      const state = get();
+      const session = state.sessions[key];
+      if (!session) return false;
+      const { orphan, resourceState } =
+        transitionKnowledgeDocumentForSourceLoss(
+          session,
+          reason === 'missing' ? 'resource-missing' : reason,
+        );
+      if (
+        session.orphan === orphan
+        && session.resourceState === resourceState
+      ) {
+        return false;
+      }
+      set({
+        sessions: {
+          ...state.sessions,
+          [key]: {
+            ...session,
+            orphan,
+            resourceState,
+            conflict: orphan ? null : session.conflict,
+          },
+        },
+      });
+      return true;
+    },
+
+    rebindOrphanDocument(from, to, diskVersion) {
+      const fromKey = knowledgeDocumentKey(from);
+      const toAddress = validateAddress(to);
+      const toKey = knowledgeDocumentKey(toAddress);
+      const state = get();
+      const session = state.sessions[fromKey];
+      if (!session?.orphan || session.resourceState !== 'orphan') return false;
+      if (fromKey !== toKey && state.sessions[toKey]) return false;
+      const nextVersion = cloneVersion(diskVersion);
+      if (!nextVersion) {
+        throw new TypeError('diskVersion is required');
+      }
+      const sessions = { ...state.sessions };
+      if (fromKey !== toKey) delete sessions[fromKey];
+      sessions[toKey] = {
+        ...session,
+        key: toKey,
+        address: { ...toAddress },
+        baseline: session.buffer,
+        diskVersion: nextVersion,
+        dirty: false,
+        saveError: null,
+        conflict: null,
+        orphan: false,
+        resourceState: 'available',
+        format: {
+          hadBom: false,
+          lineEnding: 'lf',
+          mixedLineEndings: false,
+        },
+      };
+      const views = { ...state.views };
+      for (const [viewId, view] of Object.entries(views)) {
+        if (view.sessionKey === fromKey) {
+          views[viewId] = { ...view, sessionKey: toKey };
+        }
+      }
+      set({ sessions, views });
       return true;
     },
 

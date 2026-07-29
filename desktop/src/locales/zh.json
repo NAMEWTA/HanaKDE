@@ -91,7 +91,24 @@
       "saveUnavailable": "保存服务不可用",
       "saveError": "无法保存 {name}：{reason}。你的更改仍保留在编辑器中。",
       "dismissSaveError": "关闭 {name} 的保存错误",
-      "mixedLineEndings": "{name} 包含混合换行符，首次保存时将统一为 {ending}。"
+      "mixedLineEndings": "{name} 包含混合换行符，首次保存时将统一为 {ending}。",
+      "resourceMissing": "{name} 已不在原地址；此标签仅在当前会话中保留。",
+      "sourceUnavailable": "{name} 所属来源不可用；只有同一来源恢复后才会重新加载这个干净页面。",
+      "orphan": "{name} 已成为悬空未保存文档，请将其作为新页面保存到可用且可写的来源。"
+    },
+    "unsaved": {
+      "title": "是否保存更改？",
+      "description": "{document} 有未保存的更改。继续前请选择保存、放弃或取消。",
+      "orphanTarget": "将悬空文档保存为新页面",
+      "source": "可写来源",
+      "relativePath": "页面路径",
+      "noWritableSource": "当前工作区没有可用且可写的来源。",
+      "save": "保存",
+      "saving": "正在保存…",
+      "discard": "放弃",
+      "cancel": "取消",
+      "conflict": "该路径已有页面，请选择其他页面路径。",
+      "unavailable": "无法保存页面，编辑器中的内容保持不变。"
     },
     "conflict": {
       "resolverLabel": "文档冲突解决器",

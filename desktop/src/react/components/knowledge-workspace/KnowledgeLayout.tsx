@@ -124,6 +124,8 @@ export function KnowledgeLayout({
         registry={documentRegistry}
         client={treeClient}
         workspaceKey={treeWorkspaceKey}
+        sources={renderedSources}
+        sourcesReady={sourcesStatus === 'ready'}
         conflictServices={treeServices}
       />
     </main>

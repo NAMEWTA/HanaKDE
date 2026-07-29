@@ -7,6 +7,9 @@
 
 import type { MouseEvent } from 'react';
 import { useEffect, useState, useCallback } from 'react';
+import {
+  requestKnowledgeWorkspaceClose,
+} from '../services/knowledge-workspace-lifecycle';
 
 export function WindowControls() {
   const t = window.t ?? ((p: string) => p);
@@ -27,7 +30,10 @@ export function WindowControls() {
 
   const minimize = useCallback(() => window.platform?.windowMinimize?.(), []);
   const maximize = useCallback(() => window.platform?.windowMaximize?.(), []);
-  const close = useCallback(() => window.platform?.windowClose?.(), []);
+  const close = useCallback(async () => {
+    if (!await requestKnowledgeWorkspaceClose('window-close')) return;
+    window.platform?.windowClose?.();
+  }, []);
   const preventFocus = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
   }, []);

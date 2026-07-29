@@ -5,16 +5,35 @@ import {
   useRef,
   useState,
 } from 'react';
+import {
+  knowledgeWritableSources,
+  orderKnowledgeUnsavedDocuments,
+  shouldConfirmKnowledgeViewClose,
+  type KnowledgeLifecycleDocument,
+} from '../../../../../core/knowledge-workspace/knowledge-workspace-lifecycle.ts';
 import type {
   KnowledgeResourceAddress,
+  KnowledgeSourceDto,
 } from '../../../../../shared/knowledge-workspace-contract.ts';
-import type {
-  KnowledgeWorkspaceClient,
+import {
+  knowledgeWorkspaceClient,
+  type KnowledgeWorkspaceClient,
 } from '../../services/knowledge-workspace-client';
+import {
+  registerKnowledgeWorkspaceCloseGuard,
+} from '../../services/knowledge-workspace-lifecycle';
 import {
   knowledgeDocumentKey,
   type KnowledgeDocumentRegistry,
 } from '../../stores/knowledge-document-registry';
+import {
+  createKnowledgeOrphanDocument,
+  saveKnowledgeDocument,
+  type CreateKnowledgeOrphanDocumentInput,
+  type CreateKnowledgeOrphanDocumentResult,
+  type SaveKnowledgeDocumentInput,
+  type SaveKnowledgeDocumentResult,
+} from '../../utils/knowledge-document-operations';
 import { KnowledgeAssetViewer } from './KnowledgeAssetViewer';
 import {
   KnowledgeConflictResolver,
@@ -30,6 +49,7 @@ import {
   type KnowledgeEditorResourceKind,
   type KnowledgeEditorTab,
 } from './KnowledgeTabBar';
+import { UnsavedDocumentsDialog } from './UnsavedDocumentsDialog';
 import styles from './KnowledgeWorkspace.module.css';
 
 export type KnowledgeEditorSplitDirection = 'horizontal' | 'vertical';
@@ -72,6 +92,7 @@ export interface KnowledgeEditorGroupsHandle {
   activateView(viewId: string): boolean;
   pinView(viewId: string): boolean;
   closeView(viewId: string): boolean;
+  prepareToClose(): Promise<boolean>;
   moveView(viewId: string, targetGroupId: string): boolean;
 }
 
@@ -79,11 +100,29 @@ export interface KnowledgeEditorGroupsProps {
   registry: KnowledgeDocumentRegistry;
   client?: KnowledgeWorkspaceClient;
   workspaceKey: string;
+  sources?: readonly KnowledgeSourceDto[];
+  sourcesReady?: boolean;
   onLocateResource?(target: KnowledgeBreadcrumbTarget): void;
   conflictServices?: Pick<
     KnowledgeConflictResolverProps,
     'watchSource' | 'subscribeToChanges' | 'refreshDelayMs'
   >;
+  lifecycleServices?: {
+    saveDocument?(
+      input: SaveKnowledgeDocumentInput,
+    ): Promise<SaveKnowledgeDocumentResult>;
+    createOrphanDocument?(
+      input: CreateKnowledgeOrphanDocumentInput,
+    ): Promise<CreateKnowledgeOrphanDocumentResult>;
+  };
+}
+
+interface PendingUnsavedClose {
+  tab: KnowledgeEditorTab;
+  busy: boolean;
+  error: 'conflict' | 'unavailable' | null;
+  mode: 'close-view' | 'lifecycle';
+  resolve?: (proceed: boolean) => void;
 }
 
 interface KnowledgeEditorGroupNode {
@@ -252,11 +291,8 @@ function releaseTabView(
   tab: KnowledgeEditorTab,
 ): void {
   if (tab.kind !== 'markdown') return;
-  const session = registry.getState().sessions[knowledgeDocumentKey(tab.address)];
   registry.getState().closeDocumentView(tab.viewId);
-  if (!session?.dirty) {
-    registry.getState().disposeDocumentSession(tab.address);
-  }
+  registry.getState().disposeDocumentSession(tab.address);
 }
 
 export const KnowledgeEditorGroups = forwardRef<
@@ -266,8 +302,11 @@ export const KnowledgeEditorGroups = forwardRef<
   registry,
   client,
   workspaceKey,
+  sources = [],
+  sourcesReady = true,
   onLocateResource,
   conflictServices,
+  lifecycleServices,
 }, ref) {
   const nextGroupId = useRef(1);
   const nextSplitId = useRef(1);
@@ -277,6 +316,19 @@ export const KnowledgeEditorGroups = forwardRef<
     createInitialLayout(initialGroupId));
   const layoutRef = useRef(layout);
   const workspaceKeyRef = useRef(workspaceKey);
+  const prepareToCloseRef = useRef<() => Promise<boolean>>(
+    async () => true,
+  );
+  const [pendingUnsavedClose, setPendingUnsavedClose] =
+    useState<PendingUnsavedClose | null>(null);
+  const pendingUnsavedCloseRef = useRef<PendingUnsavedClose | null>(null);
+
+  const commitPendingUnsavedClose = (
+    next: PendingUnsavedClose | null,
+  ): void => {
+    pendingUnsavedCloseRef.current = next;
+    setPendingUnsavedClose(next);
+  };
 
   const commitLayout = (next: KnowledgeEditorLayout) => {
     layoutRef.current = next;
@@ -316,7 +368,7 @@ export const KnowledgeEditorGroups = forwardRef<
     return true;
   };
 
-  const closeView = (viewId: string): boolean => {
+  const closeViewImmediately = (viewId: string): boolean => {
     const current = layoutRef.current;
     const found = findTab(current.root, tab => tab.viewId === viewId);
     if (!found) return false;
@@ -329,6 +381,46 @@ export const KnowledgeEditorGroups = forwardRef<
     commitLayout({
       root: collapsed,
       activeGroupId: activeGroup.id,
+    });
+    return true;
+  };
+
+  const closeView = (viewId: string): boolean => {
+    const current = layoutRef.current;
+    const found = findTab(current.root, tab => tab.viewId === viewId);
+    if (!found || pendingUnsavedCloseRef.current) return false;
+    if (found.tab.kind !== 'markdown') {
+      return closeViewImmediately(viewId);
+    }
+    const state = registry.getState();
+    const session = state.sessions[knowledgeDocumentKey(found.tab.address)];
+    const viewIds = session
+      ? Object.values(state.views)
+          .filter(view => view.sessionKey === session.key)
+          .map(view => view.id)
+      : [];
+    if (
+      !session
+      || !shouldConfirmKnowledgeViewClose({
+        sessionKey: session.key,
+        address: session.address,
+        sourceName: found.tab.sourceName,
+        buffer: session.buffer,
+        dirty: session.dirty,
+        orphan: session.orphan,
+        resourceState: session.resourceState,
+        viewIds,
+        displayOrder: 0,
+        active: true,
+      }, viewId)
+    ) {
+      return closeViewImmediately(viewId);
+    }
+    commitPendingUnsavedClose({
+      tab: found.tab,
+      busy: false,
+      error: null,
+      mode: 'close-view',
     });
     return true;
   };
@@ -500,16 +592,6 @@ export const KnowledgeEditorGroups = forwardRef<
     return true;
   };
 
-  useImperativeHandle(ref, () => ({
-    openResource,
-    openInSide,
-    splitGroup,
-    activateView,
-    pinView,
-    closeView,
-    moveView,
-  }));
-
   useEffect(() => registry.subscribe((state) => {
     const current = layoutRef.current;
     let changed = false;
@@ -524,6 +606,38 @@ export const KnowledgeEditorGroups = forwardRef<
   }), [registry]);
 
   useEffect(() => {
+    if (!sourcesReady) return;
+    const sourceByKey = new Map(sources.map(source => [
+      source.sourceKey,
+      source,
+    ]));
+    const reconcileSourceAvailability = (
+      state: ReturnType<KnowledgeDocumentRegistry['getState']>,
+    ) => {
+      for (const session of Object.values(state.sessions)) {
+        const source = sourceByKey.get(session.address.sourceKey);
+        const unavailable = (
+          !source
+          || source.availability !== 'available'
+        );
+        const dirtyAndReadOnly = (
+          session.dirty
+          && source?.availability === 'available'
+          && !source.capabilities.includes('write')
+        );
+        if (unavailable || dirtyAndReadOnly) {
+          registry.getState().markDocumentResourceUnavailable(
+            session.address,
+            'source-unavailable',
+          );
+        }
+      }
+    };
+    reconcileSourceAvailability(registry.getState());
+    return registry.subscribe(reconcileSourceAvailability);
+  }, [registry, sources, sourcesReady]);
+
+  useEffect(() => {
     if (workspaceKeyRef.current === workspaceKey) return;
     for (const tab of allTabs(layoutRef.current.root)) {
       if (tab.kind === 'markdown') registry.getState().closeDocumentView(tab.viewId);
@@ -534,6 +648,203 @@ export const KnowledgeEditorGroups = forwardRef<
     nextViewId.current = 1;
     commitLayout(createInitialLayout(initialGroupId));
   }, [registry, workspaceKey]);
+
+  const resolvePendingSave = async (target?: {
+    address: KnowledgeResourceAddress;
+    sourceName: string;
+  }) => {
+    const pending = pendingUnsavedCloseRef.current;
+    if (!pending || pending.busy) return;
+    const activeClient = client ?? knowledgeWorkspaceClient;
+    commitPendingUnsavedClose({ ...pending, busy: true, error: null });
+    const session = registry.getState().sessions[
+      knowledgeDocumentKey(pending.tab.address)
+    ];
+    if (!session) {
+      commitPendingUnsavedClose(null);
+      if (pending.mode === 'lifecycle') {
+        pending.resolve?.(true);
+      } else {
+        closeViewImmediately(pending.tab.viewId);
+      }
+      return;
+    }
+    if (session.orphan) {
+      if (!target) {
+        commitPendingUnsavedClose({
+          ...pending,
+          busy: false,
+          error: 'unavailable',
+        });
+        return;
+      }
+      const create = lifecycleServices?.createOrphanDocument
+        ?? createKnowledgeOrphanDocument;
+      const result = await create({
+        registry,
+        from: pending.tab.address,
+        to: target.address,
+        client: activeClient,
+      });
+      if (!result.ok) {
+        if (pending.mode === 'close-view') {
+          commitPendingUnsavedClose({
+            ...pending,
+            busy: false,
+            error: result.reason,
+          });
+          return;
+        }
+        registry.getState().reportDocumentSaveError(
+          pending.tab.address,
+          {
+            code: result.reason === 'conflict'
+              ? 'conflict'
+              : 'unavailable',
+            fileName: pending.tab.address.relativePath.split('/').at(-1)
+              ?? pending.tab.address.relativePath,
+            reason: result.reason === 'conflict'
+              ? 'knowledge.document.saveConflict'
+              : 'knowledge.document.saveUnavailable',
+          },
+        );
+        commitPendingUnsavedClose(null);
+        pending.resolve?.(false);
+        return;
+      }
+      commitLayout({
+        ...layoutRef.current,
+        root: mapTabs(layoutRef.current.root, tab => (
+          tab.kind === 'markdown'
+          && sameAddress(tab.address, pending.tab.address)
+            ? {
+                ...tab,
+                address: { ...target.address },
+                sourceName: target.sourceName,
+              }
+            : tab
+        )),
+      });
+    } else {
+      const save = lifecycleServices?.saveDocument ?? saveKnowledgeDocument;
+      const result = await save({
+        registry,
+        address: pending.tab.address,
+        client: activeClient,
+      });
+      if (!result.ok) {
+        commitPendingUnsavedClose(null);
+        pending.resolve?.(false);
+        return;
+      }
+    }
+    commitPendingUnsavedClose(null);
+    if (pending.mode === 'lifecycle') {
+      pending.resolve?.(true);
+    } else {
+      closeViewImmediately(pending.tab.viewId);
+    }
+  };
+
+  const discardPending = () => {
+    const pending = pendingUnsavedCloseRef.current;
+    if (!pending || pending.busy) return;
+    registry.getState().discardDocumentChanges(pending.tab.address);
+    commitPendingUnsavedClose(null);
+    if (pending.mode === 'lifecycle') {
+      pending.resolve?.(true);
+    } else {
+      closeViewImmediately(pending.tab.viewId);
+    }
+  };
+
+  const cancelPending = () => {
+    const pending = pendingUnsavedCloseRef.current;
+    if (!pending || pending.busy) return;
+    commitPendingUnsavedClose(null);
+    pending.resolve?.(false);
+  };
+
+  const requestLifecycleDecision = (
+    tab: KnowledgeEditorTab,
+  ): Promise<boolean> => new Promise((resolve) => {
+    commitPendingUnsavedClose({
+      tab,
+      busy: false,
+      error: null,
+      mode: 'lifecycle',
+      resolve,
+    });
+  });
+
+  const prepareToClose = async (): Promise<boolean> => {
+    if (pendingUnsavedCloseRef.current) return false;
+    const current = layoutRef.current;
+    const tabs = allTabs(current.root);
+    const activeGroup = findGroup(current.root, current.activeGroupId);
+    const activeViewId = activeGroup?.activeViewId ?? null;
+    const documents = new Map<string, KnowledgeLifecycleDocument>();
+    for (const [displayOrder, tab] of tabs.entries()) {
+      if (tab.kind !== 'markdown') continue;
+      const session = registry.getState().sessions[
+        knowledgeDocumentKey(tab.address)
+      ];
+      if (!session) continue;
+      const existing = documents.get(session.key);
+      if (existing) {
+        existing.viewIds.push(tab.viewId);
+        existing.active ||= tab.viewId === activeViewId;
+        continue;
+      }
+      documents.set(session.key, {
+        sessionKey: session.key,
+        address: { ...session.address },
+        sourceName: tab.sourceName,
+        buffer: session.buffer,
+        dirty: session.dirty,
+        orphan: session.orphan,
+        resourceState: session.resourceState,
+        viewIds: [tab.viewId],
+        displayOrder,
+        active: tab.viewId === activeViewId,
+      });
+    }
+    for (const document of orderKnowledgeUnsavedDocuments(
+      [...documents.values()],
+    )) {
+      const tab = tabs.find(candidate => (
+        candidate.kind === 'markdown'
+        && knowledgeDocumentKey(candidate.address) === document.sessionKey
+      ));
+      if (!tab) continue;
+      if (!await requestLifecycleDecision(tab)) return false;
+    }
+    return true;
+  };
+  prepareToCloseRef.current = prepareToClose;
+
+  useImperativeHandle(ref, () => ({
+    openResource,
+    openInSide,
+    splitGroup,
+    activateView,
+    pinView,
+    closeView,
+    prepareToClose,
+    moveView,
+  }));
+
+  useEffect(() => {
+    const unregister = registerKnowledgeWorkspaceCloseGuard(
+      () => prepareToCloseRef.current(),
+    );
+    return () => {
+      unregister();
+      const pending = pendingUnsavedCloseRef.current;
+      pendingUnsavedCloseRef.current = null;
+      pending?.resolve?.(false);
+    };
+  }, []);
 
   const renderNode = (node: KnowledgeEditorLayoutNode): React.ReactNode => {
     if (node.kind === 'split') {
@@ -643,6 +954,16 @@ export const KnowledgeEditorGroups = forwardRef<
                   groupId={node.id}
                   registry={registry}
                   client={client}
+                  onRequestOrphanSave={() => {
+                    if (!pendingUnsavedCloseRef.current) {
+                      commitPendingUnsavedClose({
+                        tab,
+                        busy: false,
+                        error: null,
+                        mode: 'close-view',
+                      });
+                    }
+                  }}
                 />
               ) : (
                 <KnowledgeAssetViewer
@@ -664,9 +985,27 @@ export const KnowledgeEditorGroups = forwardRef<
       <KnowledgeConflictResolver
         registry={registry}
         client={client}
+        sources={sources}
         {...conflictServices}
       />
       <KnowledgeDocumentNotices registry={registry} />
+      {pendingUnsavedClose ? (
+        <UnsavedDocumentsDialog
+          document={{
+            address: pendingUnsavedClose.tab.address,
+            sourceName: pendingUnsavedClose.tab.sourceName,
+            orphan: registry.getState().sessions[
+              knowledgeDocumentKey(pendingUnsavedClose.tab.address)
+            ]?.orphan === true,
+          }}
+          writableSources={knowledgeWritableSources(sources)}
+          busy={pendingUnsavedClose.busy}
+          error={pendingUnsavedClose.error}
+          onSave={target => void resolvePendingSave(target)}
+          onDiscard={discardPending}
+          onCancel={cancelPending}
+        />
+      ) : null}
     </div>
   );
 });

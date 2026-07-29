@@ -112,7 +112,7 @@ export class MountProvider {
     return this.mapResult(ref, await resolved.provider.write({ kind: "local-file", path: resolved.path }, content));
   }
 
-  async writeExpectedVersion(ref: ResourceRef, content: string | Buffer, expectedVersion: ResourceVersion): Promise<ResourceWriteExpectedVersionResult> {
+  async writeExpectedVersion(ref: ResourceRef, content: string | Buffer, expectedVersion: ResourceVersion | null): Promise<ResourceWriteExpectedVersionResult> {
     const resolved = this.resolveLocalMount(ref, "write");
     return this.mapResult(ref, await resolved.provider.writeExpectedVersion(
       { kind: "local-file", path: resolved.path },

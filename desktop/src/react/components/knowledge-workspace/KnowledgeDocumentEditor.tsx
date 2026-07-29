@@ -49,6 +49,7 @@ export interface KnowledgeDocumentEditorProps {
     version: RendererResourceVersion,
   ) => void;
   onOpenLink?: (url: string) => void | Promise<void>;
+  onRequestOrphanSave?: () => void;
 }
 
 export interface KnowledgeDocumentNoticesProps {
@@ -92,6 +93,7 @@ export function KnowledgeDocumentEditor({
   client = knowledgeWorkspaceClient,
   onSaved,
   onOpenLink,
+  onRequestOrphanSave,
 }: KnowledgeDocumentEditorProps) {
   const addressKey = knowledgeDocumentKey(address);
   const requestAddress = useMemo<KnowledgeResourceAddress>(() => ({
@@ -213,12 +215,19 @@ export function KnowledgeDocumentEditor({
         registry.getState().context.windowId,
       )}:${addressKey}`,
       mode: 'manual',
-      execute: async () => saveKnowledgeDocument({
-        registry,
-        address: requestAddress,
-        client,
-        onSaved,
-      }),
+      execute: async () => {
+        const current = registry.getState().sessions[addressKey];
+        if (current?.orphan) {
+          onRequestOrphanSave?.();
+          return { ok: true };
+        }
+        return saveKnowledgeDocument({
+          registry,
+          address: requestAddress,
+          client,
+          onSaved,
+        });
+      },
       onError: error => {
         reportSaveError(registry, requestAddress, error.code);
       },
@@ -226,7 +235,15 @@ export function KnowledgeDocumentEditor({
     attachment: null,
     openLink: onOpenLink ? { open: onOpenLink } : null,
     contentGate: knowledgeMarkdownContentGate,
-  }), [addressKey, client, onOpenLink, onSaved, registry, requestAddress]);
+  }), [
+    addressKey,
+    client,
+    onOpenLink,
+    onRequestOrphanSave,
+    onSaved,
+    registry,
+    requestAddress,
+  ]);
 
   const handleSelection = useCallback((editorView: NonNullable<
     ReturnType<MarkdownEditorSurfaceHandle['getView']>
@@ -266,6 +283,26 @@ export function KnowledgeDocumentEditor({
       </div>
     );
   }
+  if (
+    !session.orphan
+    && (
+      session.resourceState === 'missing'
+      || session.resourceState === 'source-unavailable'
+    )
+  ) {
+    return (
+      <div className={styles.documentUnavailable} role="status">
+        <p>
+          {tr(
+            session.resourceState === 'missing'
+              ? 'knowledge.document.resourceMissing'
+              : 'knowledge.document.sourceUnavailable',
+            { name: fileNameFromAddress(session.address) },
+          )}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <section
@@ -274,7 +311,15 @@ export function KnowledgeDocumentEditor({
         name: fileNameFromAddress(requestAddress),
       })}
       data-dirty={session.dirty ? 'true' : 'false'}
+      data-orphan={session.orphan ? 'true' : 'false'}
     >
+      {session.orphan ? (
+        <p className={styles.documentOrphanStatus} role="status">
+          {tr('knowledge.document.orphan', {
+            name: fileNameFromAddress(session.address),
+          })}
+        </p>
+      ) : null}
       <MarkdownEditorSurface
         ref={editorRef}
         content={session.buffer}

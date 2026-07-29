@@ -39,6 +39,21 @@ const REQUIRED_KEYS = [
   'conflict.useLocal',
   'conflict.useDisk',
   'conflict.refreshError',
+  'document.resourceMissing',
+  'document.sourceUnavailable',
+  'document.orphan',
+  'unsaved.title',
+  'unsaved.description',
+  'unsaved.orphanTarget',
+  'unsaved.source',
+  'unsaved.relativePath',
+  'unsaved.noWritableSource',
+  'unsaved.save',
+  'unsaved.saving',
+  'unsaved.discard',
+  'unsaved.cancel',
+  'unsaved.conflict',
+  'unsaved.unavailable',
 ] as const;
 
 function nestedString(
@@ -88,12 +103,21 @@ describe('knowledge shell i18n, accessibility and visual contract', () => {
       ),
       'utf8',
     );
+    const unsavedDialogSource = fs.readFileSync(
+      path.resolve(
+        'desktop/src/react/components/knowledge-workspace/UnsavedDocumentsDialog.tsx',
+      ),
+      'utf8',
+    );
 
     expect(layoutSource).toMatch(/role="tree"/);
     expect(layoutSource).toMatch(/aria-(?:label|labelledby)=/);
     expect(editorGroupsSource).toMatch(/role="group"/);
     expect(editorGroupsSource).toMatch(/tabIndex=\{0\}/);
     expect(editorGroupsSource).toMatch(/<KnowledgeTabBar/);
+    expect(unsavedDialogSource).toMatch(/aria-modal="true"/);
+    expect(unsavedDialogSource).toMatch(/event\.key === 'Escape'/);
+    expect(unsavedDialogSource).toMatch(/saveRef\.current\?\.focus/);
     expect(cssSource).toMatch(/:focus-visible/);
     expect(cssSource).toMatch(/var\(--(?:bg|text|border|accent)/);
     expect(cssSource.match(/@media\s*\(max-width:/g)).toHaveLength(2);
