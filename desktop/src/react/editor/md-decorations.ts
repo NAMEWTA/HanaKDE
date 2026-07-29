@@ -3,7 +3,6 @@ import {
 } from '@codemirror/view';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import {
-  EditorSelection,
   EditorState,
   Facet,
   RangeSetBuilder,
@@ -22,6 +21,11 @@ import {
   resolveMarkdownImageSrc,
   type MarkdownImageContext,
 } from '../utils/markdown';
+import {
+  activeLineNumbers,
+  selectionSourceRanges,
+  selectionTouchesRange,
+} from './knowledge-live-preview';
 
 export type DecoRange = { from: number; to: number; deco: Decoration };
 export type LivePreviewRange =
@@ -30,6 +34,7 @@ export type LivePreviewRange =
   | { kind: 'inlineMath' | 'blockMath'; from: number; to: number; source: string };
 interface LivePreviewOptions {
   includeBlockMath?: boolean;
+  selectionRanges?: readonly Readonly<{ from: number; to: number }>[];
 }
 
 export const markdownImageContextFacet = Facet.define<MarkdownImageContext, MarkdownImageContext>({
@@ -58,160 +63,13 @@ const RGB_COLOR_RE = /^rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?
 const BG_SPAN_RE = /<span\s+style=(["'])\s*background(?:-color)?\s*:\s*([^;"']+)\s*;?\s*\1>([\s\S]*?)<\/span>/ig;
 const FENCE_RE = /^(?: {0,3})(`{3,}|~{3,})/;
 
-interface CodeFenceBoundary {
-  readonly from: number;
-  readonly to: number;
-  readonly before: number | null;
-  readonly after: number | null;
-}
-
-const codeFenceBoundaryCache = new WeakMap<object, {
-  readonly tree: ReturnType<typeof syntaxTree>;
-  readonly boundaries: CodeFenceBoundary[];
-}>();
-
-function isClosingFenceLine(opening: string, candidate: string): boolean {
-  const openingMatch = opening.match(FENCE_RE);
-  const closingMatch = candidate.match(/^(?: {0,3})(`{3,}|~{3,})[ \t]*$/);
-  return Boolean(
-    openingMatch
-      && closingMatch
-      && openingMatch[1][0] === closingMatch[1][0]
-      && closingMatch[1].length >= openingMatch[1].length,
-  );
-}
-
-function codeFenceBoundaries(state: EditorState): CodeFenceBoundary[] {
-  const tree = syntaxTree(state);
-  const cached = codeFenceBoundaryCache.get(state.doc);
-  if (cached?.tree === tree) return cached.boundaries;
-  const boundaries: CodeFenceBoundary[] = [];
-  tree.iterate({
-    enter(node) {
-      if (node.name !== 'FencedCode') return;
-      const opening = state.doc.lineAt(node.from);
-      const end = state.doc.lineAt(node.to);
-      if (!FENCE_RE.test(opening.text)) return false;
-      const hasClosing = end.number > opening.number
-        && isClosingFenceLine(opening.text, end.text);
-      const firstBodyNumber = opening.number + 1;
-      const lastBodyNumber = hasClosing ? end.number - 1 : end.number;
-      const hasBody = firstBodyNumber <= lastBodyNumber;
-      const firstBody = hasBody ? state.doc.line(firstBodyNumber) : null;
-      const lastBody = hasBody ? state.doc.line(lastBodyNumber) : null;
-      const previousExternal = opening.number > 1
-        ? state.doc.line(opening.number - 1)
-        : null;
-      const nextExternal = hasClosing && end.number < state.doc.lines
-        ? state.doc.line(end.number + 1)
-        : null;
-
-      boundaries.push({
-        from: opening.from,
-        to: opening.to,
-        before: previousExternal?.to ?? firstBody?.from ?? nextExternal?.from ?? null,
-        after: firstBody?.from ?? nextExternal?.from ?? previousExternal?.to ?? null,
-      });
-      if (hasClosing) {
-        boundaries.push({
-          from: end.from,
-          to: end.to,
-          before: lastBody?.to ?? previousExternal?.to ?? nextExternal?.from ?? null,
-          after: nextExternal?.from ?? lastBody?.to ?? previousExternal?.to ?? null,
-        });
-      }
-      return false;
-    },
-  });
-  codeFenceBoundaryCache.set(state.doc, { tree, boundaries });
-  return boundaries;
-}
-
-function normalizeCodeFenceSelection(
-  state: EditorState,
-  selection: EditorSelection,
-  previous: EditorSelection,
-): EditorSelection {
-  const boundaries = codeFenceBoundaries(state);
-  if (boundaries.length === 0) return selection;
-  let changed = false;
-  const ranges = selection.ranges.map((range, index) => {
-    if (!range.empty) return range;
-    const boundary = boundaries.find(candidate => (
-      range.from >= candidate.from && range.from <= candidate.to
-    ));
-    if (!boundary) return range;
-    const previousHead = previous.ranges[index]?.head ?? previous.main.head;
-    const position = previousHead > boundary.to
-      ? boundary.before
-      : previousHead < boundary.from
-        ? boundary.after
-        : boundary.after ?? boundary.before;
-    if (position === null || position === range.from) return range;
-    changed = true;
-    return EditorSelection.cursor(position, position < range.from ? 1 : -1);
-  });
-  return changed ? EditorSelection.create(ranges, selection.mainIndex) : selection;
-}
-
-function eventTargetElement(target: EventTarget | null): Element | null {
-  if (!target || typeof target !== 'object' || !('nodeType' in target)) return null;
-  const node = target as Node;
-  return node.nodeType === 1 ? node as Element : node.parentElement;
-}
-
-function isCodeFenceBoundaryTarget(target: EventTarget | null): boolean {
-  return Boolean(eventTargetElement(target)?.closest(
-    '.cm-codeblock-line-first, .cm-codeblock-line-last',
-  ));
-}
-
-const codeFenceBoundarySelectionFilter = EditorState.transactionFilter.of((transaction) => {
-  if (transaction.docChanged || !transaction.selection) return transaction;
-  const selection = normalizeCodeFenceSelection(
-    transaction.startState,
-    transaction.newSelection,
-    transaction.startState.selection,
-  );
-  if (selection.eq(transaction.newSelection)) return transaction;
-  return [transaction, { selection, sequential: true }];
-});
-
-const codeFenceBoundaryEventHandlers = EditorView.domEventHandlers({
-  mousedown(event) {
-    if (!isCodeFenceBoundaryTarget(event.target)) return false;
-    event.preventDefault();
-    event.stopPropagation();
-    return true;
-  },
-  focus(_event, view) {
-    const selection = normalizeCodeFenceSelection(
-      view.state,
-      view.state.selection,
-      view.state.selection,
-    );
-    if (!selection.eq(view.state.selection)) view.dispatch({ selection });
-    return false;
-  },
-});
-
 export const CONCEAL_MARKS = new Set([
   'HeaderMark', 'EmphasisMark', 'CodeMark', 'StrikethroughMark',
   'LinkMark', 'URL', 'QuoteMark',
 ]);
 
 export function collectActiveLines(view: EditorView): Set<number> {
-  return collectActiveLinesFromState(view.state);
-}
-
-function collectActiveLinesFromState(state: EditorState): Set<number> {
-  const active = new Set<number>();
-  for (const range of state.selection.ranges) {
-    const start = state.doc.lineAt(range.from).number;
-    const end = state.doc.lineAt(range.to).number;
-    for (let i = start; i <= end; i++) active.add(i);
-  }
-  return active;
+  return activeLineNumbers(view.state);
 }
 
 function normalizeSafeBackgroundColor(raw: string): string | null {
@@ -280,7 +138,25 @@ function collectFenceLineNumbers(src: string): Set<number> {
   return fenced;
 }
 
-function findInlineMath(line: string, lineOffset: number, ranges: LivePreviewRange[], excluded: InlineRange[]): void {
+function sourceRangesTouch(
+  from: number,
+  to: number,
+  selectionRanges: readonly Readonly<InlineRange>[],
+): boolean {
+  return selectionRanges.some(range => (
+    range.from === range.to
+      ? range.from >= from && range.from < to
+      : range.from < to && range.to > from
+  ));
+}
+
+function findInlineMath(
+  line: string,
+  lineOffset: number,
+  ranges: LivePreviewRange[],
+  excluded: InlineRange[],
+  selectionRanges: readonly Readonly<InlineRange>[],
+): void {
   let i = 0;
   while (i < line.length) {
     const start = findNextOutside(line, '$', i, excluded);
@@ -292,11 +168,13 @@ function findInlineMath(line: string, lineOffset: number, ranges: LivePreviewRan
     const end = findNextOutside(line, '$', start + 1, excluded);
     if (end < 0) return;
     const source = line.slice(start + 1, end).trim();
-    if (source) {
+    const absoluteFrom = lineOffset + start;
+    const absoluteTo = lineOffset + end + 1;
+    if (source && !sourceRangesTouch(absoluteFrom, absoluteTo, selectionRanges)) {
       ranges.push({
         kind: 'inlineMath',
-        from: lineOffset + start,
-        to: lineOffset + end + 1,
+        from: absoluteFrom,
+        to: absoluteTo,
         source,
       });
     }
@@ -304,7 +182,13 @@ function findInlineMath(line: string, lineOffset: number, ranges: LivePreviewRan
   }
 }
 
-function findMarks(line: string, lineOffset: number, ranges: LivePreviewRange[], excluded: InlineRange[]): void {
+function findMarks(
+  line: string,
+  lineOffset: number,
+  ranges: LivePreviewRange[],
+  excluded: InlineRange[],
+  selectionRanges: readonly Readonly<InlineRange>[],
+): void {
   let i = 0;
   while (i < line.length) {
     const start = findNextOutside(line, '==', i, excluded);
@@ -312,7 +196,9 @@ function findMarks(line: string, lineOffset: number, ranges: LivePreviewRange[],
     const end = findNextOutside(line, '==', start + 2, excluded);
     if (end < 0) return;
     const text = line.slice(start + 2, end);
-    if (text) {
+    const absoluteFrom = lineOffset + start;
+    const absoluteTo = lineOffset + end + 2;
+    if (text && !sourceRangesTouch(absoluteFrom, absoluteTo, selectionRanges)) {
       ranges.push({ kind: 'hide', from: lineOffset + start, to: lineOffset + start + 2 });
       ranges.push({ kind: 'mark', from: lineOffset + start + 2, to: lineOffset + end, text });
       ranges.push({ kind: 'hide', from: lineOffset + end, to: lineOffset + end + 2 });
@@ -321,11 +207,22 @@ function findMarks(line: string, lineOffset: number, ranges: LivePreviewRange[],
   }
 }
 
-function findBackgroundSpans(line: string, lineOffset: number, ranges: LivePreviewRange[], excluded: InlineRange[]): void {
+function findBackgroundSpans(
+  line: string,
+  lineOffset: number,
+  ranges: LivePreviewRange[],
+  excluded: InlineRange[],
+  selectionRanges: readonly Readonly<InlineRange>[],
+): void {
   BG_SPAN_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = BG_SPAN_RE.exec(line)) !== null) {
     if (rangeOverlaps(match.index, match.index + match[0].length, excluded)) continue;
+    if (sourceRangesTouch(
+      lineOffset + match.index,
+      lineOffset + match.index + match[0].length,
+      selectionRanges,
+    )) continue;
     const color = normalizeSafeBackgroundColor(match[2]);
     if (!color) continue;
     const openEnd = match.index + match[0].indexOf('>') + 1;
@@ -343,6 +240,7 @@ export function collectLivePreviewRanges(
   options: LivePreviewOptions = {},
 ): LivePreviewRange[] {
   const includeBlockMath = options.includeBlockMath ?? true;
+  const selectionRanges = options.selectionRanges ?? [];
   const lines = src.split('\n');
   const ranges: LivePreviewRange[] = [];
   let offset = 0;
@@ -361,11 +259,6 @@ export function collectLivePreviewRanges(
         inFence = false;
         fenceChar = null;
       }
-      offset += line.length + 1;
-      continue;
-    }
-
-    if (activeLines.has(lineNo)) {
       offset += line.length + 1;
       continue;
     }
@@ -395,9 +288,9 @@ export function collectLivePreviewRanges(
     }
 
     const inlineCodeRanges = collectInlineCodeRanges(line);
-    findInlineMath(line, offset, ranges, inlineCodeRanges);
-    findMarks(line, offset, ranges, inlineCodeRanges);
-    findBackgroundSpans(line, offset, ranges, inlineCodeRanges);
+    findInlineMath(line, offset, ranges, inlineCodeRanges, selectionRanges);
+    findMarks(line, offset, ranges, inlineCodeRanges, selectionRanges);
+    findBackgroundSpans(line, offset, ranges, inlineCodeRanges, selectionRanges);
     offset += line.length + 1;
   }
   return ranges;
@@ -474,8 +367,10 @@ function livePreviewDeco(range: LivePreviewRange): DecoRange {
 
 function buildMarkdownBlockDecorations(state: EditorState): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  const activeLines = collectActiveLinesFromState(state);
-  const ranges: DecoRange[] = collectLivePreviewRanges(state.doc.toString(), activeLines)
+  const activeLines = activeLineNumbers(state);
+  const ranges: DecoRange[] = collectLivePreviewRanges(state.doc.toString(), activeLines, {
+    selectionRanges: selectionSourceRanges(state),
+  })
     .filter((range): range is Extract<LivePreviewRange, { kind: 'blockMath' }> => range.kind === 'blockMath')
     .map(livePreviewDeco);
 
@@ -497,7 +392,8 @@ export const markdownBlockDecoField = StateField.define<DecorationSet>({
 });
 
 export function buildMarkdownDecorations(view: EditorView): DecorationSet {
-  const concealedSourceLines = new Set<number>();
+  const activeLines = activeLineNumbers(view.state);
+  const selectionRanges = selectionSourceRanges(view.state);
   const ranges: DecoRange[] = [];
   const imageContext = view.state.facet(markdownImageContextFacet);
 
@@ -523,6 +419,7 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
             }
             return;
           case 'HorizontalRule':
+            if (activeLines.has(line.number)) return;
             ranges.push({ from: node.from, to: node.to, deco: hrDecoration });
             ranges.push({ from: line.from, to: line.from, deco: centerLineDeco });
             return;
@@ -530,21 +427,30 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
             handleBlockquote({ view, node, ranges });
             return;
           case 'FencedCode':
-            handleCodeBlock({ view, node, ranges });
+            handleCodeBlock({
+              view,
+              node,
+              ranges,
+              activeLines,
+            });
             return false; // don't traverse children
         }
 
         if (node.name === 'Image') {
-          handleImage({ view, node, activeLines: concealedSourceLines, ranges, imageContext });
+          if (!selectionTouchesRange(view.state, node.from, node.to)) {
+            handleImage({ view, node, ranges, imageContext });
+          }
           return;
         }
 
         // ── 已成立的语法按节点类型 conceal / replace ──
         switch (node.name) {
           case 'Link':
+            if (selectionTouchesRange(view.state, node.from, node.to)) return false;
             handleLink({ view, node, ranges });
             break;
           case 'Autolink': {
+            if (selectionTouchesRange(view.state, node.from, node.to)) return false;
             // Autolink <url> — hide angle brackets, keep URL text visible with link style
             const full = view.state.doc.sliceString(node.from, node.to);
             if (full.startsWith('<') && full.endsWith('>')) {
@@ -555,6 +461,7 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
             return false; // prevent child URL/LinkMark from being concealed
           }
           case 'ListMark': {
+            if (activeLines.has(line.number)) break;
             const markText = view.state.doc.sliceString(node.from, node.to);
             if (markText !== '-' && markText !== '*' && markText !== '+') break;
             let hideTo = node.to;
@@ -571,6 +478,15 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
           // conceal marks
           case 'HeaderMark': case 'EmphasisMark': case 'CodeMark':
           case 'StrikethroughMark': case 'LinkMark': case 'URL': case 'QuoteMark': {
+            if (
+              (node.name === 'HeaderMark' || node.name === 'QuoteMark')
+                ? activeLines.has(line.number)
+                : selectionTouchesRange(
+                    view.state,
+                    node.node.parent?.from ?? node.from,
+                    node.node.parent?.to ?? node.to,
+                  )
+            ) break;
             let hideTo = node.to;
             if (node.name === 'HeaderMark') {
               if (isUnconfirmedHeading) break;
@@ -585,9 +501,12 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
     });
   }
 
-  collectObsidianImageDecorations(view, concealedSourceLines, imageContext, ranges);
+  collectObsidianImageDecorations(view, imageContext, ranges);
 
-  for (const range of collectLivePreviewRanges(view.state.doc.toString(), concealedSourceLines, { includeBlockMath: false })) {
+  for (const range of collectLivePreviewRanges(view.state.doc.toString(), activeLines, {
+    includeBlockMath: false,
+    selectionRanges,
+  })) {
     ranges.push(livePreviewDeco(range));
   }
 
@@ -599,7 +518,6 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
 
 function collectObsidianImageDecorations(
   view: EditorView,
-  activeLines: Set<number>,
   imageContext: MarkdownImageContext,
   ranges: DecoRange[],
 ): void {
@@ -608,8 +526,9 @@ function collectObsidianImageDecorations(
   for (const { from, to } of view.visibleRanges) {
     let line = view.state.doc.lineAt(from);
     while (line.from <= to) {
-      if (!activeLines.has(line.number) && !fencedLines.has(line.number)) {
+      if (!fencedLines.has(line.number)) {
         collectObsidianImagesInLine(
+          view,
           line.text,
           line.from,
           imageContext,
@@ -624,6 +543,7 @@ function collectObsidianImageDecorations(
 }
 
 function collectObsidianImagesInLine(
+  view: EditorView,
   line: string,
   lineOffset: number,
   imageContext: MarkdownImageContext,
@@ -640,7 +560,14 @@ function collectObsidianImagesInLine(
     if (close < 0) return;
 
     const parsed = parseObsidianImageEmbed(line.slice(start + 3, close));
-    if (parsed) {
+    if (
+      parsed
+      && !selectionTouchesRange(
+        view.state,
+        lineOffset + start,
+        lineOffset + close + 2,
+      )
+    ) {
       const src = resolveMarkdownImageSrc(parsed.src, imageContext);
       addImageDecoration({
         ranges,
@@ -673,6 +600,5 @@ export const markdownDecoPlugin = ViewPlugin.fromClass(
   },
   {
     decorations: (v) => v.decorations,
-    provide: () => [codeFenceBoundarySelectionFilter, codeFenceBoundaryEventHandlers],
   },
 );

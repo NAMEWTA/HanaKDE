@@ -14,6 +14,7 @@ import {
   parseMarkdownKnowledgeIr,
   type MarkdownTaskMarkerToken,
 } from '../../../../lib/knowledge-workspace/markdown-knowledge-ir.ts';
+import { activeLineNumbers } from './knowledge-live-preview';
 
 export type PageTaskToggleResult =
   | 'toggled'
@@ -94,8 +95,10 @@ class PageTaskWidget extends WidgetType {
 }
 
 function buildTaskDecorations(state: EditorState): DecorationSet {
+  const activeLines = activeLineNumbers(state);
   const ranges = parseMarkdownKnowledgeIr(state.doc.toString()).tokens
     .filter((token): token is MarkdownTaskMarkerToken => token.kind === 'task_marker')
+    .filter(task => !activeLines.has(state.doc.lineAt(task.markerRange.from).number))
     .map(task => Decoration.replace({
       widget: new PageTaskWidget(task.markerRange.from, task.checked),
     }).range(task.markerRange.from, task.markerRange.to));
@@ -105,7 +108,7 @@ function buildTaskDecorations(state: EditorState): DecorationSet {
 export const taskField: Extension = StateField.define<DecorationSet>({
   create: buildTaskDecorations,
   update(value, transaction) {
-    return transaction.docChanged
+    return transaction.docChanged || transaction.selection
       ? buildTaskDecorations(transaction.state)
       : value;
   },

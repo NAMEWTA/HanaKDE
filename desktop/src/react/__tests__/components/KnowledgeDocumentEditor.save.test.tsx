@@ -45,6 +45,7 @@ vi.mock('../../components/preview/MarkdownEditorSurface', async importOriginal =
   const MarkdownEditorSurface = React.forwardRef((props: {
     content: string;
     filePath?: string;
+    markdownDisplayMode?: 'live-preview' | 'source';
     policy: MarkdownEditorSurfacePolicy;
     onContentChange?: (content: string) => void;
   }, ref: React.ForwardedRef<MarkdownEditorSurfaceHandle>) => {
@@ -74,10 +75,12 @@ vi.mock('../../components/preview/MarkdownEditorSurface', async importOriginal =
       scrollToLine: () => undefined,
       scrollToOffset: () => undefined,
       getTopVisibleLine: () => 0,
+      setMarkdownDisplayMode: () => 'changed',
     }));
     return (
       <textarea
         aria-label={`surface:${props.filePath ?? ''}`}
+        data-markdown-display-mode={props.markdownDisplayMode}
         value={props.content}
         onChange={event => props.onContentChange?.(event.currentTarget.value)}
         onKeyDown={event => {
@@ -166,6 +169,9 @@ function translate(key: string, vars?: Record<string, string | number>): string 
     'knowledge.document.invalid_utf8': 'Document is not valid UTF-8',
     'knowledge.document.invalid_base64': 'Document is not valid base64',
     'knowledge.document.editorLabel': 'Edit {name}',
+    'knowledge.document.modeLabel': 'Markdown display mode',
+    'knowledge.document.livePreviewMode': 'Live Preview',
+    'knowledge.document.sourceMode': 'Source',
     'knowledge.document.noticesLabel': 'Document notices',
     'knowledge.document.saveConflict': 'the file changed on disk',
     'knowledge.document.saveUnavailable': 'the save service is unavailable',
@@ -393,6 +399,33 @@ describe('KnowledgeDocumentEditor manual save tracer', () => {
 
     expect(services.write).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /save all/i })).not.toBeInTheDocument();
+  });
+
+  it('switches the current view display mode without saving or changing the buffer', async () => {
+    const services = clientFor(bytes('# hello'));
+    const { editor, registry } = await openEditor({
+      content: bytes('# hello'),
+      client: services.client,
+    });
+    const key = knowledgeDocumentKey(address);
+
+    expect(editor).toHaveAttribute('data-markdown-display-mode', 'live-preview');
+    expect(screen.getByRole('button', { name: 'Live Preview' }))
+      .toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Source' }));
+
+    expect(editor).toHaveAttribute('data-markdown-display-mode', 'source');
+    expect(screen.getByRole('button', { name: 'Source' }))
+      .toHaveAttribute('aria-pressed', 'true');
+    expect(registry.getState().views['view-1'].mode).toBe('source');
+    expect(registry.getState().sessions[key]).toMatchObject({
+      buffer: '# hello',
+      baseline: '# hello',
+      dirty: false,
+    });
+    expect(registry.getState().sessions[key].history.undo).toHaveLength(0);
+    expect(services.write).not.toHaveBeenCalled();
   });
 
   it('uses Ctrl/Cmd+S, latest expected version, and updates baseline only after success', async () => {

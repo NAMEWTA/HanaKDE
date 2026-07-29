@@ -21,6 +21,7 @@ import {
   type MarkdownLinkToken,
   type MarkdownWikilinkToken,
 } from '../../../../lib/knowledge-workspace/markdown-knowledge-ir.ts';
+import { selectionTouchesRange } from './knowledge-live-preview';
 import {
   formatKnowledgeWikilink,
   resolveKnowledgeMarkdownDestination,
@@ -229,6 +230,7 @@ function classForEntry(entry: KnowledgeLinkFieldEntry): string {
 function buildDecorations(
   entries: readonly KnowledgeLinkFieldEntry[],
   config: KnowledgeLinkFieldConfig,
+  state: EditorState,
 ): DecorationSet {
   const ranges: Array<{
     from: number;
@@ -236,6 +238,7 @@ function buildDecorations(
     decoration: Decoration;
   }> = [];
   for (const entry of entries) {
+    if (selectionTouchesRange(state, entry.from, entry.to)) continue;
     if (entry.sourceKind === 'wikilink') {
       if (entry.from < entry.visibleFrom) {
         ranges.push({
@@ -282,30 +285,30 @@ function buildDecorations(
 }
 
 function createFieldValue(
-  source: string,
+  state: EditorState,
   config: KnowledgeLinkFieldConfig | null,
 ): KnowledgeLinkFieldValue {
   if (!config) {
     return { entries: [], decorations: Decoration.none };
   }
-  const entries = parseEntries(source, config);
+  const entries = parseEntries(state.doc.toString(), config);
   return {
     entries,
-    decorations: buildDecorations(entries, config),
+    decorations: buildDecorations(entries, config, state),
   };
 }
 
 export const knowledgeLinkField = StateField.define<KnowledgeLinkFieldValue>({
   create(state) {
     return createFieldValue(
-      state.doc.toString(),
+      state,
       state.facet(knowledgeLinkConfigFacet),
     );
   },
   update(value, transaction) {
     const config = transaction.state.facet(knowledgeLinkConfigFacet);
     if (transaction.docChanged || !config) {
-      return createFieldValue(transaction.state.doc.toString(), config);
+      return createFieldValue(transaction.state, config);
     }
     let entries: readonly KnowledgeLinkFieldEntry[] = value.entries;
     for (const effect of transaction.effects) {
@@ -316,10 +319,10 @@ export const knowledgeLinkField = StateField.define<KnowledgeLinkFieldValue>({
           : entry
       ));
     }
-    if (entries === value.entries) return value;
+    if (entries === value.entries && !transaction.selection) return value;
     return {
       entries,
-      decorations: buildDecorations(entries, config),
+      decorations: buildDecorations(entries, config, transaction.state),
     };
   },
   provide: field => EditorView.decorations.from(field, value => value.decorations),

@@ -295,6 +295,16 @@ export function KnowledgeDocumentEditor({
     });
   }, [registry, viewId]);
 
+  const setDisplayMode = useCallback((
+    mode: 'live-preview' | 'source',
+  ) => {
+    const result = editorRef.current?.setMarkdownDisplayMode(mode)
+      ?? 'unavailable';
+    if (result === 'changed' || result === 'unchanged') {
+      registry.getState().updateDocumentView(viewId, { mode });
+    }
+  }, [registry, viewId]);
+
   if (loadState.status === 'error') {
     return (
       <div className={styles.documentUnavailable} role="alert">
@@ -346,6 +356,34 @@ export function KnowledgeDocumentEditor({
       data-dirty={session.dirty ? 'true' : 'false'}
       data-orphan={session.orphan ? 'true' : 'false'}
     >
+      <div
+        className={styles.documentModeToolbar}
+        role="group"
+        aria-label={tr('knowledge.document.modeLabel')}
+      >
+        <button
+          type="button"
+          aria-label={tr('knowledge.document.livePreviewMode')}
+          aria-pressed={view.mode === 'live-preview'}
+          className={view.mode === 'live-preview'
+            ? styles.documentModeButtonActive
+            : undefined}
+          onClick={() => setDisplayMode('live-preview')}
+        >
+          {tr('knowledge.document.livePreviewMode')}
+        </button>
+        <button
+          type="button"
+          aria-label={tr('knowledge.document.sourceMode')}
+          aria-pressed={view.mode === 'source'}
+          className={view.mode === 'source'
+            ? styles.documentModeButtonActive
+            : undefined}
+          onClick={() => setDisplayMode('source')}
+        >
+          {tr('knowledge.document.sourceMode')}
+        </button>
+      </div>
       {session.orphan ? (
         <p className={styles.documentOrphanStatus} role="status">
           {tr('knowledge.document.orphan', {
@@ -359,6 +397,7 @@ export function KnowledgeDocumentEditor({
         incomingContentMode="registry-authoritative"
         savedContent={session.baseline}
         mode="markdown"
+        markdownDisplayMode={view.mode}
         filePath={requestAddress.relativePath}
         policy={savePolicy}
         initialScrollSnapshot={{

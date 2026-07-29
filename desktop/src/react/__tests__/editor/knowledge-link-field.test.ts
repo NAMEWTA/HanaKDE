@@ -141,6 +141,7 @@ describe('knowledge link field', () => {
       '[Unsafe](file:///tmp/private)',
     ].join(' ');
     const view = createView(source);
+    view.dispatch({ selection: { anchor: source.indexOf(' ') } });
     const elements = Array.from(
       view.dom.querySelectorAll<HTMLElement>('[data-knowledge-link-id]'),
     );
@@ -217,6 +218,7 @@ describe('knowledge link field', () => {
         },
       },
     );
+    view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf(' ') } });
     const elements = view.dom.querySelectorAll<HTMLElement>(
       '[data-knowledge-link-id]',
     );

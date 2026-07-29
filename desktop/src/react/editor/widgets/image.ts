@@ -110,17 +110,14 @@ export function addStandardMarkdownImageDecoration(ctx: {
 export function handleImage(ctx: {
   view: EditorView;
   node: { name: string; from: number; to: number };
-  activeLines: Set<number>;
   ranges: DecoRange[];
   imageContext?: MarkdownImageContext;
 }) {
-  const { view, node, activeLines, ranges, imageContext } = ctx;
+  const { view, node, ranges, imageContext } = ctx;
   const line = view.state.doc.lineAt(node.from);
 
   // Cross-line guard: Image should be single-line
   if (view.state.doc.lineAt(node.to).number !== line.number) return;
-  if (activeLines.has(line.number)) return;
-
   const text = view.state.doc.sliceString(node.from, node.to);
   addStandardMarkdownImageDecoration({
     source: text,

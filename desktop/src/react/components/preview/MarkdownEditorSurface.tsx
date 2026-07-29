@@ -23,7 +23,13 @@ import {
 import {
   createMarkdownEditorCompartments,
   createMarkdownEditorExtensions,
+  createMarkdownLivePreviewExtensions,
 } from '../../editor/create-markdown-editor-extensions';
+import {
+  reconfigureKnowledgeMarkdownMode,
+  type KnowledgeMarkdownModeChangeResult,
+  type KnowledgeMarkdownViewMode,
+} from '../../editor/knowledge-live-preview';
 import {
   isMarkdownCoverOnlyUpdate,
   mergeMarkdownCoverIntoDocument,
@@ -96,6 +102,9 @@ export interface MarkdownEditorSurfaceHandle {
   scrollToLine(line: number): void;
   scrollToOffset(from: number, to?: number, options?: MarkdownEditorSurfaceScrollOptions): void;
   getTopVisibleLine(): number;
+  setMarkdownDisplayMode(
+    mode: KnowledgeMarkdownViewMode,
+  ): KnowledgeMarkdownModeChangeResult;
 }
 
 export interface MarkdownEditorSurfaceScrollOptions {
@@ -121,6 +130,7 @@ export interface MarkdownEditorSurfaceProps {
   fileVersion?: FileVersion | null;
   policy: MarkdownEditorSurfacePolicy;
   mode: 'markdown' | 'code' | 'csv' | 'text';
+  markdownDisplayMode?: KnowledgeMarkdownViewMode;
   language?: string | null;
   onSelectionChange?: (view: EditorView) => void;
   onSelectionCommit?: (view: EditorView) => void;
@@ -403,7 +413,7 @@ function isEditorCoverRailDrop(view: EditorView, event: DragEvent): boolean {
 /* ── Editor Component ── */
 
 export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, MarkdownEditorSurfaceProps>(
-  function MarkdownEditorSurface({ content, incomingContentMode = 'protect-local', savedContent, filePath, remoteContentRef, fileVersion, policy, mode, language, onSelectionChange, onSelectionCommit, onQuoteRange, onStatsChange, onContentChange, onContentRejected, onViewDestroy, initialScrollSnapshot, contentHash, onScrollSnapshotChange, readOnly = false }, ref) {
+  function MarkdownEditorSurface({ content, incomingContentMode = 'protect-local', savedContent, filePath, remoteContentRef, fileVersion, policy, mode, markdownDisplayMode = 'live-preview', language, onSelectionChange, onSelectionCommit, onQuoteRange, onStatsChange, onContentChange, onContentRejected, onViewDestroy, initialScrollSnapshot, contentHash, onScrollSnapshotChange, readOnly = false }, ref) {
     const gateResult = useMemo(
       () => policy.contentGate({ content }),
       [content, policy],
@@ -573,6 +583,20 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         if (viewRef.current) scrollEditorToOffset(viewRef.current, from, to, options);
       },
       getTopVisibleLine: () => viewRef.current ? topVisibleLine(viewRef.current) : 0,
+      setMarkdownDisplayMode: (nextMode) => {
+        if (mode !== 'markdown') return 'unavailable';
+        return reconfigureKnowledgeMarkdownMode(
+          viewRef.current,
+          cRef.current.conceal,
+          nextMode,
+          createMarkdownLivePreviewExtensions({
+            imageContext: policyRef.current.attachment?.imageContext ?? {
+              filePath,
+            },
+            knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
+          }),
+        );
+      },
     }));
 
     const createCheckpointIfDue = useCallback(async () => {
@@ -849,6 +873,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
       });
       const extensions = createMarkdownEditorExtensions({
         mode,
+        markdownDisplayMode,
         readOnly,
         compartments: c,
         imageContext: policyRef.current.attachment?.imageContext ?? { filePath },
@@ -974,6 +999,21 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         viewRef.current = null;
       };
     }, [editorHostReadySignal, mode, language, readOnly, filePath, remoteContentRef, gateResult.allowed, emitStatsIfChanged, insertMarkdownAttachments]); // eslint-disable-line react-hooks/exhaustive-deps -- 仅在 host 可测量以及 mode/language/readOnly/filePath/remoteContentRef/gate 变化时重建 CodeMirror，content/refs 故意省略以避免销毁重建
+
+    useLayoutEffect(() => {
+      if (mode !== 'markdown') return;
+      reconfigureKnowledgeMarkdownMode(
+        viewRef.current,
+        cRef.current.conceal,
+        markdownDisplayMode,
+        createMarkdownLivePreviewExtensions({
+          imageContext: policyRef.current.attachment?.imageContext ?? {
+            filePath,
+          },
+          knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
+        }),
+      );
+    }, [filePath, markdownDisplayMode, mode]);
 
     useEffect(() => {
       const view = viewRef.current;

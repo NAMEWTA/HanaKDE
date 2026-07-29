@@ -2,6 +2,7 @@ import { EditorView, Decoration } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 import { EditorState, StateField, RangeSetBuilder, type Transaction } from '@codemirror/state';
 import { MermaidWidget } from './widgets/mermaid';
+import { activeLineNumbers } from './knowledge-live-preview';
 
 export interface MermaidCodeBlock {
   from: number;
@@ -65,26 +66,9 @@ export function collectMermaidCodeBlocks(text: string, activeLines: Set<number>)
   return blocks;
 }
 
-function collectActiveLines(state: EditorState): Set<number> {
-  const activeLines = new Set<number>();
-  if (
-    state.selection.ranges.length === 1
-    && state.selection.main.empty
-    && state.selection.main.from === 0
-  ) {
-    return activeLines;
-  }
-  for (const range of state.selection.ranges) {
-    const start = state.doc.lineAt(range.from).number;
-    const end = state.doc.lineAt(range.to).number;
-    for (let line = start; line <= end; line += 1) activeLines.add(line);
-  }
-  return activeLines;
-}
-
 function buildMermaidDecorations(state: EditorState): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  const activeLines = collectActiveLines(state);
+  const activeLines = activeLineNumbers(state);
   const blocks = collectMermaidCodeBlocks(state.doc.toString(), activeLines);
 
   for (const block of blocks) {

@@ -35,10 +35,15 @@ describe('collectLivePreviewRanges', () => {
     ]));
   });
 
-  it('skips live preview ranges on active lines so the source remains editable', () => {
-    const ranges = collectLivePreviewRanges('GDP ==平减指数== and $x+1$', new Set([1]));
+  it('reveals only the inline element touched by the selection', () => {
+    const source = 'GDP ==平减指数== and $x+1$';
+    const ranges = collectLivePreviewRanges(source, new Set([1]), {
+      selectionRanges: [{ from: 7, to: 7 }],
+    });
 
-    expect(ranges).toEqual([]);
+    expect(ranges).toEqual([
+      expect.objectContaining({ kind: 'inlineMath', source: 'x+1' }),
+    ]);
   });
 
   it('does not collect math or highlight ranges inside code blocks', () => {
@@ -148,7 +153,7 @@ describe('collectLivePreviewRanges', () => {
     view.destroy();
   });
 
-  it('keeps standard markdown image previews visible while concealing focused source syntax', () => {
+  it('reveals standard markdown image source when the selection touches it', () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const doc = 'intro\n![Cover](./assets/cover.png)';
@@ -178,8 +183,8 @@ describe('collectLivePreviewRanges', () => {
       }
     });
 
-    expect(parent.textContent).not.toContain('![Cover](./assets/cover.png)');
-    expect(img?.getAttribute('src')).toBe('file:///vault/notes/assets/cover.png');
+    expect(parent.textContent).toContain('![Cover](./assets/cover.png)');
+    expect(img).toBeNull();
     expect(blockSpecs).toEqual([]);
 
     view.destroy();
@@ -211,7 +216,7 @@ describe('collectLivePreviewRanges', () => {
     view.destroy();
   });
 
-  it('keeps Obsidian image previews visible while concealing focused source syntax', () => {
+  it('reveals Obsidian image source when the selection touches it', () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const doc = 'intro\n![[attachments/diagram.png|120]]';
@@ -241,8 +246,8 @@ describe('collectLivePreviewRanges', () => {
       }
     });
 
-    expect(parent.textContent).not.toContain('![[attachments/diagram.png|120]]');
-    expect(img?.getAttribute('src')).toBe('file:///vault/notes/attachments/diagram.png');
+    expect(parent.textContent).toContain('![[attachments/diagram.png|120]]');
+    expect(img).toBeNull();
     expect(blockSpecs).toEqual([]);
 
     view.destroy();
@@ -288,7 +293,7 @@ describe('collectLivePreviewRanges', () => {
     view.destroy();
   });
 
-  it('keeps a collapsed caret out of hidden fenced-code boundary lines', () => {
+  it('allows a collapsed caret on fenced-code boundaries and reveals the whole block', () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const doc = [
@@ -313,16 +318,18 @@ describe('collectLivePreviewRanges', () => {
     const closing = view.state.doc.line(4);
 
     view.dispatch({ selection: { anchor: opening.from } });
-    expect(view.state.selection.main.anchor).toBe(view.state.doc.line(1).to);
+    expect(view.state.selection.main.anchor).toBe(opening.from);
+    expect(parent.textContent).toContain('```ts');
 
     view.dispatch({ selection: { anchor: view.state.doc.line(3).to } });
     view.dispatch({ selection: { anchor: closing.from } });
-    expect(view.state.selection.main.anchor).toBe(view.state.doc.line(5).from);
+    expect(view.state.selection.main.anchor).toBe(closing.from);
+    expect(parent.textContent).toContain('```');
 
     view.destroy();
   });
 
-  it('prevents a pointer press on hidden fenced-code boundary lines from moving the caret', () => {
+  it('does not intercept pointer presses on a revealed fenced-code boundary', () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const doc = ['```ts', 'const x = 1;', '```'].join('\n');
@@ -343,12 +350,12 @@ describe('collectLivePreviewRanges', () => {
 
     openingLine?.dispatchEvent(event);
 
-    expect(event.defaultPrevented).toBe(true);
-    expect(view.state.selection.main.anchor).toBe(bodyPosition);
+    expect(view.state.selection.main.anchor).toBe(0);
+    expect(parent.textContent).toContain('```ts');
     view.destroy();
   });
 
-  it('moves the initial caret off an opening fence when the editor receives focus', () => {
+  it('keeps the initial caret on an opening fence so its source is editable', () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const doc = ['```ts', 'const x = 1;', '```'].join('\n');
@@ -366,7 +373,8 @@ describe('collectLivePreviewRanges', () => {
 
     view.focus();
 
-    expect(view.state.selection.main.anchor).toBe(view.state.doc.line(2).from);
+    expect(view.state.selection.main.anchor).toBe(0);
+    expect(parent.textContent).toContain('```ts');
     view.destroy();
   });
 
@@ -416,7 +424,7 @@ describe('collectLivePreviewRanges', () => {
 
     view.destroy();
   });
-  it('keeps the code block copy button visible while editing inside the block', async () => {
+  it('reveals the whole code block source while editing inside the block', async () => {
     window.t = ((key: string) => {
       if (key === 'attach.copy') return '复制';
       if (key === 'attach.copied') return '已复制';
@@ -449,14 +457,13 @@ describe('collectLivePreviewRanges', () => {
 
     const button = parent.querySelector<HTMLButtonElement>('.cm-codeblock-copy-btn');
 
-    expect(button).toBeInstanceOf(HTMLButtonElement);
-    expect(parent.textContent).not.toContain('```ts');
+    expect(button).toBeNull();
+    expect(parent.textContent).toContain('```ts');
+    expect(parent.textContent).toContain('```');
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await Promise.resolve();
 
-    expect(writeText).toHaveBeenCalledWith('const x = 1;');
-    expect(button?.dataset.copied).toBe('true');
-    expect(button?.querySelector('.cm-codeblock-copy-label')?.textContent).toBe('已复制');
+    expect(writeText).not.toHaveBeenCalled();
 
     view.destroy();
   });
@@ -529,7 +536,7 @@ describe('markdown syntax reveal lifetime', () => {
       selection: { anchor: 3 },
       annotations: Transaction.userEvent.of('input.type'),
     });
-    expect(parent.textContent).toBe('');
+    expect(parent.textContent).toBe('## ');
     expect(parent.querySelector('.cm-line')?.classList.contains('cm-unconfirmed-heading-line')).toBe(false);
 
     view.dispatch({
@@ -557,7 +564,7 @@ describe('markdown syntax reveal lifetime', () => {
     view.destroy();
   });
 
-  it('keeps completed marks concealed while leaving an unfinished typed prefix visible', () => {
+  it('keeps block markers visible while their line is active', () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const view = new EditorView({
@@ -591,10 +598,10 @@ describe('markdown syntax reveal lifetime', () => {
       selection: { anchor: 3 },
       annotations: Transaction.userEvent.of('input.type'),
     });
-    expect(parent.textContent).toBe('Heading');
+    expect(parent.textContent).toBe('## Heading');
 
     view.dispatch({ selection: { anchor: 5 } });
-    expect(parent.textContent).toBe('Heading');
+    expect(parent.textContent).toBe('## Heading');
 
     view.destroy();
   });

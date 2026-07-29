@@ -26,6 +26,10 @@ import {
   markdownImageContextFacet,
 } from './md-decorations';
 import {
+  knowledgeMarkdownModeExtensions,
+  type KnowledgeMarkdownViewMode,
+} from './knowledge-live-preview';
+import {
   markdownBlockHandlePlugin,
   type MarkdownBlockMenuRequest,
 } from './markdown-block-handles';
@@ -45,6 +49,7 @@ export interface MarkdownEditorCompartments {
 
 export interface CreateMarkdownEditorExtensionsOptions {
   mode: 'markdown' | 'code' | 'csv' | 'text';
+  markdownDisplayMode?: KnowledgeMarkdownViewMode;
   readOnly: boolean;
   compartments: MarkdownEditorCompartments;
   imageContext: MarkdownImageContext;
@@ -67,11 +72,35 @@ export function createMarkdownEditorCompartments(): MarkdownEditorCompartments {
   };
 }
 
+export interface CreateMarkdownLivePreviewExtensionsOptions {
+  imageContext: MarkdownImageContext;
+  knowledgeLinks?: KnowledgeLinkFieldConfig;
+}
+
+export function createMarkdownLivePreviewExtensions(
+  options: CreateMarkdownLivePreviewExtensionsOptions,
+): Extension[] {
+  return [
+    markdownImageContextFacet.of(options.imageContext),
+    markdownDecoPlugin,
+    ...(options.knowledgeLinks
+      ? [createKnowledgeLinkField(options.knowledgeLinks)]
+      : []),
+    taskField,
+    frontmatterField,
+    markdownCoverField,
+    markdownBlockDecoField,
+    mermaidDecoField,
+    tableDecoField,
+  ];
+}
+
 export function createMarkdownEditorExtensions(
   options: CreateMarkdownEditorExtensionsOptions,
 ): Extension[] {
   const {
     mode,
+    markdownDisplayMode = 'live-preview',
     readOnly,
     compartments,
     imageContext,
@@ -108,21 +137,19 @@ export function createMarkdownEditorExtensions(
     compartments.highlight.of(
       syntaxHighlighting(isMarkdown ? markdownHighlight : codeHighlight),
     ),
-    compartments.conceal.of(isMarkdown ? [
-      markdownImageContextFacet.of(imageContext),
-      markdownDecoPlugin,
-      ...(knowledgeLinks ? [createKnowledgeLinkField(knowledgeLinks)] : []),
-      taskField,
-      frontmatterField,
-      markdownCoverField,
-      markdownBlockDecoField,
-      mermaidDecoField,
-    ] : []),
+    compartments.conceal.of(isMarkdown
+      ? knowledgeMarkdownModeExtensions(
+          markdownDisplayMode,
+          createMarkdownLivePreviewExtensions({
+            imageContext,
+            knowledgeLinks,
+          }),
+        )
+      : []),
     ...(isMarkdown && !readOnly ? [
       markdownBlockSelectionPlugin(),
       markdownBlockHandlePlugin({ onOpenMenu: onOpenBlockMenu }),
     ] : []),
-    ...(isMarkdown ? [tableDecoField] : []),
     ...(isCsv ? [csvTableField] : []),
     compartments.theme.of(isMarkdown || isCsv ? markdownTheme : codeTheme),
     ...(knowledgeLinks ? [] : [createLinkClickHandler(onOpenLink)]),

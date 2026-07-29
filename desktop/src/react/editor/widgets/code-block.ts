@@ -139,14 +139,21 @@ export function handleCodeBlock(ctx: {
   view: EditorView;
   node: { name: string; from: number; to: number };
   ranges: DecoRange[];
+  activeLines: Set<number>;
 }) {
-  const { view, node, ranges } = ctx;
+  const {
+    view, node, ranges, activeLines,
+  } = ctx;
   const startLine = view.state.doc.lineAt(node.from);
   const endLine = view.state.doc.lineAt(node.to);
   const openingFence = fenceInfo(startLine.text);
 
   if (openingFence?.language === 'mermaid') {
     return;
+  }
+  let active = false;
+  for (let i = startLine.number; i <= endLine.number; i += 1) {
+    if (activeLines.has(i)) active = true;
   }
 
   // Add background to every line in the code block
@@ -159,10 +166,8 @@ export function handleCodeBlock(ctx: {
     });
   }
 
-  if (openingFence) {
+  if (openingFence && !active) {
     const text = codeBlockText(view, startLine, endLine, openingFence);
-    // 完整 fenced block 的边界始终是文档结构，不因焦点进入代码正文而显形。
-    // 尚未形成合法语法的输入仍由 CodeMirror 作为普通文本显示。
     if (startLine.from < startLine.to) {
       ranges.push({
         from: startLine.from,

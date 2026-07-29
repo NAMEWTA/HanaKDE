@@ -26,6 +26,7 @@ function createTaskView(
     parent,
     state: EditorState.create({
       doc,
+      selection: { anchor: doc.length },
       extensions: [taskField, extensions],
     }),
   });
@@ -172,7 +173,7 @@ describe('KW-US-176 page task transactions', () => {
 
   it('writes exactly one canonical marker in one transaction and one undo step', () => {
     const updates: number[] = [];
-    const source = '- [ ] open';
+    const source = '- [ ] open\nplain';
     const { parent, view } = createTaskView(source, [
       history(),
       EditorView.updateListener.of((update) => {
@@ -182,7 +183,7 @@ describe('KW-US-176 page task transactions', () => {
 
     parent.querySelector<HTMLInputElement>('.cm-page-task')?.click();
 
-    expect(view.state.doc.toString()).toBe('- [x] open');
+    expect(view.state.doc.toString()).toBe('- [x] open\nplain');
     expect(updates).toEqual([1]);
     expect(undo(view)).toBe(true);
     expect(view.state.doc.toString()).toBe(source);
@@ -190,11 +191,11 @@ describe('KW-US-176 page task transactions', () => {
   });
 
   it('normalizes an accepted uppercase marker to open on toggle', () => {
-    const { parent, view } = createTaskView('- [X] complete');
+    const { parent, view } = createTaskView('- [X] complete\nplain');
 
     parent.querySelector<HTMLInputElement>('.cm-page-task')?.click();
 
-    expect(view.state.doc.toString()).toBe('- [ ] complete');
+    expect(view.state.doc.toString()).toBe('- [ ] complete\nplain');
     view.destroy();
   });
 
@@ -206,13 +207,13 @@ describe('KW-US-176 page task transactions', () => {
     expect(stale.view.state.doc.toString()).toBe(staleSource);
     stale.view.destroy();
 
-    const locked = createTaskView('- [ ] locked', [
+    const locked = createTaskView('- [ ] locked\nplain', [
       EditorState.readOnly.of(true),
     ]);
     const input = locked.parent.querySelector<HTMLInputElement>('.cm-page-task');
     expect(input?.disabled).toBe(true);
     expect(togglePageTask(locked.view, 2)).toBe('read_only');
-    expect(locked.view.state.doc.toString()).toBe('- [ ] locked');
+    expect(locked.view.state.doc.toString()).toBe('- [ ] locked\nplain');
     locked.view.destroy();
   });
 
