@@ -49,7 +49,7 @@
 | 30 | 2 Markdown | [交付格式快捷键与斜杠命令](./ticket/30-deliver-format-and-slash-commands.md) | 27 | KW-US-064, KW-US-065, KW-US-066, KW-US-067, KW-US-068, KW-US-069, KW-US-070, KW-US-071, KW-US-072, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 31 | 2 Markdown | [交付表格与代码块编辑预览](./ticket/31-deliver-tables-and-code-blocks.md) | 27 | KW-US-073, KW-US-074, KW-US-075, KW-US-076, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 32 | 2 Markdown | [交付软换行与编辑器状态栏](./ticket/32-deliver-wrap-and-editor-status.md) | 20, 27 | KW-US-077, KW-US-078, KW-US-079, KW-US-080, KW-US-081, KW-US-082, KW-US-083, KW-RULE-MARKDOWN | P2 | 已完成 |
-| 33 | 2 Markdown | [交付 Mermaid 与数学静态渲染](./ticket/33-deliver-mermaid-and-math.md) | 14, 27, 31 | KW-US-084, KW-US-085, KW-US-086, KW-US-087, KW-RULE-MARKDOWN | P2 | 未开始 |
+| 33 | 2 Markdown | [交付 Mermaid 与数学静态渲染](./ticket/33-deliver-mermaid-and-math.md) | 14, 27, 31 | KW-US-084, KW-US-085, KW-US-086, KW-US-087, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 34 | 2 Markdown | [交付脚注定义、预览与补全](./ticket/34-deliver-footnotes.md) | 11, 27 | KW-US-088, KW-US-089, KW-US-090, KW-RULE-MARKDOWN | P2 | 未开始 |
 | 35 | 2 Markdown | [交付安全 HTML、本地 URL 与外链策略](./ticket/35-deliver-safe-html-and-external-links.md) | 14, 17, 23, 27 | KW-US-091, KW-US-092, KW-US-093, KW-US-094, KW-US-122, KW-RULE-MARKDOWN, KW-RULE-SEC | P2 | 未开始 |
 | 36 | 2 Markdown | [交付当前 Markdown 文档查找替换](./ticket/36-deliver-find-replace.md) | 20, 27 | KW-US-095, KW-US-096, KW-US-097, KW-US-098, KW-US-099, KW-US-100, KW-US-101, KW-US-102, KW-US-103, KW-US-104, KW-US-105, KW-US-106, KW-US-107, KW-US-108, KW-US-109, KW-US-110, KW-US-111, KW-US-112, KW-RULE-MARKDOWN | P2 | 未开始 |

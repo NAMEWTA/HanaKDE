@@ -110,10 +110,10 @@
 | KW-US-081 | 32 | `desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx` | 契约/集成 | 通过 | `desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx`（8/8）；分屏活动组切换驱动唯一全局状态，资源树/侧栏取得焦点后保留最后活动 Markdown |
 | KW-US-082 | 32 | `desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx` | 契约/集成 | 通过 | `desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx`（8/8）；资产、缺失 session/view 与 missing/source-unavailable 隐藏整组文本并保留固定 `1.75rem` 空底栏 |
 | KW-US-083 | 32 | `desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx` | 契约/集成 | 通过 | `desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx`（8/8）；22rem container query 整组隐藏且不 truncate/wrap/ellipsis/scroll，宽度恢复后继续显示最新投影 |
-| KW-US-084 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 未执行 | — |
-| KW-US-085 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 未执行 | — |
-| KW-US-086 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 未执行 | — |
-| KW-US-087 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 未执行 | — |
+| KW-US-084 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 通过 | `npx vitest run desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts desktop/src/react/__tests__/editor/knowledge-math-field.test.ts --exclude 'temp/**'`（2 files、13/13）；标准 Mermaid fence、长 opening fence、完整源码保真与 Source literal 直接通过 |
+| KW-US-085 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 通过 | `knowledge-mermaid-field.test.ts`（6/6）；任一 selection range 触碰即回源、离开才渲染、exact-source cache、AbortSignal delivery cancellation、stale guard、单块错误与键盘回源通过；E2E 待 Tickets 48/49 真实打开入口回填 |
+| KW-US-086 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 通过 | `knowledge-math-field.test.ts`（7/7）；行内 `$...$`、block `$$...$$`、escaped dollar、inline/fenced code 排除和源码保真通过 |
+| KW-US-087 | 33 | `desktop/src/react/__tests__/editor/knowledge-mermaid-field.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-math-field.test.ts` | E2E-KW-011 | 通过 | `knowledge-math-field.test.ts`（7/7）；多选区触碰回源、编辑期间零 KaTeX 调用、离开后单次刷新、inline/block 错误隔离、`strict:error`/`trust:false` 与 pointer/keyboard 回源通过；E2E 待 Tickets 48/49 回填 |
 | KW-US-088 | 34 | `desktop/src/react/__tests__/editor/knowledge-footnote-field.test.ts` | E2E-KW-011 | 未执行 | — |
 | KW-US-089 | 34 | `desktop/src/react/__tests__/editor/knowledge-footnote-field.test.ts` | E2E-KW-011 | 未执行 | — |
 | KW-US-090 | 34 | `desktop/src/react/__tests__/editor/knowledge-footnote-field.test.ts` | E2E-KW-011 | 未执行 | — |
@@ -229,7 +229,7 @@
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 通过 | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193；Ticket 09 Mobile/LAN 共享 DTO、来源隔离、provider-neutral transfer、租约 watcher、权限/取消/冲突/不可用与清理故障注入，定向 12 files、274/274；干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1010 files passed、1 skipped，10161 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过 |
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Tickets 04、10） | Ticket 04 相关回归 249/249；Ticket 10 operation/journal/recovery 22/22、相关定向 255/255；稳定错误/诊断、同一 operation correlation、watch sequence/cursor、rollback 与无路径 resync 已验证；Ticket 43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
-| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12、23、24、25、26、27、28、29、30、31、32） | Tickets 11–31 的共享 IR/Surface/address/link/Frontmatter/tags/tasks/Live Preview/Enter/Tab/格式/slash/table/code 证据保持；Ticket 32 精确 11/11、相关 82/82。响应式 visual wrap、真实逻辑行导航/选择、无常驻行号、活动组 session/view 状态投影、UTF-16 行列/Unicode 总数、空资产栏与窄宽度整组隐藏已验证；Tickets 33–39 尚未执行 |
+| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12、23、24、25、26、27、28、29、30、31、32、33） | Tickets 11–32 的共享 IR/Surface/address/link/Frontmatter/tags/tasks/Live Preview/事务/table/code/wrap/status 证据保持；Ticket 33 精确 13/13、相关 152/152。Mermaid/math 标准源码方言、任一 selection 触碰回源、离开刷新、Source literal、错误不写文档、strict static Mermaid、KaTeX trust false、取消/cache/stale 与五语言键盘 UI 已验证；Tickets 34–39 尚未执行 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17） | Ticket 14 恶意工作区门禁 13/13；Ticket 17 stat-first asset policy/查看器 23/23，HTML/SVG/Mermaid/URI 与超限内容零读取，严格 BOM 解码、取消、版本漂移和媒体失败 fail-closed；Tickets 35、51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
@@ -262,7 +262,7 @@
 | E2E-KW-008 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-009 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 37、39、48 的补全/延迟建页、embed/backlink 与真实资源打开入口；当前不以私有 route 或缩减场景替代发布流程 |
 | E2E-KW-010 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-011 | 未执行 | 未执行 | 未执行 | — |
+| E2E-KW-011 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 48/49 的资源树单击/双击/Enter/Space 真实打开入口；当前仓库无该 spec，不以私有 route 或缩减场景替代，最终发布前必须回填 |
 | E2E-KW-012 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-013 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-014 | 未执行 | 未执行 | 未执行 | — |
@@ -293,7 +293,7 @@
 | TM-004 | 部分通过（macOS 基线） | 真实 APFS case/Unicode identity 与精确 relativePath 已执行；Windows/Linux 平台矩阵尚未执行 |
 | TM-005 | 通过 | 控制字符、正文、token 与绝对路径错误/日志脱敏断言通过 |
 | TM-006 | 部分通过（Ticket 14 基线） | HTML/SVG/event 与非 `http/https` URI 默认拒绝；Ticket 35 外链用户手势流程尚未执行 |
-| TM-007 | 部分通过（Ticket 14 基线） | Mermaid strict、无 HTML label、丢弃 bindFunctions、SVG allowlist 与 stale-result guard 通过；Ticket 33 编辑字段尚未执行 |
+| TM-007 | 通过 | Ticket 14 基线与 Ticket 33 编辑字段均通过：固定 strict/secure config、顶层与 flowchart 无 HTML label、丢弃 bindFunctions、SVG element/attribute/fragment allowlist、root-ID scoped CSS declaration sanitizer、active URL/global selector/at-rule/animation/event/script/foreignObject 拒绝，以及 cache/cancel/stale-result guard |
 | TM-008 | 部分通过（Tickets 14、17、19） | Server、Asset Viewer 与 Markdown Editor 均在正文前 stat；10 MiB + 1、active/unsupported 类型零 read，Markdown 超限时不创建 session/view；允许内容受实际字节数复验，取消、stale 结果与非法 UTF-8 均 fail-closed；Ticket 42 尚未执行 |
 | TM-009 | 未执行 | — |
 | TM-010 | 未执行 | — |
@@ -318,4 +318,6 @@
 - 2026-07-28 Ticket 20 文档回填后的前两次 `npx vitest run tests/knowledge-baseline-contract.test.ts` 在隔离 child import 用例触及固定 10 秒超时；排查确认三个此前为提取全仓统计而启动、但因输出管道提前返回的 Vitest 进程仍在后台并行占用 CPU。只终止本轮启动的冗余测试进程后，同一基线命令立即通过（11/11，child import 926 ms），随后单一前台全仓命令通过。这是已解决的测试编排资源争用，不是产品断言失败或发布豁免。
 - 2026-07-28 Ticket 20 全仓复验期间曾误传 `--reporter=basic`；Vitest 4 将其解析为无法加载的自定义 reporter，测试在 discovery 前退出。移除该无效参数后使用默认 reporter 的同一全仓命令通过（1025 files passed、1 skipped；10277 tests passed、6 skipped）。该记录仅说明命令更正，不属于产品测试失败或发布豁免。
 - 2026-07-28 Ticket 21 的 E2E-KW-007 尚未执行：外部变化监听、clean reload、dirty 三方状态与显式 resolver 已进入真实 Knowledge groups 组合层，但真实资源树单击/双击/Space/Enter 打开 Markdown 的公开用户入口由 Tickets 48/49 拥有，仓库目前仍只有 E2E-KW-001 spec。为避免私有 route/test shortcut 或提前实现后续 owner，本票登记精确 10/10、相关 202/202 与产品范围全仓 10288 tests passed；依赖完成后必须通过真实产品入口执行 E2E-KW-007，最终发布前不得保留此缺口。
+- 2026-07-29 Ticket 33 的 E2E-KW-011 尚未执行：Mermaid/math 静态字段已由精确 13/13、相关 152/152 与产品范围全仓 10530 tests passed 证明，但仓库尚无 E2E-KW-011 spec，且资源树单击/双击/Enter/Space 打开 Markdown 的公开产品入口由 Tickets 48/49 拥有。为避免私有 route/test shortcut 或缩减发布场景，本票保持 E2E 行“未执行”；48/49 完成后必须补建并执行，最终发布前不得保留此缺口。
+- 2026-07-29 Ticket 33 最终标准全量门禁之前，为提取简洁汇总追加的 `--reporter=dot --silent=passed-only` 单 worker 诊断变体造成三个大文件 I/O 用例超时和一个 CM6 DOM 时序失败；同票精确/相关测试始终通过。停止该冗余变体后，最终实现提交上的标准并行命令 `npm test -- --exclude 'temp/**' --silent=passed-only` 明确通过（1045 files passed、1 skipped；10530 tests passed、6 skipped），其中上述四项均通过。这是已解决的测试编排资源争用，不是产品断言失败或发布豁免。
 - 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
