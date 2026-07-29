@@ -1,7 +1,7 @@
 # Ticket 32: 交付软换行与编辑器状态栏
 
 - **被阻塞于：** [`20-deliver-groups-tabs-breadcrumbs.md`](./20-deliver-groups-tabs-breadcrumbs.md)、[`27-deliver-live-preview-modes.md`](./27-deliver-live-preview-modes.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -61,9 +61,29 @@
 
 ## 验收标准
 
-- [ ] 不混用网络 StatusBar；状态来自 session/view 投影；窄布局可访问且不遮挡编辑器。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 不混用网络 StatusBar；状态来自 session/view 投影；窄布局可访问且不遮挡编辑器。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `972e4fa0`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **视觉软换行：** Knowledge Markdown 的同一 CM6 Surface 继续使用 `EditorView.lineWrapping`；Live Preview 与 Source 共享同一源码文档、selection 和 history，不增加 wrap 开关、固定折行列、硬换行或持久化状态。
+- **真实源码导航：** Markdown 最高优先级 keymap 将 `↑/↓`、`Home/End` 及四种 Shift 组合固定映射到真实逻辑行和 1-based UTF-16 源码位置；短目标行落在真实行尾，不建立视觉行状态机。左右移动继续使用 CM6 唯一源码坐标。
+- **无常驻行号：** Markdown 两种显示模式继续将 gutter compartment 配置为空；软换行不会派生视觉行号。
+- **全局状态投影：** 新 `KnowledgeEditorStatusBar` 独立于网络 `StatusBar`，只订阅活动 Knowledge `view/session`；显示 selection 活动端的真实行、列和当前未保存 buffer 的 Unicode code point 总数，不显示 save/dirty/conflict/offline 等状态，也没有按钮、菜单或跳转。
+- **多组与焦点：** `KnowledgeEditorGroups` 只在活动组/标签变化时上报目标；资源树或其他侧栏取得焦点不会清空最后活动 Markdown，切换到资产则隐藏整组 Markdown 文本。
+- **稳定布局：** Knowledge workspace 保留一个跨三栏的固定 `1.75rem` 单行底栏；非 Markdown、加载失败、missing/source-unavailable 均保留空栏。CSS container query 在 22rem 以下整组 `display:none`，不截断、不换行、不出现省略号或横向滚动。
+- **投影性能：** 行起点和 Unicode 字符总数按当前 buffer 缓存；仅移动光标时以二分查找投影行列，不重复扫描整份文档，不创建 `ResizeObserver` 或持久化状态。
+- **五语言与可访问性：** zh-CN、zh-TW、en、ja、ko 均提供固定右侧自然语言格式；底栏为只读 `role=status`/`aria-live=polite` 文本，无 tabindex 或交互控件。
+- **精确自动化：** `npm test -- --exclude 'temp/**' desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx desktop/src/react/__tests__/editor/knowledge-source-navigation.test.ts`（2 files、11/11；强制交付文件自身 8/8）。
+- **相关回归：** `npm test -- --exclude 'temp/**' desktop/src/react/__tests__/components/KnowledgeEditorStatusBar.test.tsx desktop/src/react/__tests__/editor/knowledge-source-navigation.test.ts desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts desktop/src/react/__tests__/editor/knowledge-enter-commands.test.ts desktop/src/react/__tests__/editor/knowledge-command-registry.test.ts desktop/src/react/__tests__/lib/i18n-flat-keys.test.ts`（8 files、82/82）。
+- **产品范围全仓：** 最终实现提交后执行 `npm test -- --exclude 'temp/**'`（1043 files passed、1 skipped；10517 tests passed、6 skipped）。用户 ignored `temp/HanaKDE-TodoList-0.0.1` 未修改。
+- **门禁与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check` 与 `npm run build:renderer` 通过；未改变 preload/main 或 Server。
+- **IO/故障边界：** 本 ticket 是纯 Renderer projection，不发起 ResourceIO、保存、权限或复合 mutation；反向 selection、未保存内容、缺失 view/session、missing/source-unavailable 与资产切换均 fail-safe，底栏无 observer/计时器清理路径。
+- **Playwright：** 按本 ticket 固定契约不适用，未运行。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-29-openhanako-knowledge-workspace-implementation-32.md`
