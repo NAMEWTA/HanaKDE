@@ -40,7 +40,7 @@
 | 21 | 1 Workspace/文档 | [交付外部变化与显式三方冲突](./ticket/21-deliver-external-change-conflicts.md) | 04, 06, 19 | KW-US-133, KW-US-134, KW-US-135 | P1 | 已完成 |
 | 22 | 1 Workspace/文档 | [交付关闭、Workspace 切换与悬空文档](./ticket/22-deliver-close-switch-orphan-flow.md) | 05, 18, 19, 20, 21 | KW-US-045, KW-US-046, KW-US-047, KW-US-048, KW-US-050, KW-US-051, KW-US-052, KW-US-136, KW-US-137, KW-US-138, KW-US-139, KW-US-140, KW-US-141, KW-US-142 | P1 | 已完成 |
 | 23 | 2 Markdown | [建立知识地址与同源 LinkResolver](./ticket/23-define-knowledge-address-resolver.md) | 05, 11 | KW-US-003, KW-US-119, KW-RULE-MARKDOWN | P1 | 已完成 |
-| 24 | 2 Markdown | [交付 Wikilink 与 Markdown Link 解析渲染](./ticket/24-deliver-wikilink-markdown-links.md) | 11, 12, 23 | KW-US-114, KW-US-177, KW-RULE-MARKDOWN | P1 | 未开始 |
+| 24 | 2 Markdown | [交付 Wikilink 与 Markdown Link 解析渲染](./ticket/24-deliver-wikilink-markdown-links.md) | 11, 12, 23 | KW-US-114, KW-US-177, KW-RULE-MARKDOWN | P1 | 已完成 |
 | 25 | 2 Markdown | [交付 YAML Frontmatter 保真投影](./ticket/25-deliver-frontmatter-roundtrip.md) | 11, 12, 19 | KW-US-174, KW-RULE-MARKDOWN | P1 | 未开始 |
 | 26 | 2 Markdown | [交付标签与页面内任务](./ticket/26-deliver-tags-and-page-tasks.md) | 11, 12, 19, 25 | KW-US-175, KW-US-176, KW-RULE-MARKDOWN | P1 | 未开始 |
 | 27 | 2 Markdown | [交付 Live Preview 与源码模式状态](./ticket/27-deliver-live-preview-modes.md) | 12, 18, 24 | KW-US-055, KW-US-056, KW-RULE-MARKDOWN | P1 | 未开始 |
