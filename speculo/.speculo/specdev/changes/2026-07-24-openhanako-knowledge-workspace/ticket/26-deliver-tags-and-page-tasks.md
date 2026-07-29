@@ -1,7 +1,7 @@
 # Ticket 26: 交付标签与页面内任务
 
 - **被阻塞于：** [`11-define-markdown-semantic-ir.md`](./11-define-markdown-semantic-ir.md)、[`12-extract-policy-driven-cm6-surface.md`](./12-extract-policy-driven-cm6-surface.md)、[`19-deliver-manual-save-tracer.md`](./19-deliver-manual-save-tracer.md)、[`25-deliver-frontmatter-roundtrip.md`](./25-deliver-frontmatter-roundtrip.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,27 @@
 
 ## 验收标准
 
-- [ ] 标签矩阵覆盖 Frontmatter string/string[]、NFC、大小写、重复值、控制字符、正文边界、heading、纯数字、代码、URL 和转义；任务只写 `[ ]`/`[x]`；未保存变化不进入 Server 索引。
-- [ ] KW-US-175/176 由标签来源隔离、Frontmatter/body 合并与单 transaction task toggle 测试直接证明。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 标签矩阵覆盖 Frontmatter string/string[]、NFC、大小写、重复值、控制字符、正文边界、heading、纯数字、代码、URL 和转义；任务只写 `[ ]`/`[x]`；未保存变化不进入 Server 索引。
+- [x] KW-US-175/176 由标签来源隔离、Frontmatter/body 合并与单 transaction task toggle 测试直接证明。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `0c1ede97`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **唯一标签语义：** `extractKnowledgePageTags` 只消费 Ticket 11 共享 IR；Frontmatter `tags` 复用 Ticket 25 的同一 lossless projection 资格和已解析 token，不新增 YAML parser，也不对复杂 YAML 读取局部安全子集。
+- **标签值边界：** 只接受 Frontmatter string 或一维 string array；值执行 NFC 与首尾空白去除，空值/控制字符丢弃，不按空格或逗号拆分。body `#tag` 完全服从共享 IR 的 heading、纯数字、代码、URL、link destination、转义和 Unicode 边界。
+- **来源与 origin：** 页面投影固定携带 `sourceKey`，相同标签不跨来源聚合；Frontmatter/body 在同页按 NFC 后精确、大小写敏感值去重，并保留稳定的 `frontmatter`/`body` origins。
+- **事实边界：** 提取器是当前文本的无副作用纯投影，不访问 ResourceIO、Server 或索引；Ticket 41 的已保存磁盘抽取管线必须在成功保存并重读后调用同一函数，当前未保存 buffer 不会因此进入 Server 索引。
+- **Page Task：** shared Markdown Surface 的 `taskField` 只装饰 IR `task_marker`；点击原生 checkbox 只把准确三字符范围写成 `[ ]` 或 `[x]`，`[X]` 写回规范为小写 `[x]`，每次切换恰好一个 CM6 transaction/undo step。
+- **拒绝与故障：** 普通段落、引用同形文本、inline/fenced code 不生成 task；陈旧 marker position 返回 `not_task`，只读/不可用编辑器返回 `read_only`，dispatch 故障向上暴露且在 transaction 前不改 buffer。标签解析支持 AbortSignal，并且取消不返回部分投影。
+- **横切 UI：** 删除旧 Lezer 专用 checkbox handler，避免两套 task 语义；zh-CN、zh-TW、en、ja、ko、原生键盘复选框、ARIA label、focus-visible、亮暗 token 与 560px 窄布局同步交付。
+- **精确自动化：** `npx vitest run tests/knowledge-tags-tasks.test.ts`（1 file、16/16）。
+- **相关回归：** `npx vitest run tests/knowledge-tags-tasks.test.ts tests/frontmatter-roundtrip.test.ts tests/markdown-knowledge-ir.test.ts desktop/src/react/__tests__/editor/md-decorations.test.ts desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx tests/i18n-locale-parity.test.ts tests/knowledge-i18n-a11y-contract.test.ts`（7 files、94/94）。
+- **全仓回归：** `npx vitest run --exclude 'temp/**' --exclude 'teach/**' --silent`（1034 files passed、1 skipped；10403 tests passed、6 skipped）。
+- **门禁与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check` 与 `npm run build:renderer` 通过；未改变 composition、preload/main 或 Server。
+- **Playwright：** 按本 ticket 契约不适用，未运行；发布级 E2E-KW-013 由其完整用户入口具备后统一回填。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-29-openhanako-knowledge-workspace-implementation-26.md`
