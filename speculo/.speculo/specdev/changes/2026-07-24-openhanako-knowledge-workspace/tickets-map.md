@@ -43,7 +43,7 @@
 | 24 | 2 Markdown | [交付 Wikilink 与 Markdown Link 解析渲染](./ticket/24-deliver-wikilink-markdown-links.md) | 11, 12, 23 | KW-US-114, KW-US-177, KW-RULE-MARKDOWN | P1 | 已完成 |
 | 25 | 2 Markdown | [交付 YAML Frontmatter 保真投影](./ticket/25-deliver-frontmatter-roundtrip.md) | 11, 12, 19 | KW-US-174, KW-RULE-MARKDOWN | P1 | 已完成 |
 | 26 | 2 Markdown | [交付标签与页面内任务](./ticket/26-deliver-tags-and-page-tasks.md) | 11, 12, 19, 25 | KW-US-175, KW-US-176, KW-RULE-MARKDOWN | P1 | 已完成 |
-| 27 | 2 Markdown | [交付 Live Preview 与源码模式状态](./ticket/27-deliver-live-preview-modes.md) | 12, 18, 24 | KW-US-055, KW-US-056, KW-RULE-MARKDOWN | P1 | 未开始 |
+| 27 | 2 Markdown | [交付 Live Preview 与源码模式状态](./ticket/27-deliver-live-preview-modes.md) | 12, 18, 24 | KW-US-055, KW-US-056, KW-RULE-MARKDOWN | P1 | 已完成 |
 | 28 | 2 Markdown | [交付列表、引用与任务 Enter 事务](./ticket/28-deliver-enter-transactions.md) | 27 | KW-US-059, KW-US-060, KW-RULE-MARKDOWN | P2 | 未开始 |
 | 29 | 2 Markdown | [交付 Tab 与 Shift+Tab 行级事务](./ticket/29-deliver-tab-transactions.md) | 27 | KW-US-061, KW-US-062, KW-US-063, KW-RULE-MARKDOWN | P2 | 未开始 |
 | 30 | 2 Markdown | [交付格式快捷键与斜杠命令](./ticket/30-deliver-format-and-slash-commands.md) | 27 | KW-US-064, KW-US-065, KW-US-066, KW-US-067, KW-US-068, KW-US-069, KW-US-070, KW-US-071, KW-US-072, KW-RULE-MARKDOWN | P2 | 未开始 |
