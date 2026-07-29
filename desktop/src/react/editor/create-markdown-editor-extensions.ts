@@ -45,6 +45,7 @@ import {
   knowledgeIndentCommand,
   knowledgeOutdentCommand,
 } from './knowledge-indent-commands';
+import { knowledgeSourceNavigationKeymap } from './knowledge-source-navigation';
 import {
   createKnowledgeCommandExtensions,
   type KnowledgeCommandTranslator,
@@ -151,13 +152,17 @@ export function createMarkdownEditorExtensions(
         ...(!readOnly && knowledgeCommands
           ? createKnowledgeCommandExtensions(knowledgeCommands)
           : []),
-        Prec.highest(keymap.of([{
-          key: 'Enter',
-          run: readOnly ? () => true : knowledgeEnterCommand,
-        }, ...(!readOnly ? [
-          { key: 'Tab', run: knowledgeIndentCommand },
-          { key: 'Shift-Tab', run: knowledgeOutdentCommand },
-        ] : [])])),
+        Prec.highest(keymap.of([
+          ...knowledgeSourceNavigationKeymap,
+          {
+            key: 'Enter',
+            run: readOnly ? () => true : knowledgeEnterCommand,
+          },
+          ...(!readOnly ? [
+            { key: 'Tab', run: knowledgeIndentCommand },
+            { key: 'Shift-Tab', run: knowledgeOutdentCommand },
+          ] : []),
+        ])),
       ]
       : []),
     keymap.of([

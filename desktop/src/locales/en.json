@@ -59,7 +59,11 @@
       "emptyTitle": "Open a resource",
       "emptyDescription": "Choose a page or asset from the resource tree.",
       "splitHorizontal": "Split editor right",
-      "splitVertical": "Split editor down"
+      "splitVertical": "Split editor down",
+      "status": {
+        "label": "Markdown editor position",
+        "summary": "Line {line}, column {column} · {characters} characters"
+      }
     },
     "tabs": {
       "label": "Open resources",

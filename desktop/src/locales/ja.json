@@ -59,7 +59,11 @@
       "emptyTitle": "リソースを開く",
       "emptyDescription": "リソースツリーからページまたはアセットを選択してください。",
       "splitHorizontal": "エディターを右に分割",
-      "splitVertical": "エディターを下に分割"
+      "splitVertical": "エディターを下に分割",
+      "status": {
+        "label": "Markdown エディターの位置",
+        "summary": "{line} 行、{column} 列 · {characters} 文字"
+      }
     },
     "tabs": {
       "label": "開いているリソース",

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type {
   KnowledgeSourceDto,
 } from '../../../../../shared/knowledge-workspace-contract.ts';
@@ -8,6 +9,10 @@ import type {
   KnowledgeDocumentRegistry,
 } from '../../stores/knowledge-document-registry';
 import { KnowledgeEditorGroups } from './KnowledgeEditorGroups';
+import {
+  KnowledgeEditorStatusBar,
+  type KnowledgeEditorStatusTarget,
+} from './KnowledgeEditorStatusBar';
 import {
   KnowledgeResourceTree,
   type KnowledgeResourceTreeProps,
@@ -55,6 +60,8 @@ export function KnowledgeLayout({
 }: KnowledgeLayoutProps) {
   const renderedSources = visibleSources(sources);
   const sourcesHeadingId = 'knowledge-sources-heading';
+  const [activeStatusTarget, setActiveStatusTarget] =
+    useState<KnowledgeEditorStatusTarget | null>(null);
 
   return (
     <main
@@ -127,6 +134,11 @@ export function KnowledgeLayout({
         sources={renderedSources}
         sourcesReady={sourcesStatus === 'ready'}
         conflictServices={treeServices}
+        onActiveTargetChange={setActiveStatusTarget}
+      />
+      <KnowledgeEditorStatusBar
+        registry={documentRegistry}
+        activeTarget={activeStatusTarget}
       />
     </main>
   );

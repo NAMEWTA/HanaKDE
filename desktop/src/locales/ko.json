@@ -59,7 +59,11 @@
       "emptyTitle": "리소스 열기",
       "emptyDescription": "리소스 트리에서 페이지 또는 에셋을 선택하세요.",
       "splitHorizontal": "편집기를 오른쪽으로 분할",
-      "splitVertical": "편집기를 아래로 분할"
+      "splitVertical": "편집기를 아래로 분할",
+      "status": {
+        "label": "Markdown 편집기 위치",
+        "summary": "{line}행, {column}열 · {characters}자"
+      }
     },
     "tabs": {
       "label": "열린 리소스",

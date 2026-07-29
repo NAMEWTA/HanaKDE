@@ -59,7 +59,11 @@
       "emptyTitle": "打开一个资源",
       "emptyDescription": "从资源树中选择页面或资产。",
       "splitHorizontal": "向右拆分编辑器",
-      "splitVertical": "向下拆分编辑器"
+      "splitVertical": "向下拆分编辑器",
+      "status": {
+        "label": "Markdown 编辑器位置",
+        "summary": "行 {line}，列 {column} · {characters} 字符"
+      }
     },
     "tabs": {
       "label": "已打开资源",

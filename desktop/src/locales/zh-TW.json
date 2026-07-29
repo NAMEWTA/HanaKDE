@@ -59,7 +59,11 @@
       "emptyTitle": "開啟資源",
       "emptyDescription": "請從資源樹選擇頁面或資產。",
       "splitHorizontal": "向右分割編輯器",
-      "splitVertical": "向下分割編輯器"
+      "splitVertical": "向下分割編輯器",
+      "status": {
+        "label": "Markdown 編輯器位置",
+        "summary": "行 {line}，列 {column} · {characters} 字元"
+      }
     },
     "tabs": {
       "label": "已開啟資源",

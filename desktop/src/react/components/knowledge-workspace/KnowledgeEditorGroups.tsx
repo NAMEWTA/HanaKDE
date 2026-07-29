@@ -115,6 +115,12 @@ export interface KnowledgeEditorGroupsProps {
       input: CreateKnowledgeOrphanDocumentInput,
     ): Promise<CreateKnowledgeOrphanDocumentResult>;
   };
+  onActiveTargetChange?(
+    target: {
+      viewId: string;
+      kind: KnowledgeEditorResourceKind;
+    } | null,
+  ): void;
 }
 
 interface PendingUnsavedClose {
@@ -307,6 +313,7 @@ export const KnowledgeEditorGroups = forwardRef<
   onLocateResource,
   conflictServices,
   lifecycleServices,
+  onActiveTargetChange,
 }, ref) {
   const nextGroupId = useRef(1);
   const nextSplitId = useRef(1);
@@ -845,6 +852,22 @@ export const KnowledgeEditorGroups = forwardRef<
       pending?.resolve?.(false);
     };
   }, []);
+
+  const activeGroup = findGroup(layout.root, layout.activeGroupId);
+  const activeTab = activeGroup?.tabs.find(
+    tab => tab.viewId === activeGroup.activeViewId,
+  ) ?? null;
+  const activeTargetViewId = activeTab?.viewId ?? null;
+  const activeTargetKind = activeTab?.kind ?? null;
+  useEffect(() => {
+    onActiveTargetChange?.(activeTargetViewId && activeTargetKind
+      ? { viewId: activeTargetViewId, kind: activeTargetKind }
+      : null);
+  }, [
+    activeTargetKind,
+    activeTargetViewId,
+    onActiveTargetChange,
+  ]);
 
   const renderNode = (node: KnowledgeEditorLayoutNode): React.ReactNode => {
     if (node.kind === 'split') {
