@@ -83,9 +83,79 @@ export const markdownTheme = EditorView.theme({
     textDecorationStyle: 'dotted',
     cursor: 'not-allowed',
   },
+  '.cm-frontmatter-properties': {
+    display: 'grid',
+    gap: 'var(--space-8)',
+    maxWidth: 'var(--editor-markdown-content-width)',
+    margin: '0 auto var(--space-16)',
+    padding: 'var(--space-12)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--surface, var(--bg))',
+    color: 'var(--text)',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '0.78rem',
+    boxSizing: 'border-box',
+  },
+  '.cm-frontmatter-heading': {
+    color: 'var(--text-muted)',
+    fontWeight: '600',
+  },
+  '.cm-frontmatter-rows': {
+    display: 'grid',
+    gap: 'var(--space-6)',
+  },
+  '.cm-frontmatter-row, .cm-frontmatter-add': {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(90px, 0.7fr) minmax(140px, 1.5fr) auto auto',
+    gap: 'var(--space-6)',
+    alignItems: 'center',
+  },
+  '.cm-frontmatter-key': {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontWeight: '600',
+  },
+  '.cm-frontmatter-value, .cm-frontmatter-new-key, .cm-frontmatter-new-value': {
+    minWidth: '0',
+    padding: 'var(--space-6) var(--space-8)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--input-bg, var(--bg))',
+    color: 'var(--text)',
+    font: 'inherit',
+  },
+  '.cm-frontmatter-value:focus-visible, .cm-frontmatter-new-key:focus-visible, .cm-frontmatter-new-value:focus-visible, .cm-frontmatter-properties button:focus-visible': {
+    outline: '2px solid var(--accent)',
+    outlineOffset: '2px',
+  },
+  '.cm-frontmatter-properties button': {
+    minHeight: '28px',
+    padding: 'var(--space-4) var(--space-8)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--button-bg, var(--overlay-subtle))',
+    color: 'var(--text)',
+    font: 'inherit',
+    cursor: 'pointer',
+  },
+  '.cm-frontmatter-delete': {
+    color: 'var(--danger, #b54a4a)',
+  },
+  '.cm-frontmatter-status': {
+    margin: '0',
+    color: 'var(--danger, #b54a4a)',
+  },
   '@media (max-width: 560px)': {
     '.cm-knowledge-link': {
       textUnderlineOffset: '3px',
+    },
+    '.cm-frontmatter-row, .cm-frontmatter-add': {
+      gridTemplateColumns: '1fr auto',
+    },
+    '.cm-frontmatter-key, .cm-frontmatter-new-key': {
+      gridColumn: '1 / -1',
     },
   },
   '.cm-math-widget': {

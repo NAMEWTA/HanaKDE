@@ -12,6 +12,7 @@ import {
 } from '@codemirror/view';
 import type { MarkdownImageContext } from '../utils/markdown';
 import { csvTableField } from './csv-field';
+import { frontmatterField } from './frontmatter-field';
 import { markdownCoverField } from './cover-field';
 import { codeHighlight, markdownHighlight } from './highlight';
 import { createLinkClickHandler, type MarkdownLinkOpenHandler } from './link-handler';
@@ -110,6 +111,7 @@ export function createMarkdownEditorExtensions(
       markdownImageContextFacet.of(imageContext),
       markdownDecoPlugin,
       ...(knowledgeLinks ? [createKnowledgeLinkField(knowledgeLinks)] : []),
+      frontmatterField,
       markdownCoverField,
       markdownBlockDecoField,
       mermaidDecoField,

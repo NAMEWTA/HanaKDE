@@ -103,6 +103,17 @@
       "external": "在外部開啟連結 {url}",
       "invalid": "無效的知識連結（{reason}）"
     },
+    "frontmatter": {
+      "label": "頁面屬性",
+      "title": "屬性",
+      "editValue": "編輯 {key} 的值",
+      "apply": "套用",
+      "delete": "刪除",
+      "newKey": "屬性名稱",
+      "newValue": "JSON 值",
+      "add": "新增",
+      "invalidValue": "請輸入唯一屬性名稱以及 JSON 純量或一維純量陣列。"
+    },
     "unsaved": {
       "title": "是否儲存變更？",
       "description": "{document} 有未儲存的變更。繼續前請選擇儲存、放棄或取消。",

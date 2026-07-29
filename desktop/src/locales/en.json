@@ -103,6 +103,17 @@
       "external": "Open external link {url}",
       "invalid": "Invalid knowledge link ({reason})"
     },
+    "frontmatter": {
+      "label": "Page properties",
+      "title": "Properties",
+      "editValue": "Edit value for {key}",
+      "apply": "Apply",
+      "delete": "Delete",
+      "newKey": "Property name",
+      "newValue": "JSON value",
+      "add": "Add",
+      "invalidValue": "Enter a unique property name and a JSON scalar or flat scalar array."
+    },
     "unsaved": {
       "title": "Save changes?",
       "description": "{document} has unsaved changes. Save, discard, or cancel before continuing.",

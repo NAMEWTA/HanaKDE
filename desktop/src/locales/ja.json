@@ -103,6 +103,17 @@
       "external": "外部リンク {url} を開く",
       "invalid": "無効なナレッジリンク（{reason}）"
     },
+    "frontmatter": {
+      "label": "ページプロパティ",
+      "title": "プロパティ",
+      "editValue": "{key} の値を編集",
+      "apply": "適用",
+      "delete": "削除",
+      "newKey": "プロパティ名",
+      "newValue": "JSON 値",
+      "add": "追加",
+      "invalidValue": "一意のプロパティ名と JSON スカラーまたは一次元スカラー配列を入力してください。"
+    },
     "unsaved": {
       "title": "変更を保存しますか？",
       "description": "{document} に未保存の変更があります。続行する前に保存、破棄、またはキャンセルを選択してください。",

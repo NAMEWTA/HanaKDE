@@ -103,6 +103,17 @@
       "external": "在外部打开链接 {url}",
       "invalid": "无效的知识链接（{reason}）"
     },
+    "frontmatter": {
+      "label": "页面属性",
+      "title": "属性",
+      "editValue": "编辑 {key} 的值",
+      "apply": "应用",
+      "delete": "删除",
+      "newKey": "属性名称",
+      "newValue": "JSON 值",
+      "add": "添加",
+      "invalidValue": "请输入唯一属性名以及 JSON 标量或一维标量数组。"
+    },
     "unsaved": {
       "title": "是否保存更改？",
       "description": "{document} 有未保存的更改。继续前请选择保存、放弃或取消。",
