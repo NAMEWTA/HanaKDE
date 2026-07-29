@@ -514,10 +514,130 @@
 }
 
 .knowledgeGroupContent {
+  position: relative;
   display: flex;
   align-items: stretch;
   justify-content: stretch;
   overflow: hidden;
+}
+
+.knowledgeFindBar {
+  position: absolute;
+  z-index: 80;
+  top: var(--space-8, 0.5rem);
+  right: var(--space-8, 0.5rem);
+  display: grid;
+  grid-template-columns:
+    1.75rem
+    minmax(0, 1fr)
+    repeat(2, 1.75rem)
+    minmax(2.75rem, auto)
+    repeat(3, 1.75rem);
+  gap: var(--space-4, 0.25rem);
+  align-items: center;
+  box-sizing: border-box;
+  width: min(34rem, calc(100% - 1rem));
+  min-width: 0;
+  padding: var(--space-6, 0.375rem);
+  overflow: hidden;
+  border: var(--border-width, 1px) solid var(--border);
+  border-radius: var(--radius-md, 0.5rem);
+  background: color-mix(in srgb, var(--bg-card, var(--bg)) 96%, transparent);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  backdrop-filter: blur(0.5rem);
+}
+
+.knowledgeFindInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 1.75rem;
+  padding: 0 var(--space-6, 0.375rem);
+  overflow-x: auto;
+  border: var(--border-width, 1px) solid var(--border);
+  border-radius: var(--radius-sm, 0.25rem);
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.75rem;
+  white-space: nowrap;
+}
+
+.knowledgeFindInput:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.knowledgeFindIconButton,
+.knowledgeFindToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm, 0.25rem);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.knowledgeFindToggle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.knowledgeFindIconButton:hover,
+.knowledgeFindToggle:hover,
+.knowledgeFindToggle[aria-pressed='true'] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.knowledgeFindIconButton:focus-visible,
+.knowledgeFindToggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.knowledgeFindExpandIcon {
+  display: inline-flex;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.knowledgeFindExpandIcon[data-expanded='true'] {
+  transform: rotate(90deg);
+}
+
+.knowledgeFindCount {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.knowledgeFindReplaceRow {
+  display: grid;
+  grid-column: 2 / 8;
+  grid-row: 2;
+  grid-template-columns: minmax(0, 1fr) repeat(2, 1.75rem);
+  gap: var(--space-4, 0.25rem);
+  min-width: 0;
+}
+
+.knowledgeFindClose {
+  grid-column: 8;
+  grid-row: 1;
 }
 
 .knowledgeGroupContent > .emptyEditor {

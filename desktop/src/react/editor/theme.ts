@@ -48,6 +48,15 @@ export const markdownTheme = EditorView.theme({
   },
   '.cm-activeLine': { backgroundColor: 'transparent' },
   '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+  '.cm-knowledge-find-match': {
+    borderRadius: '2px',
+    backgroundColor: 'color-mix(in srgb, var(--warning, #c58a20) 26%, transparent)',
+    boxShadow: 'inset 0 -1px 0 color-mix(in srgb, var(--warning, #c58a20) 72%, transparent)',
+  },
+  '.cm-knowledge-find-match-current': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 34%, transparent)',
+    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--accent) 78%, transparent)',
+  },
   '.cm-cursor': { borderLeftColor: 'var(--text)' },
   '.cm-md-mark': {
     backgroundColor: 'var(--cm-md-mark-bg, rgba(255, 248, 143, 0.72))',

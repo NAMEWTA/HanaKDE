@@ -67,6 +67,9 @@ import {
   createKnowledgeSafeHtmlField,
   type KnowledgeSafeHtmlFieldConfig,
 } from './knowledge-safe-html-field';
+import {
+  knowledgeFindHighlightExtension,
+} from './knowledge-find-state';
 import { taskField } from './task-field';
 import { codeTheme, markdownTheme } from './theme';
 
@@ -92,6 +95,9 @@ export interface CreateMarkdownEditorExtensionsOptions {
   onOpenLink?: MarkdownLinkOpenHandler;
   knowledgeLinks?: KnowledgeLinkFieldConfig;
   knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig;
+  knowledgeFind?: {
+    onRequest(command: 'find' | 'replace', view: EditorView): void;
+  };
   knowledgeCommands?: {
     translate: KnowledgeCommandTranslator;
     onSlashMenuChange: (request: KnowledgeSlashMenuRequest | null) => void;
@@ -154,6 +160,7 @@ export function createMarkdownEditorExtensions(
     onOpenLink,
     knowledgeLinks,
     knowledgeSafeHtml,
+    knowledgeFind,
     knowledgeCommands,
   } = options;
   const isMarkdown = mode === 'markdown';
@@ -164,11 +171,28 @@ export function createMarkdownEditorExtensions(
     bracketMatching(),
     ...(isMarkdown
       ? [
+        knowledgeFindHighlightExtension,
         ...(!readOnly && knowledgeCommands
           ? createKnowledgeCommandExtensions(knowledgeCommands)
           : []),
         ...(!readOnly ? [knowledgeFootnoteCompletion] : []),
         Prec.highest(keymap.of([
+          ...(knowledgeFind ? [
+            {
+              key: 'Mod-f',
+              run: (view: EditorView) => {
+                knowledgeFind.onRequest('find', view);
+                return true;
+              },
+            },
+            {
+              key: 'Mod-h',
+              run: (view: EditorView) => {
+                knowledgeFind.onRequest('replace', view);
+                return true;
+              },
+            },
+          ] : []),
           ...knowledgeSourceNavigationKeymap,
           {
             key: 'Enter',

@@ -60,6 +60,18 @@ export interface KnowledgeDocumentEditorProps {
     activation: KnowledgeLinkActivation,
   ) => void | Promise<void>;
   onRequestOrphanSave?: () => void;
+  onFindRequest?: (request: {
+    command: 'find' | 'replace';
+    groupId: string;
+    viewId: string;
+  }) => void;
+  onEditorViewChange?: (
+    viewId: string,
+    view: NonNullable<
+      ReturnType<MarkdownEditorSurfaceHandle['getView']>
+    > | null,
+  ) => void;
+  onEditorViewUpdate?: (viewId: string) => void;
 }
 
 export interface KnowledgeDocumentNoticesProps {
@@ -105,6 +117,9 @@ export function KnowledgeDocumentEditor({
   onOpenLink,
   onOpenKnowledgeLink,
   onRequestOrphanSave,
+  onFindRequest,
+  onEditorViewChange,
+  onEditorViewUpdate,
 }: KnowledgeDocumentEditorProps) {
   const addressKey = knowledgeDocumentKey(address);
   const requestAddress = useMemo<KnowledgeResourceAddress>(() => ({
@@ -327,16 +342,36 @@ export function KnowledgeDocumentEditor({
         });
       },
     },
+    knowledgeFind: {
+      onRequest: command => {
+        onFindRequest?.({
+          command,
+          groupId,
+          viewId,
+        });
+      },
+      onUpdate: () => {
+        onEditorViewUpdate?.(viewId);
+      },
+      onViewChange: editorView => {
+        onEditorViewChange?.(viewId, editorView);
+      },
+    },
     contentGate: knowledgeMarkdownContentGate,
   }), [
     addressKey,
     client,
     onOpenLink,
     onOpenKnowledgeLink,
+    onFindRequest,
+    onEditorViewChange,
+    onEditorViewUpdate,
     onRequestOrphanSave,
     onSaved,
     registry,
     requestAddress,
+    groupId,
+    viewId,
   ]);
 
   const handleSelection = useCallback((editorView: NonNullable<

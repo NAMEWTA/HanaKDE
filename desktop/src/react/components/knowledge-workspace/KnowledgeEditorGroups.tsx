@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { EditorView } from '@codemirror/view';
 import {
   knowledgeWritableSources,
   orderKnowledgeUnsavedDocuments,
@@ -43,6 +44,13 @@ import {
   KnowledgeDocumentEditor,
   KnowledgeDocumentNotices,
 } from './KnowledgeDocumentEditor';
+import {
+  KnowledgeFindBar,
+  type KnowledgeFindCommand,
+} from './KnowledgeFindBar';
+import {
+  initialKnowledgeFindQuery,
+} from '../../editor/knowledge-find-state';
 import {
   KnowledgeTabBar,
   type KnowledgeBreadcrumbTarget,
@@ -129,6 +137,15 @@ interface PendingUnsavedClose {
   error: 'conflict' | 'unavailable' | null;
   mode: 'close-view' | 'lifecycle';
   resolve?: (proceed: boolean) => void;
+}
+
+interface KnowledgeFindSession {
+  groupId: string;
+  viewId: string;
+  command: KnowledgeFindCommand;
+  commandRevision: number;
+  documentRevision: number;
+  initialQuery: string;
 }
 
 interface KnowledgeEditorGroupNode {
@@ -329,6 +346,10 @@ export const KnowledgeEditorGroups = forwardRef<
   const [pendingUnsavedClose, setPendingUnsavedClose] =
     useState<PendingUnsavedClose | null>(null);
   const pendingUnsavedCloseRef = useRef<PendingUnsavedClose | null>(null);
+  const editorViewsRef = useRef(new Map<string, EditorView>());
+  const [, setEditorViewRevision] = useState(0);
+  const [findSession, setFindSession] =
+    useState<KnowledgeFindSession | null>(null);
 
   const commitPendingUnsavedClose = (
     next: PendingUnsavedClose | null,
@@ -340,6 +361,69 @@ export const KnowledgeEditorGroups = forwardRef<
   const commitLayout = (next: KnowledgeEditorLayout) => {
     layoutRef.current = next;
     setLayout(next);
+  };
+
+  const openFind = (request: {
+    command: KnowledgeFindCommand;
+    groupId: string;
+    viewId: string;
+  }) => {
+    const currentLayout = layoutRef.current;
+    const group = findGroup(currentLayout.root, request.groupId);
+    const activeTab = group?.tabs.find(
+      tab => tab.viewId === group.activeViewId,
+    );
+    if (
+      currentLayout.activeGroupId !== request.groupId
+      || activeTab?.kind !== 'markdown'
+      || activeTab.viewId !== request.viewId
+    ) {
+      return;
+    }
+    setFindSession(current => {
+      if (current?.groupId === request.groupId) {
+        return {
+          ...current,
+          viewId: request.viewId,
+          command: request.command,
+          commandRevision: current.commandRevision + 1,
+          documentRevision: current.documentRevision + 1,
+        };
+      }
+      return {
+        ...request,
+        commandRevision: 1,
+        documentRevision: 0,
+        initialQuery: initialKnowledgeFindQuery(
+          editorViewsRef.current.get(request.viewId) ?? null,
+        ),
+      };
+    });
+  };
+
+  const registerEditorView = (
+    viewId: string,
+    editorView: EditorView | null,
+  ) => {
+    if (editorView) editorViewsRef.current.set(viewId, editorView);
+    else editorViewsRef.current.delete(viewId);
+    setEditorViewRevision(revision => revision + 1);
+    setFindSession(current => {
+      if (current?.viewId !== viewId) return current;
+      if (!editorView) return null;
+      return {
+        ...current,
+        documentRevision: current.documentRevision + 1,
+      };
+    });
+  };
+
+  const notifyEditorViewUpdate = (viewId: string) => {
+    setFindSession(current => (
+      current?.viewId === viewId
+        ? { ...current, documentRevision: current.documentRevision + 1 }
+        : current
+    ));
   };
 
   const createGroupId = () => {
@@ -653,8 +737,28 @@ export const KnowledgeEditorGroups = forwardRef<
     nextGroupId.current = 1;
     nextSplitId.current = 1;
     nextViewId.current = 1;
+    editorViewsRef.current.clear();
+    setFindSession(null);
     commitLayout(createInitialLayout(initialGroupId));
   }, [registry, workspaceKey]);
+
+  useEffect(() => {
+    setFindSession(current => {
+      if (!current) return current;
+      if (layout.activeGroupId !== current.groupId) return null;
+      const group = findGroup(layout.root, current.groupId);
+      const tab = group?.tabs.find(
+        candidate => candidate.viewId === group.activeViewId,
+      );
+      if (!tab || tab.kind !== 'markdown') return null;
+      if (tab.viewId === current.viewId) return current;
+      return {
+        ...current,
+        viewId: tab.viewId,
+        documentRevision: current.documentRevision + 1,
+      };
+    });
+  }, [layout]);
 
   const resolvePendingSave = async (target?: {
     address: KnowledgeResourceAddress;
@@ -900,6 +1004,27 @@ export const KnowledgeEditorGroups = forwardRef<
             commitLayout({ ...layoutRef.current, activeGroupId: node.id });
           }
         }}
+        onKeyDown={(event) => {
+          if (
+            event.defaultPrevented
+            || !(event.metaKey || event.ctrlKey)
+          ) {
+            return;
+          }
+          const key = event.key.toLocaleLowerCase();
+          if (key !== 'f' && key !== 'h') return;
+          const tab = node.tabs.find(
+            candidate => candidate.viewId === node.activeViewId,
+          );
+          if (!tab || tab.kind !== 'markdown') return;
+          event.preventDefault();
+          event.stopPropagation();
+          openFind({
+            command: key === 'h' ? 'replace' : 'find',
+            groupId: node.id,
+            viewId: tab.viewId,
+          });
+        }}
         onDragOver={(event) => {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'move';
@@ -987,6 +1112,9 @@ export const KnowledgeEditorGroups = forwardRef<
                       });
                     }
                   }}
+                  onFindRequest={openFind}
+                  onEditorViewChange={registerEditorView}
+                  onEditorViewUpdate={notifyEditorViewUpdate}
                 />
               ) : (
                 <KnowledgeAssetViewer
@@ -997,6 +1125,18 @@ export const KnowledgeEditorGroups = forwardRef<
               )}
             </div>
           ))}
+          {findSession?.groupId === node.id ? (
+            <KnowledgeFindBar
+              editorView={
+                editorViewsRef.current.get(findSession.viewId) ?? null
+              }
+              command={findSession.command}
+              commandRevision={findSession.commandRevision}
+              documentRevision={findSession.documentRevision}
+              initialQuery={findSession.initialQuery}
+              onClose={() => setFindSession(null)}
+            />
+          ) : null}
         </div>
       </section>
     );

@@ -97,6 +97,14 @@ export interface MarkdownEditorSurfacePolicy {
   } | null;
   knowledgeLinks?: KnowledgeLinkFieldConfig | null;
   knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig | null;
+  knowledgeFind?: {
+    onRequest(
+      command: 'find' | 'replace',
+      view: EditorView,
+    ): void;
+    onUpdate?(view: EditorView): void;
+    onViewChange?(view: EditorView | null): void;
+  } | null;
   contentGate: (input: { content: string }) => MarkdownContentGateResult;
 }
 
@@ -880,6 +888,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
           }
           if (update.docChanged || update.selectionSet) {
             emitStatsIfChanged(update.view);
+            policyRef.current.knowledgeFind?.onUpdate?.(update.view);
           }
       });
       const extensions = createMarkdownEditorExtensions({
@@ -901,6 +910,13 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         onOpenLink: (url) => policyRef.current.openLink?.open(url),
         knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
         knowledgeSafeHtml: policyRef.current.knowledgeSafeHtml ?? undefined,
+        knowledgeFind: isMd && policyRef.current.knowledgeFind
+          ? {
+              onRequest: (command, view) => {
+                policyRef.current.knowledgeFind?.onRequest(command, view);
+              },
+            }
+          : undefined,
         knowledgeCommands: isMd && !readOnly && enableKnowledgeCommands
           ? {
               translate: key => window.t?.(key) ?? key,
@@ -988,6 +1004,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
       view.dom.addEventListener('dragleave', onCoverDragLeave, true);
       view.dom.addEventListener('drop', onCoverDrop, true);
       viewRef.current = view;
+      policyRef.current.knowledgeFind?.onViewChange?.(view);
       lastStatsRef.current = null;
       emitStatsIfChanged(view);
       restoreEditorScrollSnapshot(view, initialScrollSnapshotRef.current);
@@ -1012,6 +1029,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         view.dom.removeEventListener('dragover', onCoverDragOver, true);
         view.dom.removeEventListener('dragleave', onCoverDragLeave, true);
         view.dom.removeEventListener('drop', onCoverDrop, true);
+        policyRef.current.knowledgeFind?.onViewChange?.(null);
         view.destroy();
         viewDestroyCbRef.current?.();
         viewRef.current = null;

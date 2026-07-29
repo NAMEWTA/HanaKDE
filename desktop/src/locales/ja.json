@@ -126,6 +126,20 @@
       "assetLoading": "ローカルアセットを読み込み中…",
       "assetUnavailable": "ローカルアセットを利用できません"
     },
+    "find": {
+      "label": "現在の Markdown ソース内を検索して置換",
+      "query": "検索",
+      "replacement": "置換後の文字列",
+      "matchCase": "大文字と小文字を区別",
+      "wholeWord": "単語単位で一致",
+      "previous": "前の一致",
+      "next": "次の一致",
+      "replace": "現在の一致を置換",
+      "replaceAll": "すべての一致を置換",
+      "expandReplace": "置換コントロールを表示",
+      "collapseReplace": "置換コントロールを非表示",
+      "close": "検索と置換を閉じる"
+    },
     "commands": {
       "menuLabel": "Markdown コマンド",
       "empty": "一致するコマンドはありません",

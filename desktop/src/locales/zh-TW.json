@@ -126,6 +126,20 @@
       "assetLoading": "正在載入本機資源…",
       "assetUnavailable": "本機資源無法使用"
     },
+    "find": {
+      "label": "在目前 Markdown 原始碼中尋找和取代",
+      "query": "尋找",
+      "replacement": "取代為",
+      "matchCase": "區分大小寫",
+      "wholeWord": "全字拼寫須相符",
+      "previous": "上一個相符項目",
+      "next": "下一個相符項目",
+      "replace": "取代目前相符項目",
+      "replaceAll": "取代全部相符項目",
+      "expandReplace": "顯示取代控制項",
+      "collapseReplace": "隱藏取代控制項",
+      "close": "關閉尋找和取代"
+    },
     "commands": {
       "menuLabel": "Markdown 命令",
       "empty": "沒有符合的命令",

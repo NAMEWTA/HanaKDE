@@ -126,6 +126,20 @@
       "assetLoading": "로컬 에셋 불러오는 중…",
       "assetUnavailable": "로컬 에셋을 사용할 수 없습니다"
     },
+    "find": {
+      "label": "현재 Markdown 소스에서 찾기 및 바꾸기",
+      "query": "찾기",
+      "replacement": "바꿀 내용",
+      "matchCase": "대/소문자 구분",
+      "wholeWord": "단어 단위로 일치",
+      "previous": "이전 일치",
+      "next": "다음 일치",
+      "replace": "현재 일치 바꾸기",
+      "replaceAll": "모든 일치 바꾸기",
+      "expandReplace": "바꾸기 컨트롤 표시",
+      "collapseReplace": "바꾸기 컨트롤 숨기기",
+      "close": "찾기 및 바꾸기 닫기"
+    },
     "commands": {
       "menuLabel": "Markdown 명령",
       "empty": "일치하는 명령이 없습니다",

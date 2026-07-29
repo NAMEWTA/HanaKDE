@@ -126,6 +126,20 @@
       "assetLoading": "Loading local asset…",
       "assetUnavailable": "Local asset is unavailable"
     },
+    "find": {
+      "label": "Find and replace in current Markdown source",
+      "query": "Find",
+      "replacement": "Replace with",
+      "matchCase": "Match case",
+      "wholeWord": "Match whole word",
+      "previous": "Previous match",
+      "next": "Next match",
+      "replace": "Replace current match",
+      "replaceAll": "Replace all matches",
+      "expandReplace": "Show replace controls",
+      "collapseReplace": "Hide replace controls",
+      "close": "Close find and replace"
+    },
     "commands": {
       "menuLabel": "Markdown commands",
       "empty": "No matching commands",
