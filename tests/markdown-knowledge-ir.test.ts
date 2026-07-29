@@ -259,6 +259,80 @@ describe("Markdown Knowledge IR", () => {
     expect(parseMarkdownKnowledgeIr(source).tokens).toEqual(tokens);
   });
 
+  it("projects exact, case-sensitive footnotes and deterministic duplicate definitions", () => {
+    const source = [
+      "A[^Note] B[^note] C[^missing] D^[inline **body**].",
+      "",
+      "[^Note]: First paragraph.",
+      "",
+      "    - continued list",
+      "\tand a tab",
+      "",
+      "[^Note]: duplicate",
+      "[^note]: lower-case winner",
+    ].join("\n");
+    const tokens = parseMarkdownKnowledgeIr(source).tokens;
+    const definitions = tokensOfKind(tokens, "footnote_definition");
+    const references = tokensOfKind(tokens, "footnote_reference");
+    const inline = tokensOfKind(tokens, "inline_footnote");
+
+    expect(definitions.map(token => ({
+      label: token.label,
+      content: token.content,
+      duplicate: token.duplicate,
+    }))).toEqual([
+      {
+        label: "Note",
+        content: "First paragraph.\n\n- continued list\nand a tab",
+        duplicate: false,
+      },
+      { label: "Note", content: "duplicate", duplicate: true },
+      { label: "note", content: "lower-case winner", duplicate: false },
+    ]);
+    expect(references.map(token => ({
+      label: token.label,
+      resolved: token.definitionRange !== undefined,
+    }))).toEqual([
+      { label: "Note", resolved: true },
+      { label: "note", resolved: true },
+      { label: "missing", resolved: false },
+    ]);
+    expect(inline).toEqual([
+      expect.objectContaining({ content: "inline **body**" }),
+    ]);
+    expectRange(source, definitions[0].markerRange, "[^Note]:");
+    expectRange(source, definitions[0].labelRange, "Note");
+    expectRange(source, inline[0].contentRange, "inline **body**");
+    expect(references[0].definitionRange).toEqual(definitions[0].range);
+    expectWellFormedTokens(source, tokens);
+  });
+
+  it("excludes every footnote form from code, HTML, links, and escaped input", () => {
+    const source = [
+      "`[^inline] ^[inline]`",
+      "```md",
+      "[^fence]: hidden",
+      "[^fence]",
+      "```",
+      "    [^indented]: hidden",
+      "<div>[^html] ^[html]</div>",
+      "",
+      "[label](page[^inside].md)",
+      String.raw`\[^escaped] \^[escaped]`,
+      "[^visible]: shown",
+      "visible[^visible]^[also visible]",
+    ].join("\n");
+    const tokens = parseMarkdownKnowledgeIr(source).tokens;
+
+    expect(tokensOfKind(tokens, "footnote_definition").map(token => token.label))
+      .toEqual(["visible"]);
+    expect(tokensOfKind(tokens, "footnote_reference").map(token => token.label))
+      .toEqual(["visible"]);
+    expect(tokensOfKind(tokens, "inline_footnote").map(token => token.content))
+      .toEqual(["also visible"]);
+    expectWellFormedTokens(source, tokens);
+  });
+
   it("preserves mixed line endings, surrogate offsets, and deterministic repeats", () => {
     const source = "# 😀\r# lone\ud83d\n[[A]]\r\n#tag";
     const first = parseMarkdownKnowledgeIr(source);

@@ -112,6 +112,13 @@
       "editSource": "编辑数学公式源码",
       "renderError": "无法渲染公式。请编辑源码以修复。"
     },
+    "footnote": {
+      "jumpToDefinition": "脚注 [^{label}]。激活后跳转到定义。",
+      "editInline": "行内脚注 {number}。激活后编辑源码。",
+      "missingDefinition": "脚注 [^{label}] 缺少定义。激活后编辑源码。",
+      "duplicateDefinition": "脚注定义 [^{label}] 重复，将使用第一个定义。",
+      "duplicateBadge": "重复脚注"
+    },
     "commands": {
       "menuLabel": "Markdown 命令",
       "empty": "没有匹配的命令",

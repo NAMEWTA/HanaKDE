@@ -1,7 +1,10 @@
 import type { SyntaxNode, Tree } from "@lezer/common";
 import { GFM, parser as markdownParser } from "@lezer/markdown";
 import type {
+  MarkdownFootnoteDefinitionToken,
+  MarkdownFootnoteReferenceToken,
   MarkdownHeadingToken,
+  MarkdownInlineFootnoteToken,
   MarkdownKnowledgeToken,
   MarkdownLinkToken,
   MarkdownTextRange,
@@ -463,6 +466,168 @@ function advanceExclusion(
   return cursor;
 }
 
+function definitionContinuationContent(line: SourceLine): string | null {
+  if (line.text.startsWith("\t")) return line.text.slice(1);
+  if (line.text.startsWith("    ")) return line.text.slice(4);
+  return null;
+}
+
+function collectFootnoteDefinitions(
+  source: string,
+  lines: readonly SourceLine[],
+  exclusions: readonly MarkdownTextRange[],
+  signal?: AbortSignal,
+): MarkdownFootnoteDefinitionToken[] {
+  const tokens: MarkdownFootnoteDefinitionToken[] = [];
+  const firstByLabel = new Map<string, MarkdownFootnoteDefinitionToken>();
+  let exclusionCursor = 0;
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    if ((lineIndex & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    const line = lines[lineIndex];
+    exclusionCursor = advanceExclusion(exclusions, exclusionCursor, line.from, signal);
+    const exclusion = exclusions[exclusionCursor];
+    if (exclusion && exclusion.from <= line.from && line.from < exclusion.to) continue;
+
+    const match = /^\[\^([^\]\s]+)\]:([ \t]?)(.*)$/u.exec(line.text);
+    if (!match) continue;
+
+    const label = match[1];
+    const markerLength = label.length + 4;
+    const firstContentFrom = line.from + markerLength + match[2].length;
+    const contentLines = [match[3]];
+    let rangeTo = line.to;
+    let contentTo = line.to;
+    let nextLineIndex = lineIndex + 1;
+    let pendingBlankLines = 0;
+
+    for (; nextLineIndex < lines.length; nextLineIndex += 1) {
+      if ((nextLineIndex & PERIODIC_ABORT_MASK) === 0) {
+        throwIfMarkdownIrAborted(signal);
+      }
+      const continuationLine = lines[nextLineIndex];
+      const continuation = definitionContinuationContent(continuationLine);
+      if (continuation !== null) {
+        while (pendingBlankLines > 0) {
+          contentLines.push("");
+          pendingBlankLines -= 1;
+        }
+        contentLines.push(continuation);
+        rangeTo = continuationLine.to;
+        contentTo = continuationLine.to;
+        continue;
+      }
+      if (continuationLine.text.length === 0) {
+        pendingBlankLines += 1;
+        continue;
+      }
+      break;
+    }
+
+    const labelRange = {
+      from: line.from + 2,
+      to: line.from + 2 + label.length,
+    };
+    const token: MarkdownFootnoteDefinitionToken = {
+      kind: "footnote_definition",
+      range: { from: line.from, to: rangeTo },
+      raw: source.slice(line.from, rangeTo),
+      labelRange,
+      label,
+      markerRange: { from: line.from, to: line.from + markerLength },
+      contentRange: { from: firstContentFrom, to: contentTo },
+      content: contentLines.join("\n"),
+      duplicate: firstByLabel.has(label),
+    };
+    tokens.push(token);
+    if (!token.duplicate) firstByLabel.set(label, token);
+    lineIndex = Math.max(lineIndex, nextLineIndex - pendingBlankLines - 1);
+  }
+  return tokens;
+}
+
+function collectInlineFootnotes(
+  source: string,
+  escaped: Uint8Array,
+  exclusions: readonly MarkdownTextRange[],
+  definitions: readonly MarkdownFootnoteDefinitionToken[],
+  signal?: AbortSignal,
+): Array<MarkdownFootnoteReferenceToken | MarkdownInlineFootnoteToken> {
+  const tokens: Array<MarkdownFootnoteReferenceToken | MarkdownInlineFootnoteToken> = [];
+  const firstDefinitions = new Map<string, MarkdownFootnoteDefinitionToken>();
+  for (const definition of definitions) {
+    if (!definition.duplicate) firstDefinitions.set(definition.label, definition);
+  }
+
+  let exclusionCursor = 0;
+  let offset = 0;
+  let work = 0;
+  while (offset < source.length) {
+    if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    work += 1;
+    exclusionCursor = advanceExclusion(exclusions, exclusionCursor, offset, signal);
+    const exclusion = exclusions[exclusionCursor];
+    if (exclusion && exclusion.from <= offset) {
+      offset = exclusion.to;
+      continue;
+    }
+
+    const isReference = source[offset] === "["
+      && source[offset + 1] === "^"
+      && !escaped[offset];
+    const isInline = source[offset] === "^"
+      && source[offset + 1] === "["
+      && !escaped[offset];
+    if (!isReference && !isInline) {
+      offset += 1;
+      continue;
+    }
+
+    const contentFrom = offset + 2;
+    let closing = contentFrom;
+    while (closing < source.length
+      && source[closing] !== "\n"
+      && source[closing] !== "\r"
+      && (source[closing] !== "]" || escaped[closing])) {
+      if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+      work += 1;
+      closing += 1;
+    }
+    if (closing >= source.length || source[closing] !== "]") {
+      offset += 2;
+      continue;
+    }
+
+    const content = source.slice(contentFrom, closing);
+    if (!content || (isReference && /\s/u.test(content))) {
+      offset = closing + 1;
+      continue;
+    }
+    const range = { from: offset, to: closing + 1 };
+    if (isReference) {
+      const definition = firstDefinitions.get(content);
+      tokens.push({
+        kind: "footnote_reference",
+        range,
+        raw: source.slice(range.from, range.to),
+        labelRange: { from: contentFrom, to: closing },
+        label: content,
+        ...(definition ? { definitionRange: definition.range } : {}),
+      });
+    } else {
+      tokens.push({
+        kind: "inline_footnote",
+        range,
+        raw: source.slice(range.from, range.to),
+        contentRange: { from: contentFrom, to: closing },
+        content,
+      });
+    }
+    offset = closing + 1;
+  }
+  return tokens;
+}
+
 function splitWikilink(
   source: string,
   escaped: Uint8Array,
@@ -821,6 +986,17 @@ export function lexMarkdownKnowledge(
   const urlRanges = nodeRangeStream(nodes.urls, lines, signal);
   const htmlRanges = nodeRangeStream(nodes.html, lines, signal);
   const linkRanges = tokenRangeStream(linkTokens, signal);
+  const footnoteDefinitionExclusions = mergeIntervalStreams([
+    frontmatterRanges,
+    codeRanges,
+    htmlRanges,
+  ], signal);
+  const footnoteDefinitions = collectFootnoteDefinitions(
+    source,
+    lines,
+    footnoteDefinitionExclusions,
+    signal,
+  );
   const structuralExclusions = mergeIntervalStreams([
     frontmatterRanges,
     codeRanges,
@@ -830,6 +1006,17 @@ export function lexMarkdownKnowledge(
     linkRanges,
   ], signal);
   const escaped = escapeParity(source, signal);
+  const footnoteInlineExclusions = mergeIntervalStreams([
+    structuralExclusions,
+    tokenRangeStream(footnoteDefinitions, signal),
+  ], signal);
+  const footnoteInlineTokens = collectInlineFootnotes(
+    source,
+    escaped,
+    footnoteInlineExclusions,
+    footnoteDefinitions,
+    signal,
+  );
   const wikilinks = collectWikilinks(
     source,
     lines,
@@ -867,6 +1054,8 @@ export function lexMarkdownKnowledge(
     headingTokens,
     linkTokens,
     taskTokens,
+    footnoteDefinitions,
+    footnoteInlineTokens,
     wikilinks.tokens,
     tagTokens,
   ], signal);

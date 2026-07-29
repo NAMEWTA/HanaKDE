@@ -112,6 +112,13 @@
       "editSource": "数式ソースを編集",
       "renderError": "数式をレンダリングできません。ソースを編集して修正してください。"
     },
+    "footnote": {
+      "jumpToDefinition": "脚注 [^{label}]。有効にすると定義へ移動します。",
+      "editInline": "インライン脚注 {number}。有効にするとソースを編集します。",
+      "missingDefinition": "脚注 [^{label}] の定義がありません。有効にするとソースを編集します。",
+      "duplicateDefinition": "脚注定義 [^{label}] が重複しています。最初の定義が使用されます。",
+      "duplicateBadge": "重複した脚注"
+    },
     "commands": {
       "menuLabel": "Markdown コマンド",
       "empty": "一致するコマンドはありません",

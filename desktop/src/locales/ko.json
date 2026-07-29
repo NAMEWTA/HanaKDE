@@ -112,6 +112,13 @@
       "editSource": "수식 소스 편집",
       "renderError": "수식을 렌더링할 수 없습니다. 소스를 편집해 수정하세요."
     },
+    "footnote": {
+      "jumpToDefinition": "각주 [^{label}]. 활성화하면 정의로 이동해요.",
+      "editInline": "인라인 각주 {number}. 활성화하면 소스를 편집해요.",
+      "missingDefinition": "각주 [^{label}]의 정의가 없어요. 활성화하면 소스를 편집해요.",
+      "duplicateDefinition": "각주 정의 [^{label}]가 중복되었어요. 첫 번째 정의를 사용해요.",
+      "duplicateBadge": "중복 각주"
+    },
     "commands": {
       "menuLabel": "Markdown 명령",
       "empty": "일치하는 명령이 없습니다",

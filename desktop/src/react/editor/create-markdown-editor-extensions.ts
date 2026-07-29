@@ -59,6 +59,10 @@ import {
 import { markdownBlockSelectionPlugin } from './markdown-block-selection';
 import { knowledgeMermaidField } from './knowledge-mermaid-field';
 import { knowledgeMathField } from './knowledge-math-field';
+import {
+  knowledgeFootnoteCompletion,
+  knowledgeFootnoteField,
+} from './knowledge-footnote-field';
 import { taskField } from './task-field';
 import { codeTheme, markdownTheme } from './theme';
 
@@ -118,6 +122,7 @@ export function createMarkdownLivePreviewExtensions(
     markdownCoverField,
     knowledgeMermaidField,
     knowledgeMathField,
+    knowledgeFootnoteField,
     knowledgeTableField,
     knowledgeCodeBlockField,
   ];
@@ -152,6 +157,7 @@ export function createMarkdownEditorExtensions(
         ...(!readOnly && knowledgeCommands
           ? createKnowledgeCommandExtensions(knowledgeCommands)
           : []),
+        ...(!readOnly ? [knowledgeFootnoteCompletion] : []),
         Prec.highest(keymap.of([
           ...knowledgeSourceNavigationKeymap,
           {

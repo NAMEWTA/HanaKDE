@@ -94,6 +94,36 @@ export interface MarkdownTaskMarkerToken extends MarkdownKnowledgeTokenBase {
   readonly checked: boolean;
 }
 
+export interface MarkdownFootnoteDefinitionToken extends MarkdownKnowledgeTokenBase {
+  readonly kind: "footnote_definition";
+  readonly labelRange: MarkdownTextRange;
+  readonly label: string;
+  readonly markerRange: MarkdownTextRange;
+  /**
+   * Exact source span containing the definition body. Continuation indentation
+   * remains present in this range; use `content` for static Markdown rendering.
+   */
+  readonly contentRange: MarkdownTextRange;
+  /** Body normalized to LF with one continuation indent removed. */
+  readonly content: string;
+  /** True when an earlier exact, case-sensitive label already won. */
+  readonly duplicate: boolean;
+}
+
+export interface MarkdownFootnoteReferenceToken extends MarkdownKnowledgeTokenBase {
+  readonly kind: "footnote_reference";
+  readonly labelRange: MarkdownTextRange;
+  readonly label: string;
+  /** Exact range of the first winning definition in this document. */
+  readonly definitionRange?: MarkdownTextRange;
+}
+
+export interface MarkdownInlineFootnoteToken extends MarkdownKnowledgeTokenBase {
+  readonly kind: "inline_footnote";
+  readonly contentRange: MarkdownTextRange;
+  readonly content: string;
+}
+
 export type MarkdownKnowledgeToken =
   | MarkdownFrontmatterToken
   | MarkdownFencedCodeToken
@@ -103,7 +133,10 @@ export type MarkdownKnowledgeToken =
   | MarkdownWikilinkToken
   | MarkdownLinkToken
   | MarkdownTagToken
-  | MarkdownTaskMarkerToken;
+  | MarkdownTaskMarkerToken
+  | MarkdownFootnoteDefinitionToken
+  | MarkdownFootnoteReferenceToken
+  | MarkdownInlineFootnoteToken;
 
 export interface MarkdownKnowledgeIr {
   readonly version: 1;

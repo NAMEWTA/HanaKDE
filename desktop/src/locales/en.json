@@ -112,6 +112,13 @@
       "editSource": "Edit math source",
       "renderError": "Formula could not be rendered. Edit the source to fix it."
     },
+    "footnote": {
+      "jumpToDefinition": "Footnote [^{label}]. Activate to jump to its definition.",
+      "editInline": "Inline footnote {number}. Activate to edit its source.",
+      "missingDefinition": "Footnote [^{label}] has no definition. Activate to edit its source.",
+      "duplicateDefinition": "Duplicate footnote definition [^{label}]. The first definition is used.",
+      "duplicateBadge": "Duplicate footnote"
+    },
     "commands": {
       "menuLabel": "Markdown commands",
       "empty": "No matching commands",
