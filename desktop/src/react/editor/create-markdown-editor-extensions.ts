@@ -36,6 +36,10 @@ import {
 } from './knowledge-live-preview';
 import { knowledgeEnterCommand } from './knowledge-enter-commands';
 import {
+  knowledgeIndentCommand,
+  knowledgeOutdentCommand,
+} from './knowledge-indent-commands';
+import {
   markdownBlockHandlePlugin,
   type MarkdownBlockMenuRequest,
 } from './markdown-block-handles';
@@ -128,7 +132,10 @@ export function createMarkdownEditorExtensions(
       ? [Prec.highest(keymap.of([{
           key: 'Enter',
           run: readOnly ? () => true : knowledgeEnterCommand,
-        }]))]
+        }, ...(!readOnly ? [
+          { key: 'Tab', run: knowledgeIndentCommand },
+          { key: 'Shift-Tab', run: knowledgeOutdentCommand },
+        ] : [])]))]
       : []),
     keymap.of([
       ...(onManualSave ? [{ key: 'Mod-s', run: onManualSave }] : []),
