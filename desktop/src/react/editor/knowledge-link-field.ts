@@ -37,7 +37,7 @@ export type KnowledgeLinkAvailability =
 
 export interface KnowledgeLinkActivation {
   kind: 'internal' | 'external';
-  sourceKind: 'wikilink' | 'markdown_link';
+  sourceKind: 'wikilink' | 'markdown_link' | 'html';
   embedded: boolean;
   address?: KnowledgeResourceAddress;
   fragment?: string | null;

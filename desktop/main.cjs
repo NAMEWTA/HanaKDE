@@ -5522,7 +5522,7 @@ wrapIpcBestEffortHandler("open-external", (_event, url) => {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === "https:" || parsed.protocol === "http:") {
-      shell.openExternal(url);
+      shell.openExternal(parsed.toString());
     }
   } catch {}
 });

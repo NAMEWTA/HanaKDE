@@ -119,6 +119,13 @@
       "duplicateDefinition": "脚注定义 [^{label}] 重复，将使用第一个定义。",
       "duplicateBadge": "重复脚注"
     },
+    "html": {
+      "preview": "安全 HTML 预览。激活背景可编辑源码。",
+      "unsafe": "HTML 未能安全渲染",
+      "unsafeEditSource": "HTML 未能安全渲染。激活后编辑源码。",
+      "assetLoading": "正在加载本地资源…",
+      "assetUnavailable": "本地资源不可用"
+    },
     "commands": {
       "menuLabel": "Markdown 命令",
       "empty": "没有匹配的命令",

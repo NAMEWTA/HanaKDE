@@ -7,6 +7,7 @@ import type {
   MarkdownInlineFootnoteToken,
   MarkdownKnowledgeToken,
   MarkdownLinkToken,
+  MarkdownRawHtmlToken,
   MarkdownTextRange,
   MarkdownWikilinkToken,
   ParseMarkdownKnowledgeIrOptions,
@@ -867,6 +868,26 @@ function nodeRangeStream(
   return ranges;
 }
 
+function htmlToken(
+  source: string,
+  lines: readonly SourceLine[],
+  node: SyntaxNode,
+): MarkdownRawHtmlToken {
+  const range = node.name === "HTMLBlock" || node.name === "CommentBlock"
+    ? normalizedBlockRange(lines, node)
+    : { from: node.from, to: node.to };
+  return {
+    kind: "raw_html",
+    range,
+    raw: source.slice(range.from, range.to),
+    syntax: node.name === "CommentBlock"
+      ? "comment"
+      : node.name === "HTMLBlock"
+        ? "block"
+        : "inline",
+  };
+}
+
 function compareTokens(
   left: MarkdownKnowledgeToken,
   right: MarkdownKnowledgeToken,
@@ -979,6 +1000,14 @@ export function lexMarkdownKnowledge(
       checked: source[node.from + 1]?.toLowerCase() === "x",
     });
   }
+  const htmlTokens: MarkdownRawHtmlToken[] = [];
+  for (let index = 0; index < nodes.html.length; index += 1) {
+    if ((index & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    const node = nodes.html[index];
+    if (outsideFrontmatter(node)) {
+      htmlTokens.push(htmlToken(source, lines, node));
+    }
+  }
 
   const frontmatterRanges = frontmatter ? [frontmatter.range] : [];
   const codeRanges = tokenRangeStream(codeTokens, signal);
@@ -1051,6 +1080,7 @@ export function lexMarkdownKnowledge(
   const tokens = mergeTokenStreams([
     frontmatter ? [frontmatter] : [],
     codeTokens,
+    htmlTokens,
     headingTokens,
     linkTokens,
     taskTokens,

@@ -25,7 +25,10 @@ export function installMobilePlatform(): void {
       const url = browserSafeUrl(value);
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
     },
-    openExternal: (url: string) => window.open(url, '_blank', 'noopener,noreferrer'),
+    openExternal: (url: string) => {
+      const safeUrl = externalHttpUrl(url);
+      if (safeUrl) window.open(safeUrl, '_blank', 'noopener,noreferrer');
+    },
     settingsChanged: () => {},
     syncWindowTheme: () => {},
     onSettingsChanged: () => noopUnsubscribe,
@@ -40,6 +43,17 @@ export function installMobilePlatform(): void {
   };
 
   window.platform = api as PlatformApi;
+}
+
+function externalHttpUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? parsed.toString()
+      : '';
+  } catch {
+    return '';
+  }
 }
 
 function browserSafeUrl(value: string): string {

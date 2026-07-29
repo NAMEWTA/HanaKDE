@@ -177,8 +177,7 @@ export async function openInternalLink(href: string, context: LinkOpenContext = 
     return true;
   }
 
-  window.platform?.openExternal?.(target.href);
-  return true;
+  return false;
 }
 
 export function openExternalLink(href: string, context: LinkOpenContext = {}): boolean {
@@ -188,7 +187,11 @@ export function openExternalLink(href: string, context: LinkOpenContext = {}): b
     window.platform?.openFile?.(target.filePath);
     return true;
   }
-  window.platform?.openExternal?.(target.kind === 'web' ? target.url : target.href);
+  const safeUrl = target.kind === 'web'
+    ? target.url
+    : normalizeWebUrl(target.href);
+  if (!safeUrl) return false;
+  window.platform?.openExternal?.(safeUrl);
   return true;
 }
 

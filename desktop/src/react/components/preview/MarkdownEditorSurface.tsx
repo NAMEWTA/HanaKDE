@@ -44,6 +44,9 @@ import type {
   KnowledgeLinkFieldConfig,
 } from '../../editor/knowledge-link-field';
 import type {
+  KnowledgeSafeHtmlFieldConfig,
+} from '../../editor/knowledge-safe-html-field';
+import type {
   KnowledgeSlashMenuRequest,
 } from '../../editor/knowledge-command-registry';
 import { KnowledgeSlashMenu } from '../knowledge-workspace/KnowledgeSlashMenu';
@@ -93,6 +96,7 @@ export interface MarkdownEditorSurfacePolicy {
     open: (url: string) => void | Promise<void>;
   } | null;
   knowledgeLinks?: KnowledgeLinkFieldConfig | null;
+  knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig | null;
   contentGate: (input: { content: string }) => MarkdownContentGateResult;
 }
 
@@ -600,6 +604,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
               filePath,
             },
             knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
+            knowledgeSafeHtml: policyRef.current.knowledgeSafeHtml ?? undefined,
           }),
         );
       },
@@ -895,6 +900,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         onOpenBlockMenu: toggleBlockMenu,
         onOpenLink: (url) => policyRef.current.openLink?.open(url),
         knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
+        knowledgeSafeHtml: policyRef.current.knowledgeSafeHtml ?? undefined,
         knowledgeCommands: isMd && !readOnly && enableKnowledgeCommands
           ? {
               translate: key => window.t?.(key) ?? key,
@@ -1023,6 +1029,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
             filePath,
           },
           knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
+          knowledgeSafeHtml: policyRef.current.knowledgeSafeHtml ?? undefined,
         }),
       );
     }, [filePath, markdownDisplayMode, mode]);

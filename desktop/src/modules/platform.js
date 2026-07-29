@@ -92,7 +92,14 @@
     // OS 集成 → 静默降级
     openFolder: () => {},
     openFile: () => {},
-    openExternal: (url) => { try { window.open(url, "_blank"); } catch {} },
+    openExternal: (url) => {
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          window.open(parsed.toString(), "_blank", "noopener,noreferrer");
+        }
+      } catch {}
+    },
     showInFinder: () => {},
     startDrag: () => {},
 

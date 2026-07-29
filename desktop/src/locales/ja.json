@@ -119,6 +119,13 @@
       "duplicateDefinition": "脚注定義 [^{label}] が重複しています。最初の定義が使用されます。",
       "duplicateBadge": "重複した脚注"
     },
+    "html": {
+      "preview": "安全な HTML プレビューです。背景を操作するとソースを編集できます。",
+      "unsafe": "HTML を安全に表示できませんでした",
+      "unsafeEditSource": "HTML を安全に表示できませんでした。操作してソースを編集してください。",
+      "assetLoading": "ローカルアセットを読み込み中…",
+      "assetUnavailable": "ローカルアセットを利用できません"
+    },
     "commands": {
       "menuLabel": "Markdown コマンド",
       "empty": "一致するコマンドはありません",

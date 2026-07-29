@@ -181,6 +181,12 @@ export const markdownTheme = EditorView.theme({
       maxWidth: '100%',
       padding: 'var(--space-2) 0',
     },
+    '.cm-knowledge-safe-html-block': {
+      padding: 'var(--space-4)',
+    },
+    '.cm-knowledge-safe-html-asset audio, .cm-knowledge-safe-html-asset video': {
+      width: '100%',
+    },
   },
   '.cm-math-widget': {
     fontFamily: 'var(--editor-markdown-font-family, var(--font-serif))',
@@ -291,6 +297,62 @@ export const markdownTheme = EditorView.theme({
     fontSize: '0.68em',
     lineHeight: '1.5',
     verticalAlign: 'middle',
+  },
+  '.cm-knowledge-safe-html': {
+    maxWidth: '100%',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text)',
+    overflowWrap: 'anywhere',
+  },
+  '.cm-knowledge-safe-html-inline': {
+    display: 'inline',
+  },
+  '.cm-knowledge-safe-html-block': {
+    display: 'block',
+    minWidth: '0',
+    margin: 'var(--space-4) 0',
+    padding: 'var(--space-8)',
+    border: '1px solid var(--border)',
+    backgroundColor: 'var(--surface, var(--bg))',
+    overflowX: 'auto',
+  },
+  '.cm-knowledge-safe-html:focus-visible, .cm-knowledge-safe-html [role="link"]:focus-visible': {
+    outline: '2px solid var(--accent)',
+    outlineOffset: '2px',
+  },
+  '.cm-knowledge-safe-html [role="link"]': {
+    color: 'var(--link)',
+    cursor: 'pointer',
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
+  },
+  '.cm-knowledge-safe-html [data-knowledge-link-kind="external"]::after': {
+    content: '" ↗"',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '0.78em',
+    textDecoration: 'none',
+  },
+  '.cm-knowledge-safe-html.is-error, .cm-knowledge-safe-html-asset.is-error': {
+    display: 'inline-block',
+    padding: 'var(--space-2) var(--space-4)',
+    border: '1px solid color-mix(in srgb, var(--danger, #b54a4a) 40%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--danger, #b54a4a) 10%, var(--surface, var(--bg)))',
+    color: 'var(--danger, #b54a4a)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '0.82em',
+  },
+  '.cm-knowledge-safe-html-asset': {
+    display: 'inline-block',
+    maxWidth: '100%',
+    color: 'var(--muted)',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '0.82em',
+  },
+  '.cm-knowledge-safe-html-asset img, .cm-knowledge-safe-html-asset audio, .cm-knowledge-safe-html-asset video': {
+    display: 'block',
+    maxWidth: '100%',
+    maxHeight: 'min(70vh, 720px)',
   },
   '.cm-markdown-cover': {
     position: 'relative',

@@ -50,4 +50,21 @@ describe('mobile platform capability contract', () => {
     expect(listener).toHaveBeenCalledWith('providers');
     expect(window.platform?.selectFolder).toBeUndefined();
   });
+
+  it('opens only explicit HTTP/HTTPS external URLs', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    installMobilePlatform();
+
+    window.platform?.openExternal?.('https://example.com/page');
+    window.platform?.openExternal?.('javascript:alert(1)');
+    window.platform?.openExternal?.('data:text/html,boom');
+    window.platform?.openExternal?.('//example.com/implicit');
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(
+      'https://example.com/page',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
 });

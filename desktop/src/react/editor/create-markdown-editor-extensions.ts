@@ -63,6 +63,10 @@ import {
   knowledgeFootnoteCompletion,
   knowledgeFootnoteField,
 } from './knowledge-footnote-field';
+import {
+  createKnowledgeSafeHtmlField,
+  type KnowledgeSafeHtmlFieldConfig,
+} from './knowledge-safe-html-field';
 import { taskField } from './task-field';
 import { codeTheme, markdownTheme } from './theme';
 
@@ -87,6 +91,7 @@ export interface CreateMarkdownEditorExtensionsOptions {
   onOpenBlockMenu: (request: MarkdownBlockMenuRequest) => void;
   onOpenLink?: MarkdownLinkOpenHandler;
   knowledgeLinks?: KnowledgeLinkFieldConfig;
+  knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig;
   knowledgeCommands?: {
     translate: KnowledgeCommandTranslator;
     onSlashMenuChange: (request: KnowledgeSlashMenuRequest | null) => void;
@@ -106,6 +111,7 @@ export function createMarkdownEditorCompartments(): MarkdownEditorCompartments {
 export interface CreateMarkdownLivePreviewExtensionsOptions {
   imageContext: MarkdownImageContext;
   knowledgeLinks?: KnowledgeLinkFieldConfig;
+  knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig;
 }
 
 export function createMarkdownLivePreviewExtensions(
@@ -116,6 +122,9 @@ export function createMarkdownLivePreviewExtensions(
     markdownDecoPlugin,
     ...(options.knowledgeLinks
       ? [createKnowledgeLinkField(options.knowledgeLinks)]
+      : []),
+    ...(options.knowledgeSafeHtml
+      ? [createKnowledgeSafeHtmlField(options.knowledgeSafeHtml)]
       : []),
     taskField,
     frontmatterField,
@@ -144,6 +153,7 @@ export function createMarkdownEditorExtensions(
     onOpenBlockMenu,
     onOpenLink,
     knowledgeLinks,
+    knowledgeSafeHtml,
     knowledgeCommands,
   } = options;
   const isMarkdown = mode === 'markdown';
@@ -201,6 +211,7 @@ export function createMarkdownEditorExtensions(
           createMarkdownLivePreviewExtensions({
             imageContext,
             knowledgeLinks,
+            knowledgeSafeHtml,
           }),
         )
       : []),

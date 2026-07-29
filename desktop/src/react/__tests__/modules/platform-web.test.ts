@@ -51,4 +51,20 @@ describe('web platform fallback capability contract', () => {
       }),
     );
   });
+
+  it('keeps the browser fallback external opener on the HTTP/HTTPS allowlist', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    runPlatformScript();
+
+    (window as any).platform.openExternal('https://example.com/page');
+    (window as any).platform.openExternal('javascript:alert(1)');
+    (window as any).platform.openExternal('file:///private/secret');
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(
+      'https://example.com/page',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
 });

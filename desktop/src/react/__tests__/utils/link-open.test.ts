@@ -2,7 +2,11 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openInternalLink, resolveLinkTarget } from '../../utils/link-open';
+import {
+  openExternalLink,
+  openInternalLink,
+  resolveLinkTarget,
+} from '../../utils/link-open';
 
 afterEach(() => {
   document.documentElement.removeAttribute('data-platform');
@@ -74,6 +78,17 @@ describe('resolveLinkTarget', () => {
       url: 'https://example.com/',
       sessionPath: '/tmp/hana-session.jsonl',
     });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('never forwards an unsupported protocol through either open helper', async () => {
+    const openExternal = vi.fn();
+    window.platform = {
+      openExternal,
+    } as unknown as typeof window.platform;
+
+    await expect(openInternalLink('javascript:alert(1)')).resolves.toBe(false);
+    expect(openExternalLink('data:text/html,boom')).toBe(false);
     expect(openExternal).not.toHaveBeenCalled();
   });
 });

@@ -119,6 +119,13 @@
       "duplicateDefinition": "腳註定義 [^{label}] 重複，將使用第一個定義。",
       "duplicateBadge": "重複腳註"
     },
+    "html": {
+      "preview": "安全 HTML 預覽。啟用背景可編輯原始碼。",
+      "unsafe": "HTML 未能安全呈現",
+      "unsafeEditSource": "HTML 未能安全呈現。啟用後編輯原始碼。",
+      "assetLoading": "正在載入本機資源…",
+      "assetUnavailable": "本機資源無法使用"
+    },
     "commands": {
       "menuLabel": "Markdown 命令",
       "empty": "沒有符合的命令",

@@ -50,6 +50,11 @@ export interface MarkdownInlineCodeToken extends MarkdownKnowledgeTokenBase {
   readonly closed: true;
 }
 
+export interface MarkdownRawHtmlToken extends MarkdownKnowledgeTokenBase {
+  readonly kind: "raw_html";
+  readonly syntax: "block" | "inline" | "comment";
+}
+
 export interface MarkdownHeadingToken extends MarkdownKnowledgeTokenBase {
   readonly kind: "heading";
   readonly level: 1 | 2 | 3 | 4 | 5 | 6;
@@ -129,6 +134,7 @@ export type MarkdownKnowledgeToken =
   | MarkdownFencedCodeToken
   | MarkdownIndentedCodeToken
   | MarkdownInlineCodeToken
+  | MarkdownRawHtmlToken
   | MarkdownHeadingToken
   | MarkdownWikilinkToken
   | MarkdownLinkToken

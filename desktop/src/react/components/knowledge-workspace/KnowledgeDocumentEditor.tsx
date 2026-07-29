@@ -21,6 +21,9 @@ import {
   type RendererResourceVersion,
 } from '../../services/knowledge-workspace-client';
 import {
+  evaluateResourceOpenPolicy,
+} from '../../../../../lib/knowledge-workspace/resource-open-policy.ts';
+import {
   knowledgeDocumentKey,
   type KnowledgeDocumentRegistry,
   type KnowledgeDocumentSaveError,
@@ -35,6 +38,7 @@ import styles from './KnowledgeWorkspace.module.css';
 import type {
   KnowledgeLinkActivation,
 } from '../../editor/knowledge-link-field';
+import { openKnowledgeExternalLink } from '../../utils/knowledge-safe-rendering';
 
 type EditorLoadState =
   | { status: 'loading' }
@@ -248,7 +252,10 @@ export function KnowledgeDocumentEditor({
       ).exists,
       onActivate: activation => {
         if (activation.kind === 'external') {
-          if (activation.url) return onOpenLink?.(activation.url);
+          if (activation.url) {
+            if (onOpenLink) return onOpenLink(activation.url);
+            openKnowledgeExternalLink(activation.url);
+          }
           return undefined;
         }
         return onOpenKnowledgeLink?.(activation);
@@ -264,6 +271,60 @@ export function KnowledgeDocumentEditor({
         ),
         external: url => tr('knowledge.link.external', { url }),
         broken: reason => tr('knowledge.link.invalid', { reason }),
+      },
+    },
+    knowledgeSafeHtml: {
+      pageAddress: requestAddress,
+      readAsset: async (target, options) => {
+        const stat = await client.resources.stat(target, {
+          signal: options.signal,
+        });
+        const sizeBytes = Number.isSafeInteger(stat.version?.size)
+          && Number(stat.version?.size) >= 0
+          ? Number(stat.version?.size)
+          : null;
+        const fileName = target.relativePath.split('/').at(-1)
+          ?? target.relativePath;
+        const decision = evaluateResourceOpenPolicy({
+          fileName,
+          exists: stat.exists,
+          isDirectory: stat.isDirectory,
+          sizeBytes,
+        });
+        if (
+          !decision.shouldRead
+          || !['image', 'audio', 'video'].includes(decision.kind)
+          || sizeBytes === null
+        ) {
+          throw new Error('Knowledge Asset is not safe for inline preview');
+        }
+        const result = await client.resources.read(target, {
+          encoding: 'base64',
+          signal: options.signal,
+        });
+        if (result.encoding !== 'base64') {
+          throw new Error('Knowledge Asset response was not base64');
+        }
+        return {
+          content: result.content,
+          encoding: result.encoding,
+          expectedSize: sizeBytes,
+        };
+      },
+      onActivateLink: activation => {
+        if (activation.kind === 'external') {
+          if (onOpenLink) return onOpenLink(activation.url);
+          openKnowledgeExternalLink(activation.url);
+          return undefined;
+        }
+        return onOpenKnowledgeLink?.({
+          kind: 'internal',
+          sourceKind: 'html',
+          embedded: false,
+          address: activation.address,
+          fragment: activation.fragment,
+          availability: 'available',
+        });
       },
     },
     contentGate: knowledgeMarkdownContentGate,

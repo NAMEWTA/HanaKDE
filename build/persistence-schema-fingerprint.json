@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:3b0207604762a21281f776bb2e9dd58f4ab70c98d67a8ba1ff6cac580d652350",
+  "payloadFingerprint": "sha256:f72894a5d99281fabac1cfaea048a09b97cdd01c21361fcc0764fbcb126e4cbb",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2956,8 +2956,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Refreshes the deterministic persistence inventory after the external ResourceIO create path changed; persisted store schemas and existing record readers remain unchanged.",
-    "payloadFingerprint": "sha256:3b0207604762a21281f776bb2e9dd58f4ab70c98d67a8ba1ff6cac580d652350"
+    "compatibilityReason": "External-link protocol normalization changes only non-persistent Electron navigation behavior; store schemas, ownership, DATA_EPOCH, and persisted bytes are unchanged.",
+    "payloadFingerprint": "sha256:f72894a5d99281fabac1cfaea048a09b97cdd01c21361fcc0764fbcb126e4cbb"
   },
   "schemas": [
     {
@@ -3140,7 +3140,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:47db6c8bd28025698cf46167d51e9a4cec7fdd0d6a4ff65c4fe6375b7022d71a",
+      "sourceHash": "sha256:601d86d8aca6a4624aeb626cbd641c2aaa8d6ce7768d05cbbb6c5a382bb24cf6",
       "storeId": "desktop-window-version-state"
     },
     {

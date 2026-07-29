@@ -119,6 +119,13 @@
       "duplicateDefinition": "Duplicate footnote definition [^{label}]. The first definition is used.",
       "duplicateBadge": "Duplicate footnote"
     },
+    "html": {
+      "preview": "Safe HTML preview. Activate its background to edit the source.",
+      "unsafe": "HTML was not safely rendered",
+      "unsafeEditSource": "HTML was not safely rendered. Activate to edit its source.",
+      "assetLoading": "Loading local asset…",
+      "assetUnavailable": "Local asset is unavailable"
+    },
     "commands": {
       "menuLabel": "Markdown commands",
       "empty": "No matching commands",

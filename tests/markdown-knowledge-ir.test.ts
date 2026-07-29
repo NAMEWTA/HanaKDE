@@ -333,6 +333,34 @@ describe("Markdown Knowledge IR", () => {
     expectWellFormedTokens(source, tokens);
   });
 
+  it("projects source-level raw HTML boundaries without interpreting code or frontmatter", () => {
+    const source = [
+      "---",
+      "raw: <style>hidden</style>",
+      "---",
+      "inline <mark>safe</mark>",
+      "<details>",
+      "<summary>Title</summary>",
+      "",
+      "**body**",
+      "</details>",
+      "",
+      "`<img src=\"hidden.png\">`",
+    ].join("\n");
+    const html = tokensOfKind(parseMarkdownKnowledgeIr(source).tokens, "raw_html");
+
+    expect(html.map(token => ({ raw: token.raw, syntax: token.syntax }))).toEqual([
+      { raw: "<mark>", syntax: "inline" },
+      { raw: "</mark>", syntax: "inline" },
+      {
+        raw: "<details>\n<summary>Title</summary>",
+        syntax: "block",
+      },
+      { raw: "</details>", syntax: "block" },
+    ]);
+    expectWellFormedTokens(source, parseMarkdownKnowledgeIr(source).tokens);
+  });
+
   it("preserves mixed line endings, surrogate offsets, and deterministic repeats", () => {
     const source = "# 😀\r# lone\ud83d\n[[A]]\r\n#tag";
     const first = parseMarkdownKnowledgeIr(source);
