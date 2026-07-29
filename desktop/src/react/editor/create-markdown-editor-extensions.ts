@@ -2,7 +2,12 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { bracketMatching, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import {
+  Compartment,
+  EditorState,
+  Prec,
+  type Extension,
+} from '@codemirror/state';
 import {
   drawSelection,
   EditorView,
@@ -29,6 +34,7 @@ import {
   knowledgeMarkdownModeExtensions,
   type KnowledgeMarkdownViewMode,
 } from './knowledge-live-preview';
+import { knowledgeEnterCommand } from './knowledge-enter-commands';
 import {
   markdownBlockHandlePlugin,
   type MarkdownBlockMenuRequest,
@@ -118,6 +124,12 @@ export function createMarkdownEditorExtensions(
     ...(isMarkdown ? [] : [drawSelection()]),
     history(),
     bracketMatching(),
+    ...(isMarkdown
+      ? [Prec.highest(keymap.of([{
+          key: 'Enter',
+          run: readOnly ? () => true : knowledgeEnterCommand,
+        }]))]
+      : []),
     keymap.of([
       ...(onManualSave ? [{ key: 'Mod-s', run: onManualSave }] : []),
       ...defaultKeymap,
