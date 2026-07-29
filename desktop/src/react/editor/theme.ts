@@ -54,6 +54,40 @@ export const markdownTheme = EditorView.theme({
     borderRadius: '2px',
     padding: '0 1px',
   },
+  '.cm-knowledge-link': {
+    color: 'var(--link)',
+    textDecoration: 'underline',
+    textDecorationColor: 'color-mix(in srgb, var(--link) 55%, transparent)',
+    textUnderlineOffset: '2px',
+    cursor: 'pointer',
+    borderRadius: '2px',
+  },
+  '.cm-knowledge-link:focus-visible': {
+    outline: '2px solid var(--accent, var(--link))',
+    outlineOffset: '2px',
+  },
+  '.cm-knowledge-link-external::after': {
+    content: '" ↗"',
+    fontSize: '0.72em',
+    textDecoration: 'none',
+  },
+  '.cm-knowledge-link-broken': {
+    color: 'var(--danger, #b54a4a)',
+    textDecorationStyle: 'wavy',
+  },
+  '.cm-knowledge-link-checking': {
+    opacity: '0.72',
+  },
+  '.cm-knowledge-link-unavailable': {
+    color: 'var(--text-muted)',
+    textDecorationStyle: 'dotted',
+    cursor: 'not-allowed',
+  },
+  '@media (max-width: 560px)': {
+    '.cm-knowledge-link': {
+      textUnderlineOffset: '3px',
+    },
+  },
   '.cm-math-widget': {
     fontFamily: 'var(--editor-markdown-font-family, var(--font-serif))',
   },

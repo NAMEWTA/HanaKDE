@@ -96,6 +96,13 @@
       "sourceUnavailable": "{name} 所屬來源無法使用；只有同一來源恢復後才會重新載入這個乾淨頁面。",
       "orphan": "{name} 已成為懸空未儲存文件，請將它另存為可用且可寫來源中的新頁面。"
     },
+    "link": {
+      "open": "開啟知識連結 {path}",
+      "missing": "建立缺少的知識頁面 {path}",
+      "unavailable": "知識連結 {path} 目前無法使用",
+      "external": "在外部開啟連結 {url}",
+      "invalid": "無效的知識連結（{reason}）"
+    },
     "unsaved": {
       "title": "是否儲存變更？",
       "description": "{document} 有未儲存的變更。繼續前請選擇儲存、放棄或取消。",

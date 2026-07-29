@@ -96,6 +96,13 @@
       "sourceUnavailable": "{name} 所属来源不可用；只有同一来源恢复后才会重新加载这个干净页面。",
       "orphan": "{name} 已成为悬空未保存文档，请将其作为新页面保存到可用且可写的来源。"
     },
+    "link": {
+      "open": "打开知识链接 {path}",
+      "missing": "创建缺失的知识页面 {path}",
+      "unavailable": "知识链接 {path} 当前不可用",
+      "external": "在外部打开链接 {url}",
+      "invalid": "无效的知识链接（{reason}）"
+    },
     "unsaved": {
       "title": "是否保存更改？",
       "description": "{document} 有未保存的更改。继续前请选择保存、放弃或取消。",

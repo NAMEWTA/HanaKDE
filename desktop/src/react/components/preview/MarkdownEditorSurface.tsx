@@ -34,6 +34,9 @@ import type { FileVersion, RemoteWorkbenchContentRef, VersionedWriteResult } fro
 import type { MarkdownImageContext } from '../../utils/markdown';
 import type { PreviewScrollSnapshot } from '../../../../../shared/preview-reading-position.ts';
 import { KNOWLEDGE_MARKDOWN_MAX_BYTES } from '../../../../../shared/knowledge-workspace-contract.ts';
+import type {
+  KnowledgeLinkFieldConfig,
+} from '../../editor/knowledge-link-field';
 
 /* ── Types ── */
 
@@ -79,6 +82,7 @@ export interface MarkdownEditorSurfacePolicy {
   openLink: {
     open: (url: string) => void | Promise<void>;
   } | null;
+  knowledgeLinks?: KnowledgeLinkFieldConfig | null;
   contentGate: (input: { content: string }) => MarkdownContentGateResult;
 }
 
@@ -859,6 +863,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
           : undefined,
         onOpenBlockMenu: toggleBlockMenu,
         onOpenLink: (url) => policyRef.current.openLink?.open(url),
+        knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
       });
 
       const state = EditorState.create({ doc: gatedContent, extensions });

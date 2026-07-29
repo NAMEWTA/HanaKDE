@@ -96,6 +96,13 @@
       "sourceUnavailable": "The source for {name} is unavailable. The clean page will reload only if that same source recovers.",
       "orphan": "{name} is an unsaved orphan. Save it as a new Page in an available writable source."
     },
+    "link": {
+      "open": "Open knowledge link {path}",
+      "missing": "Create missing knowledge page {path}",
+      "unavailable": "Knowledge link {path} is unavailable",
+      "external": "Open external link {url}",
+      "invalid": "Invalid knowledge link ({reason})"
+    },
     "unsaved": {
       "title": "Save changes?",
       "description": "{document} has unsaved changes. Save, discard, or cancel before continuing.",

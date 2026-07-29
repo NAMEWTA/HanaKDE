@@ -32,6 +32,9 @@ import {
   saveKnowledgeDocument,
 } from '../../utils/knowledge-document-operations';
 import styles from './KnowledgeWorkspace.module.css';
+import type {
+  KnowledgeLinkActivation,
+} from '../../editor/knowledge-link-field';
 
 type EditorLoadState =
   | { status: 'loading' }
@@ -49,6 +52,9 @@ export interface KnowledgeDocumentEditorProps {
     version: RendererResourceVersion,
   ) => void;
   onOpenLink?: (url: string) => void | Promise<void>;
+  onOpenKnowledgeLink?: (
+    activation: KnowledgeLinkActivation,
+  ) => void | Promise<void>;
   onRequestOrphanSave?: () => void;
 }
 
@@ -93,6 +99,7 @@ export function KnowledgeDocumentEditor({
   client = knowledgeWorkspaceClient,
   onSaved,
   onOpenLink,
+  onOpenKnowledgeLink,
   onRequestOrphanSave,
 }: KnowledgeDocumentEditorProps) {
   const addressKey = knowledgeDocumentKey(address);
@@ -234,11 +241,37 @@ export function KnowledgeDocumentEditor({
     },
     attachment: null,
     openLink: onOpenLink ? { open: onOpenLink } : null,
+    knowledgeLinks: {
+      pageAddress: requestAddress,
+      checkAddress: async (target, options) => (
+        await client.resources.stat(target, options)
+      ).exists,
+      onActivate: activation => {
+        if (activation.kind === 'external') {
+          if (activation.url) return onOpenLink?.(activation.url);
+          return undefined;
+        }
+        return onOpenKnowledgeLink?.(activation);
+      },
+      labels: {
+        internal: (target, availability) => tr(
+          availability === 'missing'
+            ? 'knowledge.link.missing'
+            : availability === 'unavailable'
+              ? 'knowledge.link.unavailable'
+              : 'knowledge.link.open',
+          { path: target.relativePath },
+        ),
+        external: url => tr('knowledge.link.external', { url }),
+        broken: reason => tr('knowledge.link.invalid', { reason }),
+      },
+    },
     contentGate: knowledgeMarkdownContentGate,
   }), [
     addressKey,
     client,
     onOpenLink,
+    onOpenKnowledgeLink,
     onRequestOrphanSave,
     onSaved,
     registry,

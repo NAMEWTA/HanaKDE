@@ -16,6 +16,10 @@ import { markdownCoverField } from './cover-field';
 import { codeHighlight, markdownHighlight } from './highlight';
 import { createLinkClickHandler, type MarkdownLinkOpenHandler } from './link-handler';
 import {
+  createKnowledgeLinkField,
+  type KnowledgeLinkFieldConfig,
+} from './knowledge-link-field';
+import {
   markdownBlockDecoField,
   markdownDecoPlugin,
   markdownImageContextFacet,
@@ -48,6 +52,7 @@ export interface CreateMarkdownEditorExtensionsOptions {
   onManualSave?: () => boolean;
   onOpenBlockMenu: (request: MarkdownBlockMenuRequest) => void;
   onOpenLink?: MarkdownLinkOpenHandler;
+  knowledgeLinks?: KnowledgeLinkFieldConfig;
 }
 
 export function createMarkdownEditorCompartments(): MarkdownEditorCompartments {
@@ -74,6 +79,7 @@ export function createMarkdownEditorExtensions(
     onManualSave,
     onOpenBlockMenu,
     onOpenLink,
+    knowledgeLinks,
   } = options;
   const isMarkdown = mode === 'markdown';
   const isCsv = mode === 'csv';
@@ -103,6 +109,7 @@ export function createMarkdownEditorExtensions(
     compartments.conceal.of(isMarkdown ? [
       markdownImageContextFacet.of(imageContext),
       markdownDecoPlugin,
+      ...(knowledgeLinks ? [createKnowledgeLinkField(knowledgeLinks)] : []),
       markdownCoverField,
       markdownBlockDecoField,
       mermaidDecoField,
@@ -114,7 +121,7 @@ export function createMarkdownEditorExtensions(
     ...(isMarkdown ? [tableDecoField] : []),
     ...(isCsv ? [csvTableField] : []),
     compartments.theme.of(isMarkdown || isCsv ? markdownTheme : codeTheme),
-    createLinkClickHandler(onOpenLink),
+    ...(knowledgeLinks ? [] : [createLinkClickHandler(onOpenLink)]),
   ];
 
   if (!isMarkdown && !isCsv) extensions.push(highlightActiveLine());
