@@ -99,6 +99,27 @@
       "sourceUnavailable": "{name}의 소스를 사용할 수 없습니다. 동일한 소스가 복구된 경우에만 변경되지 않은 페이지를 다시 불러옵니다.",
       "orphan": "{name}은(는) 저장되지 않은 고립 문서입니다. 사용 가능하고 쓰기 가능한 소스에 새 페이지로 저장하세요."
     },
+    "commands": {
+      "menuLabel": "Markdown 명령",
+      "empty": "일치하는 명령이 없습니다",
+      "bold": { "name": "굵게", "description": "굵은 Markdown 삽입" },
+      "italic": { "name": "기울임", "description": "기울임 Markdown 삽입" },
+      "inlineCode": { "name": "인라인 코드", "description": "인라인 코드 표시 삽입" },
+      "markdownLink": { "name": "Markdown 링크", "description": "빈 Markdown 링크 삽입" },
+      "wikilink": { "name": "Wikilink", "description": "페이지 링크 삽입" },
+      "heading1": { "name": "제목 1", "description": "1단계 제목 시작" },
+      "heading2": { "name": "제목 2", "description": "2단계 제목 시작" },
+      "heading3": { "name": "제목 3", "description": "3단계 제목 시작" },
+      "heading4": { "name": "제목 4", "description": "4단계 제목 시작" },
+      "heading5": { "name": "제목 5", "description": "5단계 제목 시작" },
+      "heading6": { "name": "제목 6", "description": "6단계 제목 시작" },
+      "unorderedList": { "name": "글머리 목록", "description": "글머리 항목 시작" },
+      "orderedList": { "name": "번호 목록", "description": "번호 항목 시작" },
+      "task": { "name": "작업", "description": "미완료 작업 시작" },
+      "quote": { "name": "인용", "description": "인용 블록 시작" },
+      "codeBlock": { "name": "코드 블록", "description": "펜스 코드 블록 삽입" },
+      "divider": { "name": "구분선", "description": "가로 구분선 삽입" }
+    },
     "link": {
       "open": "지식 링크 {path} 열기",
       "missing": "누락된 지식 페이지 {path} 만들기",

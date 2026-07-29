@@ -43,6 +43,10 @@ import { KNOWLEDGE_MARKDOWN_MAX_BYTES } from '../../../../../shared/knowledge-wo
 import type {
   KnowledgeLinkFieldConfig,
 } from '../../editor/knowledge-link-field';
+import type {
+  KnowledgeSlashMenuRequest,
+} from '../../editor/knowledge-command-registry';
+import { KnowledgeSlashMenu } from '../knowledge-workspace/KnowledgeSlashMenu';
 
 /* ── Types ── */
 
@@ -142,6 +146,7 @@ export interface MarkdownEditorSurfaceProps {
   initialScrollSnapshot?: PreviewScrollSnapshot | null;
   contentHash?: string;
   onScrollSnapshotChange?: (snapshot: PreviewScrollSnapshot, topVisibleLine: number) => void;
+  enableKnowledgeCommands?: boolean;
   /**
    * 只读模式：禁用编辑、不挂 autosave listener。
    * 调用方（如派生 viewer 窗口）自己把新 content 作为 prop 传入即可。
@@ -413,7 +418,7 @@ function isEditorCoverRailDrop(view: EditorView, event: DragEvent): boolean {
 /* ── Editor Component ── */
 
 export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, MarkdownEditorSurfaceProps>(
-  function MarkdownEditorSurface({ content, incomingContentMode = 'protect-local', savedContent, filePath, remoteContentRef, fileVersion, policy, mode, markdownDisplayMode = 'live-preview', language, onSelectionChange, onSelectionCommit, onQuoteRange, onStatsChange, onContentChange, onContentRejected, onViewDestroy, initialScrollSnapshot, contentHash, onScrollSnapshotChange, readOnly = false }, ref) {
+  function MarkdownEditorSurface({ content, incomingContentMode = 'protect-local', savedContent, filePath, remoteContentRef, fileVersion, policy, mode, markdownDisplayMode = 'live-preview', language, onSelectionChange, onSelectionCommit, onQuoteRange, onStatsChange, onContentChange, onContentRejected, onViewDestroy, initialScrollSnapshot, contentHash, onScrollSnapshotChange, enableKnowledgeCommands = false, readOnly = false }, ref) {
     const gateResult = useMemo(
       () => policy.contentGate({ content }),
       [content, policy],
@@ -425,6 +430,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const [blockMenuRequest, setBlockMenuRequest] = useState<MarkdownBlockMenuRequest | null>(null);
+    const [slashMenuRequest, setSlashMenuRequest] = useState<KnowledgeSlashMenuRequest | null>(null);
     const toggleBlockMenu = useCallback((request: MarkdownBlockMenuRequest) => {
       setBlockMenuRequest(current => (
         current
@@ -889,6 +895,12 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         onOpenBlockMenu: toggleBlockMenu,
         onOpenLink: (url) => policyRef.current.openLink?.open(url),
         knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
+        knowledgeCommands: isMd && !readOnly && enableKnowledgeCommands
+          ? {
+              translate: key => window.t?.(key) ?? key,
+              onSlashMenuChange: setSlashMenuRequest,
+            }
+          : undefined,
       });
 
       const state = EditorState.create({ doc: gatedContent, extensions });
@@ -998,7 +1010,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         viewDestroyCbRef.current?.();
         viewRef.current = null;
       };
-    }, [editorHostReadySignal, mode, language, readOnly, filePath, remoteContentRef, gateResult.allowed, emitStatsIfChanged, insertMarkdownAttachments]); // eslint-disable-line react-hooks/exhaustive-deps -- 仅在 host 可测量以及 mode/language/readOnly/filePath/remoteContentRef/gate 变化时重建 CodeMirror，content/refs 故意省略以避免销毁重建
+    }, [editorHostReadySignal, mode, language, readOnly, enableKnowledgeCommands, filePath, remoteContentRef, gateResult.allowed, emitStatsIfChanged, insertMarkdownAttachments]); // eslint-disable-line react-hooks/exhaustive-deps -- 仅在 host 可测量以及 mode/language/readOnly/knowledge commands/filePath/remoteContentRef/gate 变化时重建 CodeMirror，content/refs 故意省略以避免销毁重建
 
     useLayoutEffect(() => {
       if (mode !== 'markdown') return;
@@ -1057,6 +1069,13 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
           onBlockMenuClose={closeBlockMenu}
           onQuoteRange={onQuoteRange}
         />
+        {slashMenuRequest ? (
+          <KnowledgeSlashMenu
+            request={slashMenuRequest}
+            getView={getViewForMenu}
+            container={containerRef.current}
+          />
+        ) : null}
       </Fragment>
     );
   },

@@ -99,6 +99,27 @@
       "sourceUnavailable": "{name} 所属来源不可用；只有同一来源恢复后才会重新加载这个干净页面。",
       "orphan": "{name} 已成为悬空未保存文档，请将其作为新页面保存到可用且可写的来源。"
     },
+    "commands": {
+      "menuLabel": "Markdown 命令",
+      "empty": "没有匹配的命令",
+      "bold": { "name": "粗体", "description": "插入粗体 Markdown" },
+      "italic": { "name": "斜体", "description": "插入斜体 Markdown" },
+      "inlineCode": { "name": "行内代码", "description": "插入行内代码标记" },
+      "markdownLink": { "name": "Markdown 链接", "description": "插入空 Markdown 链接" },
+      "wikilink": { "name": "Wikilink", "description": "插入页面链接" },
+      "heading1": { "name": "一级标题", "description": "开始一级标题" },
+      "heading2": { "name": "二级标题", "description": "开始二级标题" },
+      "heading3": { "name": "三级标题", "description": "开始三级标题" },
+      "heading4": { "name": "四级标题", "description": "开始四级标题" },
+      "heading5": { "name": "五级标题", "description": "开始五级标题" },
+      "heading6": { "name": "六级标题", "description": "开始六级标题" },
+      "unorderedList": { "name": "无序列表", "description": "开始无序列表项" },
+      "orderedList": { "name": "有序列表", "description": "开始有序列表项" },
+      "task": { "name": "任务", "description": "开始未完成任务" },
+      "quote": { "name": "引用", "description": "开始块引用" },
+      "codeBlock": { "name": "代码块", "description": "插入围栏代码块" },
+      "divider": { "name": "分隔线", "description": "插入水平分隔线" }
+    },
     "link": {
       "open": "打开知识链接 {path}",
       "missing": "创建缺失的知识页面 {path}",

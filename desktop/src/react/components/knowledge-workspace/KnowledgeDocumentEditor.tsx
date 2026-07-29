@@ -397,6 +397,7 @@ export function KnowledgeDocumentEditor({
         incomingContentMode="registry-authoritative"
         savedContent={session.baseline}
         mode="markdown"
+        enableKnowledgeCommands
         markdownDisplayMode={view.mode}
         filePath={requestAddress.relativePath}
         policy={savePolicy}

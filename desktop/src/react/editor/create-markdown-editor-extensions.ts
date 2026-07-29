@@ -40,6 +40,11 @@ import {
   knowledgeOutdentCommand,
 } from './knowledge-indent-commands';
 import {
+  createKnowledgeCommandExtensions,
+  type KnowledgeCommandTranslator,
+  type KnowledgeSlashMenuRequest,
+} from './knowledge-command-registry';
+import {
   markdownBlockHandlePlugin,
   type MarkdownBlockMenuRequest,
 } from './markdown-block-handles';
@@ -70,6 +75,10 @@ export interface CreateMarkdownEditorExtensionsOptions {
   onOpenBlockMenu: (request: MarkdownBlockMenuRequest) => void;
   onOpenLink?: MarkdownLinkOpenHandler;
   knowledgeLinks?: KnowledgeLinkFieldConfig;
+  knowledgeCommands?: {
+    translate: KnowledgeCommandTranslator;
+    onSlashMenuChange: (request: KnowledgeSlashMenuRequest | null) => void;
+  };
 }
 
 export function createMarkdownEditorCompartments(): MarkdownEditorCompartments {
@@ -121,6 +130,7 @@ export function createMarkdownEditorExtensions(
     onOpenBlockMenu,
     onOpenLink,
     knowledgeLinks,
+    knowledgeCommands,
   } = options;
   const isMarkdown = mode === 'markdown';
   const isCsv = mode === 'csv';
@@ -129,13 +139,18 @@ export function createMarkdownEditorExtensions(
     history(),
     bracketMatching(),
     ...(isMarkdown
-      ? [Prec.highest(keymap.of([{
+      ? [
+        ...(!readOnly && knowledgeCommands
+          ? createKnowledgeCommandExtensions(knowledgeCommands)
+          : []),
+        Prec.highest(keymap.of([{
           key: 'Enter',
           run: readOnly ? () => true : knowledgeEnterCommand,
         }, ...(!readOnly ? [
           { key: 'Tab', run: knowledgeIndentCommand },
           { key: 'Shift-Tab', run: knowledgeOutdentCommand },
-        ] : [])]))]
+        ] : [])])),
+      ]
       : []),
     keymap.of([
       ...(onManualSave ? [{ key: 'Mod-s', run: onManualSave }] : []),

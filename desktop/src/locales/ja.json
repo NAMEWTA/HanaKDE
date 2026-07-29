@@ -99,6 +99,27 @@
       "sourceUnavailable": "{name} のソースを利用できません。同じソースが復旧した場合のみ、この未変更ページを再読み込みします。",
       "orphan": "{name} は未保存の孤立ドキュメントです。利用可能で書き込み可能なソースに新しいページとして保存してください。"
     },
+    "commands": {
+      "menuLabel": "Markdown コマンド",
+      "empty": "一致するコマンドはありません",
+      "bold": { "name": "太字", "description": "太字の Markdown を挿入" },
+      "italic": { "name": "斜体", "description": "斜体の Markdown を挿入" },
+      "inlineCode": { "name": "インラインコード", "description": "インラインコード記号を挿入" },
+      "markdownLink": { "name": "Markdown リンク", "description": "空の Markdown リンクを挿入" },
+      "wikilink": { "name": "Wikilink", "description": "ページリンクを挿入" },
+      "heading1": { "name": "見出し 1", "description": "レベル 1 の見出しを開始" },
+      "heading2": { "name": "見出し 2", "description": "レベル 2 の見出しを開始" },
+      "heading3": { "name": "見出し 3", "description": "レベル 3 の見出しを開始" },
+      "heading4": { "name": "見出し 4", "description": "レベル 4 の見出しを開始" },
+      "heading5": { "name": "見出し 5", "description": "レベル 5 の見出しを開始" },
+      "heading6": { "name": "見出し 6", "description": "レベル 6 の見出しを開始" },
+      "unorderedList": { "name": "箇条書き", "description": "箇条書き項目を開始" },
+      "orderedList": { "name": "番号付きリスト", "description": "番号付き項目を開始" },
+      "task": { "name": "タスク", "description": "未完了タスクを開始" },
+      "quote": { "name": "引用", "description": "引用ブロックを開始" },
+      "codeBlock": { "name": "コードブロック", "description": "フェンスコードブロックを挿入" },
+      "divider": { "name": "区切り線", "description": "水平の区切り線を挿入" }
+    },
     "link": {
       "open": "ナレッジリンク {path} を開く",
       "missing": "不足しているナレッジページ {path} を作成",

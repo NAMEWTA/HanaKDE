@@ -99,6 +99,27 @@
       "sourceUnavailable": "{name} 所屬來源無法使用；只有同一來源恢復後才會重新載入這個乾淨頁面。",
       "orphan": "{name} 已成為懸空未儲存文件，請將它另存為可用且可寫來源中的新頁面。"
     },
+    "commands": {
+      "menuLabel": "Markdown 命令",
+      "empty": "沒有符合的命令",
+      "bold": { "name": "粗體", "description": "插入粗體 Markdown" },
+      "italic": { "name": "斜體", "description": "插入斜體 Markdown" },
+      "inlineCode": { "name": "行內程式碼", "description": "插入行內程式碼標記" },
+      "markdownLink": { "name": "Markdown 連結", "description": "插入空白 Markdown 連結" },
+      "wikilink": { "name": "Wikilink", "description": "插入頁面連結" },
+      "heading1": { "name": "一級標題", "description": "開始一級標題" },
+      "heading2": { "name": "二級標題", "description": "開始二級標題" },
+      "heading3": { "name": "三級標題", "description": "開始三級標題" },
+      "heading4": { "name": "四級標題", "description": "開始四級標題" },
+      "heading5": { "name": "五級標題", "description": "開始五級標題" },
+      "heading6": { "name": "六級標題", "description": "開始六級標題" },
+      "unorderedList": { "name": "無序清單", "description": "開始項目符號清單" },
+      "orderedList": { "name": "編號清單", "description": "開始編號清單項目" },
+      "task": { "name": "任務", "description": "開始未完成任務" },
+      "quote": { "name": "引用", "description": "開始區塊引用" },
+      "codeBlock": { "name": "程式碼區塊", "description": "插入圍欄程式碼區塊" },
+      "divider": { "name": "分隔線", "description": "插入水平分隔線" }
+    },
     "link": {
       "open": "開啟知識連結 {path}",
       "missing": "建立缺少的知識頁面 {path}",

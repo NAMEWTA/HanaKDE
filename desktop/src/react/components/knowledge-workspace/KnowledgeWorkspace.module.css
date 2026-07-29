@@ -519,6 +519,94 @@
   min-height: 0;
 }
 
+:global(.knowledge-slash-command-menu) {
+  position: fixed;
+  z-index: 1200;
+  box-sizing: border-box;
+  width: min(20rem, calc(100vw - 0.5rem));
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: var(--border-width, 1px) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card, var(--bg));
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+}
+
+:global(.knowledge-slash-command-item) {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 3rem;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:global(.knowledge-slash-command-item:hover),
+:global(.knowledge-slash-command-item.is-selected) {
+  background: var(--accent-light);
+}
+
+:global(.knowledge-slash-command-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  border: var(--border-width, 1px) solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+:global(.knowledge-slash-command-copy) {
+  min-width: 0;
+}
+
+:global(.knowledge-slash-command-name),
+:global(.knowledge-slash-command-description) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.knowledge-slash-command-name) {
+  font-weight: 600;
+}
+
+:global(.knowledge-slash-command-description) {
+  margin-top: var(--space-2, 0.125rem);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+:global(.knowledge-slash-command-shortcut) {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+:global(.knowledge-slash-command-empty) {
+  margin: 0;
+  padding: var(--space-12);
+  color: var(--text-muted);
+  text-align: center;
+}
+
 .documentModeToolbar {
   z-index: 2;
   display: flex;
@@ -1091,6 +1179,14 @@
 }
 
 @media (max-width: 38rem) {
+  :global(.knowledge-slash-command-item) {
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+  }
+
+  :global(.knowledge-slash-command-shortcut) {
+    display: none;
+  }
+
   .documentModeToolbar {
     justify-content: stretch;
   }

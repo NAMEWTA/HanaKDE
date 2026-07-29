@@ -99,6 +99,27 @@
       "sourceUnavailable": "The source for {name} is unavailable. The clean page will reload only if that same source recovers.",
       "orphan": "{name} is an unsaved orphan. Save it as a new Page in an available writable source."
     },
+    "commands": {
+      "menuLabel": "Markdown commands",
+      "empty": "No matching commands",
+      "bold": { "name": "Bold", "description": "Insert bold Markdown" },
+      "italic": { "name": "Italic", "description": "Insert italic Markdown" },
+      "inlineCode": { "name": "Inline code", "description": "Insert inline code markers" },
+      "markdownLink": { "name": "Markdown link", "description": "Insert an empty Markdown link" },
+      "wikilink": { "name": "Wikilink", "description": "Insert a page link" },
+      "heading1": { "name": "Heading 1", "description": "Start a level-one heading" },
+      "heading2": { "name": "Heading 2", "description": "Start a level-two heading" },
+      "heading3": { "name": "Heading 3", "description": "Start a level-three heading" },
+      "heading4": { "name": "Heading 4", "description": "Start a level-four heading" },
+      "heading5": { "name": "Heading 5", "description": "Start a level-five heading" },
+      "heading6": { "name": "Heading 6", "description": "Start a level-six heading" },
+      "unorderedList": { "name": "Unordered list", "description": "Start a bullet list item" },
+      "orderedList": { "name": "Ordered list", "description": "Start a numbered list item" },
+      "task": { "name": "Task", "description": "Start an unchecked task" },
+      "quote": { "name": "Quote", "description": "Start a block quote" },
+      "codeBlock": { "name": "Code block", "description": "Insert a fenced code block" },
+      "divider": { "name": "Divider", "description": "Insert a horizontal divider" }
+    },
     "link": {
       "open": "Open knowledge link {path}",
       "missing": "Create missing knowledge page {path}",
