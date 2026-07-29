@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `8a5a4f17`（Ticket 24 实现验证点） |
+| Commit | `d3f3b22d`（Ticket 25 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -18,7 +18,7 @@
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
 | M1 Workspace/文档（Tickets 15–22） | P1 | 通过 | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs、三方冲突，以及统一 close/switch/quit 与 orphan 保存均已交付。Ticket 22 精确 25/25、相关 61/61；当前产品范围全仓 1030 files passed、1 skipped，10334 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过。E2E-KW-004–008/024 按真实入口依赖保留待回填 |
-| M2 Markdown（Tickets 23–39） | P1/P2 | 部分通过（Tickets 23–24） | canonical knowledge address、同源 LinkResolver 与策略驱动 CM6 链接投影已交付：Wikilink 根相对、Markdown 页面目录相对、严格一次 percent-decode、跨来源/非法 scheme fail-closed、同源 Page/Asset canonical 插入、断裂/不可用状态及键盘/ARIA。Ticket 24 精确 7/7、相关 67/67；当前产品范围全仓 1032 files passed、1 skipped，10363 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
+| M2 Markdown（Tickets 23–39） | P1/P2 | 部分通过（Tickets 23–25） | canonical address/LinkResolver、CM6 同源链接与 Frontmatter 保真投影已交付。安全顶层属性只做源码 range patch；directive、重复键、merge/tag/anchor、嵌套、block scalar、无效或不确定 YAML 整区源码回退。Ticket 25 精确 24/24、相关 88/88；当前产品范围全仓 1033 files passed、1 skipped，10387 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
 | M5 发布（Ticket 57） | P2 | 未执行 | — |
@@ -200,7 +200,7 @@
 | KW-US-171 | 14 | `tests/knowledge-malicious-workspace.test.ts`<br>`tests/knowledge-threat-control-matrix.test.ts` | E2E-KW-022 | 通过 | `npx vitest run tests/knowledge-malicious-workspace.test.ts tests/knowledge-threat-control-matrix.test.ts`（2 files、13/13，macOS arm64）；真实 symlink 越界/循环/TOCTOU、原生 case/Unicode、控制字符/盘符/UNC、伪造身份、LAN 错误脱敏、stat-before-read、HTML/SVG/URI、图片与 Mermaid 主动内容均默认拒绝；E2E-KW-022 仅关联追踪，不属于本票 Playwright 门禁 |
 | KW-US-172 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | Ticket 03 精确命令（135/135，契约/集成）及 Open export 回归（52/52）；`build:server:open`、`smoke:server:open` 通过 |
 | KW-US-173 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 共享协议相同且 Full-only 差异仅由 composition 注入；一次性测试签名下 full build 通过 |
-| KW-US-174 | 25 | `tests/frontmatter-roundtrip.test.ts` | 契约/集成 | 未执行 | — |
+| KW-US-174 | 25 | `tests/frontmatter-roundtrip.test.ts` | 契约/集成 | 通过 | `npx vitest run tests/frontmatter-roundtrip.test.ts`（24/24）；共享 IR + `js-yaml` 校验唯一顶层 JSON scalar/flat-array 属性，增改删各一个 CM6 transaction，未触及注释/顺序/LF/CRLF/正文保持，复杂或不确定 YAML 整区保留源码 |
 | KW-US-175 | 26 | `tests/knowledge-tags-tasks.test.ts` | E2E-KW-013 | 未执行 | — |
 | KW-US-176 | 26 | `tests/knowledge-tags-tasks.test.ts` | 契约/集成 | 未执行 | — |
 | KW-US-177 | 24 | `tests/knowledge-link-resolver.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-link-field.test.ts` | E2E-KW-009 | 通过 | `npx vitest run desktop/src/react/__tests__/editor/knowledge-link-field.test.ts desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx tests/markdown-knowledge-ir.test.ts tests/knowledge-link-resolver.test.ts`（5 files、67/67）；页面目录相对 `../`、percent 名称、fragment、非法编码/scheme、越界与不存在目标均经共享 resolver 闭合拒绝 |
@@ -229,7 +229,7 @@
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 通过 | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193；Ticket 09 Mobile/LAN 共享 DTO、来源隔离、provider-neutral transfer、租约 watcher、权限/取消/冲突/不可用与清理故障注入，定向 12 files、274/274；干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1010 files passed、1 skipped，10161 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过 |
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Tickets 04、10） | Ticket 04 相关回归 249/249；Ticket 10 operation/journal/recovery 22/22、相关定向 255/255；稳定错误/诊断、同一 operation correlation、watch sequence/cursor、rollback 与无路径 resync 已验证；Ticket 43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
-| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12、23、24） | Ticket 11 Markdown IR 29/29；Ticket 12 精确表面测试 8/8、相关定向 15 files、151/151；Ticket 23 LinkResolver 22/22、相关 142/142；Ticket 24 链接投影 7/7、相关 67/67。共享 IR/CM6 接缝、canonical address、Wikilink 根相对与 Markdown 页面相对同源解析、严格一次 percent-decode、canonical 插入、断裂/不可用渲染及无副作用激活已验证；Tickets 25–39 尚未执行 |
+| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12、23、24、25） | Tickets 11–24 的共享 IR/Surface/address/link 证据保持；Ticket 25 Frontmatter 24/24、相关 88/88。可投影 JSON scalar/flat-array 顶层属性、精确 range patch、单一 CM6 transaction、注释/顺序/line-ending/body 保真与复杂 YAML 整区源码回退已验证；Tickets 26–39 尚未执行 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17） | Ticket 14 恶意工作区门禁 13/13；Ticket 17 stat-first asset policy/查看器 23/23，HTML/SVG/Mermaid/URI 与超限内容零读取，严格 BOM 解码、取消、版本漂移和媒体失败 fail-closed；Tickets 35、51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
