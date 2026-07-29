@@ -1,7 +1,7 @@
 # Ticket 30: 交付格式快捷键与斜杠命令
 
 - **被阻塞于：** [`27-deliver-live-preview-modes.md`](./27-deliver-live-preview-modes.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -63,9 +63,27 @@
 
 ## 验收标准
 
-- [ ] 命令作用于同一 transaction/history；IME、只读和多光标场景不误触；菜单可全键盘操作。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 命令作用于同一 transaction/history；IME、只读和多光标场景不误触；菜单可全键盘操作。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `2f2827f8`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **固定注册表：** 单层 V1 集合精确包含粗体、斜体、行内代码、Markdown Link、Wikilink、H1–H6、无序/有序列表、任务、引用、围栏代码块和分隔线共 17 项；每项仅声明固定 id、名称/说明键、别名、图标、inline/block、模板、唯一 cursor 与可选快捷键，运行时深冻结。
+- **格式快捷键：** writable Knowledge Markdown 以最高优先级接入 `Mod-B`、`Mod-I`、`Mod-K`、`Mod-\``；只处理显式单 selection 或 caret，不扩词，readonly、IME composition、多 cursor 和非 Knowledge Surface fail-closed，每次只有一个 input transaction/undo step。
+- **任意位置触发：** 可写 Knowledge Markdown 的普通段落、fenced code、正文中间和 selection 替换均在实际键入 `/` 后开启；触发位置稳定映射，首个 Unicode whitespace、Esc、删除 `/`、selection/focus 离开或 composition 都关闭且不吞源码。
+- **筛选与键盘：** Unicode 大小写不敏感连续子串仅匹配名称和固定别名；前缀优先、同类注册顺序稳定、空查询全量、无结果 Enter no-op；Arrow/Home/End/Enter/Esc 全键盘操作仅在菜单 active 时接管。
+- **统一模板：** inline 命令原位替换本次 `/query`；block 命令仅在触发点非逻辑行首时前置一个换行。删除查询、必要换行、固定模板和唯一 cursor 始终是一个 transaction，所有 17 模板逐项验证单步 undo。
+- **Link 与结构边界：** 斜杠 Markdown Link 固定插入 `[]()` 并把 cursor 放在 `[]` 内，不读取旧 selection、剪贴板或协议；不建立 Tab 占位、表单、动态参数或命令专用状态机。
+- **菜单 UI：** `KnowledgeSlashMenu` 以当前 `/` 坐标锚定，按上下空间翻转并严格裁剪到当前编辑器组；单层 listbox 显示固定图标、五语言名称/单行说明和平台快捷键，当前项整行高亮、内部滚动、鼠标与窄布局可用。
+- **精确自动化：** `npx vitest run desktop/src/react/__tests__/editor/knowledge-command-registry.test.ts desktop/src/react/__tests__/components/KnowledgeSlashMenu.test.tsx`（2 files、23/23）。
+- **相关回归：** `npx vitest run desktop/src/react/__tests__/editor/knowledge-command-registry.test.ts desktop/src/react/__tests__/components/KnowledgeSlashMenu.test.tsx desktop/src/react/__tests__/editor/markdown-commands.test.ts desktop/src/react/__tests__/editor/knowledge-enter-commands.test.ts desktop/src/react/__tests__/editor/knowledge-indent-commands.test.ts desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx tests/knowledge-i18n-a11y-contract.test.ts tests/knowledge-tags-tasks.test.ts`（10 files、129/129）。
+- **产品范围全仓：** `npm test -- --exclude 'temp/**'`（1039 files passed、1 skipped；10481 tests passed、6 skipped）。用户 ignored `temp/HanaKDE-TodoList-0.0.1` 未修改。
+- **门禁与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check` 与 `npm run build:renderer` 通过；未改变 preload/main 或 Server。
+- **Playwright：** 按本 ticket 固定契约不适用，未运行。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-29-openhanako-knowledge-workspace-implementation-30.md`
