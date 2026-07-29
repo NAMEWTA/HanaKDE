@@ -1,7 +1,7 @@
 # Ticket 23: 建立知识地址与同源 LinkResolver
 
 - **被阻塞于：** [`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)、[`11-define-markdown-semantic-ir.md`](./11-define-markdown-semantic-ir.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -65,9 +65,24 @@
 
 ## 验收标准
 
-- [ ] canonical address/Wikilink 拒绝 dot 段；标准 Markdown link 允许安全的 `.`/`..` 页面相对输入，但 normalize 后越出 Source 必须拒绝。矩阵覆盖绝对路径、UNC、盘符、无效 percent 编码、只解码一次、编码分隔符、fragment、真实大小写、Unicode 与扩展名。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] canonical address/Wikilink 拒绝 dot 段；标准 Markdown link 允许安全的 `.`/`..` 页面相对输入，但 normalize 后越出 Source 必须拒绝。矩阵覆盖绝对路径、UNC、盘符、无效 percent 编码、只解码一次、编码分隔符、fragment、真实大小写、Unicode 与扩展名。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `35a27e0d`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **canonical address：** 新领域层校验 Source 根相对 `/` 协议路径，拒绝空值、绝对/UNC/盘符、空段、dot 段与控制字符；大小写、Unicode 序列、扩展名及 `%` 字面拼写保持原样。字面反斜杠默认 fail-closed，只有 provider 对精确地址给出验证时可接受。
+- **Wikilink：** 直接消费 Ticket 11 共享词法已经反转义的 address/fragment/display 字段；地址按当前 Source 根解析，不做 percent-decode，不接受 `sourceKey:`、绝对路径、dot 段或跨来源回退。空地址加 fragment 明确指向当前页面。
+- **Markdown destination：** 直接消费 CommonMark 已反转义 destination；只把 `http:`/`https:` 分类为外链，拒绝其他 scheme、protocol-relative、rooted、盘符/UNC、query 与反斜杠。内部 path 逐段严格 UTF-8 percent-decode 一次，拒绝无效编码、编码 `/`/`\`/控制字符，并以页面目录为基准词法 normalize；越出 Source 立即返回 out-of-scope。
+- **同源重构输出：** Wikilink 输出 Source 根相对真实 canonical path 并转义结构字符；标准 Markdown 输出等价 `path.posix.relative(dirname(page), target)` 的页面相对路径，逐真实名称段按 RFC 3986 编码，同目录不加 `./`，fragment 保留。实现不读取 cwd、不使用平台分隔符、不查询全局文件名。
+- **精确自动化：** `npx vitest run tests/knowledge-link-resolver.test.ts`（1 file、22/22）。
+- **相关回归：** `npx vitest run tests/knowledge-link-resolver.test.ts tests/markdown-knowledge-ir.test.ts tests/knowledge-contract-schema.test.ts tests/knowledge-malicious-workspace.test.ts tests/resource-io-mount-provider.test.ts`（5 files、142/142）。
+- **全仓回归：** `npx vitest run --exclude 'temp/**' --exclude 'teach/**' --silent`（1031 files passed、1 skipped；10356 tests passed、6 skipped）。
+- **门禁与复审：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint 与 `git diff --check` 通过；本票未改变 composition、Renderer、preload/main，故不触发额外 build。固定点 `7ff84472` 到实现提交 `35a27e0d` 的规范轴与标准轴本地复审无未决 blocker。
+- **Playwright：** 本 ticket 按契约不运行 Playwright；E2E-KW-009 仅作为 Tickets 24/37 完成真实编辑/导航入口后的发布级关联场景。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-29-openhanako-knowledge-workspace-implementation-23.md`
