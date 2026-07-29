@@ -47,7 +47,7 @@
 | 28 | 2 Markdown | [交付列表、引用与任务 Enter 事务](./ticket/28-deliver-enter-transactions.md) | 27 | KW-US-059, KW-US-060, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 29 | 2 Markdown | [交付 Tab 与 Shift+Tab 行级事务](./ticket/29-deliver-tab-transactions.md) | 27 | KW-US-061, KW-US-062, KW-US-063, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 30 | 2 Markdown | [交付格式快捷键与斜杠命令](./ticket/30-deliver-format-and-slash-commands.md) | 27 | KW-US-064, KW-US-065, KW-US-066, KW-US-067, KW-US-068, KW-US-069, KW-US-070, KW-US-071, KW-US-072, KW-RULE-MARKDOWN | P2 | 已完成 |
-| 31 | 2 Markdown | [交付表格与代码块编辑预览](./ticket/31-deliver-tables-and-code-blocks.md) | 27 | KW-US-073, KW-US-074, KW-US-075, KW-US-076, KW-RULE-MARKDOWN | P2 | 未开始 |
+| 31 | 2 Markdown | [交付表格与代码块编辑预览](./ticket/31-deliver-tables-and-code-blocks.md) | 27 | KW-US-073, KW-US-074, KW-US-075, KW-US-076, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 32 | 2 Markdown | [交付软换行与编辑器状态栏](./ticket/32-deliver-wrap-and-editor-status.md) | 20, 27 | KW-US-077, KW-US-078, KW-US-079, KW-US-080, KW-US-081, KW-US-082, KW-US-083, KW-RULE-MARKDOWN | P2 | 未开始 |
 | 33 | 2 Markdown | [交付 Mermaid 与数学静态渲染](./ticket/33-deliver-mermaid-and-math.md) | 14, 27, 31 | KW-US-084, KW-US-085, KW-US-086, KW-US-087, KW-RULE-MARKDOWN | P2 | 未开始 |
 | 34 | 2 Markdown | [交付脚注定义、预览与补全](./ticket/34-deliver-footnotes.md) | 11, 27 | KW-US-088, KW-US-089, KW-US-090, KW-RULE-MARKDOWN | P2 | 未开始 |
