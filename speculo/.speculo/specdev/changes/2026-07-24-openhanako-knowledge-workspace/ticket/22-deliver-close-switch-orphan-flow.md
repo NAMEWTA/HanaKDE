@@ -1,7 +1,7 @@
 # Ticket 22: 交付关闭、Workspace 切换与悬空文档
 
 - **被阻塞于：** [`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)、[`18-establish-document-session-registry.md`](./18-establish-document-session-registry.md)、[`19-deliver-manual-save-tracer.md`](./19-deliver-manual-save-tracer.md)、[`20-deliver-groups-tabs-breadcrumbs.md`](./20-deliver-groups-tabs-breadcrumbs.md)、[`21-deliver-external-change-conflicts.md`](./21-deliver-external-change-conflicts.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -63,9 +63,26 @@
 
 ## 验收标准
 
-- [ ] 取消或保存失败立即停止；来源丢失的 dirty 文档转 orphan；保存 orphan 必须选择当前可用来源。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 取消或保存失败立即停止；来源丢失的 dirty 文档转 orphan；保存 orphan 必须选择当前可用来源。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实施交付记录
+
+- **实现提交：** `1e1f7cb7`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS；Node `v24.16.0` / npm `11.13.0`
+- **统一关闭顺序：** `knowledge-workspace-lifecycle` 按稳定文档顺序逐个执行保存、放弃或取消；非最后 view 直接关闭，最后 dirty view 才询问。任一取消或保存失败立即停止，先前已完成结果不回滚；并发关闭请求不会替换当前决策。
+- **公开生命周期接缝：** group、workspace、session 与显式窗口关闭复用同一 Renderer close guard；workspace/Studio 切换在任何路径、持久化或服务端动作之前等待 guard。`beforeunload` 在批准后只允许一次重试，组件卸载会安全取消待决对话框。
+- **来源丢失与恢复：** 来源事件触发可用性复核；clean 文档保留原地址和不可用占位，dirty 文档立即转 orphan。来源恢复只允许 clean 文档按原地址重载，orphan 不自动重绑、不猜测新位置。
+- **orphan 新建保存：** 只列出当前 workspace 中 available 且具 write 能力的来源；用户选择新 Page 地址后经 ResourceIO `expectedVersion: null` 原子创建，目标已存在或已打开均返回冲突且不覆盖。成功后仅重绑当前 session/views/breadcrumb，正文以 UTF-8、无 BOM、LF 写入，不改写旧地址引用。
+- **状态与 UI：** Workspace 每次打开重置为单空组，不恢复历史 preview/pinned/layout。逐文档对话框支持 save/discard/cancel、orphan 来源/路径选择、持久错误、键盘与 focus；五语言、ARIA、亮暗主题及窄布局同步交付。
+- **精确自动化：** `npx vitest run tests/knowledge-workspace-lifecycle.test.ts desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx`（2 files、25/25）。
+- **相关回归：** `npx vitest run tests/knowledge-workspace-lifecycle.test.ts desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts desktop/src/react/__tests__/utils/knowledge-document-operations.test.ts`（6 files、61/61）。
+- **持久化 tripwire：** `node scripts/scan-persistent-stores.mjs`、`node scripts/generate-persistence-schema-fingerprint.mjs --classification compatible --compatibility-reason "Refreshes the deterministic persistence inventory after the external ResourceIO create path changed; persisted store schemas and existing record readers remain unchanged."`；`npx vitest run tests/persistence-store-registry.test.ts tests/persistence-schema-tripwire.test.ts tests/persistence-startup-receipt.test.ts`（3 files、21/21）。
+- **全仓回归：** `npx vitest run --exclude 'temp/**' --exclude 'teach/**' --silent`（1030 files passed、1 skipped；10334 tests passed、6 skipped）。
+- **门禁与复审：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint（0 errors）、`npm run build:renderer` 与 `git diff --check` 通过；固定点 `18a1ce19` 到实现提交 `1e1f7cb7` 的规范轴与标准轴本地复审无未决 blocker。
+- **Playwright：** E2E-KW-008 尚未执行；当前真实产品资源树打开旅程仍由 Tickets 48/49 交付。未建立私有 route 或测试捷径，发布前必须执行并回填。
+- **Handoff：** `speculo/.speculo/commands/handoff/2026-07-29-openhanako-knowledge-workspace-implementation-22.md`

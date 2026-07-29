@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `64b3d9c4`（Ticket 21 实现验证点） |
+| Commit | `1e1f7cb7`（Ticket 22 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -17,7 +17,7 @@
 | Milestone | Gate | Status | Artifact/command |
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
-| M1 Workspace/文档（Tickets 15–22） | P1 | 部分通过（Tickets 15–21） | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs，以及外部变化三方冲突已交付；clean 自动重载，dirty 保留 baseline/local/disk 并阻断直接保存，merge/local/disk 显式选择复用同一手动保存执行器。Ticket 21 精确 10/10、相关 202/202；当前产品范围全仓 1026 files passed、1 skipped，10288 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
+| M1 Workspace/文档（Tickets 15–22） | P1 | 通过 | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs、三方冲突，以及统一 close/switch/quit 与 orphan 保存均已交付。Ticket 22 精确 25/25、相关 61/61；当前产品范围全仓 1030 files passed、1 skipped，10334 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过。E2E-KW-004–008/024 按真实入口依赖保留待回填 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 未执行 | — |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
@@ -71,14 +71,14 @@
 | KW-US-042 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；cursor、selection、scroll、viewport、mode、Live Preview 语法显隐按 view 独立，共享 edit 只映射位置 |
 | KW-US-043 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；会话内返回既有 view 恢复其 group、位置、滚动与 mode |
 | KW-US-044 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；关闭 view 后不缓存，重开从文档开头、零滚动和默认 Live Preview 开始 |
-| KW-US-045 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-046 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-047 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-048 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
+| KW-US-045 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令 `npx vitest run tests/knowledge-workspace-lifecycle.test.ts desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx`（25/25）；非最后 view 直接关闭，不触发未保存询问 |
+| KW-US-046 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；最后 dirty view 提供保存、放弃与取消，取消不关闭 |
+| KW-US-047 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）及 Workspace 相关回归；新 workspace 始终建立单个空编辑组 |
+| KW-US-048 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）及 Workspace 相关回归；preview、pinned tab 与布局不跨 workspace 恢复 |
 | KW-US-049 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；移除最后 view 自动收拢空侧组且 dirty session 保留 |
-| KW-US-050 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-051 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-052 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
+| KW-US-050 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；外部移除的 clean 文档保留原地址并显示失效，不重建或猜测新位置 |
+| KW-US-051 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；来源不可用时 clean 保留占位，dirty 转为携带当前 buffer 的 orphan |
+| KW-US-052 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；来源恢复仅重载 clean 文档，orphan 不自动重绑 |
 | KW-US-053 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；`A.md` 与 `archive.tar.gz` 均显示完整原始文件名 |
 | KW-US-054 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；来源/目录/完整文件名面包屑不含绝对路径，只有显式段点击发出定位 |
 | KW-US-055 | 27 | `desktop/src/react/__tests__/editor/knowledge-live-preview.test.ts` | E2E-KW-005 | 未执行 | — |
@@ -162,13 +162,13 @@
 | KW-US-133 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx`（1 file、10/10）；clean 外部正文/格式变化 stat-first 自动重载，来源级无关事件不制造假冲突，stale response 不覆盖新状态 |
 | KW-US-134 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx`（10/10）；dirty 时原子保留 baseline/local/disk、diskVersion/diskFormat，继续编辑更新 local，直接保存被阻断 |
 | KW-US-135 | 21 | `desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx` | E2E-KW-007 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeConflictResolver.test.tsx`（10/10）；merge/local/disk 三个显式动作全部进入同一手动保存执行器，写入不可用时不丢所选 buffer |
-| KW-US-136 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-137 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-138 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-139 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-140 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-141 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
-| KW-US-142 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 未执行 | — |
+| KW-US-136 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；原址保存失败后只列当前 workspace 可用可写来源，并要求用户选择新 Page 地址 |
+| KW-US-137 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；原子新建成功后当前 session、全部 view、tab 与 breadcrumb 重绑到新知识地址 |
+| KW-US-138 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；orphan 保存仅创建并重绑当前文档，不触发旧地址引用重写 |
+| KW-US-139 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；`expectedVersion: null` 原子创建拒绝既有或已打开目标，保留对话框与 buffer |
+| KW-US-140 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；最后 view 的 dirty 决策与统一关闭流一致 |
+| KW-US-141 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；退出/切换按稳定文档顺序逐项等待保存、放弃或取消 |
+| KW-US-142 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | 精确命令同上（25/25）；任一取消或保存失败立即停止，已完成结果不回滚且并发请求不替换当前决策 |
 | KW-US-143 | 10 | `tests/knowledge-operation-tracer.test.ts`<br>`tests/knowledge-operation-journal.test.ts`<br>`tests/knowledge-operation-recovery.test.ts` | 契约/集成 | 通过 | `npx vitest run tests/knowledge-operation-tracer.test.ts tests/knowledge-operation-journal.test.ts tests/knowledge-operation-recovery.test.ts`（22/22）；UUIDv4/canonical hash/TTL、锁与幂等、checkpoint/rollback、启动恢复、projection 重放及脱敏结果均通过 |
 | KW-US-144 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
 | KW-US-145 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
