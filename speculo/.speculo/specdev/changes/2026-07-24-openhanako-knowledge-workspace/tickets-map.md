@@ -53,7 +53,7 @@
 | 34 | 2 Markdown | [交付脚注定义、预览与补全](./ticket/34-deliver-footnotes.md) | 11, 27 | KW-US-088, KW-US-089, KW-US-090, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 35 | 2 Markdown | [交付安全 HTML、本地 URL 与外链策略](./ticket/35-deliver-safe-html-and-external-links.md) | 14, 17, 23, 27 | KW-US-091, KW-US-092, KW-US-093, KW-US-094, KW-US-122, KW-RULE-MARKDOWN, KW-RULE-SEC | P2 | 已完成 |
 | 36 | 2 Markdown | [交付当前 Markdown 文档查找替换](./ticket/36-deliver-find-replace.md) | 20, 27 | KW-US-095, KW-US-096, KW-US-097, KW-US-098, KW-US-099, KW-US-100, KW-US-101, KW-US-102, KW-US-103, KW-US-104, KW-US-105, KW-US-106, KW-US-107, KW-US-108, KW-US-109, KW-US-110, KW-US-111, KW-US-112, KW-RULE-MARKDOWN | P2 | 已完成 |
-| 37 | 2 Markdown | [交付 Wikilink 补全、导航与延迟建页](./ticket/37-deliver-wikilink-completion-navigation.md) | 20, 23, 24, 27 | KW-US-113, KW-US-121, KW-RULE-MARKDOWN | P2 | 未开始 |
+| 37 | 2 Markdown | [交付 Wikilink 补全、导航与延迟建页](./ticket/37-deliver-wikilink-completion-navigation.md) | 20, 23, 24, 27 | KW-US-113, KW-US-121, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 38 | 2 Markdown | [交付附件与跨来源复制后引用](./ticket/38-deliver-attachments-cross-source-copy.md) | 10, 23, 27 | KW-US-005, KW-US-006, KW-US-115, KW-US-116, KW-US-117, KW-US-118, KW-RULE-MARKDOWN, KW-RULE-COPY | P1 | 未开始 |
 | 39 | 2 Markdown | [交付同源页面与章节嵌入](./ticket/39-deliver-page-section-embeds.md) | 24, 33, 35, 37 | KW-US-120, KW-RULE-MARKDOWN | P2 | 未开始 |
 | 40 | 3 索引/查询 | [建立来源分区索引 Store 与 Schema](./ticket/40-establish-index-store-schema.md) | 01, 04, 05, 10, 13, 14 | KW-US-187, KW-RULE-INDEX | P1 | 未开始 |
