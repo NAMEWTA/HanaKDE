@@ -68,6 +68,7 @@ export type KnowledgeIndexInspection = Readonly<{
   tables: readonly string[];
   contentFtsSql: string;
   resourceCount: number;
+  nonEmptyBodyFtsCount: number;
   rowCounts: Readonly<{
     resources: number;
     pages: number;
@@ -1113,6 +1114,11 @@ export class KnowledgeIndexQueryLease {
       tables: Object.freeze(tables),
       contentFtsSql: typeof fts?.sql === "string" ? fts.sql : "",
       resourceCount: rowCounts.resources,
+      nonEmptyBodyFtsCount: Number((
+        this.#database.prepare(
+          "SELECT count(*) AS count FROM content_fts WHERE body_fold != ''",
+        ).get() as { count: number }
+      ).count),
       rowCounts,
     });
   }
@@ -1452,16 +1458,29 @@ function validateResourceDocument(
   ) {
     throw new TypeError("knowledge index derived facts are invalid");
   }
-  if (
-    resource.contentState === "indexed"
-    ? document.page === null
-    : document.page !== null
-      || document.headings.length > 0
+  const pageContentInvalid = resource.kind === "page"
+    ? resource.contentState === "indexed"
+      ? document.page === null
+      : document.page !== null
+    : document.page !== null;
+  const metadataOnlyHasDerivedContent =
+    resource.contentState !== "indexed"
+    && (
+      document.headings.length > 0
       || document.links.length > 0
       || document.tags.length > 0
       || document.tasks.length > 0
       || document.search.bodyFold.length > 0
-  ) {
+    );
+  const nonPageHasStructure =
+    resource.kind !== "page"
+    && (
+      document.headings.length > 0
+      || document.links.length > 0
+      || document.tags.length > 0
+      || document.tasks.length > 0
+    );
+  if (pageContentInvalid || metadataOnlyHasDerivedContent || nonPageHasStructure) {
     throw new TypeError("knowledge index content state is inconsistent");
   }
 }
