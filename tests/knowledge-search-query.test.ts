@@ -194,6 +194,23 @@ describe("knowledge super search", () => {
         details: { state: "stale_generation" },
       },
     });
+
+    const rebound = await searchKnowledgeIndex(fixture.index, {
+      query: "alpha OR planning",
+      cursors: { main: main.nextCursor! },
+      scope: { kind: "tag", sourceKey: "main" },
+    }, { sources: fixture.sources });
+    expect(rebound.groups[0]).toMatchObject({
+      state: "error",
+      error: {
+        code: "knowledge_operation_precondition_failed",
+        details: { field: "cursors" },
+      },
+    });
+    expect(decoded).toMatchObject({
+      scope: "all",
+      sort: "score-desc,path-byte,resource-id",
+    });
   });
 
   it("locks tag navigation to its visible source scope and rejects absent scopes", async () => {

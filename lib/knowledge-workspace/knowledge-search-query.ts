@@ -17,6 +17,7 @@ export const KNOWLEDGE_SEARCH_MAX_QUERY_CODE_POINTS = 512;
 export const KNOWLEDGE_SEARCH_MAX_SNIPPETS = 3;
 export const KNOWLEDGE_SEARCH_MAX_SNIPPET_CODE_POINTS = 240;
 const SEARCH_BATCH_SIZE = 256;
+const SEARCH_SORT_KEY = "score-desc,path-byte,resource-id";
 
 export type KnowledgeSearchSource = Readonly<{
   sourceKey: string;
@@ -274,11 +275,16 @@ async function searchSource(
   try {
     lease = coordinator.acquireQueryLease(source.sourceKey);
     const cursor = request.cursors?.[source.sourceKey];
+    const scopeBinding = request.scope
+      ? `tag:${request.scope.sourceKey}`
+      : "all";
     const offset = cursor
       ? decodeCursor(cursor, {
         sourceKey: source.sourceKey,
         generationId: lease.generationId,
         query: options.normalizedQuery,
+        scope: scopeBinding,
+        sort: SEARCH_SORT_KEY,
       })
       : 0;
     const ftsQuery = candidateFtsQuery(expression);
@@ -338,6 +344,8 @@ async function searchSource(
           sourceKey: source.sourceKey,
           generationId: lease.generationId,
           query: options.normalizedQuery,
+          scope: scopeBinding,
+          sort: SEARCH_SORT_KEY,
           offset: nextOffset,
         })
         : null,
@@ -451,6 +459,8 @@ function encodeCursor(input: {
   sourceKey: string;
   generationId: string;
   query: string;
+  scope: string;
+  sort: string;
   offset: number;
 }): string {
   return Buffer.from(JSON.stringify({ v: 1, ...input }), "utf8")
@@ -459,7 +469,13 @@ function encodeCursor(input: {
 
 function decodeCursor(
   value: string,
-  binding: { sourceKey: string; generationId: string; query: string },
+  binding: {
+    sourceKey: string;
+    generationId: string;
+    query: string;
+    scope: string;
+    sort: string;
+  },
 ): number {
   let decoded: unknown;
   try {
@@ -472,6 +488,8 @@ function decodeCursor(
     || decoded.v !== 1
     || decoded.sourceKey !== binding.sourceKey
     || decoded.query !== binding.query
+    || decoded.scope !== binding.scope
+    || decoded.sort !== binding.sort
     || typeof decoded.offset !== "number"
     || !Number.isSafeInteger(decoded.offset)
     || decoded.offset < 0
