@@ -938,7 +938,8 @@
       "migrationEntry": [],
       "protocolModules": [
         "core/knowledge-workspace/knowledge-index-coordinator.ts",
-        "core/knowledge-workspace/knowledge-index-event-coordinator.ts"
+        "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
+        "lib/knowledge-workspace/knowledge-query.ts"
       ],
       "firstPossibleOpenPhase": "runtime_ready",
       "firstPossibleWritePhase": "runtime_ready",
@@ -6580,7 +6581,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 195,
+      "line": 221,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(directory, options)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6589,7 +6590,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 219,
+      "line": 245,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(handle, content, \"utf8\")",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6598,7 +6599,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 226,
+      "line": 252,
       "kind": "rename",
       "excerpt": "fs.renameSync(from, to)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6607,7 +6608,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 229,
+      "line": 255,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(target, options)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6616,7 +6617,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 435,
+      "line": 461,
       "kind": "database-open",
       "excerpt": "new Database(buildPath)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6625,7 +6626,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 486,
+      "line": 512,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6634,7 +6635,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 554,
+      "line": 580,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6643,7 +6644,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 807,
+      "line": 833,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",

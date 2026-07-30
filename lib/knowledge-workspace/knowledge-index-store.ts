@@ -163,6 +163,32 @@ export type KnowledgeIndexIncrementalChange =
     relativePath: string;
   }>;
 
+export type KnowledgeIndexTagQueryRow = Readonly<{
+  relativePath: string;
+  tag: string;
+  origin: "frontmatter" | "body";
+}>;
+
+export type KnowledgeIndexLinkQueryRow = Readonly<{
+  relativePath: string;
+  ordinal: number;
+  linkKind: "wikilink" | "embed" | "markdown" | "content-ref";
+  rawTarget: string;
+  resolvedRelativePath: string | null;
+  fragment: string | null;
+  fromOffset: number;
+  toOffset: number;
+}>;
+
+export type KnowledgeIndexHeadingQueryRow = Readonly<{
+  ordinal: number;
+  level: number;
+  text: string;
+  slug: string;
+  fromOffset: number;
+  toOffset: number;
+}>;
+
 export interface KnowledgeIndexFileSystem {
   mkdir(directory: string, options?: { recursive?: boolean; mode?: number }): void;
   readFile(filePath: string): Buffer;
@@ -1228,9 +1254,7 @@ export class KnowledgeIndexQueryLease {
   }
 
   inspect(): KnowledgeIndexInspection {
-    if (this.#released) {
-      throw new Error("knowledge index query lease is released");
-    }
+    this.#assertActive();
     const meta = readMeta(this.#database);
     const tables = this.#database.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
@@ -1272,6 +1296,92 @@ export class KnowledgeIndexQueryLease {
     });
   }
 
+  queryTags(input: {
+    relativePath?: string;
+    tag?: string;
+    limit: number;
+  }): readonly KnowledgeIndexTagQueryRow[] {
+    this.#assertActive();
+    const rows = this.#database.prepare(`
+      SELECT resources.relative_path, tags.tag, tags.origin
+      FROM tags
+      JOIN resources ON resources.resource_id = tags.resource_id
+      WHERE (? IS NULL OR resources.relative_path = ?)
+        AND (? IS NULL OR tags.tag = ?)
+      ORDER BY tags.tag COLLATE BINARY, resources.relative_path, tags.origin
+      LIMIT ?
+    `).all(
+      input.relativePath ?? null,
+      input.relativePath ?? null,
+      input.tag ?? null,
+      input.tag ?? null,
+      input.limit,
+    ) as Array<Record<string, unknown>>;
+    return Object.freeze(rows.map((row) => Object.freeze({
+      relativePath: String(row.relative_path),
+      tag: String(row.tag),
+      origin: row.origin === "frontmatter" ? "frontmatter" : "body",
+    })));
+  }
+
+  queryOutbound(
+    relativePath: string,
+    limit: number,
+  ): readonly KnowledgeIndexLinkQueryRow[] {
+    this.#assertActive();
+    return this.#queryLinks(`
+      SELECT resources.relative_path, links.ordinal, links.link_kind,
+        links.raw_target, links.resolved_relative_path, links.fragment,
+        links.from_offset, links.to_offset
+      FROM links
+      JOIN resources ON resources.resource_id = links.source_resource_id
+      WHERE resources.relative_path = ?
+      ORDER BY links.ordinal
+      LIMIT ?
+    `, relativePath, limit);
+  }
+
+  queryBacklinks(
+    relativePath: string,
+    limit: number,
+  ): readonly KnowledgeIndexLinkQueryRow[] {
+    this.#assertActive();
+    return this.#queryLinks(`
+      SELECT resources.relative_path, links.ordinal, links.link_kind,
+        links.raw_target, links.resolved_relative_path, links.fragment,
+        links.from_offset, links.to_offset
+      FROM links
+      JOIN resources ON resources.resource_id = links.source_resource_id
+      WHERE links.resolved_relative_path = ?
+      ORDER BY resources.relative_path, links.ordinal
+      LIMIT ?
+    `, relativePath, limit);
+  }
+
+  queryOutline(
+    relativePath: string,
+    limit: number,
+  ): readonly KnowledgeIndexHeadingQueryRow[] {
+    this.#assertActive();
+    const rows = this.#database.prepare(`
+      SELECT headings.ordinal, headings.level, headings.text, headings.slug,
+        headings.from_offset, headings.to_offset
+      FROM headings
+      JOIN resources ON resources.resource_id = headings.resource_id
+      WHERE resources.relative_path = ?
+      ORDER BY headings.ordinal
+      LIMIT ?
+    `).all(relativePath, limit) as Array<Record<string, unknown>>;
+    return Object.freeze(rows.map((row) => Object.freeze({
+      ordinal: Number(row.ordinal),
+      level: Number(row.level),
+      text: String(row.text),
+      slug: String(row.slug),
+      fromOffset: Number(row.from_offset),
+      toOffset: Number(row.to_offset),
+    })));
+  }
+
   release(): void {
     if (this.#released) return;
     this.#released = true;
@@ -1281,6 +1391,49 @@ export class KnowledgeIndexQueryLease {
       this.#release();
     }
   }
+
+  #queryLinks(
+    sql: string,
+    relativePath: string,
+    limit: number,
+  ): readonly KnowledgeIndexLinkQueryRow[] {
+    const rows = this.#database.prepare(sql).all(
+      relativePath,
+      limit,
+    ) as Array<Record<string, unknown>>;
+    return Object.freeze(rows.map((row) => Object.freeze({
+      relativePath: String(row.relative_path),
+      ordinal: Number(row.ordinal),
+      linkKind: linkKindFromDatabase(row.link_kind),
+      rawTarget: String(row.raw_target),
+      resolvedRelativePath: row.resolved_relative_path === null
+        ? null
+        : String(row.resolved_relative_path),
+      fragment: row.fragment === null ? null : String(row.fragment),
+      fromOffset: Number(row.from_offset),
+      toOffset: Number(row.to_offset),
+    })));
+  }
+
+  #assertActive(): void {
+    if (this.#released) {
+      throw new Error("knowledge index query lease is released");
+    }
+  }
+}
+
+function linkKindFromDatabase(
+  value: unknown,
+): KnowledgeIndexLinkQueryRow["linkKind"] {
+  if (
+    value === "wikilink"
+    || value === "embed"
+    || value === "markdown"
+    || value === "content-ref"
+  ) {
+    return value;
+  }
+  throw new Error("knowledge index link kind is invalid");
 }
 
 function rebuildInternals(rebuild: KnowledgeIndexRebuild): {

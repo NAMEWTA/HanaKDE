@@ -5782,6 +5782,18 @@
       "reason": "Reached via esbuild source module graph, imported by core/knowledge-workspace/knowledge-copy-service.ts (import-statement); core/knowledge-workspace/durable-operation-journal.ts (import-statement); core/knowledge-workspace/knowledge-operation-coordinator.ts (import-statement)."
     },
     {
+      "path": "lib/knowledge-workspace/knowledge-query.ts",
+      "inputType": "source-graph",
+      "provenance": [
+        {
+          "root": "server-bootstrap",
+          "from": "server/routes/knowledge-workspace.ts",
+          "kind": "import-statement"
+        }
+      ],
+      "reason": "Reached via esbuild source module graph, imported by server/routes/knowledge-workspace.ts (import-statement)."
+    },
+    {
       "path": "lib/known-model-fallbacks.json",
       "inputType": "runtime-asset",
       "provenance": [
@@ -110680,6 +110692,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "lib/knowledge-workspace/knowledge-query.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/routes/knowledge-workspace.ts",
           "kind": "import-statement"
         },
@@ -110689,7 +110706,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); lib/knowledge-workspace/knowledge-operation-plan.ts (import-statement); +4 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); lib/knowledge-workspace/knowledge-operation-plan.ts (import-statement); +5 more importer(s)."
     },
     {
       "path": "shared/knowledge-workspace-errors.ts",
@@ -110732,6 +110749,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "lib/knowledge-workspace/knowledge-query.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/routes/knowledge-workspace.ts",
           "kind": "import-statement"
         },
@@ -110741,7 +110763,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/errors.ts (import-statement); lib/resource-io/transfer.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); +6 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/errors.ts (import-statement); lib/resource-io/transfer.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); +7 more importer(s)."
     },
     {
       "path": "shared/known-models.ts",
@@ -112143,9 +112165,9 @@
     }
   ],
   "stats": {
-    "totalFiles": 9603,
+    "totalFiles": 9604,
     "byInputType": {
-      "source-graph": 632,
+      "source-graph": 633,
       "runtime-asset": 11,
       "nft-runtime-trace": 8960
     }

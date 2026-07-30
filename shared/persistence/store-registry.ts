@@ -383,6 +383,7 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     protocolModules: [
       "core/knowledge-workspace/knowledge-index-coordinator.ts",
       "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
+      "lib/knowledge-workspace/knowledge-query.ts",
     ],
     firstPossibleOpenPhase: "runtime_ready",
     firstPossibleWritePhase: "runtime_ready",

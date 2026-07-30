@@ -26,6 +26,9 @@ import type { ResourceOperationContext } from "../../lib/resource-io/types.ts";
 import {
   resolveWorkbenchCompatibilityMain,
 } from "../../core/knowledge-workspace/workbench-compatibility.ts";
+import {
+  queryKnowledgeIndex,
+} from "../../lib/knowledge-workspace/knowledge-query.ts";
 
 type RegistryEntry = {
   workspaceKey: string;
@@ -67,6 +70,45 @@ export function createKnowledgeWorkspaceRoute(engine) {
           : source
       );
       return c.json({ sources });
+    } catch (error) {
+      return knowledgeRouteError(c, error);
+    }
+  });
+
+  route.get("/knowledge-workspace/index/status", async (c) => {
+    try {
+      const auth = authorize(c, engine, "files.read");
+      if (auth.response) return auth.response;
+      const result = await queryKnowledgeIndex(
+        knowledgeIndexCoordinatorFor(engine),
+        {
+          kind: "health",
+          sourceKey: c.req.query("sourceKey"),
+        },
+        { signal: c.req.raw.signal },
+      );
+      if (result.kind !== "health") {
+        throw routeError("knowledge index health result invalid", 500);
+      }
+      return c.json({
+        sourceKey: result.sourceKey,
+        health: result.health,
+      });
+    } catch (error) {
+      return knowledgeRouteError(c, error);
+    }
+  });
+
+  route.post("/knowledge-workspace/query", async (c) => {
+    try {
+      const auth = authorize(c, engine, "files.read");
+      if (auth.response) return auth.response;
+      const result = await queryKnowledgeIndex(
+        knowledgeIndexCoordinatorFor(engine),
+        await safeJson(c),
+        { signal: c.req.raw.signal },
+      );
+      return c.json({ result });
     } catch (error) {
       return knowledgeRouteError(c, error);
     }
@@ -439,6 +481,23 @@ async function currentOperationCoordinator(
   }
   const state = operationStates.get(engine);
   return state?.current ? (await state.current).coordinator : null;
+}
+
+function knowledgeIndexCoordinatorFor(engine) {
+  const coordinator = typeof engine?.getKnowledgeIndexCoordinator === "function"
+    ? engine.getKnowledgeIndexCoordinator()
+    : engine?.knowledgeIndexCoordinator;
+  if (
+    !coordinator
+    || typeof coordinator.health !== "function"
+    || typeof coordinator.acquireQueryLease !== "function"
+  ) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_index_unavailable",
+      "knowledge index coordinator is unavailable",
+    );
+  }
+  return coordinator;
 }
 
 function authorize(c, engine, capability: "files.read" | "files.write") {
