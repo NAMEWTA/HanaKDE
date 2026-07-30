@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:8ba0a52ba2037b6de77894f6ae225c308526491f50d36c07f86a40cca6f96280",
+  "payloadFingerprint": "sha256:a551ca1bc369462c81082e37fba6e59e7ad9e0b4555d4b6157f80bd271bef442",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2995,8 +2995,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "新增来源分区知识索引作为可丢弃、可独立重建的 regenerable store；不改变任何既有 store schema、ownership、DATA_EPOCH 或用户知识事实。",
-    "payloadFingerprint": "sha256:8ba0a52ba2037b6de77894f6ae225c308526491f50d36c07f86a40cca6f96280"
+    "compatibilityReason": "为既有来源分区 regenerable 知识索引增加结构化资源事务替换 API 与安全检查；schema、ownership、checkpoint/restore policy、DATA_EPOCH 和既有用户事实均不变。",
+    "payloadFingerprint": "sha256:a551ca1bc369462c81082e37fba6e59e7ad9e0b4555d4b6157f80bd271bef442"
   },
   "schemas": [
     {
@@ -3213,7 +3213,7 @@
           "sourceHash": "sha256:4f132a8c2dac94ed5c8c18cdb8110c4ad5e69a57df210767132059521b0fabf1"
         }
       ],
-      "sourceHash": "sha256:ba29442c87874f5bb7ac17e0374db48a726892683550062eac270affd9c153b4",
+      "sourceHash": "sha256:1b23ff55454f5939a2cd47093157e87d808f27cde144b0a6e3960976e1dada40",
       "storeId": "knowledge-index-generations"
     },
     {
@@ -7278,7 +7278,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 102,
+      "line": 184,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7286,7 +7286,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 126,
+      "line": 208,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7294,7 +7294,7 @@
     {
       "exemptionId": null,
       "kind": "rename",
-      "line": 133,
+      "line": 215,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7302,7 +7302,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 136,
+      "line": 218,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7310,7 +7310,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 342,
+      "line": 424,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7318,7 +7318,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 393,
+      "line": 475,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7326,7 +7326,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 591,
+      "line": 673,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"

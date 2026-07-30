@@ -68,6 +68,88 @@ export type KnowledgeIndexInspection = Readonly<{
   tables: readonly string[];
   contentFtsSql: string;
   resourceCount: number;
+  rowCounts: Readonly<{
+    resources: number;
+    pages: number;
+    headings: number;
+    links: number;
+    tags: number;
+    tasks: number;
+    contentFts: number;
+  }>;
+}>;
+
+export type KnowledgeIndexResourceKind =
+  | "page"
+  | "text"
+  | "image"
+  | "pdf"
+  | "audio"
+  | "video"
+  | "binary"
+  | "link"
+  | "unknown";
+
+export type KnowledgeIndexContentState =
+  | "indexed"
+  | "metadata-only"
+  | "rejected"
+  | "missing";
+
+export type KnowledgeIndexResourceDocument = Readonly<{
+  resource: Readonly<{
+    relativePath: string;
+    parentPath: string;
+    basename: string;
+    extension: string;
+    kind: KnowledgeIndexResourceKind;
+    sizeBytes: number;
+    mtimeMs: number;
+    versionToken: string;
+    contentState: KnowledgeIndexContentState;
+    contentReason: string | null;
+    indexedAtMs: number;
+  }>;
+  page: Readonly<{
+    title: string;
+    frontmatterJson: string | null;
+    bodyText: string;
+    bodyHash: string;
+  }> | null;
+  headings: readonly Readonly<{
+    ordinal: number;
+    level: number;
+    text: string;
+    slug: string;
+    fromOffset: number;
+    toOffset: number;
+  }>[];
+  links: readonly Readonly<{
+    ordinal: number;
+    linkKind: "wikilink" | "embed" | "markdown" | "content-ref";
+    rawTarget: string;
+    resolvedRelativePath: string | null;
+    fragment: string | null;
+    fromOffset: number;
+    toOffset: number;
+  }>[];
+  tags: readonly Readonly<{
+    tag: string;
+    origin: "frontmatter" | "body";
+  }>[];
+  tasks: readonly Readonly<{
+    ordinal: number;
+    checked: boolean;
+    text: string;
+    fromOffset: number;
+    toOffset: number;
+  }>[];
+  search: Readonly<{
+    titleFold: string;
+    pathFold: string;
+    metadataFold: string;
+    bodyFold: string;
+  }>;
 }>;
 
 export interface KnowledgeIndexFileSystem {
@@ -919,6 +1001,11 @@ export class KnowledgeIndexRebuild {
     return this.#progress;
   }
 
+  replaceResource(document: KnowledgeIndexResourceDocument): void {
+    this[REBUILD_ASSERT_HEALTHY]();
+    replaceResourceDocument(rebuildInternals(this).database, document);
+  }
+
   publish({ lastCompleteSequence }: {
     lastCompleteSequence: number;
   }): void {
@@ -946,6 +1033,9 @@ export class KnowledgeIndexRebuild {
   }
 
   [REBUILD_ASSERT_HEALTHY](): void {
+    if (this.#finished) {
+      throw new Error("knowledge index rebuild is already finished");
+    }
     if (this.#signal?.aborted) throw abortError();
     rebuildInternals(this).writerLock.assertHealthy();
   }
@@ -998,6 +1088,18 @@ export class KnowledgeIndexQueryLease {
     const fts = this.#database.prepare(
       "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_fts'",
     ).get() as { sql?: unknown } | undefined;
+    const rowCount = (table: string): number => Number((this.#database.prepare(
+      `SELECT count(*) AS count FROM ${table}`,
+    ).get() as { count: number }).count);
+    const rowCounts = Object.freeze({
+      resources: rowCount("resources"),
+      pages: rowCount("pages"),
+      headings: rowCount("headings"),
+      links: rowCount("links"),
+      tags: rowCount("tags"),
+      tasks: rowCount("tasks"),
+      contentFts: rowCount("content_fts"),
+    });
     return Object.freeze({
       generationId: this.#manifest.generationId,
       schemaVersion: Number(meta.schema_version),
@@ -1010,11 +1112,8 @@ export class KnowledgeIndexQueryLease {
       pragmas: Object.freeze(readPragmas(this.#database)),
       tables: Object.freeze(tables),
       contentFtsSql: typeof fts?.sql === "string" ? fts.sql : "",
-      resourceCount: Number((
-        this.#database.prepare(
-          "SELECT count(*) AS count FROM resources",
-        ).get() as { count: number }
-      ).count),
+      resourceCount: rowCounts.resources,
+      rowCounts,
     });
   }
 
@@ -1147,6 +1246,224 @@ export function foldSearchText(value: string): string {
     throw new TypeError("foldSearchText requires a string");
   }
   return value.normalize("NFC").toLocaleLowerCase("und");
+}
+
+function replaceResourceDocument(
+  database: DatabaseLike,
+  document: KnowledgeIndexResourceDocument,
+): void {
+  validateResourceDocument(document);
+  const { resource } = document;
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const existing = database.prepare(
+      "SELECT resource_id AS resourceId FROM resources WHERE relative_path = ?",
+    ).get(resource.relativePath) as { resourceId: number } | undefined;
+    let resourceId: number;
+    if (existing) {
+      resourceId = Number(existing.resourceId);
+      database.prepare("DELETE FROM content_fts WHERE rowid = ?").run(resourceId);
+      database.prepare("DELETE FROM headings WHERE resource_id = ?").run(resourceId);
+      database.prepare("DELETE FROM links WHERE source_resource_id = ?").run(resourceId);
+      database.prepare("DELETE FROM tags WHERE resource_id = ?").run(resourceId);
+      database.prepare("DELETE FROM tasks WHERE resource_id = ?").run(resourceId);
+      database.prepare("DELETE FROM pages WHERE resource_id = ?").run(resourceId);
+      database.prepare(`
+        UPDATE resources
+           SET parent_path = ?,
+               basename = ?,
+               extension = ?,
+               kind = ?,
+               size_bytes = ?,
+               mtime_ms = ?,
+               version_token = ?,
+               content_state = ?,
+               content_reason = ?,
+               indexed_at_ms = ?
+         WHERE resource_id = ?
+      `).run(
+        resource.parentPath,
+        resource.basename,
+        resource.extension,
+        resource.kind,
+        resource.sizeBytes,
+        resource.mtimeMs,
+        resource.versionToken,
+        resource.contentState,
+        resource.contentReason,
+        resource.indexedAtMs,
+        resourceId,
+      );
+    } else {
+      const inserted = database.prepare(`
+        INSERT INTO resources (
+          relative_path,
+          parent_path,
+          basename,
+          extension,
+          kind,
+          size_bytes,
+          mtime_ms,
+          version_token,
+          content_state,
+          content_reason,
+          indexed_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        resource.relativePath,
+        resource.parentPath,
+        resource.basename,
+        resource.extension,
+        resource.kind,
+        resource.sizeBytes,
+        resource.mtimeMs,
+        resource.versionToken,
+        resource.contentState,
+        resource.contentReason,
+        resource.indexedAtMs,
+      ) as { lastInsertRowid?: number | bigint };
+      resourceId = Number(inserted.lastInsertRowid);
+    }
+
+    if (document.page) {
+      database.prepare(`
+        INSERT INTO pages (
+          resource_id, title, frontmatter_json, body_text, body_hash
+        ) VALUES (?, ?, ?, ?, ?)
+      `).run(
+        resourceId,
+        document.page.title,
+        document.page.frontmatterJson,
+        document.page.bodyText,
+        document.page.bodyHash,
+      );
+    }
+    const insertHeading = database.prepare(`
+      INSERT INTO headings (
+        resource_id, ordinal, level, text, slug, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const heading of document.headings) {
+      insertHeading.run(
+        resourceId,
+        heading.ordinal,
+        heading.level,
+        heading.text,
+        heading.slug,
+        heading.fromOffset,
+        heading.toOffset,
+      );
+    }
+    const insertLink = database.prepare(`
+      INSERT INTO links (
+        source_resource_id,
+        ordinal,
+        link_kind,
+        raw_target,
+        resolved_relative_path,
+        fragment,
+        from_offset,
+        to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const link of document.links) {
+      insertLink.run(
+        resourceId,
+        link.ordinal,
+        link.linkKind,
+        link.rawTarget,
+        link.resolvedRelativePath,
+        link.fragment,
+        link.fromOffset,
+        link.toOffset,
+      );
+    }
+    const insertTag = database.prepare(`
+      INSERT INTO tags (resource_id, tag, origin) VALUES (?, ?, ?)
+    `);
+    for (const tag of document.tags) {
+      insertTag.run(resourceId, tag.tag, tag.origin);
+    }
+    const insertTask = database.prepare(`
+      INSERT INTO tasks (
+        resource_id, ordinal, checked, text, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const task of document.tasks) {
+      insertTask.run(
+        resourceId,
+        task.ordinal,
+        task.checked ? 1 : 0,
+        task.text,
+        task.fromOffset,
+        task.toOffset,
+      );
+    }
+    database.prepare(`
+      INSERT INTO content_fts (
+        rowid, resource_id, title_fold, path_fold, metadata_fold, body_fold
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      resourceId,
+      resourceId,
+      document.search.titleFold,
+      document.search.pathFold,
+      document.search.metadataFold,
+      document.search.bodyFold,
+    );
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function validateResourceDocument(
+  document: KnowledgeIndexResourceDocument,
+): void {
+  if (!document || typeof document !== "object") {
+    throw new TypeError("knowledge index resource document is required");
+  }
+  const { resource } = document;
+  if (
+    !resource
+    || typeof resource.relativePath !== "string"
+    || resource.relativePath.length === 0
+    || typeof resource.parentPath !== "string"
+    || typeof resource.basename !== "string"
+    || resource.basename.length === 0
+    || typeof resource.extension !== "string"
+    || typeof resource.versionToken !== "string"
+    || resource.versionToken.length === 0
+    || !Number.isSafeInteger(resource.sizeBytes)
+    || resource.sizeBytes < 0
+    || !Number.isFinite(resource.mtimeMs)
+    || !Number.isSafeInteger(resource.indexedAtMs)
+  ) {
+    throw new TypeError("knowledge index resource metadata is invalid");
+  }
+  if (
+    !Array.isArray(document.headings)
+    || !Array.isArray(document.links)
+    || !Array.isArray(document.tags)
+    || !Array.isArray(document.tasks)
+    || !document.search
+    || Object.values(document.search).some((value) => typeof value !== "string")
+  ) {
+    throw new TypeError("knowledge index derived facts are invalid");
+  }
+  if (
+    resource.contentState === "indexed"
+    ? document.page === null
+    : document.page !== null
+      || document.headings.length > 0
+      || document.links.length > 0
+      || document.tags.length > 0
+      || document.tasks.length > 0
+      || document.search.bodyFold.length > 0
+  ) {
+    throw new TypeError("knowledge index content state is inconsistent");
+  }
 }
 
 function configureDatabase(database: DatabaseLike): void {
