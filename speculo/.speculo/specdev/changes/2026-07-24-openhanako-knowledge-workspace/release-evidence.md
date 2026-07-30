@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `4a3e0cc3`（Ticket 41 实现验证点） |
+| Commit | `25e4ed0c`（Ticket 42 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -19,7 +19,7 @@
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
 | M1 Workspace/文档（Tickets 15–22） | P1 | 通过 | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs、三方冲突，以及统一 close/switch/quit 与 orphan 保存均已交付。Ticket 22 精确 25/25、相关 61/61；当前产品范围全仓 1030 files passed、1 skipped，10334 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过。E2E-KW-004–008/024 按真实入口依赖保留待回填 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 通过 | canonical address/LinkResolver、共享 CM6 表面、Markdown 增强、同源补全/导航、延迟建页、附件/跨来源复制后引用，以及同源整页/章节只读嵌入均已交付。Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过；typecheck、boundary、目标 ESLint 与 Renderer build 通过。E2E-KW-009 等缺失的发布 E2E 场景仍按真实入口依赖保留待回填 |
-| M3 索引/查询（Tickets 40–46） | P1 | 部分通过（Tickets 40–41） | Ticket 40 的 schema/generation/manifest/lease/lock/健康与原子 publish 基础保持；Ticket 41 交付已保存 Markdown 的 10 MiB/严格 UTF-8 门禁、共享 IR 的标题/属性/标签/任务/同源链接抽取、未保存 buffer 隔离和单事务旧派生行替换。Ticket 41 精确 10/10、相关 164/164、全仓 10662 tests（10656 passed、6 skipped）、typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过；Tickets 42–46 尚未执行 |
+| M3 索引/查询（Tickets 40–46） | P1 | 部分通过（Tickets 40–42） | Ticket 40 的 schema/generation/manifest/lease/lock/健康与原子 publish 基础保持；Ticket 41 的已保存 Markdown 抽取保持；Ticket 42 交付 ResourceIO stat/content gate/expected-version read、严格 UTF-8 与 BOM 明示 UTF-8/16/32 解码、10 MiB+1/PDF/媒体/二进制/主动内容零正文读取，以及门禁变化时单事务清除旧正文。Ticket 42 精确 22/22、相关 102/102、索引与持久化专项 56/56、全仓 10684 tests（10678 passed、6 skipped）、typecheck、boundary、目标 ESLint 与 Open Server build 通过；Tickets 43–46 尚未执行 |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
 | M5 发布（Ticket 57） | P2 | 未执行 | — |
 
@@ -183,7 +183,7 @@
 | KW-US-154 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
 | KW-US-155 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
 | KW-US-156 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`（2 files、23/23）；安全文本、图片、PDF、音频、视频与文件信息只读表面通过 |
-| KW-US-157 | 42 | `tests/safe-text-index-extractor.test.ts` | E2E-KW-013 | 未执行 | — |
+| KW-US-157 | 42 | `tests/safe-text-index-extractor.test.ts` | E2E-KW-013 | 通过 | `npx vitest run tests/safe-text-index-extractor.test.ts --exclude 'temp/**' --reporter=dot`（1 file、22/22）；无 BOM 严格 UTF-8、BOM 明示 UTF-8/16/32、10 MiB+1/PDF/媒体/二进制/主动内容零 read、版本/长度漂移、非法编码、取消、权限/不可用与旧正文清理均有直接证据；E2E-KW-013 仅关联追踪 |
 | KW-US-158 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；不安全编码显示文件信息，默认应用动作只接收知识地址 |
 | KW-US-159 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；10 MiB + 1 在 stat 后零正文 read |
 | KW-US-160 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；PDF 只读预览且未调用索引/OCR/高亮能力 |
@@ -232,7 +232,7 @@
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 通过 | Tickets 11–38 既有证据保持；Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过。同源整页/首个精确章节、完整地址循环、深度与故障分支隔离、已保存磁盘读取、源页面相对链接、安全静态只读渲染、保存后无损刷新及 Source literal 已验证 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17、35） | Ticket 14 恶意工作区与 Ticket 17 stat-first asset policy 证据保持；Ticket 35 显式 HTML/tag/attribute/protocol allowlist、nested active content 拒绝、http/https 用户手势、同源相对媒体 stat/read/version/byte 复验、abort/revoke、main/mobile/web system boundary 与恶意回归 85/85 通过；Tickets 51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
-| KW-RULE-INDEX | 40, 41, 42, 43 | 部分通过（Tickets 40–41） | Ticket 40 存储基础证据保持；Ticket 41 精确 10/10、相关 Markdown/持久化 164/164、全仓 10662 tests（10656 passed、6 skipped）。已保存版本读取、10 MiB 读前门禁、严格 UTF-8/BOM、共享 IR、文件名标题、属性/标题/同源链接/标签/task、embed 去重、folded FTS DTO、取消/冲突/权限/来源不可用、旧派生清理和事务回滚均已验证；Tickets 42–43 尚未执行 |
+| KW-RULE-INDEX | 40, 41, 42, 43 | 部分通过（Tickets 40–42） | Tickets 40–41 的来源分区 Store 与 Markdown 抽取证据保持；Ticket 42 精确 22/22、相关 102/102、索引与持久化专项 56/56、全仓 10684 tests（10678 passed、6 skipped）。非 Markdown 文本只经 ResourceIO stat/content gate/expected-version read；无 BOM 严格 UTF-8，UTF-8/16/32 仅按明确 BOM；10 MiB+1、PDF、媒体、二进制与主动内容零正文读取，PDF 无 OCR/文本层，取消/版本或长度漂移/非法编码/权限/不可用均 fail-closed，门禁变化会原子清除旧正文；Ticket 43 尚未执行 |
 | KW-RULE-QUERY | 44, 46 | 未执行 | — |
 | KW-RULE-SEARCH | 45 | 未执行 | — |
 | KW-RULE-VIEW | 46 | 未执行 | — |
@@ -264,7 +264,7 @@
 | E2E-KW-010 | 未执行 | 未执行 | 未执行 | 当前仓库只有 `E2E-KW-001-shell.spec.ts`，不存在 E2E-KW-010 spec；Ticket 53 真实编辑器/树拖拽入口完成后补建，最终发布前必须执行 |
 | E2E-KW-011 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 48/49 的资源树单击/双击/Enter/Space 真实打开入口；当前仓库无该 spec，不以私有 route 或缩减场景替代，最终发布前必须回填 |
 | E2E-KW-012 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-013 | 未执行 | 未执行 | 未执行 | Tickets 40–41 的索引存储与 Markdown 抽取已完成；仍依赖 Tickets 42–46 的安全文本、查询、搜索与真实 UI 入口。当前仓库不存在该 spec，不以 Vitest 冒充发布 E2E |
+| E2E-KW-013 | 未执行 | 未执行 | 未执行 | Tickets 40–42 的索引存储、Markdown 与安全文本抽取已完成；仍依赖 Tickets 43–46 的增量协调、查询、搜索与真实 UI 入口。当前仓库不存在该 spec，不以 Vitest 冒充发布 E2E |
 | E2E-KW-014 | 未执行 | 未执行 | 未执行 | Ticket 40 generation/锁/原子 publish 基础已完成；仍依赖 Ticket 43 watcher/rebuild 公开入口。当前仓库不存在该 spec，不以私有 route 或缩减场景替代 |
 | E2E-KW-015 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-016 | 未执行 | 未执行 | 未执行 | — |
@@ -294,7 +294,7 @@
 | TM-005 | 通过 | 控制字符、正文、token 与绝对路径错误/日志脱敏断言通过 |
 | TM-006 | 通过（自动化；E2E 待回填） | Ticket 14 基线保持；Ticket 35 相关 85/85 证明 raw HTML/script/style/event/nested active content 与非 `http/https` URI fail-closed，Renderer/main/mobile/web 协议策略一致，外链只在 pointer/Enter/Space 显式用户动作后进入 system boundary；E2E-KW-011 待 Tickets 48/49 真实资源入口回填 |
 | TM-007 | 通过 | Ticket 14 基线与 Ticket 33 编辑字段均通过：固定 strict/secure config、顶层与 flowchart 无 HTML label、丢弃 bindFunctions、SVG element/attribute/fragment allowlist、root-ID scoped CSS declaration sanitizer、active URL/global selector/at-rule/animation/event/script/foreignObject 拒绝，以及 cache/cancel/stale-result guard |
-| TM-008 | 部分通过（Tickets 14、17、19） | Server、Asset Viewer 与 Markdown Editor 均在正文前 stat；10 MiB + 1、active/unsupported 类型零 read，Markdown 超限时不创建 session/view；允许内容受实际字节数复验，取消、stale 结果与非法 UTF-8 均 fail-closed；Ticket 42 尚未执行 |
+| TM-008 | 通过（Tickets 13、14、17、19、42） | Server、Asset Viewer、Markdown Editor 与安全文本索引器均在正文前 stat；10 MiB+1、active/unsupported/PDF/媒体/二进制类型零 read，Markdown 超限时不创建 session/view；允许内容受实际字节数和 expected version 复验，取消、stale 结果、非法编码与长度漂移均 fail-closed |
 | TM-009 | 未执行 | — |
 | TM-010 | 未执行 | — |
 | TM-011 | 未执行 | — |

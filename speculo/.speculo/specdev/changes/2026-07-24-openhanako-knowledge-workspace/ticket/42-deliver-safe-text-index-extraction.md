@@ -1,7 +1,7 @@
 # Ticket 42: 交付非 Markdown 安全文本抽取
 
 - **被阻塞于：** [`17-deliver-open-policy-and-asset-viewer.md`](./17-deliver-open-policy-and-asset-viewer.md)、[`40-establish-index-store-schema.md`](./40-establish-index-store-schema.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -64,9 +64,21 @@
 
 ## 验收标准
 
-- [ ] PDF 无正文命中；编码/大小跨阈值时旧正文索引被移除；提取不执行内容。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] PDF 无正文命中；编码/大小跨阈值时旧正文索引被移除；提取不执行内容。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- **实现提交：** `25e4ed0c`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS / Node v24.16.0
+- **实现结果：** 交付仅经 ResourceIO `stat`、content gate、expected-version `openRead` 的非 Markdown 安全文本抽取器。无 BOM 内容只接受严格 UTF-8；UTF-8/UTF-16 LE/BE/UTF-32 LE/BE 仅按确定 BOM 解码。10 MiB+1、PDF、图片、音视频、二进制和主动 HTML/SVG/URL/Mermaid 均不读取正文，PDF 不做文本层抽取或 OCR，所有内容都不执行。安全文本以资源正文进入既有 FTS，跨越大小/编码门禁后事务替换会清除旧正文，只保留资源元数据。
+- **精确测试：** `npx vitest run tests/safe-text-index-extractor.test.ts --exclude 'temp/**' --reporter=dot`，1 file、22/22 通过；真实 ResourceIO spy provider 覆盖全部允许编码、10 MiB+1 零 read、PDF/媒体/二进制/主动内容零 read、非法编码、版本/长度漂移、missing、权限拒绝、取消、旧正文清理与 Markdown 入口拒绝。
+- **相关回归：** 安全文本/open policy/file kind/索引 Store/Schema/Markdown 抽取 6 files、102/102；索引与持久化专项 6 files、56/56。
+- **全仓测试：** `npm test -- --exclude 'temp/**'`，1060 files（1059 passed、1 skipped），10684 tests（10678 passed、6 skipped）。
+- **静态与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check`、`npm run build:server:open` 均通过；Open Server better-sqlite3 runtime smoke 通过。
+- **持久化审查：** SQLite schema、ownership、checkpoint/restore policy 与 `DATA_EPOCH` 均不变；扩展既有 regenerable 事务 DTO 校验和脱敏计数后按 compatible addition 重钉指纹 `sha256:655391089631e5314ad218a5939089c1391ed29e5420efe3d69e2890c4ec2da2`。
+- **UI/E2E：** 本 ticket 未新增 UI，五语言/键盘/ARIA/focus/主题/窄布局约束不适用；按 ticket 明确要求未运行 Playwright。E2E-KW-013 仅保留发布级关联，当前仓库不存在对应 spec，未记为通过。

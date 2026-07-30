@@ -58,7 +58,7 @@
 | 39 | 2 Markdown | [交付同源页面与章节嵌入](./ticket/39-deliver-page-section-embeds.md) | 24, 33, 35, 37 | KW-US-120, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 40 | 3 索引/查询 | [建立来源分区索引 Store 与 Schema](./ticket/40-establish-index-store-schema.md) | 01, 04, 05, 10, 13, 14 | KW-US-187, KW-RULE-INDEX | P1 | 已完成 |
 | 41 | 3 索引/查询 | [交付 Markdown 页面抽取管线](./ticket/41-deliver-markdown-index-extraction.md) | 11, 23, 25, 26, 40 | KW-RULE-INDEX | P1 | 已完成 |
-| 42 | 3 索引/查询 | [交付非 Markdown 安全文本抽取](./ticket/42-deliver-safe-text-index-extraction.md) | 17, 40 | KW-US-157, KW-RULE-INDEX | P1 | 未开始 |
+| 42 | 3 索引/查询 | [交付非 Markdown 安全文本抽取](./ticket/42-deliver-safe-text-index-extraction.md) | 17, 40 | KW-US-157, KW-RULE-INDEX | P1 | 已完成 |
 | 43 | 3 索引/查询 | [交付 watcher 增量协调与 rebuild](./ticket/43-deliver-watcher-index-rebuild.md) | 06, 10, 40, 41, 42 | KW-US-193, KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY | P1 | 未开始 |
 | 44 | 3 索引/查询 | [交付标签与引用查询 API](./ticket/44-deliver-knowledge-query-apis.md) | 23, 41, 43 | KW-RULE-QUERY | P1 | 未开始 |
 | 45 | 3 索引/查询 | [交付超级搜索](./ticket/45-deliver-super-search.md) | 20, 40, 43, 44 | KW-US-188, KW-US-189, KW-US-190, KW-RULE-SEARCH | P1 | 未开始 |
