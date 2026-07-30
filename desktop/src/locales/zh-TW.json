@@ -106,6 +106,17 @@
     "attachment": {
       "copyFailed": "附件複製失敗，未為該附件插入連結。"
     },
+    "embed": {
+      "loading": "正在載入嵌入頁面…",
+      "openPage": "嵌入頁面 {path}。啟用一般區域可開啟來源頁面。",
+      "cycle": "偵測到循環頁面嵌入",
+      "depth": "已達頁面嵌入深度上限",
+      "missing": "嵌入頁面不存在",
+      "sectionMissing": "嵌入章節不存在",
+      "unavailable": "嵌入頁面無法使用",
+      "tooLarge": "嵌入頁面過大",
+      "invalidEncoding": "嵌入頁面不是有效的 UTF-8"
+    },
     "mermaid": {
       "editSource": "編輯 Mermaid 原始碼",
       "loading": "正在算繪 Mermaid 圖表…",

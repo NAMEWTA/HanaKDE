@@ -106,6 +106,17 @@
     "attachment": {
       "copyFailed": "첨부 파일을 복사하지 못해 링크를 삽입하지 않았습니다."
     },
+    "embed": {
+      "loading": "임베드된 페이지를 불러오는 중…",
+      "openPage": "임베드된 페이지 {path}. 일반 영역을 활성화하면 원본 페이지를 엽니다.",
+      "cycle": "페이지 임베드 순환이 감지되었습니다",
+      "depth": "페이지 임베드 깊이 제한에 도달했습니다",
+      "missing": "임베드된 페이지가 없습니다",
+      "sectionMissing": "임베드된 섹션이 없습니다",
+      "unavailable": "임베드된 페이지를 사용할 수 없습니다",
+      "tooLarge": "임베드된 페이지가 너무 큽니다",
+      "invalidEncoding": "임베드된 페이지가 올바른 UTF-8이 아닙니다"
+    },
     "mermaid": {
       "editSource": "Mermaid 소스 편집",
       "loading": "Mermaid 다이어그램 렌더링 중…",

@@ -106,6 +106,17 @@
     "attachment": {
       "copyFailed": "添付ファイルをコピーできなかったため、リンクは挿入されませんでした。"
     },
+    "embed": {
+      "loading": "埋め込みページを読み込んでいます…",
+      "openPage": "埋め込みページ {path}。通常領域を操作すると元ページを開きます。",
+      "cycle": "ページ埋め込みが循環しています",
+      "depth": "ページ埋め込みの深さ上限に達しました",
+      "missing": "埋め込みページがありません",
+      "sectionMissing": "埋め込みセクションがありません",
+      "unavailable": "埋め込みページを利用できません",
+      "tooLarge": "埋め込みページが大きすぎます",
+      "invalidEncoding": "埋め込みページは有効な UTF-8 ではありません"
+    },
     "mermaid": {
       "editSource": "Mermaid ソースを編集",
       "loading": "Mermaid 図をレンダリング中…",

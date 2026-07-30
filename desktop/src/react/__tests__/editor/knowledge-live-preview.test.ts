@@ -105,6 +105,34 @@ describe('knowledge live preview modes', () => {
     expect(save).not.toHaveBeenCalled();
   });
 
+  it('force-refreshes the current mode without moving selection, scroll, or history', () => {
+    const source = '# Title\n\nbody';
+    const {
+      view, compartment, live,
+    } = createView(source, source.indexOf('body'));
+    view.dispatch({
+      changes: { from: source.length, insert: '!' },
+      selection: { anchor: source.indexOf('body') + 2 },
+    });
+    view.scrollDOM.scrollTop = 91;
+    view.scrollDOM.scrollLeft = 7;
+    const selection = view.state.selection.toJSON();
+
+    expect(reconfigureKnowledgeMarkdownMode(
+      view,
+      compartment,
+      'live-preview',
+      live,
+      { force: true },
+    )).toBe('changed');
+    expect(view.state.doc.toString()).toBe(`${source}!`);
+    expect(view.state.selection.toJSON()).toEqual(selection);
+    expect(view.scrollDOM.scrollTop).toBe(91);
+    expect(view.scrollDOM.scrollLeft).toBe(7);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(source);
+  });
+
   it('reveals only a touched inline element and only active block markers', () => {
     const inlineSource = '**one** and **two**\nplain';
     const inline = createView(inlineSource, inlineSource.indexOf('one') + 1);

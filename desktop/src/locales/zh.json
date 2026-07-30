@@ -106,6 +106,17 @@
     "attachment": {
       "copyFailed": "附件复制失败，未为该附件插入链接。"
     },
+    "embed": {
+      "loading": "正在加载嵌入页面…",
+      "openPage": "嵌入页面 {path}。激活普通区域可打开源页面。",
+      "cycle": "检测到循环页面嵌入",
+      "depth": "已达到页面嵌入深度上限",
+      "missing": "嵌入页面不存在",
+      "sectionMissing": "嵌入章节不存在",
+      "unavailable": "嵌入页面不可用",
+      "tooLarge": "嵌入页面过大",
+      "invalidEncoding": "嵌入页面不是有效的 UTF-8"
+    },
     "mermaid": {
       "editSource": "编辑 Mermaid 源码",
       "loading": "正在渲染 Mermaid 图表…",

@@ -88,9 +88,15 @@ export function reconfigureKnowledgeMarkdownMode(
   compartment: Compartment,
   mode: KnowledgeMarkdownViewMode,
   livePreviewExtensions: readonly Extension[],
+  options: { force?: boolean } = {},
 ): KnowledgeMarkdownModeChangeResult {
   if (!view) return 'unavailable';
-  if (getKnowledgeMarkdownViewMode(view.state) === mode) return 'unchanged';
+  if (
+    getKnowledgeMarkdownViewMode(view.state) === mode
+    && !options.force
+  ) {
+    return 'unchanged';
+  }
   const top = view.scrollDOM.scrollTop;
   const left = view.scrollDOM.scrollLeft;
   try {

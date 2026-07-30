@@ -47,6 +47,9 @@ import type {
   KnowledgeSafeHtmlFieldConfig,
 } from '../../editor/knowledge-safe-html-field';
 import type {
+  KnowledgeEmbedFieldConfig,
+} from '../../editor/knowledge-embed-field';
+import type {
   KnowledgeSlashMenuRequest,
 } from '../../editor/knowledge-command-registry';
 import { KnowledgeSlashMenu } from '../knowledge-workspace/KnowledgeSlashMenu';
@@ -107,6 +110,7 @@ export interface MarkdownEditorSurfacePolicy {
   } | null;
   knowledgeLinks?: KnowledgeLinkFieldConfig | null;
   knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig | null;
+  knowledgeEmbeds?: KnowledgeEmbedFieldConfig | null;
   knowledgeFind?: {
     onRequest(
       command: 'find' | 'replace',
@@ -652,6 +656,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
             },
             knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
             knowledgeSafeHtml: policyRef.current.knowledgeSafeHtml ?? undefined,
+            knowledgeEmbeds: policyRef.current.knowledgeEmbeds ?? undefined,
           }),
         );
       },
@@ -958,6 +963,7 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
         onOpenLink: (url) => policyRef.current.openLink?.open(url),
         knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
         knowledgeSafeHtml: policyRef.current.knowledgeSafeHtml ?? undefined,
+        knowledgeEmbeds: policyRef.current.knowledgeEmbeds ?? undefined,
         knowledgeFind: isMd && policyRef.current.knowledgeFind
           ? {
               onRequest: (command, view) => {
@@ -1096,9 +1102,16 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
           },
           knowledgeLinks: policyRef.current.knowledgeLinks ?? undefined,
           knowledgeSafeHtml: policyRef.current.knowledgeSafeHtml ?? undefined,
+          knowledgeEmbeds: policyRef.current.knowledgeEmbeds ?? undefined,
         }),
+        { force: true },
       );
-    }, [filePath, markdownDisplayMode, mode]);
+    }, [
+      filePath,
+      markdownDisplayMode,
+      mode,
+      policy.knowledgeEmbeds?.refreshKey,
+    ]);
 
     useEffect(() => {
       const view = viewRef.current;

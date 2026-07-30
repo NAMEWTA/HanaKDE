@@ -43,6 +43,9 @@ import {
   createKnowledgeAttachmentPolicy,
   readKnowledgeAttachmentItems,
 } from '../../editor/knowledge-attachment-policy';
+import type {
+  KnowledgeEmbedPageReadResult,
+} from '../../editor/knowledge-embed-field';
 
 type EditorLoadState =
   | { status: 'loading' }
@@ -98,6 +101,50 @@ function loadErrorReason(error: unknown): string {
   return tr('knowledge.document.loadError');
 }
 
+function embedReadFailure(error: unknown): KnowledgeEmbedPageReadResult {
+  if (!(error instanceof KnowledgeDocumentReadError)) {
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (error.reason === 'missing') {
+    return { ok: false, reason: 'missing' };
+  }
+  if (
+    error.reason === 'tooLarge'
+    || error.reason === 'content_too_large'
+  ) {
+    return { ok: false, reason: 'content_too_large' };
+  }
+  if (
+    error.reason === 'invalidEncoding'
+    || error.reason === 'invalid_base64'
+    || error.reason === 'invalid_utf8'
+  ) {
+    return { ok: false, reason: 'invalid_utf8' };
+  }
+  return { ok: false, reason: 'unavailable' };
+}
+
+function embedRefreshKey(
+  sessions: Readonly<Record<string, KnowledgeDocumentSession>>,
+  sourceKey: string,
+): string {
+  return Object.values(sessions)
+    .filter(candidate => candidate.address.sourceKey === sourceKey)
+    .map(candidate => {
+      const version = candidate.diskVersion;
+      return [
+        candidate.key,
+        version?.mtimeMs ?? '',
+        version?.size ?? '',
+        version?.sha256 ?? '',
+        version?.etag ?? '',
+        version?.sequence ?? '',
+      ].join(':');
+    })
+    .sort()
+    .join('|');
+}
+
 function reportSaveError(
   registry: KnowledgeDocumentRegistry,
   address: KnowledgeResourceAddress,
@@ -134,6 +181,10 @@ export function KnowledgeDocumentEditor({
   }), [address.relativePath, address.sourceKey]);
   const session = useStore(registry, state => state.sessions[addressKey]);
   const view = useStore(registry, state => state.views[viewId]);
+  const embedsRevision = useStore(
+    registry,
+    state => embedRefreshKey(state.sessions, requestAddress.sourceKey),
+  );
   const editorRef = useRef<MarkdownEditorSurfaceHandle>(null);
   const requestIdRef = useRef(0);
   const [retryRevision, setRetryRevision] = useState(0);
@@ -391,6 +442,45 @@ export function KnowledgeDocumentEditor({
         });
       },
     },
+    knowledgeEmbeds: {
+      pageAddress: requestAddress,
+      refreshKey: embedsRevision,
+      readPage: async (target, options) => {
+        try {
+          const snapshot = await readKnowledgeMarkdownSnapshot(
+            client,
+            target,
+            { signal: options.signal },
+          );
+          return { ok: true, content: snapshot.buffer };
+        } catch (error) {
+          return embedReadFailure(error);
+        }
+      },
+      onActivatePage: activation => onOpenKnowledgeLink?.({
+        kind: 'internal',
+        sourceKind: 'wikilink',
+        embedded: true,
+        address: activation.address,
+        fragment: activation.fragment,
+        availability: 'available',
+      }),
+      onActivateLink: activation => {
+        if (activation.kind === 'external') {
+          if (onOpenLink) return onOpenLink(activation.url);
+          openKnowledgeExternalLink(activation.url);
+          return undefined;
+        }
+        return onOpenKnowledgeLink?.({
+          kind: 'internal',
+          sourceKind: 'markdown_link',
+          embedded: false,
+          address: activation.address,
+          fragment: activation.fragment,
+          availability: 'available',
+        });
+      },
+    },
     knowledgeFind: {
       onRequest: command => {
         onFindRequest?.({
@@ -420,6 +510,7 @@ export function KnowledgeDocumentEditor({
     requestAddress,
     saveCurrentDocument,
     sourceWritable,
+    embedsRevision,
     groupId,
     viewId,
   ]);

@@ -37,6 +37,8 @@ import {
   knowledgeBytesFromBase64,
 } from '../../utils/knowledge-markdown-file';
 
+const surfacePolicies = vi.hoisted(() => new Map<string, MarkdownEditorSurfacePolicy>());
+
 vi.mock('../../components/preview/MarkdownEditorSurface', async importOriginal => {
   const React = await import('react');
   const actual = await importOriginal<
@@ -49,6 +51,7 @@ vi.mock('../../components/preview/MarkdownEditorSurface', async importOriginal =
     policy: MarkdownEditorSurfacePolicy;
     onContentChange?: (content: string) => void;
   }, ref: React.ForwardedRef<MarkdownEditorSurfaceHandle>) => {
+    surfacePolicies.set(props.filePath ?? '', props.policy);
     const contentRef = React.useRef(props.content);
     contentRef.current = props.content;
     const save = async () => {
@@ -229,6 +232,7 @@ async function openEditor(input: {
 describe('KnowledgeDocumentEditor manual save tracer', () => {
   beforeEach(() => {
     window.t = translate as typeof window.t;
+    surfacePolicies.clear();
   });
 
   afterEach(() => {
@@ -480,6 +484,111 @@ describe('KnowledgeDocumentEditor manual save tracer', () => {
     });
     expect(registry.getState().sessions[key].history.undo).toHaveLength(0);
     expect(services.write).not.toHaveBeenCalled();
+  });
+
+  it('reads embeds from saved ResourceIO snapshots and refreshes hosts only after a source save', async () => {
+    const sourceAddress: KnowledgeResourceAddress = {
+      sourceKey: 'main',
+      relativePath: 'Notes/Source.md',
+    };
+    const disk = new Map([
+      [address.relativePath, '![[Source.md]]'],
+      [sourceAddress.relativePath, 'saved source'],
+    ]);
+    const versions = new Map<string, RendererResourceVersion>([
+      [address.relativePath, { etag: 'host-v1', sequence: 1, size: 14 }],
+      [sourceAddress.relativePath, { etag: 'source-v1', sequence: 1, size: 12 }],
+    ]);
+    const stat = vi.fn(async (target: KnowledgeResourceAddress) => ({
+      exists: true as const,
+      isDirectory: false as const,
+      version: versions.get(target.relativePath),
+    }));
+    const read = vi.fn(async (target: KnowledgeResourceAddress) => {
+      const value = disk.get(target.relativePath) ?? '';
+      return {
+        content: knowledgeBase64FromBytes(bytes(value)),
+        encoding: 'base64' as const,
+        version: versions.get(target.relativePath),
+      };
+    });
+    const client = {
+      resources: { stat, read },
+    } as unknown as KnowledgeWorkspaceClient;
+    const registry = createKnowledgeDocumentRegistry({
+      ownerId: 'owner',
+      windowId: 'embed-refresh',
+    });
+    await openEditor({ client, registry });
+    registry.getState().establishDocumentSession({
+      address: sourceAddress,
+      buffer: 'saved source',
+      diskVersion: versions.get(sourceAddress.relativePath),
+    });
+    registry.getState().openDocumentView({
+      viewId: 'source-view',
+      address: sourceAddress,
+      groupId: 'source-group',
+    });
+
+    await waitFor(() => {
+      expect(surfacePolicies.get(address.relativePath)?.knowledgeEmbeds)
+        .toBeDefined();
+    });
+    const initialEmbeds = surfacePolicies.get(
+      address.relativePath,
+    )!.knowledgeEmbeds!;
+    const initialRefreshKey = initialEmbeds.refreshKey;
+    await expect(initialEmbeds.readPage(sourceAddress, {
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      ok: true,
+      content: 'saved source',
+    });
+    expect(stat.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      read.mock.invocationCallOrder.at(-1)!,
+    );
+
+    act(() => {
+      registry.getState().replaceDocumentBuffer(
+        'source-view',
+        'unsaved source edit',
+      );
+    });
+    expect(surfacePolicies.get(address.relativePath)?.knowledgeEmbeds?.refreshKey)
+      .toBe(initialRefreshKey);
+    await expect(initialEmbeds.readPage(sourceAddress, {
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      ok: true,
+      content: 'saved source',
+    });
+
+    disk.set(sourceAddress.relativePath, 'newer source');
+    versions.set(sourceAddress.relativePath, {
+      etag: 'source-v2',
+      sequence: 2,
+      size: bytes('newer source').byteLength,
+    });
+    act(() => {
+      registry.getState().commitSavedDocument(
+        sourceAddress,
+        'newer source',
+        versions.get(sourceAddress.relativePath)!,
+      );
+    });
+    await waitFor(() => {
+      expect(surfacePolicies.get(address.relativePath)?.knowledgeEmbeds?.refreshKey)
+        .not.toBe(initialRefreshKey);
+    });
+    await expect(surfacePolicies.get(
+      address.relativePath,
+    )!.knowledgeEmbeds!.readPage(sourceAddress, {
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      ok: true,
+      content: 'newer source',
+    });
   });
 
   it('uses Ctrl/Cmd+S, latest expected version, and updates baseline only after success', async () => {

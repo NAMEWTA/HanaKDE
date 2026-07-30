@@ -70,6 +70,10 @@ import {
   type KnowledgeSafeHtmlFieldConfig,
 } from './knowledge-safe-html-field';
 import {
+  createKnowledgeEmbedField,
+  type KnowledgeEmbedFieldConfig,
+} from './knowledge-embed-field';
+import {
   knowledgeAttachmentHistoryExtension,
   knowledgeAttachmentHistoryKeymap,
 } from './knowledge-attachment-history';
@@ -101,6 +105,7 @@ export interface CreateMarkdownEditorExtensionsOptions {
   onOpenLink?: MarkdownLinkOpenHandler;
   knowledgeLinks?: KnowledgeLinkFieldConfig;
   knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig;
+  knowledgeEmbeds?: KnowledgeEmbedFieldConfig;
   knowledgeFind?: {
     onRequest(command: 'find' | 'replace', view: EditorView): void;
   };
@@ -124,6 +129,7 @@ export interface CreateMarkdownLivePreviewExtensionsOptions {
   imageContext: MarkdownImageContext;
   knowledgeLinks?: KnowledgeLinkFieldConfig;
   knowledgeSafeHtml?: KnowledgeSafeHtmlFieldConfig;
+  knowledgeEmbeds?: KnowledgeEmbedFieldConfig;
 }
 
 export function createMarkdownLivePreviewExtensions(
@@ -137,6 +143,9 @@ export function createMarkdownLivePreviewExtensions(
       : []),
     ...(options.knowledgeSafeHtml
       ? [createKnowledgeSafeHtmlField(options.knowledgeSafeHtml)]
+      : []),
+    ...(options.knowledgeEmbeds
+      ? [createKnowledgeEmbedField(options.knowledgeEmbeds)]
       : []),
     taskField,
     frontmatterField,
@@ -166,6 +175,7 @@ export function createMarkdownEditorExtensions(
     onOpenLink,
     knowledgeLinks,
     knowledgeSafeHtml,
+    knowledgeEmbeds,
     knowledgeFind,
     knowledgeCommands,
   } = options;
@@ -246,6 +256,7 @@ export function createMarkdownEditorExtensions(
             imageContext,
             knowledgeLinks,
             knowledgeSafeHtml,
+            knowledgeEmbeds,
           }),
         )
       : []),

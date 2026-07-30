@@ -106,6 +106,17 @@
     "attachment": {
       "copyFailed": "The attachment could not be copied. No link was inserted for it."
     },
+    "embed": {
+      "loading": "Loading embedded page…",
+      "openPage": "Embedded page {path}. Activate a plain area to open the source page.",
+      "cycle": "Circular page embed",
+      "depth": "Page embed depth limit reached",
+      "missing": "Embedded page is missing",
+      "sectionMissing": "Embedded section is missing",
+      "unavailable": "Embedded page is unavailable",
+      "tooLarge": "Embedded page is too large",
+      "invalidEncoding": "Embedded page is not valid UTF-8"
+    },
     "mermaid": {
       "editSource": "Edit Mermaid source",
       "loading": "Rendering Mermaid diagram…",
