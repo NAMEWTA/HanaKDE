@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `d3f3b22d`（Ticket 25 实现验证点） |
+| Commit | `f68345f0`（Ticket 38 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -18,7 +18,7 @@
 |---|---|---|---|
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
 | M1 Workspace/文档（Tickets 15–22） | P1 | 通过 | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs、三方冲突，以及统一 close/switch/quit 与 orphan 保存均已交付。Ticket 22 精确 25/25、相关 61/61；当前产品范围全仓 1030 files passed、1 skipped，10334 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过。E2E-KW-004–008/024 按真实入口依赖保留待回填 |
-| M2 Markdown（Tickets 23–39） | P1/P2 | 部分通过（Tickets 23–30） | canonical address/LinkResolver、CM6 同源链接、Frontmatter 保真投影、来源隔离标签、页面内 GFM task、Live Preview/Source、Enter/Tab 行级事务、四格式快捷键与固定斜杠菜单已交付。Ticket 30 精确 23/23、相关 129/129；当前产品范围全仓 1039 files passed、1 skipped，10481 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过 |
+| M2 Markdown（Tickets 23–39） | P1/P2 | 部分通过（Tickets 23–38） | canonical address/LinkResolver、共享 CM6 表面、Markdown 增强、同源补全/导航、延迟建页及附件/跨来源复制后引用已交付。Ticket 38 精确 17/17、相关核心 79/79 与产品范围全仓 10625 tests（10619 passed、6 skipped）通过；typecheck、boundary、Renderer/Open/Full Server build 通过。Ticket 39 与缺失的发布 E2E 场景尚待完成 |
 | M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
 | M5 发布（Ticket 57） | P2 | 未执行 | — |
@@ -31,8 +31,8 @@
 | KW-US-002 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；Provider root identity/broker 对 same/ancestor/descendant/unknown 全部拒绝，只允许可证明 disjoint |
 | KW-US-003 | 23 | `tests/knowledge-link-resolver.test.ts` | E2E-KW-009 | 通过 | `npx vitest run tests/knowledge-link-resolver.test.ts`（22/22）；Wikilink 持久化为当前 Source 根相对 canonical path，保留真实 Unicode、大小写与扩展名，不写 sourceKey |
 | KW-US-004 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成） |
-| KW-US-005 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
-| KW-US-006 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
+| KW-US-005 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 通过 | `npx vitest run tests/knowledge-copy-service.test.ts desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts --exclude 'temp/**' --reporter=dot`（17/17）；跨来源 Page 整文件复制到当前页面目录后链接，副本正文逐字节不变且冲突后缀确定 |
+| KW-US-006 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 通过 | `tests/knowledge-copy-service.test.ts` 与 policy 测试同一精确命令（17/17）；同来源直接引用、跨来源先复制，来源正文与链接均不清理、不迁移、不删除、不批量重写 |
 | KW-US-007 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；realpath/dev/ino/scope token；symlink retarget 重验、alias/nested root、跨 namespace unknown 均被拒绝 |
 | KW-US-008 | 05 | `tests/knowledge-source-registry.test.ts`<br>`tests/provider-root-identity.test.ts` | E2E-KW-003 | 通过 | `npm exec -- vitest run tests/knowledge-source-registry.test.ts tests/provider-root-identity.test.ts`；相同历史 opaqueRootId 可显式复用空闲 key；不同根、活动冲突、workspace 切回自动恢复均拒绝/不发生 |
 | KW-US-009 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，macOS arm64，契约/集成）；远程 DTO/错误无本地绝对路径 |
@@ -141,10 +141,10 @@
 | KW-US-112 | 36 | `desktop/src/react/__tests__/components/KnowledgeFindBar.test.tsx` | E2E-KW-012 | 通过 | `KnowledgeFindBar.test.tsx` 同一精确命令（17/17）；关闭/跨组/Asset 后销毁 React/CM6 临时状态，无历史、建议、日志或持久化 |
 | KW-US-113 | 37 | `desktop/src/react/__tests__/editor/knowledge-link-completion.test.ts`<br>`desktop/src/react/__tests__/commands/knowledge-link-navigation.test.ts` | E2E-KW-009 | 通过 | `npx vitest run desktop/src/react/__tests__/editor/knowledge-link-completion.test.ts desktop/src/react/__tests__/commands/knowledge-link-navigation.test.ts desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx --exclude 'temp/**' --reporter=dot`（25/25）；`[[`/`![[` 只递归查询当前页面 sourceKey，Unicode 连续子串与 natural path 排序、embed allowlist、语法区排除、单 transaction 插入和脚注共享唯一 autocomplete owner 通过 |
 | KW-US-114 | 24 | `desktop/src/react/__tests__/editor/knowledge-link-field.test.ts` | E2E-KW-009 | 通过 | `npx vitest run desktop/src/react/__tests__/editor/knowledge-link-field.test.ts`（7/7）；同源 Page/Asset 插入保留真实扩展名并只写 Source 根相对 Wikilink，跨来源拒绝；共享 IR 驱动 CM6 同源渲染、断裂状态与安全激活 |
-| KW-US-115 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
-| KW-US-116 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
-| KW-US-117 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
-| KW-US-118 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 未执行 | — |
+| KW-US-115 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 通过 | `tests/knowledge-copy-service.test.ts` 与 policy 测试同一精确命令（17/17）；其他来源 `.md` 复制为页面同级完整文件，成功后才插入普通 Wikilink |
+| KW-US-116 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 通过 | `tests/knowledge-copy-service.test.ts` 与 policy 测试同一精确命令（17/17）；其他来源与系统附件复制到页面同级 `assets/`，日期前缀/冲突后缀、静态媒体 embed allowlist 与安全流式传输通过 |
+| KW-US-117 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 通过 | `tests/knowledge-copy-service.test.ts` 与 policy 测试同一精确命令（17/17）；取消、冲突、权限/不可用、长度不符和被文件占用的 `assets` 均不写无效链接或正式半文件，批次保持稳定部分成功 |
+| KW-US-118 | 38 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts` | E2E-KW-010 | 通过 | `tests/knowledge-copy-service.test.ts` 与 policy 测试同一精确命令（17/17）；副本正文/二进制字节原样保留，Undo 只删引用，Redo 重新复制并引用新的确定冲突名 |
 | KW-US-119 | 23 | `tests/knowledge-link-resolver.test.ts` | E2E-KW-009 | 通过 | `npx vitest run tests/knowledge-link-resolver.test.ts`（22/22）；Wikilink、Markdown destination 与重构格式化均绑定引用页面 sourceKey，跨来源、越界及不安全编码闭合拒绝且不搜索回退 |
 | KW-US-120 | 39 | `desktop/src/react/__tests__/editor/knowledge-embed-field.test.ts` | E2E-KW-009 | 未执行 | — |
 | KW-US-121 | 37 | `desktop/src/react/__tests__/editor/knowledge-link-completion.test.ts`<br>`desktop/src/react/__tests__/commands/knowledge-link-navigation.test.ts` | E2E-KW-009 | 通过 | `npx vitest run desktop/src/react/__tests__/editor/knowledge-link-completion.test.ts desktop/src/react/__tests__/commands/knowledge-link-navigation.test.ts desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx --exclude 'temp/**' --reporter=dot`（25/25）；同源 stat 后全局 view 复用/当前组 preview、区分大小写首 heading、缺失 Page pending 零写入与首次 `expectedVersion: null` 创建、跨来源/Asset/普通 Markdown link/只读/不可用安全拒绝通过 |
@@ -229,14 +229,14 @@
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 通过 | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193；Ticket 09 Mobile/LAN 共享 DTO、来源隔离、provider-neutral transfer、租约 watcher、权限/取消/冲突/不可用与清理故障注入，定向 12 files、274/274；干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1010 files passed、1 skipped，10161 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过 |
 | KW-RULE-OBS | 04, 10, 43 | 部分通过（Tickets 04、10） | Ticket 04 相关回归 249/249；Ticket 10 operation/journal/recovery 22/22、相关定向 255/255；稳定错误/诊断、同一 operation correlation、watch sequence/cursor、rollback 与无路径 resync 已验证；Ticket 43 尚未执行 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
-| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12、23、24、25、26、27、28、29、30、31、32、33、34、35、36、37） | Tickets 11–36 既有证据保持；Ticket 37 精确 25/25、相关 10 files 115/115 与产品范围全仓 10601 tests（10595 passed、6 skipped）通过。同源 ResourceIO completion、单 transaction、共享 autocomplete owner、全局 tab 复用、精确 heading、pending Page 零写入/首次 expected-version 创建及取消/冲突/权限/不可用边界已验证；Tickets 38–39 尚未执行 |
+| KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 部分通过（Tickets 11、12、23、24、25、26、27、28、29、30、31、32、33、34、35、36、37、38） | Tickets 11–37 既有证据保持；Ticket 38 精确 17/17、相关核心 79/79 与产品范围全仓 10625 tests（10619 passed、6 skipped）通过。附件成功项逐行生成 Wikilink、整批单 transaction、Undo 仅删引用、Redo 重新复制，以及跨来源先复制后引用已验证；Ticket 39 尚待执行 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17、35） | Ticket 14 恶意工作区与 Ticket 17 stat-first asset policy 证据保持；Ticket 35 显式 HTML/tag/attribute/protocol allowlist、nested active content 拒绝、http/https 用户手势、同源相对媒体 stat/read/version/byte 复验、abort/revoke、main/mobile/web system boundary 与恶意回归 85/85 通过；Tickets 51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
 | KW-RULE-QUERY | 44, 46 | 未执行 | — |
 | KW-RULE-SEARCH | 45 | 未执行 | — |
 | KW-RULE-VIEW | 46 | 未执行 | — |
-| KW-RULE-COPY | 38 | 未执行 | — |
+| KW-RULE-COPY | 38 | 通过 | `npx vitest run tests/knowledge-copy-service.test.ts desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts --exclude 'temp/**' --reporter=dot`（17/17）；ResourceIO 分块逐字节复制、日期/冲突命名、单资源原子、批次部分成功、取消/冲突/权限/不可用/长度不符清理与无 Renderer 路径边界通过 |
 | KW-RULE-CREATE | 50 | 未执行 | — |
 | KW-RULE-IMPORT | 51 | 未执行 | — |
 | KW-RULE-CLIPBOARD | 52 | 未执行 | — |
@@ -261,7 +261,7 @@
 | E2E-KW-007 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-008 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-009 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 37、39、48 的补全/延迟建页、embed/backlink 与真实资源打开入口；当前不以私有 route 或缩减场景替代发布流程 |
-| E2E-KW-010 | 未执行 | 未执行 | 未执行 | — |
+| E2E-KW-010 | 未执行 | 未执行 | 未执行 | 当前仓库只有 `E2E-KW-001-shell.spec.ts`，不存在 E2E-KW-010 spec；Ticket 53 真实编辑器/树拖拽入口完成后补建，最终发布前必须执行 |
 | E2E-KW-011 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 48/49 的资源树单击/双击/Enter/Space 真实打开入口；当前仓库无该 spec，不以私有 route 或缩减场景替代，最终发布前必须回填 |
 | E2E-KW-012 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-013 | 未执行 | 未执行 | 未执行 | — |
@@ -306,7 +306,7 @@
 | TM-017 | 未执行 | — |
 | TM-018 | 部分通过（Ticket 14 基线） | 恶意工作区测试全部使用 `mkdtemp` 隔离 source/outside/HANA_HOME 并清理；Ticket 57 平台 runner 尚未执行 |
 | TM-019 | 通过 | Knowledge/ResourceIO route 仅信任 Hono principal，伪造 principal/user/studio/owner/scope 字段在 provider 前拒绝 |
-| TM-020 | 部分通过（Ticket 14 基线） | transfer 控制矩阵及既有 1 MiB chunk/4 streams/8 MiB buffer、取消/半目录/provider-pair 回归通过；Tickets 38、51–53 尚未执行 |
+| TM-020 | 部分通过（Tickets 14、38） | 既有 transfer 控制矩阵保持；Ticket 38 通过 RequestBody provider 与 ResourceIO transfer 验证超 1.5 MiB 外部文件分块字节一致性、取消、声明长度不符 staging 清理、并发冲突重试、权限/来源不可用及批次部分失败；Tickets 51–53 尚待执行 |
 
 ## Exceptions
 
@@ -331,4 +331,6 @@
 - 2026-07-29 Ticket 36 文档回填前的 baseline 首次拒绝 Ticket 35 三条“通过”证据文案：其中 `fail-closed`、`未闭合`、`未执行` 被 fail-closed 正则判为负面标记，且两条 artifact 未包含精确命令。将文案改成等义的安全拒绝/不进入执行路径并补齐真实命令后，baseline/preflight 通过；没有改变 Ticket 35 产品状态或测试结论。
 - 2026-07-30 Ticket 37 的 E2E-KW-009 尚未执行：同源补全、全局 view 复用、精确 heading 与 pending Page 已由精确 25/25、相关 10 files 115/115 和产品范围全仓 10601 tests（10595 passed、6 skipped）证明，但仓库只有 E2E-KW-001 spec，完整 E2E-KW-009 仍依赖 Ticket 39 embed 与 Tickets 48/49 的真实资源树公开打开入口。为避免私有 route/test shortcut 或缩减发布场景，本票保持 Playwright 流程为待回填；依赖完成后必须补建并执行，最终发布前不得保留该缺口。
 - 2026-07-30 Ticket 37 首次全仓 JSON 运行受到并行收集/资源争用影响，仅收集到 2774 suites、10561 tests，并在 10 个互不相关文件中产生 21 个 suite 结果缺口与 13 个 test failure；Ticket 精确与核心相关测试始终通过。该 10 文件立即隔离复验为 36 suites、172/172，确认没有可复现产品断言回归；随后保持默认 worker、固定 timeout 与同一产品范围的完整前台命令真实退出 0（2782 suites；10601 tests，10595 passed、6 skipped、0 failed）。这是已消解的测试编排资源争用，不构成豁免或发布 blocker。
+- 2026-07-30 Ticket 38 的 E2E-KW-010 尚未执行：当前仓库实际只有 E2E-KW-001 spec，尚不存在 E2E-KW-010。跨来源 Page/Asset、系统附件、复制失败零正文修改与 Undo/重新复制 Redo 已由精确 17/17、相关核心 79/79 和产品范围全仓 10625 tests（10619 passed、6 skipped）证明；真实资源树与编辑器拖拽统一入口由 Ticket 53 拥有。为避免私有 route、测试捷径或缩减场景，本票保持 Playwright 流程待回填；Ticket 53 后必须补建并执行，最终发布前不得保留该缺口。
+- 2026-07-30 Ticket 38 首次产品范围全仓运行暴露两类确定性回执漂移：CLI runtime closure 的 2 个新增模块对应 2 个断言，`core/engine.ts` 既有持久化点行号对应 1 个断言；使用仓库生成器重建 closure 与 inventory 后两文件 30/30 通过。第二次全仓运行继续由 schema tripwire 要求显式兼容审查；确认 store schema、ownership、DATA_EPOCH 与落盘字节均未变化后，以 compatible review 将 payload 重钉为 `sha256:97f71f7430bef0f40f60ac4a32a1d2846d79764700e64d96d68a1a367261e80b`，tripwire 7/7 通过。最终保持默认 worker 与固定 timeout 的前台命令真实退出 0（1055 files；1054 passed、1 skipped；10625 tests，10619 passed、6 skipped、0 failed）；这是已完成的机械回执更新，不构成豁免或发布 blocker。
 - 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
