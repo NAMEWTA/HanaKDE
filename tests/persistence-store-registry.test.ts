@@ -69,6 +69,7 @@ describe("persistent store registry", () => {
       "device-access-registries",
       "server-network-config",
       "studio-mount-registry",
+      "knowledge-index-generations",
       "web-session-registry",
       "security-grants",
       "execution-leases",
@@ -136,6 +137,14 @@ describe("persistent store registry", () => {
     const legacy = PERSISTENT_STORES.find((store) => store.id === "legacy-pi-search-cache")!;
     expect(legacy.pathPattern).toBe(".pi/agent/bin/{toolName}");
     expect(legacy.epochPolicy).toBe("migration-source");
+    const knowledgeIndex = PERSISTENT_STORES.find(
+      (store) => store.id === "knowledge-index-generations",
+    )!;
+    expect(knowledgeIndex.epochPolicy).toBe("regenerable");
+    expect(knowledgeIndex.affectedByEpochMigration).toBe(false);
+    expect(knowledgeIndex.pathPattern).toBe(
+      "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+    );
 
     const pluginData = PERSISTENT_STORES.find((store) => store.id === "plugin-runtime-data")!;
     expect(pluginData.pathExclusions).toEqual([

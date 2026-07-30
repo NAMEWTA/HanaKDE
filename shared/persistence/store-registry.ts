@@ -364,6 +364,41 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     ),
   }),
   defineStore({
+    id: "knowledge-index-generations",
+    ownerModule: "lib/knowledge-workspace/knowledge-index-store.ts",
+    pathPatterns: [
+      "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+    ],
+    pathKind: "tree",
+    format: "mixed-directory",
+    schemaSource: directorySource(
+      "lib/knowledge-workspace/knowledge-index-store.ts",
+      "schema v1 SQLite DDL, strict manifest/meta validation, generation publication, writer lock, and query lease protocol",
+    ),
+    openEntry: ["KnowledgeIndexCoordinator", "KnowledgeIndexStore"],
+    protocolModules: [
+      "core/knowledge-workspace/knowledge-index-coordinator.ts",
+    ],
+    firstPossibleOpenPhase: "runtime_ready",
+    firstPossibleWritePhase: "runtime_ready",
+    epochPolicy: "regenerable",
+    checkpointPolicy: "Exclude; every source partition is a discardable cache rebuilt only from revalidated saved disk resources.",
+    restorePolicy: "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition.",
+    affectedByEpochMigration: false,
+    identityContract: "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one immutable published SQLite generation.",
+    siteRules: rules(
+      ["lib/knowledge-workspace/knowledge-index-store.ts"],
+      "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      [
+        "database-open",
+        "write-file",
+        "rename",
+        "mkdir",
+        "remove-path",
+      ],
+    ),
+  }),
+  defineStore({
     id: "web-session-registry",
     ownerModule: "core/web-session-store.ts",
     pathPatterns: ["web-sessions.json"],

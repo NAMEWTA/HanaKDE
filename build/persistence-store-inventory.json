@@ -911,6 +911,45 @@
       "exemption": null
     },
     {
+      "id": "knowledge-index-generations",
+      "ownerModule": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "pathPattern": "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+      "pathPatterns": [
+        "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**"
+      ],
+      "pathExclusions": [],
+      "pathKind": "tree",
+      "format": "mixed-directory",
+      "schemaSource": {
+        "kind": "directory-contract",
+        "module": "lib/knowledge-workspace/knowledge-index-store.ts",
+        "contract": "schema v1 SQLite DDL, strict manifest/meta validation, generation publication, writer lock, and query lease protocol"
+      },
+      "schemaContract": {
+        "kind": "protocol",
+        "source": "lib/knowledge-workspace/knowledge-index-store.ts",
+        "compatibility": "The named runtime reader is canonical; this inventory does not imply stricter validation than runtime currently performs."
+      },
+      "openEntry": [
+        "KnowledgeIndexCoordinator",
+        "KnowledgeIndexStore"
+      ],
+      "migrationEntry": [],
+      "protocolModules": [
+        "core/knowledge-workspace/knowledge-index-coordinator.ts"
+      ],
+      "firstPossibleOpenPhase": "runtime_ready",
+      "firstPossibleWritePhase": "runtime_ready",
+      "epochPolicy": "regenerable",
+      "checkpointPolicy": "Exclude; every source partition is a discardable cache rebuilt only from revalidated saved disk resources.",
+      "restorePolicy": "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition.",
+      "affectedByEpochMigration": false,
+      "bootstrapSafety": null,
+      "preCoordinatorReadProjection": null,
+      "identityContract": "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one immutable published SQLite generation.",
+      "exemption": null
+    },
+    {
       "id": "knowledge-operation-journal",
       "ownerModule": "core/knowledge-workspace/durable-operation-journal.ts",
       "pathPattern": "knowledge-workspace/operations/v1/{operationId}/**",
@@ -6536,6 +6575,69 @@
       "reason": "Writes an explicit tool output path supplied by the caller; no HANA_HOME store is implied.",
       "storeId": null,
       "exemptionId": "external-file-ref-io"
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 102,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(directory, options)",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 126,
+      "kind": "write-file",
+      "excerpt": "fs.writeFileSync(handle, content, \"utf8\")",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 133,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(from, to)",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 136,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(target, options)",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 342,
+      "kind": "database-open",
+      "excerpt": "new Database(buildPath)",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 393,
+      "kind": "database-open",
+      "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 591,
+      "kind": "database-open",
+      "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
     },
     {
       "sourceFile": "lib/llm/usage-ledger.ts",
