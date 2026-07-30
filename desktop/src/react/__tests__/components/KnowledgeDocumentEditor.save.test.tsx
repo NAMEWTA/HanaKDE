@@ -401,6 +401,60 @@ describe('KnowledgeDocumentEditor manual save tracer', () => {
     expect(screen.queryByRole('button', { name: /save all/i })).not.toBeInTheDocument();
   });
 
+  it('creates a pending Wikilink Page on first edit and keeps later edits manual', async () => {
+    const registry = createKnowledgeDocumentRegistry({
+      ownerId: 'owner',
+      windowId: 'pending',
+    });
+    registry.getState().establishDocumentSession({
+      address,
+      buffer: '',
+      baseline: '',
+      diskVersion: null,
+      pendingCreate: true,
+    });
+    const services = clientFor(bytes(''), {
+      write: vi.fn(async () => ({
+        ok: true as const,
+        changeType: 'created' as const,
+        version: { etag: 'created', sequence: 1, size: 1 },
+      })),
+    });
+    const { editor } = await openEditor({
+      client: services.client,
+      registry,
+    });
+
+    fireEvent.change(editor, { target: { value: 'a' } });
+    await waitFor(() => expect(services.write).toHaveBeenCalledTimes(1));
+    expect(services.write).toHaveBeenCalledWith(
+      address,
+      expect.any(String),
+      null,
+      { encoding: 'base64', signal: undefined },
+    );
+    await waitFor(() => {
+      expect(registry.getState().sessions[knowledgeDocumentKey(address)])
+        .toMatchObject({
+          baseline: 'a',
+          pendingCreate: false,
+          dirty: false,
+        });
+    });
+
+    fireEvent.change(editor, { target: { value: 'ab' } });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(services.write).toHaveBeenCalledTimes(1);
+    expect(registry.getState().sessions[knowledgeDocumentKey(address)])
+      .toMatchObject({
+        buffer: 'ab',
+        baseline: 'a',
+        dirty: true,
+      });
+  });
+
   it('switches the current view display mode without saving or changing the buffer', async () => {
     const services = clientFor(bytes('# hello'));
     const { editor, registry } = await openEditor({

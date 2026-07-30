@@ -52,6 +52,10 @@ import {
   initialKnowledgeFindQuery,
 } from '../../editor/knowledge-find-state';
 import {
+  navigateKnowledgeLink,
+  revealKnowledgeHeading,
+} from '../../commands/knowledge-link-navigation';
+import {
   KnowledgeTabBar,
   type KnowledgeBreadcrumbTarget,
   type KnowledgeEditorResourceKind,
@@ -347,6 +351,7 @@ export const KnowledgeEditorGroups = forwardRef<
     useState<PendingUnsavedClose | null>(null);
   const pendingUnsavedCloseRef = useRef<PendingUnsavedClose | null>(null);
   const editorViewsRef = useRef(new Map<string, EditorView>());
+  const pendingFragmentByViewRef = useRef(new Map<string, string>());
   const [, setEditorViewRevision] = useState(0);
   const [findSession, setFindSession] =
     useState<KnowledgeFindSession | null>(null);
@@ -407,6 +412,13 @@ export const KnowledgeEditorGroups = forwardRef<
   ) => {
     if (editorView) editorViewsRef.current.set(viewId, editorView);
     else editorViewsRef.current.delete(viewId);
+    if (editorView) {
+      const fragment = pendingFragmentByViewRef.current.get(viewId);
+      if (fragment !== undefined) {
+        pendingFragmentByViewRef.current.delete(viewId);
+        revealKnowledgeHeading(editorView, fragment);
+      }
+    }
     setEditorViewRevision(revision => revision + 1);
     setFindSession(current => {
       if (current?.viewId !== viewId) return current;
@@ -617,6 +629,40 @@ export const KnowledgeEditorGroups = forwardRef<
     return { viewId, groupId: target.id, reused: false };
   };
 
+  const openKnowledgeLink = async (
+    activation: Parameters<typeof navigateKnowledgeLink>[0]['activation'],
+    pageAddress: KnowledgeResourceAddress,
+    groupId: string,
+  ) => {
+    const source = sources.find(candidate => (
+      candidate.sourceKey === pageAddress.sourceKey
+    ));
+    const activeClient = client ?? knowledgeWorkspaceClient;
+    const result = await navigateKnowledgeLink({
+      activation,
+      pageAddress,
+      source: source ? {
+        sourceKey: source.sourceKey,
+        displayName: source.displayName,
+        available: source.availability === 'available',
+        writable: source.capabilities.includes('write'),
+      } : null,
+      registry,
+      stat: (target, options) => activeClient.resources.stat(target, options),
+      openResource: (resource, options) => openResource(resource, options),
+      groupId,
+    });
+    if (result.ok && activation.fragment) {
+      const editorView = editorViewsRef.current.get(result.viewId);
+      if (editorView) revealKnowledgeHeading(editorView, activation.fragment);
+      else pendingFragmentByViewRef.current.set(
+        result.viewId,
+        activation.fragment,
+      );
+    }
+    return result;
+  };
+
   const openInSide = (
     resource: KnowledgeOpenResource,
     options: KnowledgeOpenSideOptions = {},
@@ -738,6 +784,7 @@ export const KnowledgeEditorGroups = forwardRef<
     nextSplitId.current = 1;
     nextViewId.current = 1;
     editorViewsRef.current.clear();
+    pendingFragmentByViewRef.current.clear();
     setFindSession(null);
     commitLayout(createInitialLayout(initialGroupId));
   }, [registry, workspaceKey]);
@@ -1111,6 +1158,9 @@ export const KnowledgeEditorGroups = forwardRef<
                         mode: 'close-view',
                       });
                     }
+                  }}
+                  onOpenKnowledgeLink={async activation => {
+                    await openKnowledgeLink(activation, tab.address, node.id);
                   }}
                   onFindRequest={openFind}
                   onEditorViewChange={registerEditorView}

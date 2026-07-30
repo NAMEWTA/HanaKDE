@@ -235,6 +235,18 @@ export function KnowledgeDocumentEditor({
     viewId,
   ]);
 
+  const saveCurrentDocument = useCallback(() => saveKnowledgeDocument({
+    registry,
+    address: requestAddress,
+    client,
+    onSaved,
+  }), [
+    client,
+    onSaved,
+    registry,
+    requestAddress,
+  ]);
+
   const savePolicy = useMemo<MarkdownEditorSurfacePolicy>(() => ({
     save: {
       scopeKey: `${registry.getState().context.ownerId}:${String(
@@ -247,12 +259,7 @@ export function KnowledgeDocumentEditor({
           onRequestOrphanSave?.();
           return { ok: true };
         }
-        return saveKnowledgeDocument({
-          registry,
-          address: requestAddress,
-          client,
-          onSaved,
-        });
+        return saveCurrentDocument();
       },
       onError: error => {
         reportSaveError(registry, requestAddress, error.code);
@@ -262,6 +269,12 @@ export function KnowledgeDocumentEditor({
     openLink: onOpenLink ? { open: onOpenLink } : null,
     knowledgeLinks: {
       pageAddress: requestAddress,
+      completion: {
+        pageAddress: requestAddress,
+        listDirectory: (target, options) => (
+          client.resources.list(target, options)
+        ),
+      },
       checkAddress: async (target, options) => (
         await client.resources.stat(target, options)
       ).exists,
@@ -367,9 +380,9 @@ export function KnowledgeDocumentEditor({
     onEditorViewChange,
     onEditorViewUpdate,
     onRequestOrphanSave,
-    onSaved,
     registry,
     requestAddress,
+    saveCurrentDocument,
     groupId,
     viewId,
   ]);
@@ -502,7 +515,16 @@ export function KnowledgeDocumentEditor({
           scrollLeft: view.scroll.left,
         }}
         onContentChange={content => {
-          registry.getState().replaceDocumentBuffer(viewId, content);
+          const changed = registry.getState().replaceDocumentBuffer(
+            viewId,
+            content,
+          );
+          if (
+            changed
+            && registry.getState().sessions[addressKey]?.pendingCreate
+          ) {
+            void saveCurrentDocument();
+          }
         }}
         onSelectionChange={handleSelection}
         onScrollSnapshotChange={(snapshot) => {

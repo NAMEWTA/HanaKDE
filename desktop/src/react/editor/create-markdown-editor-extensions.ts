@@ -60,9 +60,11 @@ import { markdownBlockSelectionPlugin } from './markdown-block-selection';
 import { knowledgeMermaidField } from './knowledge-mermaid-field';
 import { knowledgeMathField } from './knowledge-math-field';
 import {
-  knowledgeFootnoteCompletion,
   knowledgeFootnoteField,
 } from './knowledge-footnote-field';
+import {
+  createKnowledgeEditorAutocomplete,
+} from './knowledge-link-completion';
 import {
   createKnowledgeSafeHtmlField,
   type KnowledgeSafeHtmlFieldConfig,
@@ -175,7 +177,9 @@ export function createMarkdownEditorExtensions(
         ...(!readOnly && knowledgeCommands
           ? createKnowledgeCommandExtensions(knowledgeCommands)
           : []),
-        ...(!readOnly ? [knowledgeFootnoteCompletion] : []),
+        ...(!readOnly
+          ? [createKnowledgeEditorAutocomplete(knowledgeLinks?.completion)]
+          : []),
         Prec.highest(keymap.of([
           ...(knowledgeFind ? [
             {

@@ -92,6 +92,36 @@ export const markdownTheme = EditorView.theme({
     textDecorationStyle: 'dotted',
     cursor: 'not-allowed',
   },
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    maxWidth: 'min(36rem, calc(100vw - var(--space-16)))',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--surface, var(--bg))',
+    color: 'var(--text)',
+    boxShadow: 'var(--shadow-lg)',
+    overflow: 'hidden',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '0.78rem',
+  },
+  '.cm-tooltip-autocomplete > ul': {
+    maxHeight: 'min(18rem, 42vh)',
+  },
+  '.cm-tooltip-autocomplete > ul > li': {
+    minWidth: '0',
+    padding: 'var(--space-6) var(--space-8)',
+  },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+    backgroundColor: 'var(--bg-hover)',
+    color: 'var(--text)',
+  },
+  '.cm-completionLabel': {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  '.cm-completionIcon, .cm-completionDetail': {
+    display: 'none',
+  },
   '.cm-page-task': {
     inlineSize: '1rem',
     blockSize: '1rem',

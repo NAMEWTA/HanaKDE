@@ -28,6 +28,9 @@ import {
   resolveKnowledgeWikilink,
   type KnowledgeLinkResolution,
 } from '../../../../lib/knowledge-workspace/link-resolver.ts';
+import type {
+  KnowledgeLinkCompletionConfig,
+} from './knowledge-link-completion';
 
 export type KnowledgeLinkAvailability =
   | 'checking'
@@ -56,6 +59,7 @@ export interface KnowledgeLinkLabels {
 
 export interface KnowledgeLinkFieldConfig {
   pageAddress: KnowledgeResourceAddress;
+  completion?: KnowledgeLinkCompletionConfig;
   checkAddress?: (
     address: KnowledgeResourceAddress,
     options: { signal: AbortSignal },

@@ -111,6 +111,7 @@ export interface KnowledgeDocumentSession {
   saveError: KnowledgeDocumentSaveError | null;
   conflict: KnowledgeDocumentConflict | null;
   orphan: boolean;
+  pendingCreate: boolean;
   resourceState: KnowledgeDocumentResourceState;
 }
 
@@ -137,6 +138,7 @@ export interface EstablishKnowledgeDocumentSessionInput {
   baseline?: string;
   diskVersion?: KnowledgeDocumentVersion | null;
   format?: KnowledgeDocumentFormat;
+  pendingCreate?: boolean;
 }
 
 export interface OpenKnowledgeDocumentViewInput {
@@ -575,6 +577,7 @@ export function createKnowledgeDocumentRegistry(
         saveError: null,
         conflict: null,
         orphan: false,
+        pendingCreate: input.pendingCreate === true,
         resourceState: 'available',
       };
       set(state => ({
@@ -751,6 +754,7 @@ export function createKnowledgeDocumentRegistry(
             conflict: session.conflict?.disk === savedBuffer
               ? null
               : session.conflict,
+            pendingCreate: false,
             resourceState: 'available',
           },
         },
@@ -1055,6 +1059,7 @@ export function createKnowledgeDocumentRegistry(
         saveError: null,
         conflict: null,
         orphan: false,
+        pendingCreate: false,
         resourceState: 'available',
         format: {
           hadBom: false,

@@ -57,6 +57,11 @@ export type SaveKnowledgeDocumentResult =
   | { ok: true }
   | { ok: false; conflict?: true };
 
+const pendingDocumentCreates = new WeakMap<
+  KnowledgeDocumentRegistry,
+  Map<string, Promise<SaveKnowledgeDocumentResult>>
+>();
+
 export interface CreateKnowledgeOrphanDocumentInput {
   registry: KnowledgeDocumentRegistry;
   from: KnowledgeResourceAddress;
@@ -157,7 +162,70 @@ export async function saveKnowledgeDocument({
 }: SaveKnowledgeDocumentInput): Promise<SaveKnowledgeDocumentResult> {
   const key = knowledgeDocumentKey(address);
   const current = registry.getState().sessions[key];
-  if (!current?.diskVersion || current.orphan) {
+  if (!current || current.orphan) {
+    reportSaveError(registry, address, 'unavailable');
+    return { ok: false };
+  }
+  if (current.pendingCreate) {
+    let registryCreates = pendingDocumentCreates.get(registry);
+    if (!registryCreates) {
+      registryCreates = new Map();
+      pendingDocumentCreates.set(registry, registryCreates);
+    }
+    const active = registryCreates.get(key);
+    if (active) return active;
+    const operation = (async (): Promise<SaveKnowledgeDocumentResult> => {
+      const snapshot = registry.getState().sessions[key];
+      if (!snapshot?.pendingCreate || snapshot.orphan) {
+        return { ok: false };
+      }
+      const encoded = encodeKnowledgeMarkdownFile(snapshot.buffer, {
+        hadBom: false,
+        lineEnding: 'lf',
+        mixedLineEndings: false,
+      });
+      if (!encoded.ok) {
+        reportSaveError(registry, address, 'unavailable');
+        return { ok: false };
+      }
+      let result;
+      try {
+        result = await client.resources.writeExpectedVersion(
+          address,
+          encoded.base64,
+          null,
+          { encoding: 'base64', signal },
+        );
+      } catch {
+        reportSaveError(registry, address, 'unavailable');
+        return { ok: false };
+      }
+      if (!result.ok) {
+        reportSaveError(registry, address, 'conflict');
+        return { ok: false, conflict: true };
+      }
+      if (!result.version) {
+        reportSaveError(registry, address, 'unavailable');
+        return { ok: false };
+      }
+      registry.getState().commitSavedDocument(
+        address,
+        snapshot.buffer,
+        result.version,
+      );
+      try {
+        onSaved?.(address, result.version);
+      } catch {
+        // The disk create already succeeded; projection callbacks are isolated.
+      }
+      return { ok: true };
+    })().finally(() => {
+      registryCreates?.delete(key);
+    });
+    registryCreates.set(key, operation);
+    return operation;
+  }
+  if (!current.diskVersion) {
     reportSaveError(registry, address, 'unavailable');
     return { ok: false };
   }
