@@ -56,7 +56,7 @@
 | 37 | 2 Markdown | [交付 Wikilink 补全、导航与延迟建页](./ticket/37-deliver-wikilink-completion-navigation.md) | 20, 23, 24, 27 | KW-US-113, KW-US-121, KW-RULE-MARKDOWN | P2 | 已完成 |
 | 38 | 2 Markdown | [交付附件与跨来源复制后引用](./ticket/38-deliver-attachments-cross-source-copy.md) | 10, 23, 27 | KW-US-005, KW-US-006, KW-US-115, KW-US-116, KW-US-117, KW-US-118, KW-RULE-MARKDOWN, KW-RULE-COPY | P1 | 已完成 |
 | 39 | 2 Markdown | [交付同源页面与章节嵌入](./ticket/39-deliver-page-section-embeds.md) | 24, 33, 35, 37 | KW-US-120, KW-RULE-MARKDOWN | P2 | 已完成 |
-| 40 | 3 索引/查询 | [建立来源分区索引 Store 与 Schema](./ticket/40-establish-index-store-schema.md) | 01, 04, 05, 10, 13, 14 | KW-US-187, KW-RULE-INDEX | P1 | 未开始 |
+| 40 | 3 索引/查询 | [建立来源分区索引 Store 与 Schema](./ticket/40-establish-index-store-schema.md) | 01, 04, 05, 10, 13, 14 | KW-US-187, KW-RULE-INDEX | P1 | 已完成 |
 | 41 | 3 索引/查询 | [交付 Markdown 页面抽取管线](./ticket/41-deliver-markdown-index-extraction.md) | 11, 23, 25, 26, 40 | KW-RULE-INDEX | P1 | 未开始 |
 | 42 | 3 索引/查询 | [交付非 Markdown 安全文本抽取](./ticket/42-deliver-safe-text-index-extraction.md) | 17, 40 | KW-US-157, KW-RULE-INDEX | P1 | 未开始 |
 | 43 | 3 索引/查询 | [交付 watcher 增量协调与 rebuild](./ticket/43-deliver-watcher-index-rebuild.md) | 06, 10, 40, 41, 42 | KW-US-193, KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY | P1 | 未开始 |

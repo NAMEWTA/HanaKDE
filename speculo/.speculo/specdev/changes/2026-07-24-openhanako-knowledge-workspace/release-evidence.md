@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `d80c3046`（Ticket 39 实现验证点） |
+| Commit | `7fe54ac1`（Ticket 40 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -19,7 +19,7 @@
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
 | M1 Workspace/文档（Tickets 15–22） | P1 | 通过 | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs、三方冲突，以及统一 close/switch/quit 与 orphan 保存均已交付。Ticket 22 精确 25/25、相关 61/61；当前产品范围全仓 1030 files passed、1 skipped，10334 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过。E2E-KW-004–008/024 按真实入口依赖保留待回填 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 通过 | canonical address/LinkResolver、共享 CM6 表面、Markdown 增强、同源补全/导航、延迟建页、附件/跨来源复制后引用，以及同源整页/章节只读嵌入均已交付。Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过；typecheck、boundary、目标 ESLint 与 Renderer build 通过。E2E-KW-009 等缺失的发布 E2E 场景仍按真实入口依赖保留待回填 |
-| M3 索引/查询（Tickets 40–46） | P1 | 未执行 | — |
+| M3 索引/查询（Tickets 40–46） | P1 | 部分通过（Ticket 40） | schema v1、严格 meta/PRAGMA、FTS5 folded trigram、per-source generation/current manifest、query lease、writer lock、原子 publish、保留与健康状态、schema/extractor drift 重建、损坏/symlink fail-closed 和 SourceRegistry identity 隔离已交付；精确 13/13、全仓 10652 tests（10646 passed、6 skipped）、typecheck、boundary、目标 ESLint 与 Open Server build 通过；Tickets 41–46 尚未执行 |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
 | M5 发布（Ticket 57） | P2 | 未执行 | — |
 
@@ -213,7 +213,7 @@
 | KW-US-184 | 53 | `tests/knowledge-drag-contract.test.ts`<br>`desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 未执行 | — |
 | KW-US-185 | 53 | `desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 未执行 | — |
 | KW-US-186 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 未执行 | — |
-| KW-US-187 | 40 | `tests/knowledge-index-store.test.ts`<br>`tests/knowledge-index-schema-migration.test.ts` | E2E-KW-013, E2E-KW-014 | 未执行 | — |
+| KW-US-187 | 40 | `tests/knowledge-index-store.test.ts`<br>`tests/knowledge-index-schema-migration.test.ts` | E2E-KW-013, E2E-KW-014 | 通过 | `npx vitest run tests/knowledge-index-store.test.ts tests/knowledge-index-schema-migration.test.ts --exclude 'temp/**' --reporter=dot`（2 files、13/13）；每来源 generation、原子 current manifest、取消保留旧分区、checkpoint/sidecar、query lease、writer lock、schema/extractor drift、损坏、磁盘满、Windows handle 与来源身份重验均有直接证据；E2E 仅关联追踪 |
 | KW-US-188 | 45 | `tests/knowledge-search-query.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 | 未执行 | — |
 | KW-US-189 | 45 | `tests/knowledge-search-query.test.ts` | E2E-KW-013 | 未执行 | — |
 | KW-US-190 | 45 | `desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 | 未执行 | — |
@@ -232,7 +232,7 @@
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 通过 | Tickets 11–38 既有证据保持；Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过。同源整页/首个精确章节、完整地址循环、深度与故障分支隔离、已保存磁盘读取、源页面相对链接、安全静态只读渲染、保存后无损刷新及 Source literal 已验证 |
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17、35） | Ticket 14 恶意工作区与 Ticket 17 stat-first asset policy 证据保持；Ticket 35 显式 HTML/tag/attribute/protocol allowlist、nested active content 拒绝、http/https 用户手势、同源相对媒体 stat/read/version/byte 复验、abort/revoke、main/mobile/web system boundary 与恶意回归 85/85 通过；Tickets 51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
-| KW-RULE-INDEX | 40, 41, 42, 43 | 未执行 | — |
+| KW-RULE-INDEX | 40, 41, 42, 43 | 部分通过（Ticket 40） | Ticket 40 精确 13/13、全仓 10652 tests（10646 passed、6 skipped）；schema v1、folded trigram FTS、严格 meta/PRAGMA、来源分区、generation/manifest/lease/lock、原子 checkpoint-close-publish、retention、健康状态、drift/corruption/symlink/磁盘满/取消/锁故障与来源隔离已验证；Tickets 41–43 尚未执行 |
 | KW-RULE-QUERY | 44, 46 | 未执行 | — |
 | KW-RULE-SEARCH | 45 | 未执行 | — |
 | KW-RULE-VIEW | 46 | 未执行 | — |
@@ -264,8 +264,8 @@
 | E2E-KW-010 | 未执行 | 未执行 | 未执行 | 当前仓库只有 `E2E-KW-001-shell.spec.ts`，不存在 E2E-KW-010 spec；Ticket 53 真实编辑器/树拖拽入口完成后补建，最终发布前必须执行 |
 | E2E-KW-011 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 48/49 的资源树单击/双击/Enter/Space 真实打开入口；当前仓库无该 spec，不以私有 route 或缩减场景替代，最终发布前必须回填 |
 | E2E-KW-012 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-013 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-014 | 未执行 | 未执行 | 未执行 | — |
+| E2E-KW-013 | 未执行 | 未执行 | 未执行 | Ticket 40 索引存储基础已完成；仍依赖 Tickets 41–46 的抽取、查询、搜索与真实 UI 入口。当前仓库不存在该 spec，不以 Vitest 冒充发布 E2E |
+| E2E-KW-014 | 未执行 | 未执行 | 未执行 | Ticket 40 generation/锁/原子 publish 基础已完成；仍依赖 Ticket 43 watcher/rebuild 公开入口。当前仓库不存在该 spec，不以私有 route 或缩减场景替代 |
 | E2E-KW-015 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-016 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-017 | 未执行 | 未执行 | 未执行 | — |

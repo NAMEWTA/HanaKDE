@@ -1,7 +1,7 @@
 # Ticket 40: 建立来源分区索引 Store 与 Schema
 
 - **被阻塞于：** [`01-freeze-real-repository-baseline.md`](./01-freeze-real-repository-baseline.md)、[`04-define-errors-and-diagnostics.md`](./04-define-errors-and-diagnostics.md)、[`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)、[`10-trace-knowledge-operation-protocol.md`](./10-trace-knowledge-operation-protocol.md)、[`13-establish-performance-fixtures.md`](./13-establish-performance-fixtures.md)、[`14-establish-malicious-workspace-tests.md`](./14-establish-malicious-workspace-tests.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -65,10 +65,20 @@
 
 ## 验收标准
 
-- [ ] 每来源独立损坏/重建；磁盘内容是唯一事实；取消重建不破坏旧可用分区。
-- [ ] KW-US-187 由 per-source generation、磁盘重建与来源隔离测试直接证明。
-- [ ] FTS 使用 folded trigram 候选列；发布前 WAL checkpoint/close，不能遗漏 sidecar 内容。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 每来源独立损坏/重建；磁盘内容是唯一事实；取消重建不破坏旧可用分区。
+- [x] KW-US-187 由 per-source generation、磁盘重建与来源隔离测试直接证明。
+- [x] FTS 使用 folded trigram 候选列；发布前 WAL checkpoint/close，不能遗漏 sidecar 内容。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- **实现提交：** `7fe54ac1`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS / Node v24.16.0
+- **实现结果：** 交付 schema v1、严格 meta、FTS5 folded trigram、每来源 generation/current manifest、query lease、单 writer lock、原子 publish、保留策略、健康状态、schema/extractor drift 重建语义、损坏与 symlink fail-closed，以及基于 SourceRegistry root identity 的来源隔离 coordinator；索引登记为可丢弃且仅由 rebuild 恢复的 regenerable persistence store，`DATA_EPOCH` 不变。
+- **精确测试：** `npx vitest run tests/knowledge-index-store.test.ts tests/knowledge-index-schema-migration.test.ts --exclude 'temp/**' --reporter=dot`，2 files、13/13 通过。
+- **全仓测试：** `npm test -- --exclude 'temp/**'`，1058 files（1057 passed、1 skipped），10652 tests（10646 passed、6 skipped）。
+- **静态与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check`、`npm run build:server:open` 均通过；Open Server 构建中的 better-sqlite3 runtime smoke 通过。
+- **E2E：** 本 ticket 明确不运行 Playwright；E2E-KW-013、E2E-KW-014 仅保留发布级关联，当前仓库仍不存在对应 spec，未记为通过。
