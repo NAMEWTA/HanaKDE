@@ -61,7 +61,7 @@
 | 42 | 3 索引/查询 | [交付非 Markdown 安全文本抽取](./ticket/42-deliver-safe-text-index-extraction.md) | 17, 40 | KW-US-157, KW-RULE-INDEX | P1 | 已完成 |
 | 43 | 3 索引/查询 | [交付 watcher 增量协调与 rebuild](./ticket/43-deliver-watcher-index-rebuild.md) | 06, 10, 40, 41, 42 | KW-US-193, KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY | P1 | 已完成 |
 | 44 | 3 索引/查询 | [交付标签与引用查询 API](./ticket/44-deliver-knowledge-query-apis.md) | 23, 41, 43 | KW-RULE-QUERY | P1 | 已完成 |
-| 45 | 3 索引/查询 | [交付超级搜索](./ticket/45-deliver-super-search.md) | 20, 40, 43, 44 | KW-US-188, KW-US-189, KW-US-190, KW-RULE-SEARCH | P1 | 未开始 |
+| 45 | 3 索引/查询 | [交付超级搜索](./ticket/45-deliver-super-search.md) | 20, 40, 43, 44 | KW-US-188, KW-US-189, KW-US-190, KW-RULE-SEARCH | P1 | 已完成 |
 | 46 | 3 索引/查询 | [交付当前大纲与引用视图](./ticket/46-deliver-current-resource-views.md) | 20, 24, 44 | KW-US-191, KW-US-192, KW-RULE-QUERY, KW-RULE-VIEW | P1 | 未开始 |
 | 47 | 4 资源操作 | [建立资源树选择状态机](./ticket/47-define-resource-tree-selection-reducer.md) | 16 | KW-US-019, KW-US-020, KW-US-021, KW-US-022, KW-US-028 | P1 | 未开始 |
 | 48 | 4 资源操作 | [交付资源树键盘导航与范围选择](./ticket/48-deliver-tree-keyboard-range-selection.md) | 47 | KW-US-015, KW-US-016, KW-US-017, KW-US-018 | P1 | 未开始 |
