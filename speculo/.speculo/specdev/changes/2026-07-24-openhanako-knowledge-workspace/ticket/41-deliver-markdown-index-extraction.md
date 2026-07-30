@@ -1,7 +1,7 @@
 # Ticket 41: 交付 Markdown 页面抽取管线
 
 - **被阻塞于：** [`11-define-markdown-semantic-ir.md`](./11-define-markdown-semantic-ir.md)、[`23-define-knowledge-address-resolver.md`](./23-define-knowledge-address-resolver.md)、[`25-deliver-frontmatter-roundtrip.md`](./25-deliver-frontmatter-roundtrip.md)、[`26-deliver-tags-and-page-tasks.md`](./26-deliver-tags-and-page-tasks.md)、[`40-establish-index-store-schema.md`](./40-establish-index-store-schema.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -62,9 +62,21 @@
 
 ## 验收标准
 
-- [ ] 超限或不可解码页面移除旧正文/结构索引；未保存 buffer 永不进入 Server 索引。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 超限或不可解码页面移除旧正文/结构索引；未保存 buffer 永不进入 Server 索引。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- **实现提交：** `4a3e0cc3`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS / Node v24.16.0
+- **实现结果：** 交付只接受已保存版本读取接缝的 Markdown 抽取器；10 MiB+1 在读取前拒绝，严格 UTF-8 完整解码且仅移除开头 BOM。复用共享 Markdown IR、Frontmatter projection、LinkResolver 和共享 heading slug，抽取文件名标题、简单属性 JSON、正文、标题层级、同源 Wikilink/embed/content-ref/Markdown link、标签与 GFM task；嵌入只记录边，不复制派生正文。`KnowledgeIndexRebuild.replaceResource` 在单 SQLite transaction 内清除旧派生行并写入新资源/page/结构/FTS，失败完整回滚。
+- **精确测试：** `npx vitest run tests/markdown-index-extractor.test.ts --exclude 'temp/**' --reporter=dot`，1 file、10/10 通过；覆盖正常抽取、共享 IR 排除、未保存 buffer 隔离、超限未读、非法 UTF-8、BOM、missing、权限拒绝、来源不可用、取消、版本/字节冲突、非法路径、旧正文清理与事务回滚。
+- **相关回归：** Markdown/Frontmatter/tags/links/Renderer 工具相关 7 files、133/133；索引/持久化 4 files、31/31。
+- **全仓测试：** `npm test -- --exclude 'temp/**'`，1059 files（1058 passed、1 skipped），10662 tests（10656 passed、6 skipped）。
+- **静态与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check`、`npm run build:renderer`、`npm run build:server:open` 均通过；Open Server better-sqlite3 runtime smoke 通过。
+- **持久化审查：** schema、ownership、checkpoint/restore policy 与 `DATA_EPOCH` 均不变；结构化事务替换 API 按 compatible addition 重钉指纹 `sha256:a551ca1bc369462c81082e37fba6e59e7ad9e0b4555d4b6157f80bd271bef442`。
+- **E2E：** 本 ticket 明确不运行 Playwright；E2E-KW-013 仅保留发布级关联，当前仓库不存在对应 spec，未记为通过。
