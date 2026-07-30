@@ -3,7 +3,9 @@ import {
   KnowledgeIndexStore,
   type KnowledgeIndexFileSystem,
   type KnowledgeIndexHealth,
+  type KnowledgeIndexIncrementalChange,
   type KnowledgeIndexRebuild,
+  type KnowledgeIndexResourceDocument,
 } from "../../lib/knowledge-workspace/knowledge-index-store.ts";
 import type {
   ProviderRootIdentity,
@@ -66,6 +68,38 @@ export class KnowledgeIndexCoordinator {
 
   acquireQueryLease(sourceKey: string) {
     return this.#storeForCurrentIdentity(sourceKey).acquireQueryLease();
+  }
+
+  async applyIncremental(
+    sourceKey: string,
+    input: {
+      lastCompleteSequence: number;
+      changes: readonly KnowledgeIndexIncrementalChange[];
+    },
+  ): Promise<void> {
+    await this.#sourceRegistry.revalidate(sourceKey);
+    const identity = this.#sourceRegistry.rootIdentity(sourceKey);
+    const sourceFingerprint = fingerprintProviderRootIdentity(identity);
+    const store = this.#storeForIdentity(sourceKey, sourceFingerprint);
+    store.applyIncremental(input);
+  }
+
+  markDegraded(sourceKey: string, reason: string): void {
+    const existing = this.#stores.get(sourceKey);
+    if (existing) {
+      existing.store.markDegraded(reason);
+      return;
+    }
+    this.#storeForCurrentIdentity(sourceKey).markDegraded(reason);
+  }
+
+  clearDegraded(sourceKey: string): void {
+    const existing = this.#stores.get(sourceKey);
+    if (existing) {
+      existing.store.clearDegraded();
+      return;
+    }
+    this.#storeForCurrentIdentity(sourceKey).clearDegraded();
   }
 
   async beginRebuild(
@@ -152,6 +186,14 @@ export class CoordinatedKnowledgeIndexRebuild {
 
   setProgress(progress: number): void {
     this.#rebuild.setProgress(progress);
+  }
+
+  replaceResource(document: KnowledgeIndexResourceDocument): void {
+    this.#rebuild.replaceResource(document);
+  }
+
+  deleteResource(relativePath: string): void {
+    this.#rebuild.deleteResource(relativePath);
   }
 
   async publish({ lastCompleteSequence }: {

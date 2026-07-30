@@ -136,7 +136,6 @@ export async function extractSafeTextIndexFacts(
   throwIfAborted(input.signal);
   if (
     opened.size !== sizeBytes
-    || opened.mtimeMs !== mtimeMs
     || versionToken(opened.version) !== metadata.versionToken
   ) {
     throw new SafeTextIndexVersionConflictError();

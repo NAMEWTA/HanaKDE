@@ -923,7 +923,7 @@
       "schemaSource": {
         "kind": "directory-contract",
         "module": "lib/knowledge-workspace/knowledge-index-store.ts",
-        "contract": "schema v1 SQLite DDL, strict manifest/meta validation, generation publication, writer lock, and query lease protocol"
+        "contract": "schema v1 SQLite DDL, strict manifest/meta validation, generation publication, active-generation incremental transactions, writer lock, and query lease protocol"
       },
       "schemaContract": {
         "kind": "protocol",
@@ -932,11 +932,13 @@
       },
       "openEntry": [
         "KnowledgeIndexCoordinator",
+        "KnowledgeIndexEventCoordinator",
         "KnowledgeIndexStore"
       ],
       "migrationEntry": [],
       "protocolModules": [
-        "core/knowledge-workspace/knowledge-index-coordinator.ts"
+        "core/knowledge-workspace/knowledge-index-coordinator.ts",
+        "core/knowledge-workspace/knowledge-index-event-coordinator.ts"
       ],
       "firstPossibleOpenPhase": "runtime_ready",
       "firstPossibleWritePhase": "runtime_ready",
@@ -946,7 +948,7 @@
       "affectedByEpochMigration": false,
       "bootstrapSafety": null,
       "preCoordinatorReadProjection": null,
-      "identityContract": "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one immutable published SQLite generation.",
+      "identityContract": "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation.",
       "exemption": null
     },
     {
@@ -6578,7 +6580,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 185,
+      "line": 195,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(directory, options)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6587,7 +6589,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 209,
+      "line": 219,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(handle, content, \"utf8\")",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6596,7 +6598,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 216,
+      "line": 226,
       "kind": "rename",
       "excerpt": "fs.renameSync(from, to)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6605,7 +6607,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 219,
+      "line": 229,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(target, options)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6614,7 +6616,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 425,
+      "line": 435,
       "kind": "database-open",
       "excerpt": "new Database(buildPath)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6623,7 +6625,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 476,
+      "line": 486,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6632,7 +6634,16 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 674,
+      "line": 554,
+      "kind": "database-open",
+      "excerpt": "new Database(generationPath, { fileMustExist: true, })",
+      "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
+      "storeId": "knowledge-index-generations",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
+      "line": 807,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",

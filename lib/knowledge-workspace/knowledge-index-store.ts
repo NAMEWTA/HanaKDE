@@ -153,6 +153,16 @@ export type KnowledgeIndexResourceDocument = Readonly<{
   }>;
 }>;
 
+export type KnowledgeIndexIncrementalChange =
+  | Readonly<{
+    kind: "replace";
+    document: KnowledgeIndexResourceDocument;
+  }>
+  | Readonly<{
+    kind: "delete";
+    relativePath: string;
+  }>;
+
 export interface KnowledgeIndexFileSystem {
   mkdir(directory: string, options?: { recursive?: boolean; mode?: number }): void;
   readFile(filePath: string): Buffer;
@@ -494,6 +504,129 @@ export class KnowledgeIndexStore {
         else this.#leaseCounts.delete(generationId);
       },
     });
+  }
+
+  applyIncremental(input: {
+    lastCompleteSequence: number;
+    changes: readonly KnowledgeIndexIncrementalChange[];
+  }): void {
+    if (this.#activeRebuild) {
+      throw indexUnavailable(
+        "knowledge index incremental update waits for active rebuild",
+      );
+    }
+    const sequence = validSequence(
+      input.lastCompleteSequence,
+      "lastCompleteSequence",
+    );
+    if (!Array.isArray(input.changes) || input.changes.length === 0) {
+      throw new TypeError("knowledge index incremental changes are required");
+    }
+    const beforeLock = this.#readCurrent();
+    if (!beforeLock.manifest || !beforeLock.databaseReadable) {
+      throw indexUnavailable("knowledge index generation is unavailable");
+    }
+    if (
+      beforeLock.health.state !== "ready"
+      && beforeLock.health.state !== "degraded"
+    ) {
+      throw indexUnavailable("knowledge index generation requires rebuild");
+    }
+    if (sequence <= beforeLock.manifest.lastCompleteSequence) return;
+
+    const writerLock = this.#acquireWriterLock();
+    let database: DatabaseLike | null = null;
+    let manifestWriteAttempted = false;
+    try {
+      const current = this.#readCurrent();
+      if (
+        !current.manifest
+        || !current.databaseReadable
+        || current.manifest.generationId
+          !== beforeLock.manifest.generationId
+      ) {
+        throw new Error("knowledge index generation changed before update");
+      }
+      if (sequence <= current.manifest.lastCompleteSequence) return;
+      const generationPath = this.#generationPath(
+        current.manifest.generationId,
+      );
+      database = new Database(generationPath, {
+        fileMustExist: true,
+      }) as unknown as DatabaseLike;
+      configureDatabase(database);
+      validateCompleteGeneration(database, this.#sourceFingerprint);
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        for (const change of input.changes) {
+          applyIncrementalChange(database, change);
+        }
+        writeMetaValue(
+          database,
+          "last_complete_sequence",
+          String(sequence),
+        );
+        const nextManifest: KnowledgeIndexManifest = Object.freeze({
+          ...current.manifest,
+          lastCompleteSequence: sequence,
+        });
+        manifestWriteAttempted = true;
+        this.#writeManifest(nextManifest);
+        database.exec("COMMIT");
+      } catch (error) {
+        try {
+          database.exec("ROLLBACK");
+        } catch {
+          // Preserve the incremental failure.
+        }
+        if (manifestWriteAttempted) {
+          try {
+            this.#writeManifest(current.manifest);
+          } catch {
+            this.#degradedReason = "incremental_manifest_restore_failed";
+          }
+        }
+        throw error;
+      }
+      this.#degradedReason = null;
+      this.#lockedOwnerHint = null;
+    } catch (error) {
+      if (beforeLock.manifest) {
+        this.#degradedReason = this.#degradedReason
+          ?? "incremental_update_failed";
+      }
+      throw Object.assign(
+        indexUnavailable("knowledge index incremental update failed"),
+        { cause: error },
+      );
+    } finally {
+      try {
+        database?.close();
+      } catch {
+        this.#degradedReason = "incremental_close_failed";
+      }
+      try {
+        writerLock.release();
+      } catch {
+        this.#degradedReason = "writer_lock_release_failed";
+      }
+    }
+  }
+
+  markDegraded(reason: string): void {
+    if (
+      typeof reason !== "string"
+      || reason.length === 0
+      || reason.length > 128
+      || !/^[a-z0-9_]+$/.test(reason)
+    ) {
+      throw new TypeError("knowledge index degraded reason is invalid");
+    }
+    this.#degradedReason = reason;
+  }
+
+  clearDegraded(): void {
+    this.#degradedReason = null;
   }
 
   cleanupObsoleteGenerations(): readonly string[] {
@@ -1007,6 +1140,22 @@ export class KnowledgeIndexRebuild {
     replaceResourceDocument(rebuildInternals(this).database, document);
   }
 
+  deleteResource(relativePath: string): void {
+    this[REBUILD_ASSERT_HEALTHY]();
+    const database = rebuildInternals(this).database;
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      applyIncrementalChange(database, {
+        kind: "delete",
+        relativePath,
+      });
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   publish({ lastCompleteSequence }: {
     lastCompleteSequence: number;
   }): void {
@@ -1259,22 +1408,62 @@ function replaceResourceDocument(
   document: KnowledgeIndexResourceDocument,
 ): void {
   validateResourceDocument(document);
-  const { resource } = document;
   database.exec("BEGIN IMMEDIATE");
   try {
+    replaceResourceDocumentRows(database, document);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function applyIncrementalChange(
+  database: DatabaseLike,
+  change: KnowledgeIndexIncrementalChange,
+): void {
+  if (!change || typeof change !== "object") {
+    throw new TypeError("knowledge index incremental change is invalid");
+  }
+  if (change.kind === "replace") {
+    validateResourceDocument(change.document);
+    replaceResourceDocumentRows(database, change.document);
+    return;
+  }
+  if (change.kind === "delete") {
+    const relativePath = validateIncrementalRelativePath(change.relativePath);
     const existing = database.prepare(
       "SELECT resource_id AS resourceId FROM resources WHERE relative_path = ?",
-    ).get(resource.relativePath) as { resourceId: number } | undefined;
-    let resourceId: number;
-    if (existing) {
-      resourceId = Number(existing.resourceId);
-      database.prepare("DELETE FROM content_fts WHERE rowid = ?").run(resourceId);
-      database.prepare("DELETE FROM headings WHERE resource_id = ?").run(resourceId);
-      database.prepare("DELETE FROM links WHERE source_resource_id = ?").run(resourceId);
-      database.prepare("DELETE FROM tags WHERE resource_id = ?").run(resourceId);
-      database.prepare("DELETE FROM tasks WHERE resource_id = ?").run(resourceId);
-      database.prepare("DELETE FROM pages WHERE resource_id = ?").run(resourceId);
-      database.prepare(`
+    ).get(relativePath) as { resourceId: number } | undefined;
+    if (!existing) return;
+    const resourceId = Number(existing.resourceId);
+    database.prepare("DELETE FROM content_fts WHERE rowid = ?").run(resourceId);
+    database.prepare("DELETE FROM resources WHERE resource_id = ?").run(
+      resourceId,
+    );
+    return;
+  }
+  throw new TypeError("knowledge index incremental change kind is invalid");
+}
+
+function replaceResourceDocumentRows(
+  database: DatabaseLike,
+  document: KnowledgeIndexResourceDocument,
+): void {
+  const { resource } = document;
+  const existing = database.prepare(
+    "SELECT resource_id AS resourceId FROM resources WHERE relative_path = ?",
+  ).get(resource.relativePath) as { resourceId: number } | undefined;
+  let resourceId: number;
+  if (existing) {
+    resourceId = Number(existing.resourceId);
+    database.prepare("DELETE FROM content_fts WHERE rowid = ?").run(resourceId);
+    database.prepare("DELETE FROM headings WHERE resource_id = ?").run(resourceId);
+    database.prepare("DELETE FROM links WHERE source_resource_id = ?").run(resourceId);
+    database.prepare("DELETE FROM tags WHERE resource_id = ?").run(resourceId);
+    database.prepare("DELETE FROM tasks WHERE resource_id = ?").run(resourceId);
+    database.prepare("DELETE FROM pages WHERE resource_id = ?").run(resourceId);
+    database.prepare(`
         UPDATE resources
            SET parent_path = ?,
                basename = ?,
@@ -1287,21 +1476,21 @@ function replaceResourceDocument(
                content_reason = ?,
                indexed_at_ms = ?
          WHERE resource_id = ?
-      `).run(
-        resource.parentPath,
-        resource.basename,
-        resource.extension,
-        resource.kind,
-        resource.sizeBytes,
-        resource.mtimeMs,
-        resource.versionToken,
-        resource.contentState,
-        resource.contentReason,
-        resource.indexedAtMs,
-        resourceId,
-      );
-    } else {
-      const inserted = database.prepare(`
+    `).run(
+      resource.parentPath,
+      resource.basename,
+      resource.extension,
+      resource.kind,
+      resource.sizeBytes,
+      resource.mtimeMs,
+      resource.versionToken,
+      resource.contentState,
+      resource.contentReason,
+      resource.indexedAtMs,
+      resourceId,
+    );
+  } else {
+    const inserted = database.prepare(`
         INSERT INTO resources (
           relative_path,
           parent_path,
@@ -1315,52 +1504,52 @@ function replaceResourceDocument(
           content_reason,
           indexed_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        resource.relativePath,
-        resource.parentPath,
-        resource.basename,
-        resource.extension,
-        resource.kind,
-        resource.sizeBytes,
-        resource.mtimeMs,
-        resource.versionToken,
-        resource.contentState,
-        resource.contentReason,
-        resource.indexedAtMs,
-      ) as { lastInsertRowid?: number | bigint };
-      resourceId = Number(inserted.lastInsertRowid);
-    }
+    `).run(
+      resource.relativePath,
+      resource.parentPath,
+      resource.basename,
+      resource.extension,
+      resource.kind,
+      resource.sizeBytes,
+      resource.mtimeMs,
+      resource.versionToken,
+      resource.contentState,
+      resource.contentReason,
+      resource.indexedAtMs,
+    ) as { lastInsertRowid?: number | bigint };
+    resourceId = Number(inserted.lastInsertRowid);
+  }
 
-    if (document.page) {
-      database.prepare(`
+  if (document.page) {
+    database.prepare(`
         INSERT INTO pages (
           resource_id, title, frontmatter_json, body_text, body_hash
         ) VALUES (?, ?, ?, ?, ?)
-      `).run(
-        resourceId,
-        document.page.title,
-        document.page.frontmatterJson,
-        document.page.bodyText,
-        document.page.bodyHash,
-      );
-    }
-    const insertHeading = database.prepare(`
+    `).run(
+      resourceId,
+      document.page.title,
+      document.page.frontmatterJson,
+      document.page.bodyText,
+      document.page.bodyHash,
+    );
+  }
+  const insertHeading = database.prepare(`
       INSERT INTO headings (
         resource_id, ordinal, level, text, slug, from_offset, to_offset
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    for (const heading of document.headings) {
-      insertHeading.run(
-        resourceId,
-        heading.ordinal,
-        heading.level,
-        heading.text,
-        heading.slug,
-        heading.fromOffset,
-        heading.toOffset,
-      );
-    }
-    const insertLink = database.prepare(`
+  for (const heading of document.headings) {
+    insertHeading.run(
+      resourceId,
+      heading.ordinal,
+      heading.level,
+      heading.text,
+      heading.slug,
+      heading.fromOffset,
+      heading.toOffset,
+    );
+  }
+  const insertLink = database.prepare(`
       INSERT INTO links (
         source_resource_id,
         ordinal,
@@ -1371,57 +1560,69 @@ function replaceResourceDocument(
         from_offset,
         to_offset
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const link of document.links) {
-      insertLink.run(
-        resourceId,
-        link.ordinal,
-        link.linkKind,
-        link.rawTarget,
-        link.resolvedRelativePath,
-        link.fragment,
-        link.fromOffset,
-        link.toOffset,
-      );
-    }
-    const insertTag = database.prepare(`
+  `);
+  for (const link of document.links) {
+    insertLink.run(
+      resourceId,
+      link.ordinal,
+      link.linkKind,
+      link.rawTarget,
+      link.resolvedRelativePath,
+      link.fragment,
+      link.fromOffset,
+      link.toOffset,
+    );
+  }
+  const insertTag = database.prepare(`
       INSERT INTO tags (resource_id, tag, origin) VALUES (?, ?, ?)
     `);
-    for (const tag of document.tags) {
-      insertTag.run(resourceId, tag.tag, tag.origin);
-    }
-    const insertTask = database.prepare(`
+  for (const tag of document.tags) {
+    insertTag.run(resourceId, tag.tag, tag.origin);
+  }
+  const insertTask = database.prepare(`
       INSERT INTO tasks (
         resource_id, ordinal, checked, text, from_offset, to_offset
       ) VALUES (?, ?, ?, ?, ?, ?)
     `);
-    for (const task of document.tasks) {
-      insertTask.run(
-        resourceId,
-        task.ordinal,
-        task.checked ? 1 : 0,
-        task.text,
-        task.fromOffset,
-        task.toOffset,
-      );
-    }
-    database.prepare(`
+  for (const task of document.tasks) {
+    insertTask.run(
+      resourceId,
+      task.ordinal,
+      task.checked ? 1 : 0,
+      task.text,
+      task.fromOffset,
+      task.toOffset,
+    );
+  }
+  database.prepare(`
       INSERT INTO content_fts (
         rowid, resource_id, title_fold, path_fold, metadata_fold, body_fold
       ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      resourceId,
-      resourceId,
-      document.search.titleFold,
-      document.search.pathFold,
-      document.search.metadataFold,
-      document.search.bodyFold,
-    );
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
+  `).run(
+    resourceId,
+    resourceId,
+    document.search.titleFold,
+    document.search.pathFold,
+    document.search.metadataFold,
+    document.search.bodyFold,
+  );
+}
+
+function validateIncrementalRelativePath(relativePath: string): string {
+  if (
+    typeof relativePath !== "string"
+    || relativePath.length === 0
+    || relativePath.length > 4_096
+    || relativePath.includes("\\")
+    || relativePath.startsWith("/")
+    || relativePath.split("/").some((segment) =>
+      segment.length === 0 || segment === "." || segment === ".."
+    )
+    || /[\p{Cc}]/u.test(relativePath)
+  ) {
+    throw new TypeError("knowledge index incremental relativePath is invalid");
   }
+  return relativePath.normalize("NFC");
 }
 
 function validateResourceDocument(

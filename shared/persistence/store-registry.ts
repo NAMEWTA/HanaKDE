@@ -373,11 +373,16 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     format: "mixed-directory",
     schemaSource: directorySource(
       "lib/knowledge-workspace/knowledge-index-store.ts",
-      "schema v1 SQLite DDL, strict manifest/meta validation, generation publication, writer lock, and query lease protocol",
+      "schema v1 SQLite DDL, strict manifest/meta validation, generation publication, active-generation incremental transactions, writer lock, and query lease protocol",
     ),
-    openEntry: ["KnowledgeIndexCoordinator", "KnowledgeIndexStore"],
+    openEntry: [
+      "KnowledgeIndexCoordinator",
+      "KnowledgeIndexEventCoordinator",
+      "KnowledgeIndexStore",
+    ],
     protocolModules: [
       "core/knowledge-workspace/knowledge-index-coordinator.ts",
+      "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
     ],
     firstPossibleOpenPhase: "runtime_ready",
     firstPossibleWritePhase: "runtime_ready",
@@ -385,7 +390,7 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     checkpointPolicy: "Exclude; every source partition is a discardable cache rebuilt only from revalidated saved disk resources.",
     restorePolicy: "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition.",
     affectedByEpochMigration: false,
-    identityContract: "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one immutable published SQLite generation.",
+    identityContract: "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation.",
     siteRules: rules(
       ["lib/knowledge-workspace/knowledge-index-store.ts"],
       "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
