@@ -103,6 +103,9 @@
       "sourceUnavailable": "{name} 所屬來源無法使用；只有同一來源恢復後才會重新載入這個乾淨頁面。",
       "orphan": "{name} 已成為懸空未儲存文件，請將它另存為可用且可寫來源中的新頁面。"
     },
+    "attachment": {
+      "copyFailed": "附件複製失敗，未為該附件插入連結。"
+    },
     "mermaid": {
       "editSource": "編輯 Mermaid 原始碼",
       "loading": "正在算繪 Mermaid 圖表…",

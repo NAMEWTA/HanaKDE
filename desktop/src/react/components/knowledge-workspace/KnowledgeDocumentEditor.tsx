@@ -39,6 +39,10 @@ import type {
   KnowledgeLinkActivation,
 } from '../../editor/knowledge-link-field';
 import { openKnowledgeExternalLink } from '../../utils/knowledge-safe-rendering';
+import {
+  createKnowledgeAttachmentPolicy,
+  readKnowledgeAttachmentItems,
+} from '../../editor/knowledge-attachment-policy';
 
 type EditorLoadState =
   | { status: 'loading' }
@@ -72,6 +76,7 @@ export interface KnowledgeDocumentEditorProps {
     > | null,
   ) => void;
   onEditorViewUpdate?: (viewId: string) => void;
+  sourceWritable?: boolean;
 }
 
 export interface KnowledgeDocumentNoticesProps {
@@ -120,6 +125,7 @@ export function KnowledgeDocumentEditor({
   onFindRequest,
   onEditorViewChange,
   onEditorViewUpdate,
+  sourceWritable = true,
 }: KnowledgeDocumentEditorProps) {
   const addressKey = knowledgeDocumentKey(address);
   const requestAddress = useMemo<KnowledgeResourceAddress>(() => ({
@@ -265,7 +271,37 @@ export function KnowledgeDocumentEditor({
         reportSaveError(registry, requestAddress, error.code);
       },
     },
-    attachment: null,
+    attachment: createKnowledgeAttachmentPolicy({
+      pageAddress: requestAddress,
+      writable: sourceWritable,
+      readItems: readKnowledgeAttachmentItems,
+      copyForEditor: (item, options) => client.copyForEditor({
+        sourceAddress: item.sourceAddress,
+        pageAddress: options.pageAddress,
+        kind: item.kind,
+        localDate: options.localDate,
+      }, {
+        signal: options.signal,
+      }),
+      copyExternalForEditor: (item, options) => client.copyExternalForEditor(
+        item.file,
+        {
+          pageAddress: options.pageAddress,
+          localDate: options.localDate,
+        },
+        {
+          signal: options.signal,
+        },
+      ),
+      onItemError: () => {
+        window.dispatchEvent(new CustomEvent('hana-inline-notice', {
+          detail: {
+            text: tr('knowledge.attachment.copyFailed'),
+            type: 'error',
+          },
+        }));
+      },
+    }),
     openLink: onOpenLink ? { open: onOpenLink } : null,
     knowledgeLinks: {
       pageAddress: requestAddress,
@@ -383,6 +419,7 @@ export function KnowledgeDocumentEditor({
     registry,
     requestAddress,
     saveCurrentDocument,
+    sourceWritable,
     groupId,
     viewId,
   ]);

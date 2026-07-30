@@ -38,6 +38,144 @@ async function advanceResourceCursor(
 }
 
 describe('knowledge workspace client', () => {
+  it('copies an editor resource through the domain endpoint and validates the result', async () => {
+    const fetchImpl = vi.fn(async (
+      _path: string,
+      _options?: RequestInit,
+    ) => jsonResponse({
+      result: {
+        copied: true,
+        targetAddress: {
+          sourceKey: 'main',
+          relativePath: 'Notes/assets/2026-07-30-photo.png',
+        },
+        bytesTransferred: 5,
+        embed: true,
+        originalName: 'photo.png',
+      },
+    }, 201));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.copyForEditor({
+      sourceAddress: {
+        sourceKey: 'research',
+        relativePath: 'Media/photo.png',
+      },
+      pageAddress: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Host.md',
+      },
+      kind: 'attachment',
+      localDate: '2026-07-30',
+    })).resolves.toMatchObject({
+      copied: true,
+      targetAddress: {
+        sourceKey: 'main',
+        relativePath: 'Notes/assets/2026-07-30-photo.png',
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/knowledge-workspace/copy-for-editor',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          sourceAddress: {
+            sourceKey: 'research',
+            relativePath: 'Media/photo.png',
+          },
+          pageAddress: {
+            sourceKey: 'main',
+            relativePath: 'Notes/Host.md',
+          },
+          kind: 'attachment',
+          localDate: '2026-07-30',
+        }),
+      }),
+    );
+  });
+
+  it('streams an external File body with opaque bounded metadata', async () => {
+    const fetchImpl = vi.fn(async (
+      _path: string,
+      _options?: RequestInit,
+    ) => jsonResponse({
+      result: {
+        copied: true,
+        targetAddress: {
+          sourceKey: 'main',
+          relativePath: 'Notes/assets/2026-07-30-photo.png',
+        },
+        bytesTransferred: 5,
+        embed: true,
+        originalName: 'photo.png',
+      },
+    }, 201));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+    const file = new File(['bytes'], 'photo.png', { type: 'image/png' });
+
+    await client.copyExternalForEditor(file, {
+      pageAddress: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Host.md',
+      },
+      localDate: '2026-07-30',
+    });
+
+    const [, options] = fetchImpl.mock.calls[0];
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      '/api/knowledge-workspace/copy-external-for-editor',
+    );
+    expect(options?.body).toBe(file);
+    const metadataHeader = (
+      options?.headers as Record<string, string>
+    )['X-Hanako-Knowledge-Copy'];
+    expect(JSON.parse(
+      Buffer.from(metadataHeader, 'base64url').toString('utf8'),
+    )).toEqual({
+      fileName: 'photo.png',
+      fileSize: 5,
+      mimeType: 'image/png',
+      pageAddress: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Host.md',
+      },
+      localDate: '2026-07-30',
+    });
+    expect(metadataHeader).not.toContain('/Users/');
+  });
+
+  it('rejects unsafe fields in an editor copy response', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      result: {
+        copied: true,
+        targetAddress: {
+          sourceKey: 'main',
+          relativePath: 'Notes/assets/2026-07-30-photo.png',
+        },
+        bytesTransferred: 5,
+        embed: true,
+        originalName: 'photo.png',
+        absolutePath: '/Users/example/private/photo.png',
+      },
+    }, 201));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.copyForEditor({
+      sourceAddress: {
+        sourceKey: 'research',
+        relativePath: 'Media/photo.png',
+      },
+      pageAddress: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Host.md',
+      },
+      kind: 'attachment',
+      localDate: '2026-07-30',
+    })).rejects.toMatchObject({
+      code: 'knowledge_operation_precondition_failed',
+    });
+  });
+
   it('loads and validates the public source projection through the shared Renderer seam', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       sources: [{

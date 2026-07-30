@@ -89,6 +89,79 @@ export function createKnowledgeWorkspaceRoute(engine) {
     }
   });
 
+  route.post("/knowledge-workspace/copy-for-editor", async (c) => {
+    try {
+      const auth = authorize(c, engine, "files.write");
+      if (auth.response) return auth.response;
+      const registry = await registryFor(
+        c,
+        engine,
+        auth.requestContext,
+        registryState,
+      );
+      if (typeof engine.copyKnowledgeResourceForEditor !== "function") {
+        throw routeError("knowledge copy service unavailable", 503);
+      }
+      const context = createApiResourceOperationContext({
+        requestContext: auth.requestContext,
+        requestId: requestIdFromHono(c),
+        reason: "knowledge-copy-for-editor",
+      }) as ResourceOperationContext;
+      const result = await engine.copyKnowledgeResourceForEditor(
+        await safeJson(c),
+        {
+          sourceRegistry: registry,
+          ...context,
+          signal: c.req.raw?.signal,
+        },
+      );
+      return c.json({ result }, result.copied ? 201 : 200);
+    } catch (error) {
+      return knowledgeRouteError(c, error);
+    }
+  });
+
+  route.post("/knowledge-workspace/copy-external-for-editor", async (c) => {
+    try {
+      const auth = authorize(c, engine, "files.write");
+      if (auth.response) return auth.response;
+      const metadata = parseExternalCopyMetadata(
+        c.req.header("x-hanako-knowledge-copy"),
+      );
+      const registry = await registryFor(
+        c,
+        engine,
+        auth.requestContext,
+        registryState,
+      );
+      if (
+        typeof engine.copyExternalKnowledgeResourceForEditor !== "function"
+      ) {
+        throw routeError("knowledge external copy service unavailable", 503);
+      }
+      const context = createApiResourceOperationContext({
+        requestContext: auth.requestContext,
+        requestId: requestIdFromHono(c),
+        reason: "knowledge-copy-external-for-editor",
+      }) as ResourceOperationContext;
+      const result = await engine.copyExternalKnowledgeResourceForEditor({
+        body: c.req.raw.body,
+        sizeBytes: metadata.fileSize,
+        originalName: metadata.fileName,
+        mimeType: metadata.mimeType,
+        pageAddress: metadata.pageAddress,
+        localDate: metadata.localDate,
+      }, {
+        sourceRegistry: registry,
+        ...context,
+        signal: c.req.raw.signal,
+      });
+      return c.json({ result }, 201);
+    } catch (error) {
+      return knowledgeRouteError(c, error);
+    }
+  });
+
   route.delete("/knowledge-workspace/sources/:sourceKey", async (c) => {
     try {
       const auth = authorize(c, engine, "files.write");
@@ -659,6 +732,68 @@ function knowledgeRouteError(c, error: unknown) {
 
 function routeError(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
+}
+
+function parseExternalCopyMetadata(input: unknown): {
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  pageAddress: unknown;
+  localDate: string;
+} {
+  if (typeof input !== "string" || input.length === 0 || input.length > 8192) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "external copy metadata is invalid",
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(input, "base64url").toString("utf8"));
+  } catch {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "external copy metadata is invalid",
+    );
+  }
+  if (
+    typeof parsed !== "object"
+    || parsed === null
+    || Array.isArray(parsed)
+    || Object.keys(parsed).some(field => ![
+      "fileName",
+      "fileSize",
+      "mimeType",
+      "pageAddress",
+      "localDate",
+    ].includes(field))
+  ) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "external copy metadata is invalid",
+    );
+  }
+  const value = parsed as Record<string, unknown>;
+  if (
+    typeof value.fileName !== "string"
+    || !Number.isSafeInteger(value.fileSize)
+    || (value.fileSize as number) < 0
+    || typeof value.mimeType !== "string"
+    || value.mimeType.length > 255
+    || typeof value.localDate !== "string"
+  ) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "external copy metadata is invalid",
+    );
+  }
+  return {
+    fileName: value.fileName,
+    fileSize: value.fileSize as number,
+    mimeType: value.mimeType,
+    pageAddress: value.pageAddress,
+    localDate: value.localDate,
+  };
 }
 
 function errorStatus(error: unknown): number {

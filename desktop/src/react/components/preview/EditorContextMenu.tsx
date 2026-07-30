@@ -13,6 +13,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { undo, redo } from '@codemirror/commands';
+import {
+  canRedoKnowledgeAttachment,
+  redoKnowledgeAttachment,
+} from '../../editor/knowledge-attachment-history';
 import { useStore } from '../../stores';
 import type { EditorView } from '@codemirror/view';
 import type {
@@ -48,7 +52,8 @@ function editorCanUndo(view: EditorView): boolean {
 }
 
 function editorCanRedo(view: EditorView): boolean {
-  return redo({ state: view.state, dispatch: () => {} });
+  return canRedoKnowledgeAttachment(view)
+    || redo({ state: view.state, dispatch: () => {} });
 }
 
 function eventTargetClosest(target: EventTarget | null, selector: string): Element | null {
@@ -272,7 +277,10 @@ export function EditorContextMenu({
 
   const handleRedo = useCallback(() => {
     const view = getView();
-    if (view) { redo(view); view.focus(); }
+    if (view) {
+      if (!redoKnowledgeAttachment(view)) redo(view);
+      view.focus();
+    }
   }, [getView]);
 
   if (!menu) return null;

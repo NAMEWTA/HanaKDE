@@ -14,6 +14,9 @@ import {
   type MarkdownEditorSurfaceHandle,
   type MarkdownEditorSurfacePolicy,
 } from '../../components/preview/MarkdownEditorSurface';
+import {
+  redoKnowledgeAttachment,
+} from '../../editor/knowledge-attachment-history';
 
 function elementRect(width = 960, height = 640): DOMRect {
   return {
@@ -494,6 +497,72 @@ describe('MarkdownEditorSurface', () => {
       await Promise.resolve();
     });
     expect(open).toHaveBeenCalledWith('https://example.com');
+  });
+
+  it('undoes only attachment text and re-copies before attachment redo', async () => {
+    const copy = vi.fn()
+      .mockResolvedValueOnce({
+        markdown: '![[Notes/assets/2026-07-30-photo.png]]',
+        redo: async () => copy(),
+      })
+      .mockResolvedValueOnce({
+        markdown: '![[Notes/assets/2026-07-30-photo_2.png]]',
+        redo: async () => copy(),
+      });
+    const ref = createRef<MarkdownEditorSurfaceHandle>();
+    const { container } = render(
+      <MarkdownEditorSurface
+        ref={ref}
+        content=""
+        mode="markdown"
+        policy={policy({
+          scopeKey: 'knowledge:attachment-history',
+          mode: 'manual',
+          execute: vi.fn(async () => ({
+            ok: true,
+            conflict: false,
+            version: null,
+          })),
+        }, {
+          attachment: {
+            accepts: () => true,
+            insert: copy,
+          },
+        })}
+      />,
+    );
+    fireEvent.paste(container.querySelector('.cm-content')!, {
+      clipboardData: {
+        files: [],
+        items: [],
+        types: ['application/x-hanako-knowledge-editor-resources+json'],
+      },
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const view = ref.current!.getView()!;
+    expect(view.state.doc.toString()).toBe(
+      '![[Notes/assets/2026-07-30-photo.png]]',
+    );
+    act(() => {
+      expect(undo(view)).toBe(true);
+    });
+    expect(view.state.doc.toString()).toBe('');
+
+    act(() => {
+      expect(redoKnowledgeAttachment(view)).toBe(true);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(copy).toHaveBeenCalledTimes(2);
+    expect(view.state.doc.toString()).toBe(
+      '![[Notes/assets/2026-07-30-photo_2.png]]',
+    );
   });
 
   it('applies content gate before creating EditorState and destroys the view on cleanup', () => {

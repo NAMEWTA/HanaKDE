@@ -289,6 +289,12 @@ function classifyKnowledgeWorkspaceRoute(verb, routePath) {
   if (/^\/api\/knowledge-workspace\/sources\/[^/]+$/.test(routePath)) {
     return verb === "DELETE" ? scoped("files.write") : LOCAL_ONLY;
   }
+  if (
+    routePath === "/api/knowledge-workspace/copy-for-editor"
+    || routePath === "/api/knowledge-workspace/copy-external-for-editor"
+  ) {
+    return verb === "POST" ? scoped("files.write") : LOCAL_ONLY;
+  }
   if (routePath === "/api/knowledge-workspace/operations/plan") {
     return verb === "POST" ? scoped("files.write") : LOCAL_ONLY;
   }

@@ -147,6 +147,21 @@ export type RendererResourceTransferResult = {
   bytesTransferred: number;
 };
 
+export type RendererKnowledgeEditorCopyInput = {
+  sourceAddress: KnowledgeResourceAddress;
+  pageAddress: KnowledgeResourceAddress;
+  kind: 'page' | 'attachment';
+  localDate?: string;
+};
+
+export type RendererKnowledgeEditorCopyResult = {
+  copied: boolean;
+  targetAddress: KnowledgeResourceAddress;
+  bytesTransferred: number;
+  embed: boolean;
+  originalName: string;
+};
+
 export type RendererKnowledgeRenameOperationRequest = {
   kind: 'rename';
   from: KnowledgeResourceAddress;
@@ -294,6 +309,18 @@ export type KnowledgeResourceEventCatchUp =
 export interface KnowledgeWorkspaceClient {
   resources: KnowledgeResourceClient;
   operations: KnowledgeOperationClient;
+  copyForEditor(
+    input: RendererKnowledgeEditorCopyInput,
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeEditorCopyResult>;
+  copyExternalForEditor(
+    file: File,
+    input: {
+      pageAddress: KnowledgeResourceAddress;
+      localDate: string;
+    },
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeEditorCopyResult>;
   listSources(options?: KnowledgeWorkspaceRequestOptions): Promise<KnowledgeSourceDto[]>;
   registerSource(
     input: RegisterKnowledgeSourceInput,
@@ -643,6 +670,94 @@ export function createKnowledgeWorkspaceClient({
   return {
     resources,
     operations,
+    async copyForEditor(input, options = {}) {
+      const sourceAddress = validateKnowledgeAddress(input?.sourceAddress);
+      const pageAddress = validateKnowledgeAddress(input?.pageAddress);
+      if (input?.kind !== 'page' && input?.kind !== 'attachment') {
+        throw invalidResponse('kind');
+      }
+      if (
+        input.kind === 'attachment'
+        && (
+          typeof input.localDate !== 'string'
+          || !/^\d{4}-\d{2}-\d{2}$/u.test(input.localDate)
+        )
+      ) {
+        throw invalidResponse('localDate');
+      }
+      const body = await requestJson(
+        fetchImpl,
+        '/api/knowledge-workspace/copy-for-editor',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sourceAddress,
+            pageAddress,
+            kind: input.kind,
+            ...(input.localDate ? { localDate: input.localDate } : {}),
+          }),
+          signal: options.signal,
+        },
+      );
+      const result = parseKnowledgeEditorCopyEnvelope(body);
+      if (result.targetAddress.sourceKey !== pageAddress.sourceKey) {
+        throw invalidResponse('targetAddress.sourceKey');
+      }
+      return result;
+    },
+    async copyExternalForEditor(file, input, options = {}) {
+      if (
+        typeof file !== 'object'
+        || file === null
+        || typeof file.name !== 'string'
+        || file.name.length > 255
+        || file.name.includes('/')
+        || file.name.includes('\\')
+        || /\p{Cc}/u.test(file.name)
+        || typeof file.size !== 'number'
+        || !Number.isSafeInteger(file.size)
+        || file.size < 0
+        || typeof file.type !== 'string'
+        || file.type.length > 255
+        || /\p{Cc}/u.test(file.type)
+      ) {
+        throw invalidResponse('file');
+      }
+      const pageAddress = validateKnowledgeAddress(input?.pageAddress);
+      if (
+        typeof input?.localDate !== 'string'
+        || !/^\d{4}-\d{2}-\d{2}$/u.test(input.localDate)
+      ) {
+        throw invalidResponse('localDate');
+      }
+      const metadata = encodeKnowledgeCopyMetadata({
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+        pageAddress,
+        localDate: input.localDate,
+      });
+      if (metadata.length > 8192) throw invalidResponse('file');
+      const body = await requestJson(
+        fetchImpl,
+        '/api/knowledge-workspace/copy-external-for-editor',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'X-Hanako-Knowledge-Copy': metadata,
+          },
+          body: file,
+          signal: options.signal,
+        },
+      );
+      const result = parseKnowledgeEditorCopyEnvelope(body);
+      if (result.targetAddress.sourceKey !== pageAddress.sourceKey) {
+        throw invalidResponse('targetAddress.sourceKey');
+      }
+      return result;
+    },
     async listSources(options = {}) {
       const body = await requestJson(fetchImpl, '/api/knowledge-workspace/sources', {
         method: 'GET',
@@ -692,6 +807,66 @@ export function createKnowledgeWorkspaceClient({
     catchUpResourceEvents,
     lastResourceEventSequence: () => lastResourceEventSequence,
   };
+}
+
+function parseKnowledgeEditorCopyEnvelope(
+  input: unknown,
+): RendererKnowledgeEditorCopyResult {
+  if (
+    !isRecord(input)
+    || Object.keys(input).length !== 1
+    || !isRecord(input.result)
+  ) {
+    throw invalidResponse('result');
+  }
+  const result = input.result;
+  const allowed = new Set([
+    'copied',
+    'targetAddress',
+    'bytesTransferred',
+    'embed',
+    'originalName',
+  ]);
+  if (
+    Object.keys(result).some(field => !allowed.has(field))
+    || typeof result.copied !== 'boolean'
+    || typeof result.embed !== 'boolean'
+    || !Number.isSafeInteger(result.bytesTransferred)
+    || (result.bytesTransferred as number) < 0
+    || typeof result.originalName !== 'string'
+    || result.originalName.length === 0
+    || result.originalName.includes('/')
+    || result.originalName.includes('\\')
+    || /\p{Cc}/u.test(result.originalName)
+  ) {
+    throw invalidResponse('result');
+  }
+  const targetAddress = parseKnowledgeResourceAddress(result.targetAddress);
+  if (
+    targetAddress.ok === false
+    || targetAddress.value.relativePath.length === 0
+  ) {
+    throw invalidResponse('targetAddress');
+  }
+  return {
+    copied: result.copied,
+    targetAddress: targetAddress.value,
+    bytesTransferred: result.bytesTransferred as number,
+    embed: result.embed,
+    originalName: result.originalName,
+  };
+}
+
+function encodeKnowledgeCopyMetadata(input: unknown): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(input));
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary)
+    .replace(/\+/gu, '-')
+    .replace(/\//gu, '_')
+    .replace(/=+$/u, '');
 }
 
 export const knowledgeWorkspaceClient = createKnowledgeWorkspaceClient();

@@ -893,6 +893,18 @@
       "reason": "Reached via esbuild source module graph, imported by core/knowledge-workspace/knowledge-operation-coordinator.ts (import-statement)."
     },
     {
+      "path": "core/knowledge-workspace/knowledge-copy-service.ts",
+      "inputType": "source-graph",
+      "provenance": [
+        {
+          "root": "server-bootstrap",
+          "from": "core/engine.ts",
+          "kind": "import-statement"
+        }
+      ],
+      "reason": "Reached via esbuild source module graph, imported by core/engine.ts (import-statement)."
+    },
+    {
       "path": "core/knowledge-workspace/knowledge-operation-coordinator.ts",
       "inputType": "source-graph",
       "provenance": [
@@ -5753,6 +5765,11 @@
       "provenance": [
         {
           "root": "server-bootstrap",
+          "from": "core/knowledge-workspace/knowledge-copy-service.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "core/knowledge-workspace/durable-operation-journal.ts",
           "kind": "import-statement"
         },
@@ -5762,7 +5779,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by core/knowledge-workspace/durable-operation-journal.ts (import-statement); core/knowledge-workspace/knowledge-operation-coordinator.ts (import-statement)."
+      "reason": "Reached via esbuild source module graph, imported by core/knowledge-workspace/knowledge-copy-service.ts (import-statement); core/knowledge-workspace/durable-operation-journal.ts (import-statement); core/knowledge-workspace/knowledge-operation-coordinator.ts (import-statement)."
     },
     {
       "path": "lib/known-model-fallbacks.json",
@@ -7506,6 +7523,18 @@
       "reason": "Reached via esbuild source module graph, imported by lib/resource-io/sandbox-resource-io.ts (import-statement)."
     },
     {
+      "path": "lib/resource-io/providers/request-body-provider.ts",
+      "inputType": "source-graph",
+      "provenance": [
+        {
+          "root": "server-bootstrap",
+          "from": "core/engine.ts",
+          "kind": "import-statement"
+        }
+      ],
+      "reason": "Reached via esbuild source module graph, imported by core/engine.ts (import-statement)."
+    },
+    {
       "path": "lib/resource-io/providers/resource-provider.ts",
       "inputType": "source-graph",
       "provenance": [
@@ -7583,9 +7612,14 @@
           "root": "server-bootstrap",
           "from": "lib/resource-io/sandbox-resource-io.ts",
           "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "core/engine.ts",
+          "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/sandbox-resource-io.ts (import-statement)."
+      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/sandbox-resource-io.ts (import-statement); core/engine.ts (import-statement)."
     },
     {
       "path": "lib/resource-io/resource-refs.ts",
@@ -7725,9 +7759,14 @@
           "root": "server-bootstrap",
           "from": "lib/resource-io/resource-io.ts",
           "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "lib/resource-io/providers/request-body-provider.ts",
+          "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/providers/local-fs-provider.ts (import-statement); lib/resource-io/resource-io.ts (import-statement)."
+      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/providers/local-fs-provider.ts (import-statement); lib/resource-io/resource-io.ts (import-statement); lib/resource-io/providers/request-body-provider.ts (import-statement)."
     },
     {
       "path": "lib/resources/resource-envelope.ts",
@@ -110594,12 +110633,12 @@
         },
         {
           "root": "server-bootstrap",
-          "from": "server/resource-events-ws.ts",
+          "from": "lib/knowledge-workspace/knowledge-operation-plan.ts",
           "kind": "import-statement"
         },
         {
           "root": "server-bootstrap",
-          "from": "lib/knowledge-workspace/knowledge-operation-plan.ts",
+          "from": "server/resource-events-ws.ts",
           "kind": "import-statement"
         },
         {
@@ -110608,7 +110647,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/resource-io.ts (import-statement); server/resource-events-ws.ts (import-statement); lib/knowledge-workspace/knowledge-operation-plan.ts (import-statement); +1 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/resource-io.ts (import-statement); lib/knowledge-workspace/knowledge-operation-plan.ts (import-statement); server/resource-events-ws.ts (import-statement); +1 more importer(s)."
     },
     {
       "path": "shared/knowledge-workspace-contract.ts",
@@ -110626,12 +110665,17 @@
         },
         {
           "root": "server-bootstrap",
-          "from": "core/knowledge-workspace/source-registry.ts",
+          "from": "lib/knowledge-workspace/knowledge-operation-plan.ts",
           "kind": "import-statement"
         },
         {
           "root": "server-bootstrap",
-          "from": "lib/knowledge-workspace/knowledge-operation-plan.ts",
+          "from": "core/knowledge-workspace/knowledge-copy-service.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "core/knowledge-workspace/source-registry.ts",
           "kind": "import-statement"
         },
         {
@@ -110645,7 +110689,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); core/knowledge-workspace/source-registry.ts (import-statement); +3 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); lib/knowledge-workspace/knowledge-operation-plan.ts (import-statement); +4 more importer(s)."
     },
     {
       "path": "shared/knowledge-workspace-errors.ts",
@@ -110668,12 +110712,17 @@
         },
         {
           "root": "server-bootstrap",
-          "from": "core/knowledge-workspace/source-registry.ts",
+          "from": "lib/knowledge-workspace/knowledge-operation-plan.ts",
           "kind": "import-statement"
         },
         {
           "root": "server-bootstrap",
-          "from": "lib/knowledge-workspace/knowledge-operation-plan.ts",
+          "from": "core/knowledge-workspace/knowledge-copy-service.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "core/knowledge-workspace/source-registry.ts",
           "kind": "import-statement"
         },
         {
@@ -110692,7 +110741,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/errors.ts (import-statement); lib/resource-io/transfer.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); +5 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/errors.ts (import-statement); lib/resource-io/transfer.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); +6 more importer(s)."
     },
     {
       "path": "shared/known-models.ts",
@@ -112094,9 +112143,9 @@
     }
   ],
   "stats": {
-    "totalFiles": 9601,
+    "totalFiles": 9603,
     "byInputType": {
-      "source-graph": 630,
+      "source-graph": 632,
       "runtime-asset": 11,
       "nft-runtime-trace": 8960
     }

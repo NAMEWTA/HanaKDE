@@ -50,6 +50,9 @@ import type {
   KnowledgeSlashMenuRequest,
 } from '../../editor/knowledge-command-registry';
 import { KnowledgeSlashMenu } from '../knowledge-workspace/KnowledgeSlashMenu';
+import {
+  knowledgeAttachmentInsertEffect,
+} from '../../editor/knowledge-attachment-history';
 
 /* ── Types ── */
 
@@ -75,6 +78,11 @@ export interface MarkdownEditorSaveError {
   cause?: unknown;
 }
 
+export interface MarkdownAttachmentInsertResult {
+  markdown: string;
+  redo?: () => Promise<MarkdownAttachmentInsertResult>;
+}
+
 export interface MarkdownEditorSurfacePolicy {
   save: {
     scopeKey: string;
@@ -87,7 +95,9 @@ export interface MarkdownEditorSurfacePolicy {
   };
   attachment: {
     accepts?: (dataTransfer: DataTransfer | null) => boolean;
-    insert?: (dataTransfer: DataTransfer | null) => Promise<string>;
+    insert?: (
+      dataTransfer: DataTransfer | null,
+    ) => Promise<string | MarkdownAttachmentInsertResult>;
     imageContext?: MarkdownImageContext;
     applyCoverDrop?: (dataTransfer: DataTransfer | null) => Promise<void>;
     onError?: (error: unknown) => void;
@@ -386,15 +396,44 @@ function syncEditorRootToDom(view: EditorView): void {
   }
 }
 
-function insertMarkdownAt(view: EditorView, markdown: string, position: number | null): void {
+function insertMarkdownAt(
+  view: EditorView,
+  markdown: string,
+  position: number | null,
+  redo?: () => Promise<MarkdownAttachmentInsertResult>,
+  onError?: (error: unknown) => void,
+  replacement?: { from: number; to: number },
+): void {
   const selection = view.state.selection.main;
-  const from = position ?? selection.from;
-  const to = position ?? selection.to;
+  const from = replacement?.from ?? position ?? selection.from;
+  const to = replacement?.to ?? position ?? selection.to;
+  const redoPayload = redo ? {
+    async execute() {
+      try {
+        const result = await redo();
+        if (!result.markdown) throw new Error('attachment redo copied no files');
+        insertMarkdownAt(
+          view,
+          result.markdown,
+          null,
+          result.redo,
+          onError,
+          { from, to },
+        );
+      } catch (error) {
+        onError?.(error);
+        throw error;
+      }
+    },
+  } : null;
   view.dispatch({
     changes: { from, to, insert: markdown },
     selection: EditorSelection.cursor(from + markdown.length),
     scrollIntoView: true,
     annotations: Transaction.userEvent.of('input.paste'),
+    ...(redoPayload
+      ? { effects: knowledgeAttachmentInsertEffect(redoPayload) }
+      : {}),
   });
 }
 
@@ -643,8 +682,17 @@ export const MarkdownEditorSurface = forwardRef<MarkdownEditorSurfaceHandle, Mar
     ) => {
       const attachmentPolicy = policyRef.current.attachment;
       if (!attachmentPolicy?.insert) return;
-      const markdown = await attachmentPolicy.insert(dataTransfer);
-      if (markdown) insertMarkdownAt(view, markdown, position);
+      const result = await attachmentPolicy.insert(dataTransfer);
+      const markdown = typeof result === 'string' ? result : result.markdown;
+      if (markdown) {
+        insertMarkdownAt(
+          view,
+          markdown,
+          position,
+          typeof result === 'string' ? undefined : result.redo,
+          attachmentPolicy.onError,
+        );
+      }
     }, []);
 
     const emitStatsIfChanged = useCallback((view: EditorView) => {

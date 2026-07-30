@@ -70,6 +70,10 @@ import {
   type KnowledgeSafeHtmlFieldConfig,
 } from './knowledge-safe-html-field';
 import {
+  knowledgeAttachmentHistoryExtension,
+  knowledgeAttachmentHistoryKeymap,
+} from './knowledge-attachment-history';
+import {
   knowledgeFindHighlightExtension,
 } from './knowledge-find-state';
 import { taskField } from './task-field';
@@ -173,6 +177,7 @@ export function createMarkdownEditorExtensions(
     bracketMatching(),
     ...(isMarkdown
       ? [
+        knowledgeAttachmentHistoryExtension,
         knowledgeFindHighlightExtension,
         ...(!readOnly && knowledgeCommands
           ? createKnowledgeCommandExtensions(knowledgeCommands)
@@ -212,6 +217,7 @@ export function createMarkdownEditorExtensions(
     keymap.of([
       ...(onManualSave ? [{ key: 'Mod-s', run: onManualSave }] : []),
       ...defaultKeymap,
+      ...knowledgeAttachmentHistoryKeymap,
       ...historyKeymap,
     ]),
     EditorView.contentAttributes.of({ spellcheck: 'false' }),

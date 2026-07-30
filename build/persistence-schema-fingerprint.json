@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:f72894a5d99281fabac1cfaea048a09b97cdd01c21361fcc0764fbcb126e4cbb",
+  "payloadFingerprint": "sha256:97f71f7430bef0f40f60ac4a32a1d2846d79764700e64d96d68a1a367261e80b",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2956,8 +2956,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "External-link protocol normalization changes only non-persistent Electron navigation behavior; store schemas, ownership, DATA_EPOCH, and persisted bytes are unchanged.",
-    "payloadFingerprint": "sha256:f72894a5d99281fabac1cfaea048a09b97cdd01c21361fcc0764fbcb126e4cbb"
+    "compatibilityReason": "Knowledge attachment copy adds transient ResourceIO transfer composition and shifts existing persistence-site source locations only; store schemas, ownership, DATA_EPOCH, and persisted bytes are unchanged.",
+    "payloadFingerprint": "sha256:97f71f7430bef0f40f60ac4a32a1d2846d79764700e64d96d68a1a367261e80b"
   },
   "schemas": [
     {
@@ -3954,7 +3954,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 326,
+      "line": 357,
       "reason": "Creates the channel root.",
       "sourceFile": "core/engine.ts",
       "storeId": "channels"
@@ -3962,7 +3962,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 372,
+      "line": 403,
       "reason": "Constructs the preferences owner.",
       "sourceFile": "core/engine.ts",
       "storeId": "user-preferences"
@@ -3970,7 +3970,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 373,
+      "line": 404,
       "reason": "Constructs draft/project stores.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-drafts-and-projects"
@@ -3978,7 +3978,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 391,
+      "line": 422,
       "reason": "Constructs draft/project stores.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-drafts-and-projects"
@@ -3986,7 +3986,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 624,
+      "line": 655,
       "reason": "Constructs the plugin task registry.",
       "sourceFile": "core/engine.ts",
       "storeId": "plugin-task-registry"
@@ -3994,7 +3994,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 1247,
+      "line": 1332,
       "reason": "Constructs the manifest store during engine construction.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-manifest-sqlite"
@@ -4002,7 +4002,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 1268,
+      "line": 1353,
       "reason": "Constructs the manifest store during engine construction.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-manifest-sqlite"
@@ -4010,7 +4010,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 2212,
+      "line": 2297,
       "reason": "Creates the user skill root.",
       "sourceFile": "core/engine.ts",
       "storeId": "skill-state"
@@ -4018,7 +4018,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 2394,
+      "line": 2479,
       "reason": "Deletes an expired legacy ephemeral session JSONL locator.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-jsonl"
@@ -4026,7 +4026,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 2448,
+      "line": 2533,
       "reason": "Creates the plugin development source root.",
       "sourceFile": "core/engine.ts",
       "storeId": "plugin-development-state"

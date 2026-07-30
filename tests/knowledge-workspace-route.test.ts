@@ -121,6 +121,169 @@ describe("knowledge workspace source route", () => {
     expect(text).not.toContain("recoveryReason");
   });
 
+  it("copies an editor resource through the scoped domain route without path DTOs", async () => {
+    const { engine, main } = setup();
+    const copyForEditor = vi.fn(async () => ({
+      copied: true,
+      targetAddress: {
+        sourceKey: "main",
+        relativePath: "Notes/assets/2026-07-30-photo.png",
+      },
+      bytesTransferred: 5,
+      embed: true,
+      originalName: "photo.png",
+    }));
+    Object.assign(engine, {
+      copyKnowledgeResourceForEditor: copyForEditor,
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    const request = {
+      sourceAddress: {
+        sourceKey: "research",
+        relativePath: "Media/photo.png",
+      },
+      pageAddress: {
+        sourceKey: "main",
+        relativePath: "Notes/Host.md",
+      },
+      kind: "attachment",
+      localDate: "2026-07-30",
+    };
+
+    const response = await app.request(
+      "/api/knowledge-workspace/copy-for-editor",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-request-id": "request-copy-1",
+        },
+        body: JSON.stringify(request),
+      },
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(201);
+    expect(JSON.parse(text)).toEqual({
+      result: expect.objectContaining({
+        targetAddress: {
+          sourceKey: "main",
+          relativePath: "Notes/assets/2026-07-30-photo.png",
+        },
+      }),
+    });
+    expect(copyForEditor).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        reason: "knowledge-copy-for-editor",
+        requestId: "request-copy-1",
+        source: "api",
+      }),
+    );
+    expect(text).not.toContain(main);
+    expect(text).not.toContain("filePath");
+  });
+
+  it("accepts an external file stream through opaque metadata without path DTOs", async () => {
+    const { engine, main } = setup();
+    const copyExternalForEditor = vi.fn(async () => ({
+      copied: true,
+      targetAddress: {
+        sourceKey: "main",
+        relativePath: "Notes/assets/2026-07-30-photo.png",
+      },
+      bytesTransferred: 5,
+      embed: true,
+      originalName: "photo.png",
+    }));
+    Object.assign(engine, {
+      copyExternalKnowledgeResourceForEditor: copyExternalForEditor,
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    const metadata = Buffer.from(JSON.stringify({
+      fileName: "photo.png",
+      fileSize: 5,
+      mimeType: "image/png",
+      pageAddress: {
+        sourceKey: "main",
+        relativePath: "Notes/Host.md",
+      },
+      localDate: "2026-07-30",
+    }), "utf8").toString("base64url");
+
+    const response = await app.request(
+      "/api/knowledge-workspace/copy-external-for-editor",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Hanako-Knowledge-Copy": metadata,
+          "x-request-id": "request-copy-external-1",
+        },
+        body: "bytes",
+      },
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(201);
+    expect(copyExternalForEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.any(ReadableStream),
+        sizeBytes: 5,
+        originalName: "photo.png",
+        mimeType: "image/png",
+        pageAddress: {
+          sourceKey: "main",
+          relativePath: "Notes/Host.md",
+        },
+        localDate: "2026-07-30",
+      }),
+      expect.objectContaining({
+        reason: "knowledge-copy-external-for-editor",
+        requestId: "request-copy-external-1",
+        source: "api",
+      }),
+    );
+    expect(text).not.toContain(main);
+    expect(text).not.toContain("filePath");
+  });
+
+  it("rejects malformed external file metadata before invoking the copy service", async () => {
+    const { engine } = setup();
+    const copyExternalForEditor = vi.fn();
+    Object.assign(engine, {
+      copyExternalKnowledgeResourceForEditor: copyExternalForEditor,
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const response = await app.request(
+      "/api/knowledge-workspace/copy-external-for-editor",
+      {
+        method: "POST",
+        headers: {
+          "X-Hanako-Knowledge-Copy": Buffer.from(JSON.stringify({
+            fileName: "photo.png",
+            fileSize: 5,
+            mimeType: "image/png",
+            pageAddress: {
+              sourceKey: "main",
+              relativePath: "Notes/Host.md",
+            },
+            localDate: "2026-07-30",
+            absolutePath: "/Users/example/photo.png",
+          })).toString("base64url"),
+        },
+        body: "bytes",
+      },
+    );
+
+    expect(response.status).toBe(412);
+    expect(copyExternalForEditor).not.toHaveBeenCalled();
+  });
+
   it("exposes the shared operation plan/commit/status/cancel protocol without path DTOs", async () => {
     const { engine, main } = setup();
     const operationId = "123e4567-e89b-42d3-a456-426614174000";

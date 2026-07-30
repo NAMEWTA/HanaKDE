@@ -15,6 +15,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { randomUUID } from "node:crypto";
 import { migrateConfigScope } from "../shared/migrate-config-scope.ts";
 import { migrateToProvidersYaml } from "./migrate-providers.ts";
 import { migrateProviderMediaConfig } from "./provider-media-config.ts";
@@ -141,6 +142,22 @@ import {
 import { debugLog, createModuleLogger } from "../lib/debug-log.ts";
 import { createSandboxedTools } from "../lib/sandbox/index.ts";
 import { createSandboxResourceIO } from "../lib/resource-io/sandbox-resource-io.ts";
+import { ResourceIO } from "../lib/resource-io/resource-io.ts";
+import {
+  RequestBodyResourceProvider,
+} from "../lib/resource-io/providers/request-body-provider.ts";
+import {
+  KnowledgeCopyService,
+  type KnowledgeEditorCopyRequest,
+  type KnowledgeEditorCopyResult,
+} from "./knowledge-workspace/knowledge-copy-service.ts";
+import type { SourceRegistry } from "./knowledge-workspace/source-registry.ts";
+import type {
+  KnowledgeResourceAddress,
+} from "../shared/knowledge-workspace-contract.ts";
+import type {
+  ResourceOperationContext,
+} from "../lib/resource-io/types.ts";
 import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import { resourceKeyForRef } from "../lib/resource-io/resource-refs.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
@@ -197,6 +214,20 @@ import { assertValidAgentId, isValidAgentId } from "../shared/agent-id.ts";
 const moduleLog = createModuleLogger("engine");
 const toolAvailabilityLog = createModuleLogger("tool-availability");
 const win32SandboxCleanupLog = createModuleLogger("win32-sandbox-cleanup");
+
+type KnowledgeEngineCopyOptions = ResourceOperationContext & {
+  sourceRegistry: SourceRegistry;
+  signal?: AbortSignal;
+};
+
+type KnowledgeExternalEngineCopyInput = {
+  body: ReadableStream<Uint8Array> | null;
+  sizeBytes: number;
+  originalName: string;
+  mimeType?: string;
+  pageAddress: KnowledgeResourceAddress;
+  localDate: string;
+};
 
 export function runBestEffortStartupMigrationStep(label, operation, log: any = () => {}) {
   try {
@@ -1042,6 +1073,60 @@ export class HanaEngine {
       });
     }
     return this._resourceIO;
+  }
+  async copyKnowledgeResourceForEditor(
+    input: KnowledgeEditorCopyRequest,
+    options: KnowledgeEngineCopyOptions,
+  ): Promise<KnowledgeEditorCopyResult> {
+    const { sourceRegistry, signal, ...context } = options;
+    if (!sourceRegistry) {
+      throw new Error("knowledge copy source registry is unavailable");
+    }
+    const service = new KnowledgeCopyService({
+      sourceRegistry,
+      resourceIO: this.getResourceIO(),
+    });
+    return service.copyForEditor(input, {
+      ...context,
+      signal,
+    });
+  }
+  async copyExternalKnowledgeResourceForEditor(
+    input: KnowledgeExternalEngineCopyInput,
+    options: KnowledgeEngineCopyOptions,
+  ): Promise<KnowledgeEditorCopyResult> {
+    const { sourceRegistry, signal, ...context } = options;
+    if (!sourceRegistry) {
+      throw new Error("knowledge external copy source registry is unavailable");
+    }
+    const fileId = randomUUID();
+    const baseResourceIO = this.getResourceIO();
+    const requestResourceIO = new ResourceIO({
+      providers: {
+        ...baseResourceIO.providers,
+        session_file: new RequestBodyResourceProvider({
+          fileId,
+          body: input?.body ?? null,
+          sizeBytes: input?.sizeBytes,
+        }),
+      },
+      eventBus: baseResourceIO.eventBus,
+      audit: baseResourceIO.audit,
+    });
+    const service = new KnowledgeCopyService({
+      sourceRegistry,
+      resourceIO: requestResourceIO,
+    });
+    return service.copyExternalForEditor({
+      source: { kind: "session-file", fileId },
+      originalName: input?.originalName,
+      mimeType: input?.mimeType,
+      pageAddress: input?.pageAddress,
+      localDate: input?.localDate,
+    }, {
+      ...context,
+      signal,
+    });
   }
   retainResourceWatch(resource) {
     if (!this._resourceWatchRegistry || typeof this._resourceWatchRegistry.retain !== "function") {

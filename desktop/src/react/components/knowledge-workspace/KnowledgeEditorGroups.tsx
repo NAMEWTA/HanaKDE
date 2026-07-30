@@ -1149,6 +1149,11 @@ export const KnowledgeEditorGroups = forwardRef<
                   groupId={node.id}
                   registry={registry}
                   client={client}
+                  sourceWritable={
+                    sources.find(source => (
+                      source.sourceKey === tab.address.sourceKey
+                    ))?.capabilities.includes('write') === true
+                  }
                   onRequestOrphanSave={() => {
                     if (!pendingUnsavedCloseRef.current) {
                       commitPendingUnsavedClose({

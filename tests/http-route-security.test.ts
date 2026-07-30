@@ -685,6 +685,8 @@ describe("HTTP route security policy", () => {
     const writeRoutes = [
       ["POST", "/api/knowledge-workspace/sources"],
       ["DELETE", "/api/knowledge-workspace/sources/research"],
+      ["POST", "/api/knowledge-workspace/copy-for-editor"],
+      ["POST", "/api/knowledge-workspace/copy-external-for-editor"],
       ["POST", "/api/knowledge-workspace/operations/plan"],
       ["POST", "/api/knowledge-workspace/operations/123e4567-e89b-42d3-a456-426614174000/commit"],
       ["POST", "/api/knowledge-workspace/operations/123e4567-e89b-42d3-a456-426614174000/cancel"],
