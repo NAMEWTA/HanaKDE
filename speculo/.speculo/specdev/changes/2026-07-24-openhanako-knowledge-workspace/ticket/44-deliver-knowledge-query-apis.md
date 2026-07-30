@@ -1,7 +1,7 @@
 # Ticket 44: 交付标签与引用查询 API
 
 - **被阻塞于：** [`23-define-knowledge-address-resolver.md`](./23-define-knowledge-address-resolver.md)、[`41-deliver-markdown-index-extraction.md`](./41-deliver-markdown-index-extraction.md)、[`43-deliver-watcher-index-rebuild.md`](./43-deliver-watcher-index-rebuild.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -63,9 +63,23 @@
 
 ## 验收标准
 
-- [ ] 查询按 sourceKey 分区；反向引用只读已保存索引；outline 可由当前 buffer 另行计算。
-- [ ] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 查询按 sourceKey 分区；反向引用只读已保存索引；outline 可由当前 buffer 另行计算。
+- [x] `Primary ownership` 明确为无直接用户故事；本 ticket 不新增未分配的产品行为，也不替其他 ticket 兜底。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 交付记录
+
+- **实现提交：** `59f03eca`
+- **平台：** macOS Darwin 25.5.0 / Apple M5 arm64 / APFS / Node v24.16.0
+- **实现结果：** 新增严格解析的 `queryKnowledgeIndex` 与公开 `POST /api/knowledge-workspace/query`、`GET /api/knowledge-workspace/index/status`；支持来源内标签、已保存出站、已保存反向引用、已保存 outline 与完整 index health。查询只经 `KnowledgeIndexCoordinator.acquireQueryLease` 的类型化方法读取，不向 route/Renderer 暴露 Database。
+- **隔离与事实来源：** 每个请求只打开一个 sourceKey 的 current generation，不执行跨来源 join；标签与 backlinks 只读已保存 SQLite generation。结果携带 generationId，调用方传入旧 generation 时明确返回 `knowledge_version_conflict/stale_generation`；outline/outbound 的当前 buffer 实时投影仍由 Ticket 46 独立计算。
+- **安全与生命周期：** 输入拒绝非 canonical 地址、未知字段、非法 generation/tag 与超出 1–100 的 limit；默认 50、最大 100，并以额外一行计算 `hasMore`。AbortSignal、权限拒绝、索引不可用、查询故障与 lease 释放均有覆盖；公开 DTO 不返回绝对路径、数据库位置、正文、原始链接文本或 SQLite/provider 原始错误。
+- **精确测试：** `npx vitest run tests/knowledge-query-api.test.ts --exclude 'temp/**'`，1 file、6/6；覆盖正常查询、双来源同名隔离、取消、generation 冲突、权限、不可用、SQL 故障脱敏和 lease 清理。
+- **相关回归：** `npx vitest run tests/knowledge-query-api.test.ts tests/knowledge-workspace-route.test.ts tests/knowledge-index-store.test.ts tests/knowledge-index-schema-migration.test.ts tests/knowledge-index-rebuild.test.ts tests/knowledge-index-event-coordinator.test.ts tests/markdown-index-extractor.test.ts tests/safe-text-index-extractor.test.ts --exclude 'temp/**'`，8 files、90/90；持久化/Composition 3 files、26/26；CLI closure census 19/19。
+- **全仓测试：** `npm test -- --exclude 'temp/**' --maxWorkers=8`，1063 files（1062 passed、1 skipped），10713 tests（10707 passed、6 skipped）。
+- **静态与构建：** `npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`git diff --check` 与 `npm run build:server:open` 均通过；Open Server better-sqlite3 runtime smoke 通过。
+- **持久化审查：** SQLite schema、持久化字节、ownership、checkpoint/restore policy、`DATA_EPOCH` 与用户事实不变；Store registry 加入只读 query protocol module，按 compatible addition 重钉指纹 `sha256:69afabc257caa46498145d054631595bffe3b907e95a393d5229c99bc3a348bf`。
+- **UI/E2E：** 本 ticket 未新增 UI；按 ticket 明确要求未运行 Playwright。E2E-KW-013 仅保留发布级关联，当前仓库不存在对应 spec，未记为通过。

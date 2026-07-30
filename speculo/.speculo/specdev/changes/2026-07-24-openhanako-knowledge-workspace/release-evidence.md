@@ -6,7 +6,7 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `1527ac95`（Ticket 43 实现验证点） |
+| Commit | `59f03eca`（Ticket 44 实现验证点） |
 | Branch | `hanakde` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
@@ -19,7 +19,7 @@
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
 | M1 Workspace/文档（Tickets 15–22） | P1 | 通过 | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs、三方冲突，以及统一 close/switch/quit 与 orphan 保存均已交付。Ticket 22 精确 25/25、相关 61/61；当前产品范围全仓 1030 files passed、1 skipped，10334 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过。E2E-KW-004–008/024 按真实入口依赖保留待回填 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 通过 | canonical address/LinkResolver、共享 CM6 表面、Markdown 增强、同源补全/导航、延迟建页、附件/跨来源复制后引用，以及同源整页/章节只读嵌入均已交付。Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过；typecheck、boundary、目标 ESLint 与 Renderer build 通过。E2E-KW-009 等缺失的发布 E2E 场景仍按真实入口依赖保留待回填 |
-| M3 索引/查询（Tickets 40–46） | P1 | 部分通过（Tickets 40–43） | Tickets 40–42 的来源分区 Store、Markdown 与安全文本抽取保持；Ticket 43 交付 ResourceEvent hint→ResourceIO 磁盘重读、来源 FIFO/跨来源并行、100–500ms debounce、burst/gap/stale 升级 rebuild、内部 operation correlation、active-generation 增量事务、rebuild replay/scope 重验/原子切换、取消与旧 generation 降级读取。Ticket 43 精确 23/23、相关 100/100、持久化 tripwire 21/21、全仓 10707 tests（10701 passed、6 skipped）、typecheck、boundary、目标 ESLint 与 Open Server build 通过；Tickets 44–46 尚未执行 |
+| M3 索引/查询（Tickets 40–46） | P1 | 部分通过（Tickets 40–44） | Tickets 40–43 的来源分区 Store、抽取与 watcher/rebuild 保持；Ticket 44 交付来源内 tags/outbound/backlinks/outline/health 类型化 lease 查询、generation 冲突、取消、权限与脱敏故障语义，以及 Open composition 的公开 query/status routes。精确 6/6、相关 90/90、持久化/Composition 26/26、closure 19/19、全仓 10713 tests（10707 passed、6 skipped）、typecheck、boundary、目标 ESLint 与 Open Server build 通过；Tickets 45–46 尚未执行 |
 | M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
 | M5 发布（Ticket 57） | P2 | 未执行 | — |
 
@@ -233,7 +233,7 @@
 | KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
 | KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17、35） | Ticket 14 恶意工作区与 Ticket 17 stat-first asset policy 证据保持；Ticket 35 显式 HTML/tag/attribute/protocol allowlist、nested active content 拒绝、http/https 用户手势、同源相对媒体 stat/read/version/byte 复验、abort/revoke、main/mobile/web system boundary 与恶意回归 85/85 通过；Tickets 51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 通过 | Tickets 40–42 的来源分区 Store 与两类抽取证据保持；Ticket 43 精确 23/23、相关 100/100、持久化 tripwire 21/21、全仓 10707 tests（10701 passed、6 skipped）。同来源 FIFO、跨来源并行、100–500ms 合并、5,000 events/10s、gap/stale reconcile、active-generation 单事务替换/删除与 sequence、独立 staging rebuild、200 resources/50ms yield、replay、scope 重验、checkpoint/原子 manifest、旧 generation lease 和完整 health 状态均已验证 |
-| KW-RULE-QUERY | 44, 46 | 未执行 | — |
+| KW-RULE-QUERY | 44, 46 | 部分通过（Ticket 44） | `npx vitest run tests/knowledge-query-api.test.ts --exclude 'temp/**'`（6/6）；严格 unknown 输入、来源分区标签/出站/backlinks/outline/health、默认/最大 50/100、generation 冲突、AbortSignal、只读已保存索引、权限/不可用/故障脱敏与 lease cleanup 已验证；Ticket 46 当前 buffer outline/outbound 和真实 backlinks UI 尚未执行 |
 | KW-RULE-SEARCH | 45 | 未执行 | — |
 | KW-RULE-VIEW | 46 | 未执行 | — |
 | KW-RULE-COPY | 38 | 通过 | `npx vitest run tests/knowledge-copy-service.test.ts desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts --exclude 'temp/**' --reporter=dot`（17/17）；ResourceIO 分块逐字节复制、日期/冲突命名、单资源原子、批次部分成功、取消/冲突/权限/不可用/长度不符清理与无 Renderer 路径边界通过 |
@@ -264,7 +264,7 @@
 | E2E-KW-010 | 未执行 | 未执行 | 未执行 | 当前仓库只有 `E2E-KW-001-shell.spec.ts`，不存在 E2E-KW-010 spec；Ticket 53 真实编辑器/树拖拽入口完成后补建，最终发布前必须执行 |
 | E2E-KW-011 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 48/49 的资源树单击/双击/Enter/Space 真实打开入口；当前仓库无该 spec，不以私有 route 或缩减场景替代，最终发布前必须回填 |
 | E2E-KW-012 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-013 | 未执行 | 未执行 | 未执行 | Tickets 40–43 的索引存储、两类抽取与增量/rebuild 协调已完成；仍依赖 Tickets 44–46 的查询、搜索与真实 UI 入口。当前仓库不存在该 spec，不以 Vitest 冒充发布 E2E |
+| E2E-KW-013 | 未执行 | 未执行 | 未执行 | Tickets 40–44 的索引存储、两类抽取、增量/rebuild 与来源分区查询 API 已完成；仍依赖 Tickets 45–46 的搜索与真实 UI 入口。当前仓库不存在该 spec，不以 Vitest 冒充发布 E2E |
 | E2E-KW-014 | 未执行 | 未执行 | 未执行 | Tickets 40、43 的 generation/锁/原子 publish 与 watcher/rebuild 公开协调 API 已完成；当前仓库不存在该 spec，本 ticket 明确不运行 Playwright，发布前仍须创建并执行真实场景，不以 Vitest、私有 route 或缩减场景替代 |
 | E2E-KW-015 | 未执行 | 未执行 | 未执行 | — |
 | E2E-KW-016 | 未执行 | 未执行 | 未执行 | — |
@@ -334,4 +334,6 @@
 - 2026-07-30 Ticket 38 的 E2E-KW-010 尚未执行：当前仓库实际只有 E2E-KW-001 spec，尚不存在 E2E-KW-010。跨来源 Page/Asset、系统附件、复制失败零正文修改与 Undo/重新复制 Redo 已由精确 17/17、相关核心 79/79 和产品范围全仓 10625 tests（10619 passed、6 skipped）证明；真实资源树与编辑器拖拽统一入口由 Ticket 53 拥有。为避免私有 route、测试捷径或缩减场景，本票保持 Playwright 流程待回填；Ticket 53 后必须补建并执行，最终发布前不得保留该缺口。
 - 2026-07-30 Ticket 38 首次产品范围全仓运行暴露两类确定性回执漂移：CLI runtime closure 的 2 个新增模块对应 2 个断言，`core/engine.ts` 既有持久化点行号对应 1 个断言；使用仓库生成器重建 closure 与 inventory 后两文件 30/30 通过。第二次全仓运行继续由 schema tripwire 要求显式兼容审查；确认 store schema、ownership、DATA_EPOCH 与落盘字节均未变化后，以 compatible review 将 payload 重钉为 `sha256:97f71f7430bef0f40f60ac4a32a1d2846d79764700e64d96d68a1a367261e80b`，tripwire 7/7 通过。最终保持默认 worker 与固定 timeout 的前台命令真实退出 0（1055 files；1054 passed、1 skipped；10625 tests，10619 passed、6 skipped、0 failed）；这是已完成的机械回执更新，不构成豁免或发布 blocker。
 - 2026-07-30 Ticket 39 的 E2E-KW-009 尚未执行：同源整页/章节嵌入、完整地址循环与深度隔离、源页面相对链接、已保存磁盘读取和保存后无损刷新已由精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）证明，但仓库实际只有 E2E-KW-001 spec，尚不存在 E2E-KW-009。完整场景仍依赖 Ticket 46 backlinks 和 Tickets 48/49 的真实资源树公开打开入口；为避免私有 route、测试捷径或缩减发布场景，本票保持 Playwright 流程待回填，依赖完成后必须补建并执行，最终发布前不得保留该缺口。
+- 2026-07-30 Ticket 44 的 E2E-KW-013 尚未执行：来源分区 tags/outbound/backlinks/outline/health 查询、公开 route、generation 冲突、取消、权限、不可用与故障脱敏已由精确 6/6、相关 90/90 和产品范围全仓 10713 tests（10707 passed、6 skipped）证明；仓库实际只有 E2E-KW-001 spec，尚不存在 E2E-KW-013，完整流程仍依赖 Tickets 45–46 的搜索与真实 UI。为避免用 Vitest 或私有捷径冒充发布流程，本票保持 E2E 行“未执行”，最终发布前不得保留该缺口。
+- 2026-07-30 Ticket 44 首次全仓运行仅有 CLI runtime closure 的两条机械回执断言发现新增公开查询模块；使用仓库生成器重建 closure 后该文件 19/19。随后默认高并发全仓的 10 万资源性能 fixture 两次分别耗时 30.7 秒与触及固定 30 秒 timeout，隔离复验 13/13（目标用例 7.7 秒）；不提高 timeout 的受控 `--maxWorkers=8` 完整前台运行真实退出 0（1063 files；10713 tests，10707 passed、6 skipped、0 failed）。这是已消解的 I/O 资源争用，不构成产品失败或发布豁免。
 - 除上述已记录事实外没有例外。任何未执行、失败或 flaky 项必须在这里记录事实、影响、owner 和阻断决定；不得写入 `LOG.md`。
