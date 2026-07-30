@@ -43,6 +43,20 @@
     },
     "source": { "main": "Main" },
     "retry": "Retry",
+    "search": {
+      "label": "Search knowledge",
+      "input": "Search query",
+      "placeholder": "Search all saved knowledge…",
+      "scope": "Source: {source}",
+      "clearScope": "Search all sources",
+      "submit": "Search",
+      "loading": "Searching…",
+      "resultCount": "{count} results",
+      "error": "Search is unavailable",
+      "sourceError": "{source} could not be searched",
+      "tag": "Search tag #{tag} in {source}",
+      "more": "More from {source}"
+    },
     "tree": {
       "heading": "Resource tree",
       "empty": "No resources expanded",

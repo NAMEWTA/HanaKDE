@@ -43,6 +43,20 @@
     },
     "source": { "main": "主来源" },
     "retry": "重试",
+    "search": {
+      "label": "搜索知识",
+      "input": "搜索内容",
+      "placeholder": "搜索所有已保存知识…",
+      "scope": "来源：{source}",
+      "clearScope": "搜索所有来源",
+      "submit": "搜索",
+      "loading": "正在搜索…",
+      "resultCount": "{count} 个结果",
+      "error": "搜索暂不可用",
+      "sourceError": "无法搜索{source}",
+      "tag": "在{source}中搜索标签 #{tag}",
+      "more": "加载{source}的更多结果"
+    },
     "tree": {
       "heading": "资源树",
       "empty": "暂无已展开资源",

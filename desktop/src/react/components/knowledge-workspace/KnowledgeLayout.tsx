@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type {
   KnowledgeSourceDto,
 } from '../../../../../shared/knowledge-workspace-contract.ts';
@@ -8,7 +8,10 @@ import type {
 import type {
   KnowledgeDocumentRegistry,
 } from '../../stores/knowledge-document-registry';
-import { KnowledgeEditorGroups } from './KnowledgeEditorGroups';
+import {
+  KnowledgeEditorGroups,
+  type KnowledgeEditorGroupsHandle,
+} from './KnowledgeEditorGroups';
 import {
   KnowledgeEditorStatusBar,
   type KnowledgeEditorStatusTarget,
@@ -17,6 +20,7 @@ import {
   KnowledgeResourceTree,
   type KnowledgeResourceTreeProps,
 } from './KnowledgeResourceTree';
+import { KnowledgeSearch } from './KnowledgeSearch';
 import styles from './KnowledgeWorkspace.module.css';
 
 const tr = (key: string) => window.t?.(key) ?? key;
@@ -62,6 +66,7 @@ export function KnowledgeLayout({
   const sourcesHeadingId = 'knowledge-sources-heading';
   const [activeStatusTarget, setActiveStatusTarget] =
     useState<KnowledgeEditorStatusTarget | null>(null);
+  const editorGroupsRef = useRef<KnowledgeEditorGroupsHandle>(null);
 
   return (
     <main
@@ -110,6 +115,18 @@ export function KnowledgeLayout({
         )}
       </section>
 
+      <KnowledgeSearch
+        client={treeClient}
+        sources={renderedSources}
+        onOpen={(item, sourceName) => {
+          editorGroupsRef.current?.openResource({
+            address: item.address,
+            sourceName,
+            kind: item.kind === 'page' ? 'markdown' : 'asset',
+          });
+        }}
+      />
+
       <nav className={styles.treePanel} aria-label={tr('knowledge.tree.heading')}>
         <h2 className={styles.panelHeading}>{tr('knowledge.tree.heading')}</h2>
         <div
@@ -127,6 +144,7 @@ export function KnowledgeLayout({
       </nav>
 
       <KnowledgeEditorGroups
+        ref={editorGroupsRef}
         key={treeWorkspaceKey}
         registry={documentRegistry}
         client={treeClient}

@@ -43,6 +43,20 @@
     },
     "source": { "main": "主要來源" },
     "retry": "重試",
+    "search": {
+      "label": "搜尋知識",
+      "input": "搜尋內容",
+      "placeholder": "搜尋所有已儲存知識…",
+      "scope": "來源：{source}",
+      "clearScope": "搜尋所有來源",
+      "submit": "搜尋",
+      "loading": "正在搜尋…",
+      "resultCount": "{count} 個結果",
+      "error": "搜尋暫時無法使用",
+      "sourceError": "無法搜尋{source}",
+      "tag": "在{source}中搜尋標籤 #{tag}",
+      "more": "載入{source}的更多結果"
+    },
     "tree": {
       "heading": "資源樹",
       "empty": "尚無已展開資源",

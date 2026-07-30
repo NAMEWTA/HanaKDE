@@ -1059,4 +1059,95 @@ describe('knowledge workspace client', () => {
       }],
     });
   });
+
+  it('uses the super-search endpoint and validates grouped source-relative DTOs', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      result: {
+        query: 'alpha',
+        scope: null,
+        groups: [{
+          state: 'ready',
+          sourceKey: 'main',
+          displayName: 'Main',
+          generationId: 'generation-1',
+          nextCursor: null,
+          items: [{
+            address: {
+              sourceKey: 'main',
+              relativePath: 'Notes/Alpha.md',
+            },
+            title: 'Alpha',
+            kind: 'page',
+            score: 120,
+            snippets: [{ field: 'body', text: 'alpha body' }],
+          }],
+        }],
+      },
+    }));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.searchKnowledge({
+      query: 'alpha',
+    })).resolves.toEqual({
+      query: 'alpha',
+      scope: null,
+      groups: [{
+        state: 'ready',
+        sourceKey: 'main',
+        displayName: 'Main',
+        generationId: 'generation-1',
+        nextCursor: null,
+        items: [{
+          address: {
+            sourceKey: 'main',
+            relativePath: 'Notes/Alpha.md',
+          },
+          title: 'Alpha',
+          kind: 'page',
+          score: 120,
+          snippets: [{ field: 'body', text: 'alpha body' }],
+        }],
+      }],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/knowledge-workspace/search',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ query: 'alpha' }),
+      }),
+    );
+  });
+
+  it('rejects cross-source or oversized search DTOs before exposing them', async () => {
+    const client = createKnowledgeWorkspaceClient({
+      fetchImpl: vi.fn(async () => jsonResponse({
+        result: {
+          query: 'alpha',
+          scope: null,
+          groups: [{
+            state: 'ready',
+            sourceKey: 'main',
+            displayName: 'Main',
+            generationId: 'generation-1',
+            nextCursor: null,
+            items: [{
+              address: {
+                sourceKey: 'research',
+                relativePath: 'Secret.md',
+              },
+              title: 'Secret',
+              kind: 'page',
+              score: 1,
+              snippets: [{ field: 'body', text: 'x'.repeat(241) }],
+            }],
+          }],
+        },
+      })),
+    });
+    await expect(client.searchKnowledge({ query: 'alpha' })).rejects
+      .toMatchObject({
+        code: 'knowledge_operation_precondition_failed',
+        details: { field: 'search.address' },
+      });
+  });
 });

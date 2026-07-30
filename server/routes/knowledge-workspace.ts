@@ -29,6 +29,9 @@ import {
 import {
   queryKnowledgeIndex,
 } from "../../lib/knowledge-workspace/knowledge-query.ts";
+import {
+  searchKnowledgeIndex,
+} from "../../lib/knowledge-workspace/knowledge-search-query.ts";
 
 type RegistryEntry = {
   workspaceKey: string;
@@ -107,6 +110,30 @@ export function createKnowledgeWorkspaceRoute(engine) {
         knowledgeIndexCoordinatorFor(engine),
         await safeJson(c),
         { signal: c.req.raw.signal },
+      );
+      return c.json({ result });
+    } catch (error) {
+      return knowledgeRouteError(c, error);
+    }
+  });
+
+  route.post("/knowledge-workspace/search", async (c) => {
+    try {
+      const auth = authorize(c, engine, "files.read");
+      if (auth.response) return auth.response;
+      const registry = await registryFor(
+        c,
+        engine,
+        auth.requestContext,
+        registryState,
+      );
+      const result = await searchKnowledgeIndex(
+        knowledgeIndexCoordinatorFor(engine),
+        await safeJson(c),
+        {
+          sources: registry.list(),
+          signal: c.req.raw.signal,
+        },
       );
       return c.json({ result });
     } catch (error) {

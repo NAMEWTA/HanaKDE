@@ -189,6 +189,20 @@ export type KnowledgeIndexHeadingQueryRow = Readonly<{
   toOffset: number;
 }>;
 
+export type KnowledgeIndexSearchQueryRow = Readonly<{
+  resourceId: number;
+  relativePath: string;
+  basename: string;
+  kind: KnowledgeIndexResourceKind;
+  title: string;
+  frontmatterJson: string | null;
+  bodyText: string | null;
+  titleFold: string;
+  pathFold: string;
+  metadataFold: string;
+  bodyFold: string;
+}>;
+
 export interface KnowledgeIndexFileSystem {
   mkdir(directory: string, options?: { recursive?: boolean; mode?: number }): void;
   readFile(filePath: string): Buffer;
@@ -1382,6 +1396,51 @@ export class KnowledgeIndexQueryLease {
     })));
   }
 
+  querySearchCandidates(input: {
+    ftsQuery: string | null;
+    offset: number;
+    limit: number;
+  }): readonly KnowledgeIndexSearchQueryRow[] {
+    this.#assertActive();
+    const where = input.ftsQuery === null
+      ? ""
+      : "WHERE content_fts MATCH ?";
+    const sql = `
+      SELECT resources.resource_id, resources.relative_path,
+        resources.basename, resources.kind, pages.title,
+        pages.frontmatter_json, pages.body_text,
+        content_fts.title_fold, content_fts.path_fold,
+        content_fts.metadata_fold, content_fts.body_fold
+      FROM content_fts
+      JOIN resources ON resources.resource_id = content_fts.resource_id
+      LEFT JOIN pages ON pages.resource_id = resources.resource_id
+      ${where}
+      ORDER BY resources.resource_id
+      LIMIT ? OFFSET ?
+    `;
+    const params = input.ftsQuery === null
+      ? [input.limit, input.offset]
+      : [input.ftsQuery, input.limit, input.offset];
+    const rows = this.#database.prepare(sql).all(
+      ...params,
+    ) as Array<Record<string, unknown>>;
+    return Object.freeze(rows.map((row) => Object.freeze({
+      resourceId: Number(row.resource_id),
+      relativePath: String(row.relative_path),
+      basename: String(row.basename),
+      kind: resourceKindFromDatabase(row.kind),
+      title: row.title === null ? String(row.basename) : String(row.title),
+      frontmatterJson: row.frontmatter_json === null
+        ? null
+        : String(row.frontmatter_json),
+      bodyText: row.body_text === null ? null : String(row.body_text),
+      titleFold: String(row.title_fold),
+      pathFold: String(row.path_fold),
+      metadataFold: String(row.metadata_fold),
+      bodyFold: String(row.body_fold),
+    })));
+  }
+
   release(): void {
     if (this.#released) return;
     this.#released = true;
@@ -1434,6 +1493,25 @@ function linkKindFromDatabase(
     return value;
   }
   throw new Error("knowledge index link kind is invalid");
+}
+
+function resourceKindFromDatabase(
+  value: unknown,
+): KnowledgeIndexResourceKind {
+  if (
+    value === "page"
+    || value === "text"
+    || value === "image"
+    || value === "pdf"
+    || value === "audio"
+    || value === "video"
+    || value === "binary"
+    || value === "link"
+    || value === "unknown"
+  ) {
+    return value;
+  }
+  throw new Error("knowledge index resource kind is invalid");
 }
 
 function rebuildInternals(rebuild: KnowledgeIndexRebuild): {

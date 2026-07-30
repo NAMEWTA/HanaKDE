@@ -380,6 +380,7 @@
     "lib/knowledge-workspace/knowledge-index-store.ts",
     "lib/knowledge-workspace/knowledge-operation-plan.ts",
     "lib/knowledge-workspace/knowledge-query.ts",
+    "lib/knowledge-workspace/knowledge-search-query.ts",
     "lib/resource-io/agent-tools.ts",
     "lib/resource-io/errors.ts",
     "lib/resource-io/pi-tool-operations.ts",

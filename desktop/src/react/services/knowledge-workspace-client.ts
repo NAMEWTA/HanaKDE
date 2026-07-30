@@ -147,6 +147,58 @@ export type RendererResourceTransferResult = {
   bytesTransferred: number;
 };
 
+export type RendererKnowledgeSearchScope = {
+  kind: 'tag';
+  sourceKey: string;
+};
+
+export type RendererKnowledgeSearchItem = {
+  address: KnowledgeResourceAddress;
+  title: string;
+  kind:
+    | 'page'
+    | 'text'
+    | 'image'
+    | 'pdf'
+    | 'audio'
+    | 'video'
+    | 'binary'
+    | 'link'
+    | 'unknown';
+  score: number;
+  snippets: Array<{
+    field: 'title' | 'path' | 'metadata' | 'body';
+    text: string;
+  }>;
+};
+
+export type RendererKnowledgeSearchGroup =
+  | {
+      state: 'ready';
+      sourceKey: string;
+      displayName: string;
+      generationId: string;
+      items: RendererKnowledgeSearchItem[];
+      nextCursor: string | null;
+    }
+  | {
+      state: 'error';
+      sourceKey: string;
+      displayName: string;
+      error: {
+        code: KnowledgeErrorCode;
+        httpStatus: number;
+        retryable: boolean;
+        details?: KnowledgeSafeErrorDetails;
+      };
+    };
+
+export type RendererKnowledgeSearchResult = {
+  query: string;
+  scope: RendererKnowledgeSearchScope | null;
+  groups: RendererKnowledgeSearchGroup[];
+};
+
 export type RendererKnowledgeEditorCopyInput = {
   sourceAddress: KnowledgeResourceAddress;
   pageAddress: KnowledgeResourceAddress;
@@ -330,6 +382,15 @@ export interface KnowledgeWorkspaceClient {
     sourceKey: string,
     options?: KnowledgeWorkspaceRequestOptions,
   ): Promise<void>;
+  searchKnowledge(
+    input: {
+      query: string;
+      limit?: number;
+      cursors?: Record<string, string>;
+      scope?: RendererKnowledgeSearchScope;
+    },
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeSearchResult>;
   applyResourceEvent(
     event: unknown,
     handlers?: KnowledgeResourceEventHandlers,
@@ -758,6 +819,20 @@ export function createKnowledgeWorkspaceClient({
       }
       return result;
     },
+    async searchKnowledge(input, options = {}) {
+      validateKnowledgeSearchInput(input);
+      const body = await requestJson(
+        fetchImpl,
+        '/api/knowledge-workspace/search',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+          signal: options.signal,
+        },
+      );
+      return parseKnowledgeSearchEnvelope(body);
+    },
     async listSources(options = {}) {
       const body = await requestJson(fetchImpl, '/api/knowledge-workspace/sources', {
         method: 'GET',
@@ -806,6 +881,194 @@ export function createKnowledgeWorkspaceClient({
     applyResourceEvent,
     catchUpResourceEvents,
     lastResourceEventSequence: () => lastResourceEventSequence,
+  };
+}
+
+function validateKnowledgeSearchInput(input: unknown): void {
+  if (
+    !isRecord(input)
+    || typeof input.query !== 'string'
+    || Array.from(input.query).length === 0
+    || Array.from(input.query).length > 512
+    || /\p{Cc}/u.test(input.query)
+    || (
+      input.limit !== undefined
+      && (
+        !Number.isSafeInteger(input.limit)
+        || Number(input.limit) < 1
+        || Number(input.limit) > 100
+      )
+    )
+    || (
+      input.cursors !== undefined
+      && (
+        !isRecord(input.cursors)
+        || Object.values(input.cursors).some((cursor) =>
+          typeof cursor !== 'string'
+          || cursor.length === 0
+          || cursor.length > 4096
+        )
+      )
+    )
+    || (
+      input.scope !== undefined
+      && (
+        !isRecord(input.scope)
+        || input.scope.kind !== 'tag'
+        || typeof input.scope.sourceKey !== 'string'
+      )
+    )
+  ) {
+    throw invalidResponse('search');
+  }
+}
+
+function parseKnowledgeSearchEnvelope(
+  input: unknown,
+): RendererKnowledgeSearchResult {
+  if (
+    !isRecord(input)
+    || Object.keys(input).length !== 1
+    || !isRecord(input.result)
+    || typeof input.result.query !== 'string'
+    || !Array.isArray(input.result.groups)
+  ) {
+    throw invalidResponse('search.result');
+  }
+  const scope = input.result.scope === null
+    ? null
+    : parseKnowledgeSearchScope(input.result.scope);
+  return {
+    query: input.result.query,
+    scope,
+    groups: input.result.groups.map(parseKnowledgeSearchGroup),
+  };
+}
+
+function parseKnowledgeSearchScope(
+  input: unknown,
+): RendererKnowledgeSearchScope {
+  if (
+    !isRecord(input)
+    || input.kind !== 'tag'
+    || typeof input.sourceKey !== 'string'
+  ) {
+    throw invalidResponse('search.scope');
+  }
+  return { kind: 'tag', sourceKey: input.sourceKey };
+}
+
+function parseKnowledgeSearchGroup(
+  input: unknown,
+): RendererKnowledgeSearchGroup {
+  if (
+    !isRecord(input)
+    || typeof input.sourceKey !== 'string'
+    || typeof input.displayName !== 'string'
+  ) {
+    throw invalidResponse('search.group');
+  }
+  if (input.state === 'error') {
+    if (!isRecord(input.error)) throw invalidResponse('search.error');
+    const code = normalizeKnowledgeErrorCode(input.error.code);
+    if (
+      !code
+      || !Number.isSafeInteger(input.error.httpStatus)
+      || typeof input.error.retryable !== 'boolean'
+    ) {
+      throw invalidResponse('search.error');
+    }
+    return {
+      state: 'error',
+      sourceKey: input.sourceKey,
+      displayName: input.displayName,
+      error: {
+        code,
+        httpStatus: input.error.httpStatus as number,
+        retryable: input.error.retryable,
+        ...(safeDetails(input.error.details)
+          ? { details: safeDetails(input.error.details) }
+          : {}),
+      },
+    };
+  }
+  if (
+    input.state !== 'ready'
+    || typeof input.generationId !== 'string'
+    || !Array.isArray(input.items)
+    || (
+      input.nextCursor !== null
+      && typeof input.nextCursor !== 'string'
+    )
+  ) {
+    throw invalidResponse('search.group');
+  }
+  return {
+    state: 'ready',
+    sourceKey: input.sourceKey,
+    displayName: input.displayName,
+    generationId: input.generationId,
+    items: input.items.map((item) =>
+      parseKnowledgeSearchItem(item, input.sourceKey as string)
+    ),
+    nextCursor: input.nextCursor as string | null,
+  };
+}
+
+function parseKnowledgeSearchItem(
+  input: unknown,
+  sourceKey: string,
+): RendererKnowledgeSearchItem {
+  const kinds = new Set([
+    'page',
+    'text',
+    'image',
+    'pdf',
+    'audio',
+    'video',
+    'binary',
+    'link',
+    'unknown',
+  ]);
+  if (
+    !isRecord(input)
+    || typeof input.title !== 'string'
+    || !kinds.has(String(input.kind))
+    || typeof input.score !== 'number'
+    || !Number.isFinite(input.score)
+    || !Array.isArray(input.snippets)
+    || input.snippets.length > 3
+  ) {
+    throw invalidResponse('search.item');
+  }
+  const parsedAddress = parseKnowledgeResourceAddress(input.address);
+  if (
+    parsedAddress.ok === false
+    || parsedAddress.value.sourceKey !== sourceKey
+  ) {
+    throw invalidResponse('search.address');
+  }
+  const fields = new Set(['title', 'path', 'metadata', 'body']);
+  const snippets = input.snippets.map((snippet) => {
+    if (
+      !isRecord(snippet)
+      || !fields.has(String(snippet.field))
+      || typeof snippet.text !== 'string'
+      || Array.from(snippet.text).length > 240
+    ) {
+      throw invalidResponse('search.snippet');
+    }
+    return {
+      field: snippet.field as RendererKnowledgeSearchItem['snippets'][number]['field'],
+      text: snippet.text,
+    };
+  });
+  return {
+    address: parsedAddress.value,
+    title: input.title,
+    kind: input.kind as RendererKnowledgeSearchItem['kind'],
+    score: input.score,
+    snippets,
   };
 }
 

@@ -43,6 +43,20 @@
     },
     "source": { "main": "메인" },
     "retry": "다시 시도",
+    "search": {
+      "label": "지식 검색",
+      "input": "검색어",
+      "placeholder": "저장된 모든 지식 검색…",
+      "scope": "소스: {source}",
+      "clearScope": "모든 소스 검색",
+      "submit": "검색",
+      "loading": "검색 중…",
+      "resultCount": "결과 {count}개",
+      "error": "검색을 사용할 수 없습니다",
+      "sourceError": "{source}을(를) 검색할 수 없습니다",
+      "tag": "{source}에서 #{tag} 태그 검색",
+      "more": "{source}에서 더 보기"
+    },
     "tree": {
       "heading": "리소스 트리",
       "empty": "펼쳐진 리소스가 없습니다",

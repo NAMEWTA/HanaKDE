@@ -270,6 +270,30 @@ describe("knowledge query API", () => {
     });
     expect(unavailableText).not.toContain(fixture.hanakoHome);
     expect(unavailableText).not.toMatch(/SQLITE_/);
+
+    const search = await app.request("/api/knowledge-workspace/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: "host" }),
+    });
+    expect(search.status).toBe(200);
+    expect(await search.json()).toMatchObject({
+      result: {
+        query: "host",
+        scope: null,
+        groups: [{
+          state: "ready",
+          sourceKey: "main",
+          generationId: "main-generation",
+          items: [{
+            address: {
+              sourceKey: "main",
+              relativePath: "Notes/Host.md",
+            },
+          }],
+        }],
+      },
+    });
   });
 
   it("releases the generation lease and redacts storage failures", async () => {
@@ -352,6 +376,16 @@ describe("knowledge query API", () => {
     });
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
+      code: "knowledge_resource_out_of_scope",
+    });
+
+    const search = await app.request("/api/knowledge-workspace/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: "host" }),
+    });
+    expect(search.status).toBe(403);
+    expect(await search.json()).toMatchObject({
       code: "knowledge_resource_out_of_scope",
     });
   });

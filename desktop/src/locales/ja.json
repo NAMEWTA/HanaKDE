@@ -43,6 +43,20 @@
     },
     "source": { "main": "メイン" },
     "retry": "再試行",
+    "search": {
+      "label": "ナレッジを検索",
+      "input": "検索クエリ",
+      "placeholder": "保存済みのナレッジをすべて検索…",
+      "scope": "ソース：{source}",
+      "clearScope": "すべてのソースを検索",
+      "submit": "検索",
+      "loading": "検索中…",
+      "resultCount": "{count} 件の結果",
+      "error": "検索を利用できません",
+      "sourceError": "{source}を検索できませんでした",
+      "tag": "{source}でタグ #{tag} を検索",
+      "more": "{source}をさらに表示"
+    },
     "tree": {
       "heading": "リソースツリー",
       "empty": "展開されたリソースはありません",
