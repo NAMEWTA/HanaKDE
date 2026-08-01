@@ -44,6 +44,7 @@ type Prepared = {
 const WORKSPACE_FINGERPRINT = createHash("sha256").update("knowledge-reference-workspace").digest("hex");
 const SOURCE_KEYS = ["main", "research", "archive", "materials"] as const;
 const FORMAT = Object.freeze({ hadBom: false, lineEnding: "lf" as const, mixedLineEndings: false });
+const REBUILD_BATCH_SIZE = 8;
 
 export function createKnowledgeProductPerformanceAdapters(options: {
   scratchParent: string;
@@ -356,7 +357,7 @@ function rebuildStores(
     const batch = batches.get(entry.sourceKey) ?? [];
     batch.push(entry);
     batches.set(entry.sourceKey, batch);
-    if (batch.length < 64) continue;
+    if (batch.length < REBUILD_BATCH_SIZE) continue;
     const started = performance.now();
     rebuilds.get(entry.sourceKey)!.replaceResources(batch.splice(0).map(indexDocument));
     maxTaskMs = Math.max(maxTaskMs, performance.now() - started);

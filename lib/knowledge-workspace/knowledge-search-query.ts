@@ -17,6 +17,10 @@ export const KNOWLEDGE_SEARCH_MAX_QUERY_CODE_POINTS = 512;
 export const KNOWLEDGE_SEARCH_MAX_SNIPPETS = 3;
 export const KNOWLEDGE_SEARCH_MAX_SNIPPET_CODE_POINTS = 240;
 const SEARCH_BATCH_SIZE = 256;
+// Keep broad/short-term searches responsive. The cursor still exposes more
+// results within this bounded candidate window without allowing an unindexed
+// term to turn every renderer request into a full 100k-row scan.
+const SEARCH_MAX_CANDIDATES = 10_000;
 const SEARCH_SORT_KEY = "score-desc,path-byte,resource-id";
 
 export type KnowledgeSearchSource = Readonly<{
@@ -294,12 +298,18 @@ async function searchSource(
     branch: readonly string[];
   }> = [];
     let candidateOffset = 0;
+    let truncated = false;
     while (true) {
       assertNotAborted(options.signal);
+      const remainingCandidates = SEARCH_MAX_CANDIDATES - candidateOffset;
+      if (remainingCandidates <= 0) {
+        truncated = true;
+        break;
+      }
       const rows = lease.querySearchCandidates({
         ftsQuery,
         offset: candidateOffset,
-        limit: SEARCH_BATCH_SIZE,
+        limit: Math.min(SEARCH_BATCH_SIZE, remainingCandidates),
         includeDisplayText: false,
       });
       for (const row of rows) {
@@ -311,7 +321,7 @@ async function searchSource(
           branch,
         });
       }
-      if (rows.length < SEARCH_BATCH_SIZE) break;
+      if (rows.length < Math.min(SEARCH_BATCH_SIZE, remainingCandidates)) break;
       candidateOffset += rows.length;
       await yieldForCancellation(options.signal);
     }
@@ -350,7 +360,7 @@ async function searchSource(
           snippets,
         })
       )),
-      nextCursor: nextOffset < matches.length
+      nextCursor: nextOffset < matches.length || truncated
         ? encodeCursor({
           sourceKey: source.sourceKey,
           generationId: lease.generationId,
