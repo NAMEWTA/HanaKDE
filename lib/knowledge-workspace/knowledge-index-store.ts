@@ -474,6 +474,10 @@ export class KnowledgeIndexStore {
     try {
       database = new Database(buildPath) as unknown as DatabaseLike;
       configureDatabase(database);
+      // An unpublished build is disposable on crash; NORMAL keeps each bulk
+      // indexing slice responsive. Publication restores FULL before metadata
+      // and checkpoint durability are asserted.
+      database.pragma("synchronous = NORMAL");
       createSchema(database);
       const createdAtMs = this.#now();
       writeMeta(database, {
@@ -706,6 +710,7 @@ export class KnowledgeIndexStore {
     rebuild[REBUILD_ASSERT_HEALTHY]();
     let publishedGenerationPath: string | null = null;
     try {
+      rebuildInternals(rebuild).database.pragma("synchronous = FULL");
       writeMetaValue(
         rebuildInternals(rebuild).database,
         "last_complete_sequence",
