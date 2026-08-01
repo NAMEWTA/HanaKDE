@@ -8,13 +8,13 @@
  * 4. 关闭 splash，显示主窗口
  * 5. 优雅关闭
  */
-const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, dialog, session, shell, nativeTheme, Tray, Menu, nativeImage, systemPreferences, Notification, webContents, screen, powerSaveBlocker } = require("electron");
+const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, dialog, session, shell, clipboard, nativeTheme, Tray, Menu, nativeImage, systemPreferences, Notification, webContents, screen, powerSaveBlocker } = require("electron");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
 const fs = require("fs");
-const { pathToFileURL } = require("url");
+const { pathToFileURL, fileURLToPath } = require("url");
 const { PNG } = require("pngjs");
 const { initAutoUpdater, checkForUpdatesAuto, setMainWindow: setUpdaterMainWindow, setUpdateChannel, installDownloadedUpdate, normalizeReleaseDigest } = require("./auto-updater.cjs");
 const { createUpdateDigestHistoryLoader } = require("./src/shared/update-digest-history.cjs");
@@ -26,6 +26,7 @@ const { createKeepAwakeManager } = require("./keep-awake.cjs");
 const { createFileWatchRegistry } = require("./file-watch-registry.cjs");
 const { createStableFileWatcher } = require("./file-watch-adapter.cjs");
 const { createWorkspaceWatchRegistry } = require("./workspace-watch-registry.cjs");
+const { createKnowledgeTrashRetentionScheduler } = require("./knowledge-trash-retention.cjs");
 const { readTextFileSnapshot, writeTextFileIfUnchanged } = require("./file-text-io.cjs");
 const chokidar = require("chokidar");
 const { wrapIpcHandler, wrapIpcBestEffortHandler, wrapIpcOn } = require('./ipc-wrapper.cjs');
@@ -548,6 +549,8 @@ let serverProcess = null;
 const _intentionalServerStops = new WeakSet();
 let serverPort = null;
 let serverToken = null;
+let nativeBridgeToken = null;
+const knowledgeWindowServerSessions = new Map();
 let isQuitting = false;  // 区分关窗口（hide）和真正退出（quit）
 let tray = null;
 let reusedServerPid = null; // 复用已有 server 时记录其 PID，用 owner 字段决定是否关闭
@@ -1138,6 +1141,8 @@ function isDesktopOwnedServerInfo(info) {
 }
 
 async function startServer() {
+  nativeBridgeToken = null;
+  knowledgeWindowServerSessions.clear();
   const serverInfoPath = path.join(hanakoHome, "server-info.json");
 
   // ── 1. 检查是否有已运行的 server（Electron crash 后遗留的守护进程） ──
@@ -1157,6 +1162,9 @@ async function startServer() {
         console.log(`[desktop] 复用已运行的 server，端口: ${existingInfo.port}, 版本: ${existingInfo.version || "unknown"}, studio: ${verification.identity.studioId}`);
         serverPort = existingInfo.port;
         serverToken = existingInfo.token;
+        nativeBridgeToken = isDesktopOwnedServerInfo(existingInfo) && typeof existingInfo.nativeBridgeToken === "string"
+          ? existingInfo.nativeBridgeToken
+          : null;
         reusedServerPid = existingInfo.pid;
         reusedServerOwned = isDesktopOwnedServerInfo(existingInfo);
         return; // 跳过启动
@@ -1830,6 +1838,7 @@ async function _spawnServerOnce(serverInfoPath, artifactBootContext) {
   }
   serverPort = info.port;
   serverToken = info.token;
+  nativeBridgeToken = typeof info.nativeBridgeToken === "string" ? info.nativeBridgeToken : null;
   serverProcess.unref(); // 脱离 Electron 事件循环，允许 Electron 独立退出
 
   // server 就绪：进入健康观察期，期满清除 crash 哨兵（timer 已 unref）
@@ -1908,13 +1917,9 @@ function monitorServer() {
         console.log("[desktop] Server 重启成功");
         monitorServer(); // 重新挂监控
         // 通知前端重连
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("server-restarted", { port: serverPort, token: serverToken });
-        }
+        if (mainWindow && !mainWindow.isDestroyed()) await notifyRendererServerRestarted(mainWindow);
         // 设置窗口也需要知道新端口（否则旧端口的 API 全部失败）
-        if (settingsWindow && !settingsWindow.isDestroyed()) {
-          settingsWindow.webContents.send("server-restarted", { port: serverPort, token: serverToken });
-        }
+        if (settingsWindow && !settingsWindow.isDestroyed()) await notifyRendererServerRestarted(settingsWindow);
       } catch (err) {
         console.error("[desktop] Server 重启失败:", err.message);
         writeCrashLog(`Server 重启失败: ${err.message}`);
@@ -5037,8 +5042,204 @@ const loadUpdateDigestHistory = createUpdateDigestHistoryLoader({
 wrapIpcHandler("get-update-digest-history", () => loadUpdateDigestHistory());
 
 // ── IPC ──
+async function knowledgeNativeServerRequest(routePath, body, authorizationToken = serverToken) {
+  if (!serverPort || !serverToken || !nativeBridgeToken) {
+    const error = new Error("Knowledge native bridge is unavailable");
+    error.code = "knowledge_native_capability_unavailable";
+    throw error;
+  }
+  const response = await fetch(`http://127.0.0.1:${serverPort}/api/knowledge-workspace/native/${routePath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${authorizationToken}`,
+      "Content-Type": "application/json",
+      "X-Hana-Native-Bridge": nativeBridgeToken,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error("Knowledge native request failed");
+    error.code = typeof payload?.code === "string" ? payload.code : "knowledge_resource_unavailable";
+    throw error;
+  }
+  return payload;
+}
+
+async function getKnowledgeWindowServerToken(sender) {
+  if (!serverToken || !serverPort) return serverToken;
+  if (!nativeBridgeToken || !sender || typeof sender.id !== "number") return serverToken;
+  const cached = knowledgeWindowServerSessions.get(sender.id);
+  if (cached && cached.serverPort === serverPort && cached.masterToken === serverToken) return cached.token;
+
+  const windowKey = `desktop-window-${sender.id}-${crypto.randomUUID()}`;
+  const issued = await knowledgeNativeServerRequest("sessions", { windowKey }, serverToken);
+  if (typeof issued?.token !== "string" || issued.token.length === 0) {
+    throw new Error("Knowledge native window session credential is invalid");
+  }
+  const entry = { windowKey, token: issued.token, serverPort, masterToken: serverToken };
+  knowledgeWindowServerSessions.set(sender.id, entry);
+  sender.once("destroyed", () => {
+    if (knowledgeWindowServerSessions.get(sender.id) !== entry) return;
+    knowledgeWindowServerSessions.delete(sender.id);
+    void knowledgeNativeServerRequest("sessions/revoke", { windowKey }, serverToken).catch(() => {});
+  });
+  return entry.token;
+}
+
+async function notifyRendererServerRestarted(win) {
+  const token = await getKnowledgeWindowServerToken(win.webContents);
+  win.webContents.send("server-restarted", { port: serverPort, token });
+}
+
+function knowledgeNativeFailure(error) {
+  const allowed = new Set([
+    "knowledge_native_capability_unavailable",
+    "knowledge_operation_precondition_failed",
+    "knowledge_resource_unavailable",
+  ]);
+  return {
+    ok: false,
+    code: allowed.has(error?.code) ? error.code : "knowledge_resource_unavailable",
+  };
+}
+
+async function performKnowledgeNativeGrantAction(action, grantId, authorizationToken) {
+  const consumed = await knowledgeNativeServerRequest("consume", { action, grantId }, authorizationToken);
+  let ok = true;
+  if (action === "openDefault") ok = (await shell.openPath(consumed.filePath)) === "";
+  else if (action === "reveal") shell.showItemInFolder(consumed.filePath);
+  else {
+    try { fs.lstatSync(consumed.filePath); await shell.trashItem(consumed.filePath); } catch { ok = false; }
+    await knowledgeNativeServerRequest("complete", { grantId, ok }, authorizationToken);
+  }
+  if (!ok) {
+    const error = new Error("Knowledge native system action failed");
+    error.code = "knowledge_resource_unavailable";
+    throw error;
+  }
+  return { action, completed: true };
+}
+
+const knowledgeTrashRetentionScheduler = createKnowledgeTrashRetentionScheduler({
+  listExpiredEntries: async () => {
+    const result = await knowledgeNativeServerRequest("trash/expired", {});
+    return Array.isArray(result?.entries) ? result.entries : [];
+  },
+  moveToSystemTrash: async (address) => {
+    const issued = await knowledgeNativeServerRequest("grants", { action: "systemTrash", address });
+    if (typeof issued?.grant?.grantId !== "string") throw new Error("Knowledge native trash grant is invalid");
+    await performKnowledgeNativeGrantAction("systemTrash", issued.grant.grantId, serverToken);
+    return true;
+  },
+  log: (error) => console.warn(`[knowledge-trash] ${redactMainLogText(error?.message || String(error))}`),
+});
+
+function startKnowledgeTrashRetentionSchedulerOnce() {
+  knowledgeTrashRetentionScheduler.start();
+}
+
+function readClipboardFilePaths() {
+  const candidates = [];
+  const push = (value) => {
+    if (typeof value !== "string") return;
+    const trimmed = value.replace(/\0+$/u, "").trim();
+    if (trimmed && path.isAbsolute(trimmed) && fs.existsSync(trimmed)) candidates.push(trimmed);
+  };
+  for (const format of clipboard.availableFormats()) {
+    try {
+      if (format === "FileNameW") push(clipboard.readBuffer(format).toString("utf16le"));
+      if (format === "public.file-url") push(fileURLToPath(clipboard.readBuffer(format).toString("utf8").trim()));
+      if (format.toLowerCase() === "text/uri-list") {
+        for (const line of clipboard.readBuffer(format).toString("utf8").split(/\r?\n/u)) {
+          if (line && !line.startsWith("#") && line.startsWith("file:")) push(fileURLToPath(line));
+        }
+      }
+    } catch {
+      // Ignore clipboard formats that are not valid local file references.
+    }
+  }
+  return [...new Set(candidates)];
+}
+
+function validKnowledgeNativeTarget(value) {
+  return value && typeof value === "object"
+    && /^[a-z][a-z0-9-]{0,31}$/u.test(value.sourceKey)
+    && typeof value.directoryPath === "string"
+    && (value.directoryPath === "" || (!value.directoryPath.startsWith("/") && !value.directoryPath.endsWith("/") && value.directoryPath.split("/").every(segment => segment && segment !== "." && segment !== ".." && segment !== ".trash" && !/[\\\p{Cc}]/u.test(segment))));
+}
+
+wrapIpcHandler("knowledge-native:capabilities", () => {
+  const available = Boolean(nativeBridgeToken && serverPort && serverToken);
+  return {
+    directoryPicker: available,
+    filePicker: available,
+    fileClipboard: available,
+    openDefault: available,
+    reveal: available,
+    systemTrash: available,
+  };
+});
+
+wrapIpcHandler("knowledge-native:invoke", async (event, request) => {
+  try {
+    if (!request || typeof request !== "object" || !nativeBridgeToken) {
+      const error = new Error("Knowledge native capability unavailable");
+      error.code = "knowledge_native_capability_unavailable";
+      throw error;
+    }
+    const rendererToken = await getKnowledgeWindowServerToken(event.sender);
+    const action = request.action;
+    if (["pickFiles", "pickDirectory", "importClipboardFiles", "importDroppedFiles"].includes(action)) {
+      if (!validKnowledgeNativeTarget(request.target) || !["skip", "keep-both", "replace"].includes(request.conflictPolicy)) {
+        const error = new Error("Invalid Knowledge native import request");
+        error.code = "knowledge_operation_precondition_failed";
+        throw error;
+      }
+      const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+      let filePaths = [];
+      if (action === "importDroppedFiles") {
+        filePaths = Array.isArray(request.filePaths)
+          ? request.filePaths.slice(0, 1000).filter((candidate) => (
+            typeof candidate === "string"
+            && path.isAbsolute(candidate)
+            && fs.existsSync(candidate)
+          ))
+          : [];
+      } else if (action === "importClipboardFiles") {
+        filePaths = readClipboardFilePaths();
+      } else if (win) {
+        const picked = await dialog.showOpenDialog(win, {
+          properties: action === "pickDirectory" ? ["openDirectory"] : ["openFile", "multiSelections"],
+          title: action === "pickDirectory"
+            ? mt("dialog.selectFolder", null, "Select Folder to Import")
+            : mt("dialog.selectFiles", null, "Select Files to Import"),
+        });
+        if (!picked.canceled) filePaths = picked.filePaths;
+      }
+      if (filePaths.length === 0) return { ok: true, cancelled: true };
+      const result = await knowledgeNativeServerRequest("import", {
+        filePaths,
+        target: request.target,
+        conflictPolicy: request.conflictPolicy,
+      }, rendererToken);
+      return { ok: true, cancelled: false, result: result.results };
+    }
+    if (!["openDefault", "reveal", "systemTrash"].includes(action) || typeof request.grantId !== "string") {
+      const error = new Error("Invalid Knowledge native grant request");
+      error.code = "knowledge_operation_precondition_failed";
+      throw error;
+    }
+    const result = await performKnowledgeNativeGrantAction(action, request.grantId, rendererToken);
+    return { ok: true, cancelled: false, result };
+  } catch (error) {
+    return knowledgeNativeFailure(error);
+  }
+});
+
 wrapIpcHandler("get-server-port", () => serverPort);
-wrapIpcHandler("get-server-token", () => serverToken);
+wrapIpcHandler("get-server-token", (event) => getKnowledgeWindowServerToken(event.sender));
 wrapIpcHandler("run-edit-command", (event, command) => {
   const allowed = new Set(["cut", "copy", "paste", "selectAll"]);
   if (!allowed.has(command)) {
@@ -5918,6 +6119,7 @@ app.whenReady().then(async () => {
     }
     console.log(`[desktop] Server 就绪，端口: ${serverPort}`);
     monitorServer();
+    startKnowledgeTrashRetentionSchedulerOnce();
     setupBrowserCommands();
     createTray();
     if (_startHiddenAtLogin && process.platform === "darwin") {
@@ -6053,6 +6255,7 @@ app.on("activate", () => {
 
 // ── 优雅关闭 ──
 app.on("will-quit", () => {
+  knowledgeTrashRetentionScheduler.stop();
   keepAwakeManager.dispose();
   globalShortcut.unregisterAll();
   // 销毁托盘图标

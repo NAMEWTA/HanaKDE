@@ -30,9 +30,33 @@ function normalizeBrowserViewerOpenTarget(target) {
   return {};
 }
 
+function invokeKnowledgeNative(request) {
+  if (!request || request.action !== "importDroppedFiles") {
+    return ipcRenderer.invoke("knowledge-native:invoke", request);
+  }
+  const files = Array.isArray(request.files) ? request.files.slice(0, 1000) : [];
+  const filePaths = [];
+  for (const file of files) {
+    try {
+      const filePath = webUtils.getPathForFile(file);
+      if (typeof filePath === "string" && filePath) filePaths.push(filePath);
+    } catch {
+      // Reject synthetic or revoked File handles without exposing a path.
+    }
+  }
+  return ipcRenderer.invoke("knowledge-native:invoke", {
+    action: "importDroppedFiles",
+    target: request.target,
+    conflictPolicy: request.conflictPolicy,
+    filePaths,
+  });
+}
+
 contextBridge.exposeInMainWorld("hana", {
   getServerPort: () => ipcRenderer.invoke("get-server-port"),
   getServerToken: () => ipcRenderer.invoke("get-server-token"),
+  knowledgeNativeCapabilities: () => ipcRenderer.invoke("knowledge-native:capabilities"),
+  knowledgeNativeInvoke: invokeKnowledgeNative,
   runEditCommand: (command) => ipcRenderer.invoke("run-edit-command", command),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   getPendingAnnouncement: () => ipcRenderer.invoke("get-pending-announcement"),

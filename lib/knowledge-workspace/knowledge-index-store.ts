@@ -1358,6 +1358,7 @@ export class KnowledgeIndexQueryLease {
   queryBacklinks(
     relativePath: string,
     limit: number,
+    offset = 0,
   ): readonly KnowledgeIndexLinkQueryRow[] {
     this.#assertActive();
     return this.#queryLinks(`
@@ -1368,8 +1369,8 @@ export class KnowledgeIndexQueryLease {
       JOIN resources ON resources.resource_id = links.source_resource_id
       WHERE links.resolved_relative_path = ?
       ORDER BY resources.relative_path, links.ordinal
-      LIMIT ?
-    `, relativePath, limit);
+      LIMIT ? OFFSET ?
+    `, relativePath, limit, offset);
   }
 
   queryOutline(
@@ -1455,11 +1456,12 @@ export class KnowledgeIndexQueryLease {
     sql: string,
     relativePath: string,
     limit: number,
+    offset?: number,
   ): readonly KnowledgeIndexLinkQueryRow[] {
-    const rows = this.#database.prepare(sql).all(
-      relativePath,
-      limit,
-    ) as Array<Record<string, unknown>>;
+    const statement = this.#database.prepare(sql);
+    const rows = (offset === undefined
+      ? statement.all(relativePath, limit)
+      : statement.all(relativePath, limit, offset)) as Array<Record<string, unknown>>;
     return Object.freeze(rows.map((row) => Object.freeze({
       relativePath: String(row.relative_path),
       ordinal: Number(row.ordinal),

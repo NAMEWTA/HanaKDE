@@ -132,6 +132,34 @@ describe("knowledge operation tracer", () => {
     );
   });
 
+  it("persists and commits a same-source move through the same atomic protocol", async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-operation-move-"));
+    const fixture = createFixture(tempRoot, Date.parse("2026-07-28T08:00:00.000Z"));
+    const movedTo = { sourceKey: "main", relativePath: "Archive/Moved.md" };
+    const plan = await fixture.coordinator.plan({
+      kind: "move",
+      from: FROM,
+      to: movedTo,
+      expectedVersion: VERSION,
+    }, OWNER);
+
+    expect(plan).toMatchObject({ kind: "move", items: [{ from: FROM, to: movedTo }] });
+    const result = await fixture.coordinator.commit(
+      plan.operationId,
+      { requestHash: plan.requestHash },
+      OWNER,
+    );
+    expect(result).toMatchObject({ kind: "move", state: "FINALIZED" });
+    expect(JSON.parse(fs.readFileSync(path.join(
+      tempRoot,
+      "knowledge-workspace",
+      "operations",
+      "v1",
+      plan.operationId,
+      "journal.json",
+    ), "utf8"))).toMatchObject({ kind: "move", request: { kind: "move" } });
+  });
+
   it("returns the same result for an idempotent commit and rejects a reused id/hash", async () => {
     tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-operation-idempotent-"));
     const fixture = createFixture(tempRoot, Date.now());

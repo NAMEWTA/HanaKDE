@@ -410,4 +410,36 @@ describe("real Open/Full knowledge composition", () => {
     expect(fullRoot.registerClosedRoutes).toBe(registerClosedRoutes);
     expect(fullRoot.builtinMediaAdapters).toBe(builtinMediaAdapters);
   });
+
+  it("runs the production saved-disk index facade in both Open and Full compositions", async () => {
+    const waitForReadyIndex = async (server: SpawnedComposition) => {
+      let lastBody: unknown = null;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const response = await fetch(
+          `${server.baseUrl}/api/knowledge-workspace/index/status?sourceKey=main`,
+          { headers: { Authorization: `Bearer ${server.token}` } },
+        );
+        expect(response.status).toBe(200);
+        lastBody = await response.json();
+        if ((lastBody as { health?: { state?: string } }).health?.state === "ready") {
+          return lastBody;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error(`knowledge index did not become ready: ${JSON.stringify(lastBody)}`);
+    };
+
+    const [openIndex, fullIndex] = await Promise.all([
+      waitForReadyIndex(open),
+      waitForReadyIndex(full),
+    ]);
+    expect(openIndex).toMatchObject({
+      sourceKey: "main",
+      health: { state: "ready" },
+    });
+    expect(fullIndex).toMatchObject({
+      sourceKey: "main",
+      health: { state: "ready" },
+    });
+  });
 });

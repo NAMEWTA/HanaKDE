@@ -45,4 +45,36 @@ describe("ResourceEventBus", () => {
 
     expect(emit).toHaveBeenCalledTimes(1);
   });
+
+  it("notifies runtime subscribers without letting one subscriber break producers", () => {
+    const emit = vi.fn();
+    const first = vi.fn(() => {
+      throw new Error("observer failed");
+    });
+    const second = vi.fn();
+    const bus = new ResourceEventBus({ emit });
+    const unsubscribeFirst = bus.subscribe(first);
+    bus.subscribe(second);
+
+    expect(() => bus.changed({
+      changeType: "modified",
+      resourceKey: "local_fs:/repo/runtime.md",
+      resource: { kind: "local-file", path: "/repo/runtime.md" },
+      source: "api",
+    })).not.toThrow();
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(bus.latestSequence()).toBe(1);
+
+    unsubscribeFirst();
+    bus.deleted({
+      resourceKey: "local_fs:/repo/runtime.md",
+      resource: { kind: "local-file", path: "/repo/runtime.md" },
+      source: "api",
+    });
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(2);
+    expect(bus.latestSequence()).toBe(2);
+  });
 });

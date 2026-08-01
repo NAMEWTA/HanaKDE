@@ -43,6 +43,10 @@
     },
     "source": { "main": "Main" },
     "retry": "Retry",
+    "actions": { "label": "Resource actions" },
+    "action": { "newPage": "New page", "newFolder": "New folder", "import": "Import", "copy": "Copy", "cut": "Cut", "paste": "Paste", "delete": "Delete", "cancel": "Cancel", "create": "Create", "close": "Close", "restore": "Restore", "systemTrash": "System trash" },
+    "create": { "pageTitle": "Create page", "folderTitle": "Create folder", "name": "Name", "error": "The resource could not be created." },
+    "trash": { "title": "Workspace trash", "loading": "Loading trash…", "empty": "Trash is empty.", "deleteConfirm": "Move the selected resources to workspace trash?", "cleanupConfirm": "Move this resource to the system trash?", "cleanupTitle": "Move to system trash", "cleanupDescription": "OpenHanako will no longer be able to restore these items after the operating system accepts them.", "cleanupExpired": "Clean up items older than 30 days", "cleanupSelected": "Move selected items to system trash", "cleanupBatch": "Move batch to system trash", "retryFailed": "Retry failed items", "select": "Select", "operationError": "The trash operation could not be completed." },
     "search": {
       "label": "Search knowledge",
       "input": "Search query",
@@ -57,6 +61,22 @@
       "tag": "Search tag #{tag} in {source}",
       "more": "More from {source}"
     },
+    "currentViews": {
+      "heading": "Current resource",
+      "empty": "Open a Markdown page to see its outline and references.",
+      "outline": "Outline",
+      "outbound": "Outbound references",
+      "backlinks": "Backlinks",
+      "liveBuffer": "Live buffer",
+      "savedIndex": "Saved index",
+      "unsavedDifference": "Unsaved edits update the outline and outbound references. Backlinks still reflect the last saved index.",
+      "noOutline": "No headings",
+      "noOutbound": "No same-source outbound references",
+      "noBacklinks": "No saved backlinks",
+      "loadingBacklinks": "Loading saved backlinks…",
+      "backlinksError": "Saved backlinks are unavailable",
+      "moreBacklinks": "More saved backlinks are available"
+    },
     "tree": {
       "heading": "Resource tree",
       "empty": "No resources expanded",
@@ -66,7 +86,14 @@
       "loadError": "Could not load {name}",
       "retry": "Retry {name}",
       "unavailable": "{name} is unavailable",
-      "emptyDirectory": "{name} is empty"
+      "emptyDirectory": "{name} is empty",
+      "sort": "Sort {name}",
+      "sortNameAscending": "Name (A–Z)",
+      "sortNameDescending": "Name (Z–A)",
+      "sortModifiedAscending": "Modified (oldest)",
+      "sortModifiedDescending": "Modified (newest)",
+      "sortExtensionAscending": "Extension (A–Z)",
+      "sortExtensionDescending": "Extension (Z–A)"
     },
     "editor": {
       "groupLabel": "Editor group {number}",

@@ -35,6 +35,7 @@ type KnowledgeFixtures = {
     page: Page;
     runtime: "desktop-full" | "web-open" | "web-full";
     electronApplication: ElectronApplication | null;
+    apiFetch(pathname: string, init?: RequestInit): Promise<Response>;
   };
 };
 
@@ -100,15 +101,26 @@ export const test = base.extend<KnowledgeFixtures>({
         },
         timeout: 90_000,
       });
+      let serverPid: number | null = null;
       try {
         const appPage = await waitForDesktopMainWindow(electronApplication);
+        const serverInfo = await waitForServerInfo(
+          workspaceSandbox.hanaHome,
+          electronApplication.process(),
+        );
+        serverPid = serverInfo.pid;
         await use({
           page: appPage,
           runtime,
           electronApplication,
+          apiFetch: createAuthenticatedApiFetch(serverInfo),
         });
       } finally {
-        await electronApplication.close();
+        await closeElectronApplication(
+          electronApplication,
+          workspaceSandbox.hanaHome,
+          serverPid,
+        );
       }
       return;
     }
@@ -178,6 +190,7 @@ export const test = base.extend<KnowledgeFixtures>({
         page,
         runtime,
         electronApplication: null,
+        apiFetch: createAuthenticatedApiFetch(serverInfo),
       });
     } finally {
       await browser?.close();
@@ -187,6 +200,19 @@ export const test = base.extend<KnowledgeFixtures>({
 });
 
 export { expect };
+
+function createAuthenticatedApiFetch(
+  serverInfo: { port: number; token: string },
+): (pathname: string, init?: RequestInit) => Promise<Response> {
+  return (pathname, init = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${serverInfo.token}`);
+    return fetch(`http://127.0.0.1:${serverInfo.port}${pathname}`, {
+      ...init,
+      headers,
+    });
+  };
+}
 
 async function waitForDesktopMainWindow(
   application: ElectronApplication,
@@ -208,7 +234,7 @@ async function waitForDesktopMainWindow(
 async function waitForServerInfo(
   hanaHome: string,
   child: ChildProcess,
-): Promise<{ port: number; token: string }> {
+): Promise<{ pid: number; port: number; token: string }> {
   const file = path.join(hanaHome, "server-info.json");
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
@@ -217,16 +243,23 @@ async function waitForServerInfo(
     }
     try {
       const parsed = JSON.parse(await fs.readFile(file, "utf8")) as {
+        pid?: unknown;
         port?: unknown;
         token?: unknown;
       };
       if (
-        Number.isInteger(parsed.port)
+        Number.isInteger(parsed.pid)
+        && Number(parsed.pid) > 0
+        && Number.isInteger(parsed.port)
         && Number(parsed.port) > 0
         && typeof parsed.token === "string"
         && parsed.token.length > 0
       ) {
-        return { port: Number(parsed.port), token: parsed.token };
+        return {
+          pid: Number(parsed.pid),
+          port: Number(parsed.port),
+          token: parsed.token,
+        };
       }
     } catch {
       // The writer uses atomic replacement; retry until the complete file exists.
@@ -277,5 +310,108 @@ async function stopChild(child: ChildProcess): Promise<void> {
   ]);
   if (child.exitCode === null && child.signalCode === null) {
     child.kill("SIGKILL");
+  }
+}
+
+async function closeElectronApplication(
+  application: ElectronApplication,
+  hanaHome: string,
+  knownServerPid: number | null,
+): Promise<void> {
+  const serverPid = knownServerPid ?? await readServerPid(hanaHome);
+  const child = application.process();
+  if (child.exitCode === null && child.signalCode === null) {
+    try {
+      await application.evaluate(({ app, BrowserWindow }) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.destroy();
+        }
+        app.quit();
+      });
+    } catch {
+      // The Electron transport may close before the evaluate reply arrives.
+      // Process and owned-server verification below remain authoritative.
+    }
+    if (!await waitForProcessExit(child, 15_000)) {
+      await terminateProcessTree(child.pid);
+      await waitForProcessExit(child, 5_000);
+    }
+  }
+  if (serverPid === null || await waitForPidExit(serverPid, 10_000)) return;
+  await terminateProcessTree(serverPid);
+  if (!await waitForPidExit(serverPid, 5_000)) {
+    throw new Error("Desktop fixture could not terminate its owned server");
+  }
+}
+
+async function readServerPid(hanaHome: string): Promise<number | null> {
+  try {
+    const parsed = JSON.parse(
+      await fs.readFile(path.join(hanaHome, "server-info.json"), "utf8"),
+    ) as { pid?: unknown };
+    return Number.isSafeInteger(parsed.pid) && Number(parsed.pid) > 0
+      ? Number(parsed.pid)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function waitForProcessExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+async function waitForPidExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isPidAlive(pid)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return !isPidAlive(pid);
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+async function terminateProcessTree(pid: number | undefined): Promise<void> {
+  if (!Number.isSafeInteger(pid) || Number(pid) <= 0 || !isPidAlive(Number(pid))) {
+    return;
+  }
+  if (process.platform === "win32") {
+    const taskkill = spawn("taskkill.exe", [
+      "/PID",
+      String(pid),
+      "/T",
+      "/F",
+    ], { stdio: "ignore", windowsHide: true });
+    await new Promise<void>((resolve) => taskkill.once("exit", () => resolve()));
+    return;
+  }
+  try {
+    process.kill(Number(pid), "SIGTERM");
+  } catch {
+    return;
+  }
+  if (await waitForPidExit(Number(pid), 2_000)) return;
+  try {
+    process.kill(Number(pid), "SIGKILL");
+  } catch {
+    // The process exited between the liveness check and the signal.
   }
 }

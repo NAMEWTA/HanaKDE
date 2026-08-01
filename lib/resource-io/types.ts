@@ -1,9 +1,16 @@
-export type ResourceRef =
+export const RESOURCE_SCOPE_ROOT = Symbol("hana.resource-io.scope-root");
+
+type ResourceInternalScope = {
+  [RESOURCE_SCOPE_ROOT]?: string;
+};
+
+export type ResourceRef = (
   | { kind: "local-file"; path: string }
   | { kind: "mount"; mountId: string; path: string }
   | { kind: "session-file"; fileId: string; sessionId?: string; sessionPath?: string }
   | { kind: "resource"; resourceId: string }
-  | { kind: "url"; url: string };
+  | { kind: "url"; url: string }
+) & ResourceInternalScope;
 
 export type ResourceVersion = {
   mtimeMs?: number;
@@ -130,6 +137,18 @@ export type ResourceProviderId =
   | "resource"
   | "url";
 
+/**
+ * Provider-owned proof that binds a stat result to a later read. The symbol
+ * keeps the proof out of JSON, logs, and remote DTO projection while allowing
+ * in-process callers to carry it across the ResourceIO seam.
+ */
+export const RESOURCE_READ_PROOF = Symbol("hana.resource-io.read-proof");
+
+export type ResourceReadProof = Readonly<{
+  providerId: ResourceProviderId;
+  value: unknown;
+}>;
+
 export type ResourceStat = {
   resourceKey: string;
   resource: ResourceDescriptor;
@@ -137,6 +156,7 @@ export type ResourceStat = {
   isDirectory: boolean;
   version?: ResourceVersion;
   filePath?: string;
+  [RESOURCE_READ_PROOF]?: ResourceReadProof;
 };
 
 export type ResourceReadResult = {
@@ -151,6 +171,7 @@ export type ResourceOpenReadOptions = {
   start?: number;
   end?: number;
   expectedVersion?: ResourceVersion;
+  [RESOURCE_READ_PROOF]?: ResourceReadProof;
 };
 
 export type ResourceOpenReadResult = {

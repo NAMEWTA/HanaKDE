@@ -152,9 +152,22 @@ import {
   type KnowledgeEditorCopyResult,
 } from "./knowledge-workspace/knowledge-copy-service.ts";
 import type { SourceRegistry } from "./knowledge-workspace/source-registry.ts";
+import {
+  KnowledgeIndexRuntime,
+} from "./knowledge-workspace/knowledge-index-runtime.ts";
+import type {
+  KnowledgeIndexCoordinator,
+} from "./knowledge-workspace/knowledge-index-coordinator.ts";
+import type {
+  KnowledgeIndexHealth,
+} from "../lib/knowledge-workspace/knowledge-index-store.ts";
 import type {
   KnowledgeResourceAddress,
 } from "../shared/knowledge-workspace-contract.ts";
+import {
+  createKnowledgeWorkspaceError,
+  isKnowledgeWorkspaceError,
+} from "../shared/knowledge-workspace-errors.ts";
 import type {
   ResourceOperationContext,
 } from "../lib/resource-io/types.ts";
@@ -297,6 +310,7 @@ export class HanaEngine {
   declare _prefs: any;
   declare _resourceAccess: any;
   declare _resourceEventBus: any;
+  declare _knowledgeIndexRuntime: KnowledgeIndexRuntime | null;
   declare _resourceLoader: any;
   declare _resourceIO: any;
   declare _resourceWatchRegistry: any;
@@ -351,6 +365,7 @@ export class HanaEngine {
     this._resourceAccess = null;
     this._resourceIO = null;
     this._resourceEventBus = null;
+    this._knowledgeIndexRuntime = null;
     this.agentsDir = path.join(hanakoHome, "agents");
     this.userDir = path.join(hanakoHome, "user");
     this.channelsDir = path.join(hanakoHome, "channels");
@@ -1073,6 +1088,70 @@ export class HanaEngine {
       });
     }
     return this._resourceIO;
+  }
+  async bindKnowledgeIndexWorkspace(
+    sourceRegistry: SourceRegistry,
+  ): Promise<KnowledgeIndexCoordinator> {
+    if (!sourceRegistry) {
+      throw new Error("knowledge index source registry is unavailable");
+    }
+    if (!this._knowledgeIndexRuntime) {
+      const runtime = this.getRuntimeContext();
+      const hostId = runtime.serverNodeId || runtime.serverId;
+      if (!hostId) throw new Error("knowledge index host identity is unavailable");
+      this._knowledgeIndexRuntime = new KnowledgeIndexRuntime({
+        hanakoHome: this.hanakoHome,
+        hostId,
+        pid: process.pid,
+        resourceIO: this.getResourceIO(),
+        resourceEvents: this._resourceEvents(),
+        retainWatch: (resource) => this.retainResourceWatch(resource),
+      });
+    }
+    try {
+      return await this._knowledgeIndexRuntime.bindWorkspace(sourceRegistry);
+    } catch (error) {
+      if (
+        isKnowledgeWorkspaceError(error)
+        || (error as { name?: unknown })?.name === "AbortError"
+      ) {
+        throw error;
+      }
+      throw createKnowledgeWorkspaceError(
+        "knowledge_index_unavailable",
+        "knowledge index runtime is unavailable",
+      );
+    }
+  }
+  getKnowledgeIndexCoordinator(): KnowledgeIndexCoordinator | null {
+    return this._knowledgeIndexRuntime?.coordinator() ?? null;
+  }
+  async rebuildKnowledgeIndex(
+    sourceKey: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<KnowledgeIndexHealth> {
+    if (!this._knowledgeIndexRuntime) {
+      throw new Error("knowledge index runtime is unavailable");
+    }
+    try {
+      return await this._knowledgeIndexRuntime.rebuild(sourceKey, options);
+    } catch (error) {
+      if (
+        isKnowledgeWorkspaceError(error)
+        || (error as { name?: unknown })?.name === "AbortError"
+      ) {
+        throw error;
+      }
+      throw createKnowledgeWorkspaceError(
+        "knowledge_index_unavailable",
+        "knowledge index rebuild failed",
+      );
+    }
+  }
+  async disposeKnowledgeIndexRuntime(): Promise<void> {
+    const runtime = this._knowledgeIndexRuntime;
+    this._knowledgeIndexRuntime = null;
+    await runtime?.dispose();
   }
   async copyKnowledgeResourceForEditor(
     input: KnowledgeEditorCopyRequest,
@@ -2507,9 +2586,13 @@ export class HanaEngine {
       await this._sessionCoord.cleanupSession();
     } finally {
       try {
-        await this.disposeComputerRuntime();
+        await this.disposeKnowledgeIndexRuntime();
       } finally {
-        this._sessionManifestStore?.close?.();
+        try {
+          await this.disposeComputerRuntime();
+        } finally {
+          this._sessionManifestStore?.close?.();
+        }
       }
     }
   }

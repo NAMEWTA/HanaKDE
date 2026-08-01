@@ -7,7 +7,7 @@ import {
   resolveFixtureProfile,
   type FixtureManifest,
   type KnowledgeFixtureDataset,
-} from "./generate-fixture.js";
+} from "./generate-fixture.ts";
 
 type NumericBudget = {
   readonly p50Ms?: number;
@@ -185,6 +185,8 @@ class PerformanceAbortError extends Error {
 
 export async function runMeasuredScenario(options: {
   readonly measure: (phase: "warmup" | "sample", iteration: number) => Promise<void> | void;
+  readonly beforeEach?: (phase: "warmup" | "sample", iteration: number) => Promise<void> | void;
+  readonly afterEach?: (phase: "warmup" | "sample", iteration: number) => Promise<void> | void;
   readonly now?: () => number;
   readonly readRssBytes?: () => number;
   readonly signal?: AbortSignal;
@@ -209,12 +211,17 @@ export async function runMeasuredScenario(options: {
 
   const execute = async (phase: "warmup" | "sample", iteration: number): Promise<number> => {
     if (options.signal?.aborted) throw new PerformanceAbortError("AbortError", 0);
+    await options.beforeEach?.(phase, iteration);
     const startedAt = now();
     const measurement = Promise.resolve().then(() => options.measure(phase, iteration));
     measurement.catch(() => undefined);
     if (options.signal === undefined) {
-      await measurement;
-      return now() - startedAt;
+      try {
+        await measurement;
+        return now() - startedAt;
+      } finally {
+        await options.afterEach?.(phase, iteration);
+      }
     }
     let removeAbortListener = (): void => undefined;
     const aborted = new Promise<never>((_resolve, reject) => {
@@ -239,6 +246,7 @@ export async function runMeasuredScenario(options: {
       return now() - startedAt;
     } finally {
       removeAbortListener();
+      await options.afterEach?.(phase, iteration);
     }
   };
 
@@ -837,14 +845,31 @@ export interface ReferenceBenchmarkObservation {
   readonly rejectOverLimitBeforeEditorView?: boolean;
 }
 
-export type ReferenceBenchmarkAdapter = (context: {
+export type ReferenceBenchmarkContext = Readonly<{
   readonly phase: "warmup" | "sample";
   readonly iteration: number;
   readonly signal?: AbortSignal;
   readonly dataset: KnowledgeFixtureDataset;
   readonly manifest: FixtureManifest;
   readonly scenarioFixture: ReturnType<KnowledgeFixtureDataset["scenario"]>;
-}) => Promise<ReferenceBenchmarkObservation | void> | ReferenceBenchmarkObservation | void;
+}>;
+
+export type ReferenceBenchmarkAdapter = (
+  context: ReferenceBenchmarkContext,
+) => Promise<ReferenceBenchmarkObservation | void> | ReferenceBenchmarkObservation | void;
+
+export interface ReferenceBenchmarkProductAdapter {
+  prepare(context: ReferenceBenchmarkContext): Promise<unknown> | unknown;
+  measure(
+    context: ReferenceBenchmarkContext,
+    prepared: unknown,
+  ): Promise<ReferenceBenchmarkObservation | void> | ReferenceBenchmarkObservation | void;
+  cleanup?(context: ReferenceBenchmarkContext, prepared: unknown): Promise<void> | void;
+}
+
+export type ReferenceBenchmarkAdapterEntry =
+  | ReferenceBenchmarkAdapter
+  | ReferenceBenchmarkProductAdapter;
 
 function maximumObservation(
   observations: readonly ReferenceBenchmarkObservation[],
@@ -970,7 +995,7 @@ export async function runReferenceBenchmark(options: {
   readonly platform: string;
   readonly machine: ReferenceMachine;
   readonly environment: ReferenceEnvironment;
-  readonly adapters: Partial<Record<PerformanceScenarioId, ReferenceBenchmarkAdapter>>;
+  readonly adapters: Partial<Record<PerformanceScenarioId, ReferenceBenchmarkAdapterEntry>>;
   readonly baseline: ReferenceBaseline;
   readonly signal?: AbortSignal;
   readonly now?: () => number;
@@ -993,18 +1018,39 @@ export async function runReferenceBenchmark(options: {
     const adapter = options.adapters[scenarioId]!;
     const observations: ReferenceBenchmarkObservation[] = [];
     const scenarioFixture = dataset.scenario(scenarioId);
+    let prepared: unknown;
+    let preparedContext: ReferenceBenchmarkContext | null = null;
+    const contextFor = (
+      phase: "warmup" | "sample",
+      iteration: number,
+    ): ReferenceBenchmarkContext => ({
+      phase,
+      iteration,
+      signal: options.signal,
+      dataset,
+      manifest: fixture,
+      scenarioFixture,
+    });
     const result = await runMeasuredScenario({
+      beforeEach: async (phase, iteration) => {
+        if (typeof adapter === "function") return;
+        preparedContext = contextFor(phase, iteration);
+        prepared = await adapter.prepare(preparedContext);
+      },
       measure: async (phase, iteration) => {
-        const observation = await adapter({
-          phase,
-          iteration,
-          signal: options.signal,
-          dataset,
-          manifest: fixture,
-          scenarioFixture,
-        });
+        const context = preparedContext ?? contextFor(phase, iteration);
+        const observation = typeof adapter === "function"
+          ? await adapter(context)
+          : await adapter.measure(context, prepared);
         if (phase === "sample" && observation !== undefined && typeof observation === "object") {
           observations.push(observation);
+        }
+      },
+      afterEach: async () => {
+        if (typeof adapter !== "function" && preparedContext) {
+          await adapter.cleanup?.(preparedContext, prepared);
+          prepared = undefined;
+          preparedContext = null;
         }
       },
       signal: options.signal,

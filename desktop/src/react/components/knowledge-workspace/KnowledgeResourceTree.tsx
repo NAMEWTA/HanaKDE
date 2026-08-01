@@ -1,11 +1,14 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, DragEvent, KeyboardEvent } from 'react';
 import type {
   KnowledgeResourceAddress,
   KnowledgeSourceDto,
@@ -20,6 +23,22 @@ import {
   type KnowledgeResourceTreeChangeSignal,
 } from '../../services/resource-events';
 import { useStore } from '../../stores';
+import {
+  KNOWLEDGE_DRAG_MIME,
+  parseKnowledgeDragPayload,
+} from '../../../../../shared/knowledge-drag-contract.ts';
+import { KnowledgeDragController } from './knowledge-drag-controller';
+import { invokeKnowledgeNative } from '../../services/knowledge-native-client';
+import { KNOWLEDGE_ATTACHMENT_RESOURCE_MIME } from '../../editor/knowledge-attachment-policy';
+import type { KnowledgeBreadcrumbTarget } from './KnowledgeTabBar';
+import {
+  createKnowledgeTreeSelectionState,
+  knowledgeTreeNodeKey,
+  knowledgeTreeSelectionReducer,
+  moveKnowledgeTreeFocus,
+  type KnowledgeTreeSelectionState,
+  type KnowledgeTreeVisibleNode,
+} from './resource-tree-selection';
 import styles from './KnowledgeWorkspace.module.css';
 
 export type { KnowledgeResourceTreeChangeSignal };
@@ -45,7 +64,27 @@ export interface KnowledgeResourceTreeProps {
   watchSource?: WatchSource;
   subscribeToChanges?: SubscribeToChanges;
   refreshDelayMs?: number;
+  onOpenResource?(input: Readonly<{
+    address: KnowledgeResourceAddress;
+    sourceName: string;
+    mode: 'preview' | 'pinned';
+    focusContent: boolean;
+  }>): void;
+  onSelectionChange?(input: Readonly<{
+    sourceKey: string | null;
+    addresses: readonly KnowledgeResourceAddress[];
+    contextTarget: KnowledgeResourceAddress | null;
+  }>): void;
 }
+
+export interface KnowledgeResourceTreeHandle {
+  locateResource(target: KnowledgeBreadcrumbTarget): void;
+}
+
+export type KnowledgeTreeSort = Readonly<{
+  field: 'name' | 'modified' | 'extension';
+  direction: 'ascending' | 'descending';
+}>;
 
 const naturalNameCollator = new Intl.Collator(undefined, {
   numeric: true,
@@ -87,6 +126,7 @@ function compareCodePoints(left: string, right: string): number {
 
 export function sortKnowledgeTreeItems(
   items: RendererResourceListItem[],
+  sort: KnowledgeTreeSort = { field: 'name', direction: 'ascending' },
 ): RendererResourceListItem[] {
   return items
     .map((item, index) => ({ item, index }))
@@ -94,6 +134,16 @@ export function sortKnowledgeTreeItems(
       if (left.item.isDirectory !== right.item.isDirectory) {
         return left.item.isDirectory ? -1 : 1;
       }
+      let projected = sort.field === 'modified'
+        ? left.item.mtimeMs - right.item.mtimeMs
+        : sort.field === 'extension'
+          ? naturalNameCollator.compare(
+              fileExtension(left.item.name),
+              fileExtension(right.item.name),
+            )
+          : naturalNameCollator.compare(left.item.name, right.item.name);
+      if (sort.direction === 'descending') projected *= -1;
+      if (projected !== 0) return projected;
       const natural = naturalNameCollator.compare(left.item.name, right.item.name);
       if (natural !== 0) return natural;
       const exact = compareCodePoints(left.item.name, right.item.name);
@@ -139,14 +189,19 @@ function ResourceIcon({ directory }: { directory: boolean }) {
   );
 }
 
-export function KnowledgeResourceTree({
+export const KnowledgeResourceTree = forwardRef<
+  KnowledgeResourceTreeHandle,
+  KnowledgeResourceTreeProps
+>(function KnowledgeResourceTree({
   client,
   sources,
   workspaceKey,
   watchSource = retainKnowledgeSourceWatch,
   subscribeToChanges = subscribeKnowledgeResourceTreeChanges,
   refreshDelayMs = 120,
-}: KnowledgeResourceTreeProps) {
+  onOpenResource,
+  onSelectionChange,
+}, ref) {
   const expandedPathsBySource = useStore(
     (state) => state.knowledgeExpandedPathsBySource,
   );
@@ -154,10 +209,22 @@ export function KnowledgeResourceTree({
     (state) => state.setKnowledgeExpandedPaths,
   );
   const [directories, setDirectories] = useState<DirectoryStateMap>({});
+  const [selection, dispatchSelection] = useReducer(
+    knowledgeTreeSelectionReducer,
+    undefined,
+    createKnowledgeTreeSelectionState,
+  );
+  const [sortBySource, setSortBySource] = useState<Record<string, KnowledgeTreeSort>>({});
   const directoriesRef = useRef<DirectoryStateMap>({});
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const controllersRef = useRef(new Map<string, AbortController>());
   const requestIdsRef = useRef(new Map<string, number>());
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingLocateKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
   const workspaceKeyRef = useRef(workspaceKey);
   const sourcesRef = useRef(sources);
 
@@ -246,7 +313,10 @@ export function KnowledgeResourceTree({
       updateDirectories((state) => ({
         ...state,
         [key]: {
-          items: sortKnowledgeTreeItems(visibleItems),
+          items: sortKnowledgeTreeItems(
+            visibleItems,
+            sortBySource[source.sourceKey],
+          ),
           status: 'ready',
         },
       }));
@@ -270,7 +340,7 @@ export function KnowledgeResourceTree({
         controllersRef.current.delete(key);
       }
     }
-  }, [client, updateDirectories, workspaceKey]);
+  }, [client, sortBySource, updateDirectories, workspaceKey]);
 
   const refreshLoadedDirectories = useCallback(() => {
     const currentExpanded = useStore.getState().knowledgeExpandedPathsBySource;
@@ -295,6 +365,9 @@ export function KnowledgeResourceTree({
     requestIdsRef.current.clear();
     directoriesRef.current = {};
     setDirectories({});
+    setSortBySource({});
+    pendingLocateKeyRef.current = null;
+    dispatchSelection({ type: 'clear' });
   }, [workspaceKey]);
 
   useEffect(() => {
@@ -371,7 +444,267 @@ export function KnowledgeResourceTree({
     setExpandedPaths,
   ]);
 
-  const sourceRows = useMemo(() => sources.map((source) => {
+  const visibleNodes = useMemo(() => buildVisibleKnowledgeTreeNodes(
+    sources,
+    expandedPathsBySource,
+    directories,
+    sortBySource,
+  ), [directories, expandedPathsBySource, sortBySource, sources]);
+  const dragController = useMemo(() => new KnowledgeDragController({
+    onExpand: ({ sourceKey, directoryPath }) => {
+      const source = sourcesRef.current.find(candidate => candidate.sourceKey === sourceKey);
+      if (source) toggleDirectory(source, directoryPath);
+    },
+  }), [toggleDirectory]);
+  useEffect(() => () => dragController.dispose(), [dragController]);
+
+  useEffect(() => {
+    dispatchSelection({ type: 'replace-visible', nodes: visibleNodes });
+  }, [visibleNodes]);
+
+  useEffect(() => {
+    const key = pendingLocateKeyRef.current;
+    if (!key || !visibleNodes.some(node => node.key === key)) return;
+    pendingLocateKeyRef.current = null;
+    dispatchSelection({ type: 'select', key });
+    requestAnimationFrame(() => {
+      const row = rowRefs.current.get(key);
+      row?.scrollIntoView?.({ block: 'nearest' });
+      row?.focus();
+    });
+  }, [visibleNodes]);
+
+  useImperativeHandle(ref, () => ({
+    locateResource(target) {
+      const source = sources.find(candidate => candidate.sourceKey === target.sourceKey);
+      if (!source) return;
+      const relativePath = target.relativePath ?? '';
+      const key = knowledgeTreeNodeKey(target.sourceKey, relativePath);
+      pendingLocateKeyRef.current = key;
+
+      if (target.kind === 'source') {
+        dispatchSelection({ type: 'select', key });
+        requestAnimationFrame(() => {
+          const row = rowRefs.current.get(key);
+          row?.scrollIntoView?.({ block: 'nearest' });
+          row?.focus();
+        });
+        pendingLocateKeyRef.current = null;
+        return;
+      }
+
+      const segments = relativePath.split('/');
+      const ancestors = [''];
+      for (let index = 1; index < segments.length; index += 1) {
+        ancestors.push(segments.slice(0, index).join('/'));
+      }
+      const current = expandedPathsBySource[target.sourceKey] ?? [];
+      const next = [...current];
+      for (const ancestor of ancestors) {
+        if (!next.includes(ancestor)) next.push(ancestor);
+        void loadDirectory(source, ancestor);
+      }
+      setExpandedPaths(target.sourceKey, next);
+    },
+  }), [expandedPathsBySource, loadDirectory, setExpandedPaths, sources]);
+
+  useEffect(() => {
+    const nodeByKey = new Map(selection.visibleNodes.map(node => [node.key, node]));
+    const toAddress = (key: string | null): KnowledgeResourceAddress | null => {
+      const node = key ? nodeByKey.get(key) : undefined;
+      return node && node.relativePath
+        ? { sourceKey: node.sourceKey, relativePath: node.relativePath }
+        : null;
+    };
+    onSelectionChangeRef.current?.({
+      sourceKey: selection.sourceKey,
+      addresses: selection.selectedKeys
+        .map(toAddress)
+        .filter((address): address is KnowledgeResourceAddress => Boolean(address)),
+      contextTarget: toAddress(selection.contextTargetKey),
+    });
+  }, [selection]);
+
+  const focusRow = useCallback((key: string) => {
+    requestAnimationFrame(() => rowRefs.current.get(key)?.focus());
+  }, []);
+
+  const interact: TreeInteraction = {
+    selection,
+    registerRow: (key, element) => {
+      if (element) rowRefs.current.set(key, element);
+      else rowRefs.current.delete(key);
+    },
+    select: (key, options = {}) => {
+      dispatchSelection({ type: 'select', key, ...options });
+      focusRow(key);
+    },
+    context: (key) => {
+      dispatchSelection({ type: 'context', key });
+      focusRow(key);
+    },
+    keyDown: (event, key) => {
+      const node = selection.visibleNodes.find(candidate => candidate.key === key);
+      if (!node) return;
+      const command = event.metaKey || event.ctrlKey;
+      if (command && event.code === 'Space') {
+        event.preventDefault();
+        dispatchSelection({ type: 'toggle-focused', key });
+        return;
+      }
+      const movement = keyboardMovement(event.key);
+      if (movement) {
+        event.preventDefault();
+        const target = moveKnowledgeTreeFocus(selection, movement);
+        if (!target) return;
+        if (command) dispatchSelection({ type: 'focus', key: target });
+        else dispatchSelection({
+          type: 'select',
+          key: target,
+          range: event.shiftKey,
+        });
+        focusRow(target);
+        return;
+      }
+      const source = sources.find(candidate => candidate.sourceKey === node.sourceKey);
+      if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && source) {
+        event.preventDefault();
+        if (event.key === 'ArrowLeft') {
+          if (node.isDirectory && node.expanded) {
+            toggleDirectory(source, node.relativePath);
+            return;
+          }
+          if (node.parentKey) {
+            dispatchSelection({ type: command ? 'focus' : 'select', key: node.parentKey });
+            focusRow(node.parentKey);
+          }
+          return;
+        }
+        if (node.isDirectory && !node.expanded) {
+          toggleDirectory(source, node.relativePath);
+          return;
+        }
+        const child = selection.visibleNodes.find(candidate => candidate.parentKey === node.key);
+        if (child) {
+          dispatchSelection({ type: command ? 'focus' : 'select', key: child.key });
+          focusRow(child.key);
+        }
+        return;
+      }
+      if (event.key !== 'Enter' && event.code !== 'Space') return;
+      event.preventDefault();
+      if (node.isDirectory) {
+        if (source && event.key === 'Enter') toggleDirectory(source, node.relativePath);
+        return;
+      }
+      openTreeResource(node, event.key === 'Enter' ? 'pinned' : 'preview', event.key === 'Enter');
+    },
+    open: (key, mode, focusContent) => {
+      const node = selection.visibleNodes.find(candidate => candidate.key === key)
+        ?? visibleNodes.find(candidate => candidate.key === key);
+      if (node) openTreeResource(node, mode, focusContent);
+    },
+    toggle: (source, relativePath) => toggleDirectory(source, relativePath),
+    dragStart: (event, key) => {
+      const node = visibleNodes.find(candidate => candidate.key === key);
+      if (!node?.relativePath) return;
+      const selectedNodes = selection.selectedKeys.includes(key)
+        ? selection.selectedKeys
+          .map(selectedKey => visibleNodes.find(candidate => candidate.key === selectedKey))
+          .filter((candidate): candidate is KnowledgeTreeVisibleNode => Boolean(candidate?.relativePath))
+        : [node];
+      const addresses = selectedNodes.map(candidate => ({ sourceKey: candidate.sourceKey, relativePath: candidate.relativePath }));
+      if (addresses.some(address => address.sourceKey !== node.sourceKey)) return;
+      const payload = { kind: 'knowledge-resources' as const, sourceKey: node.sourceKey, addresses };
+      dragController.begin(payload);
+      event.dataTransfer.setData(KNOWLEDGE_DRAG_MIME, JSON.stringify(payload));
+      const editorItems = selectedNodes
+        .filter(candidate => !candidate.isDirectory)
+        .map(candidate => ({
+          sourceAddress: {
+            sourceKey: candidate.sourceKey,
+            relativePath: candidate.relativePath,
+          },
+          kind: candidate.relativePath.toLocaleLowerCase().endsWith('.md')
+            ? 'page'
+            : 'attachment',
+        }));
+      if (editorItems.length > 0) {
+        event.dataTransfer.setData(
+          KNOWLEDGE_ATTACHMENT_RESOURCE_MIME,
+          JSON.stringify(editorItems),
+        );
+      }
+      event.dataTransfer.effectAllowed = 'copyMove';
+    },
+    dragOver: (event, key) => {
+      const node = visibleNodes.find(candidate => candidate.key === key);
+      if (!node?.isDirectory) return;
+      if (!dragController.state().payload) {
+        if (event.dataTransfer.files.length > 0) {
+          dragController.begin({
+            kind: 'external-files',
+            nativeRequestId: crypto.randomUUID(),
+          });
+        }
+        let parsed = null;
+        try { parsed = parseKnowledgeDragPayload(JSON.parse(event.dataTransfer.getData(KNOWLEDGE_DRAG_MIME) || 'null')); } catch { parsed = null; }
+        if (parsed) dragController.begin(parsed);
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      dragController.hover({
+        address: { sourceKey: node.sourceKey, directoryPath: node.relativePath },
+        directory: true,
+        expanded: Boolean(node.expanded),
+      }, rect.height ? (event.clientY - rect.top) / rect.height : 0.5);
+      if (dragController.state().effect !== 'none') {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = dragController.state().effect === 'move' ? 'move' : 'copy';
+      }
+    },
+    drop: async (event, key) => {
+      event.preventDefault();
+      const node = visibleNodes.find(candidate => candidate.key === key);
+      if (!node?.isDirectory) return dragController.cancel();
+      const dropped = dragController.drop();
+      if (!dropped) return;
+      if (dropped.payload.kind === 'external-files') {
+        const files = Array.from(event.dataTransfer.files);
+        if (files.length === 0) return;
+        await invokeKnowledgeNative({
+          action: 'importDroppedFiles',
+          files,
+          target: dropped.target.address,
+          conflictPolicy: 'keep-both',
+        });
+        return;
+      }
+      await client.pasteResources({
+        intent: dropped.effect === 'move' ? 'cut' : 'copy',
+        items: dropped.payload.addresses,
+        target: dropped.target.address,
+      });
+    },
+    dragEnd: () => dragController.cancel(),
+  };
+
+  function openTreeResource(
+    node: KnowledgeTreeVisibleNode,
+    mode: 'preview' | 'pinned',
+    focusContent: boolean,
+  ) {
+    if (node.isDirectory || !node.relativePath) return;
+    const source = sources.find(candidate => candidate.sourceKey === node.sourceKey);
+    if (!source) return;
+    onOpenResource?.({
+      address: { sourceKey: node.sourceKey, relativePath: node.relativePath },
+      sourceName: source.displayName,
+      mode,
+      focusContent,
+    });
+  }
+
+  const sourceRows = sources.map((source) => {
     const expanded = (expandedPathsBySource[source.sourceKey] ?? []).includes('');
     const state = directories[directoryKey(source.sourceKey, '')];
     return (
@@ -382,27 +715,46 @@ export function KnowledgeResourceTree({
         key={source.sourceKey}
         onRetry={(relativePath) => void loadDirectory(source, relativePath, true)}
         onToggle={(relativePath) => toggleDirectory(source, relativePath)}
+        interact={interact}
+        sort={sortBySource[source.sourceKey] ?? { field: 'name', direction: 'ascending' }}
+        onSort={(sort) => setSortBySource(current => ({ ...current, [source.sourceKey]: sort }))}
         source={source}
         states={directories}
       />
     );
-  }), [
-    directories,
-    expandedPathsBySource,
-    loadDirectory,
-    sources,
-    toggleDirectory,
-  ]);
+  });
 
   if (sourceRows.length === 0) {
     return <p className={styles.emptyTree}>{tr('knowledge.tree.empty')}</p>;
   }
   return (
-    <ul className={styles.knowledgeTreeRoots} role="group">
+    <ul
+      className={styles.knowledgeTreeRoots}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          dispatchSelection({ type: 'clear-selection' });
+        }
+      }}
+      role="group"
+    >
       {sourceRows}
     </ul>
   );
-}
+});
+
+type TreeInteraction = {
+  selection: KnowledgeTreeSelectionState;
+  registerRow(key: string, element: HTMLDivElement | null): void;
+  select(key: string, options?: { additive?: boolean; range?: boolean }): void;
+  context(key: string): void;
+  keyDown(event: KeyboardEvent<HTMLDivElement>, key: string): void;
+  open(key: string, mode: 'preview' | 'pinned', focusContent: boolean): void;
+  toggle(source: KnowledgeSourceDto, relativePath: string): void;
+  dragStart(event: DragEvent<HTMLDivElement>, key: string): void;
+  dragOver(event: DragEvent<HTMLDivElement>, key: string): void;
+  drop(event: DragEvent<HTMLDivElement>, key: string): Promise<void> | void;
+  dragEnd(): void;
+};
 
 function SourceNode({
   source,
@@ -412,6 +764,9 @@ function SourceNode({
   states,
   onToggle,
   onRetry,
+  interact,
+  sort,
+  onSort,
 }: {
   source: KnowledgeSourceDto;
   expanded: boolean;
@@ -420,17 +775,39 @@ function SourceNode({
   states: DirectoryStateMap;
   onToggle(relativePath: string): void;
   onRetry(relativePath: string): void;
+  interact: TreeInteraction;
+  sort: KnowledgeTreeSort;
+  onSort(sort: KnowledgeTreeSort): void;
 }) {
   const listable = isSourceListable(source);
+  const key = knowledgeTreeNodeKey(source.sourceKey, '');
+  const selected = interact.selection.selectedKeys.includes(key);
+  const focused = interact.selection.focusKey === key
+    || (!interact.selection.focusKey && interact.selection.visibleNodes[0]?.key === key);
   return (
     <li className={styles.knowledgeTreeListItem} role="none">
       <div
         aria-disabled={!listable || undefined}
         aria-expanded={listable ? expanded : undefined}
         aria-level={1}
+        aria-selected={selected}
         className={styles.knowledgeTreeItem}
         data-source-key={source.sourceKey}
+        onDragOver={(event) => interact.dragOver(event, key)}
+        onDrop={(event) => void interact.drop(event, key)}
+        onClick={(event) => interact.select(key, {
+          additive: event.metaKey || event.ctrlKey,
+          range: event.shiftKey,
+        })}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          interact.context(key);
+        }}
+        onDoubleClick={() => listable && onToggle('')}
+        onKeyDown={(event) => interact.keyDown(event, key)}
+        ref={(element) => interact.registerRow(key, element)}
         role="treeitem"
+        tabIndex={focused ? 0 : -1}
       >
         {listable ? (
           <button
@@ -439,7 +816,10 @@ function SourceNode({
               { name: source.displayName },
             )}
             className={styles.treeDisclosureButton}
-            onClick={() => onToggle('')}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle('');
+            }}
             type="button"
           >
             <DisclosureIcon expanded={expanded} />
@@ -451,6 +831,20 @@ function SourceNode({
           <ResourceIcon directory />
         </span>
         <span className={styles.knowledgeTreeName}>{source.displayName}</span>
+        <select
+          aria-label={tr('knowledge.tree.sort', { name: source.displayName })}
+          className={styles.knowledgeTreeSort}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onSort(parseTreeSort(event.target.value))}
+          value={`${sort.field}:${sort.direction}`}
+        >
+          <option value="name:ascending">{tr('knowledge.tree.sortNameAscending')}</option>
+          <option value="name:descending">{tr('knowledge.tree.sortNameDescending')}</option>
+          <option value="modified:ascending">{tr('knowledge.tree.sortModifiedAscending')}</option>
+          <option value="modified:descending">{tr('knowledge.tree.sortModifiedDescending')}</option>
+          <option value="extension:ascending">{tr('knowledge.tree.sortExtensionAscending')}</option>
+          <option value="extension:descending">{tr('knowledge.tree.sortExtensionDescending')}</option>
+        </select>
       </div>
       {!listable && (
         <p className={styles.treeInlineStatus} role="status">
@@ -465,6 +859,8 @@ function SourceNode({
           level={2}
           onRetry={onRetry}
           onToggle={onToggle}
+          interact={interact}
+          sort={sort}
           parentPath=""
           source={source}
           states={states}
@@ -484,6 +880,8 @@ function DirectoryGroup({
   states,
   onToggle,
   onRetry,
+  interact,
+  sort,
 }: {
   source: KnowledgeSourceDto;
   parentPath: string;
@@ -494,8 +892,10 @@ function DirectoryGroup({
   states: DirectoryStateMap;
   onToggle(relativePath: string): void;
   onRetry(relativePath: string): void;
+  interact: TreeInteraction;
+  sort: KnowledgeTreeSort;
 }) {
-  const items = directoryState?.items ?? [];
+  const items = sortKnowledgeTreeItems(directoryState?.items ?? [], sort);
   return (
     <ul
       aria-label={directoryName}
@@ -506,18 +906,46 @@ function DirectoryGroup({
         const relativePath = joinRelativePath(parentPath, item.name);
         const expanded = item.isDirectory && expandedPaths.includes(relativePath);
         const childState = states[directoryKey(source.sourceKey, relativePath)];
+        const key = knowledgeTreeNodeKey(source.sourceKey, relativePath);
+        const selected = interact.selection.selectedKeys.includes(key);
+        const focused = interact.selection.focusKey === key;
         return (
           <li className={styles.knowledgeTreeListItem} key={relativePath} role="none">
             <div
               aria-expanded={item.isDirectory ? expanded : undefined}
               aria-level={level}
+              aria-posinset={items.indexOf(item) + 1}
+              aria-selected={selected}
+              aria-setsize={items.length}
               className={styles.knowledgeTreeItem}
               data-resource-name={item.name}
               data-resource-path={relativePath}
               data-source-key={source.sourceKey}
+              draggable
+              onDragStart={(event) => interact.dragStart(event, key)}
+              onDragEnd={() => interact.dragEnd()}
+              onDragOver={(event) => interact.dragOver(event, key)}
+              onDrop={(event) => void interact.drop(event, key)}
+              onClick={(event) => {
+                interact.select(key, {
+                  additive: event.metaKey || event.ctrlKey,
+                  range: event.shiftKey,
+                });
+                if (!item.isDirectory) interact.open(key, 'preview', false);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                interact.context(key);
+              }}
+              onDoubleClick={() => {
+                if (item.isDirectory) interact.toggle(source, relativePath);
+                else interact.open(key, 'pinned', true);
+              }}
+              onKeyDown={(event) => interact.keyDown(event, key)}
+              ref={(element) => interact.registerRow(key, element)}
               role="treeitem"
               style={{ '--knowledge-tree-level': level } as CSSProperties}
-              tabIndex={-1}
+              tabIndex={focused ? 0 : -1}
               title={item.name}
             >
               {item.isDirectory ? (
@@ -527,7 +955,10 @@ function DirectoryGroup({
                     { name: item.name },
                   )}
                   className={styles.treeDisclosureButton}
-                  onClick={() => onToggle(relativePath)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggle(relativePath);
+                  }}
                   type="button"
                 >
                   <DisclosureIcon expanded={expanded} />
@@ -548,6 +979,8 @@ function DirectoryGroup({
                 level={level + 1}
                 onRetry={onRetry}
                 onToggle={onToggle}
+                interact={interact}
+                sort={sort}
                 parentPath={relativePath}
                 source={source}
                 states={states}
@@ -580,4 +1013,92 @@ function DirectoryGroup({
       )}
     </ul>
   );
+}
+
+function buildVisibleKnowledgeTreeNodes(
+  sources: readonly KnowledgeSourceDto[],
+  expandedPathsBySource: Record<string, string[]>,
+  directories: DirectoryStateMap,
+  sortBySource: Record<string, KnowledgeTreeSort>,
+): KnowledgeTreeVisibleNode[] {
+  const visible: KnowledgeTreeVisibleNode[] = [];
+  for (const source of sources) {
+    const expandedPaths = expandedPathsBySource[source.sourceKey] ?? [];
+    const rootKey = knowledgeTreeNodeKey(source.sourceKey, '');
+    visible.push({
+      key: rootKey,
+      sourceKey: source.sourceKey,
+      relativePath: '',
+      parentKey: null,
+      isDirectory: true,
+      expanded: expandedPaths.includes(''),
+    });
+    if (!expandedPaths.includes('')) continue;
+    appendDirectory('', rootKey);
+
+    function appendDirectory(parentPath: string, parentKey: string) {
+      const state = directories[directoryKey(source.sourceKey, parentPath)];
+      const items = sortKnowledgeTreeItems(
+        state?.items ?? [],
+        sortBySource[source.sourceKey],
+      );
+      for (const item of items) {
+        const relativePath = joinRelativePath(parentPath, item.name);
+        const key = knowledgeTreeNodeKey(source.sourceKey, relativePath);
+        const expanded = item.isDirectory && expandedPaths.includes(relativePath);
+        visible.push({
+          key,
+          sourceKey: source.sourceKey,
+          relativePath,
+          parentKey,
+          isDirectory: item.isDirectory,
+          expanded,
+        });
+        if (expanded) appendDirectory(relativePath, key);
+      }
+    }
+  }
+  return visible;
+}
+
+function keyboardMovement(
+  key: string,
+): Parameters<typeof moveKnowledgeTreeFocus>[1] | null {
+  switch (key) {
+    case 'ArrowUp':
+      return 'previous';
+    case 'ArrowDown':
+      return 'next';
+    case 'Home':
+      return 'first';
+    case 'End':
+      return 'last';
+    case 'PageUp':
+      return 'page-up';
+    case 'PageDown':
+      return 'page-down';
+    default:
+      return null;
+  }
+}
+
+function fileExtension(name: string): string {
+  const lastDot = name.lastIndexOf('.');
+  return lastDot > 0 && lastDot < name.length - 1
+    ? name.slice(lastDot + 1)
+    : '';
+}
+
+function parseTreeSort(value: string): KnowledgeTreeSort {
+  const [field, direction] = value.split(':');
+  if (
+    !['name', 'modified', 'extension'].includes(field)
+    || !['ascending', 'descending'].includes(direction)
+  ) {
+    return { field: 'name', direction: 'ascending' };
+  }
+  return {
+    field: field as KnowledgeTreeSort['field'],
+    direction: direction as KnowledgeTreeSort['direction'],
+  };
 }

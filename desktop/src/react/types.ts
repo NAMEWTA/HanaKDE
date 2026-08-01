@@ -1,4 +1,5 @@
 import type { ThinkingLevel } from './stores/model-slice';
+import type { KnowledgeNativeCapabilities, KnowledgeNativeRequest, KnowledgeNativeResult } from '../../../shared/knowledge-native-contract';
 
 // ── Auto-update ──
 
@@ -522,6 +523,8 @@ export interface BrowserViewerOpenTarget {
 export interface PlatformApi {
   getServerPort(): Promise<string>;
   getServerToken(): Promise<string>;
+  knowledgeNativeCapabilities?(): Promise<KnowledgeNativeCapabilities>;
+  knowledgeNativeInvoke?(request: KnowledgeNativeRequest): Promise<KnowledgeNativeResult>;
   runEditCommand?(command: 'cut' | 'copy' | 'paste' | 'selectAll'): Promise<boolean>;
   openSettings(tab?: string): void;
   openBrowserViewer(target?: string | BrowserViewerOpenTarget): void;

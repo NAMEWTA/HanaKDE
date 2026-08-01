@@ -252,6 +252,36 @@ describe("knowledge index rebuild", () => {
     expect(JSON.stringify(health)).not.toMatch(/SQLITE_/);
   });
 
+  it("rejects a source symlink that resolves outside the source before publishing its body", async (context) => {
+    const fixture = createFixture("symlink-scope");
+    fs.writeFileSync(path.join(fixture.workspace, "stable.md"), "# Stable\ninside");
+    await fixture.events.rebuild("main");
+    const generationId = readyGeneration(fixture.index.health("main"));
+    const outside = path.join(fixture.root, "outside.md");
+    fs.writeFileSync(outside, "# Outside Secret\nleak-token");
+    try {
+      fs.symlinkSync(outside, path.join(fixture.workspace, "leak.md"), "file");
+    } catch (error) {
+      if (["EPERM", "EACCES"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )) {
+        context.skip();
+        return;
+      }
+      throw error;
+    }
+
+    await expect(fixture.events.rebuild("main")).rejects.toMatchObject({
+      code: "knowledge_resource_out_of_scope",
+    });
+    const lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect()).toMatchObject({
+      generationId,
+      resourceCount: 1,
+    });
+    lease.release();
+  });
+
   function createFixture(label: string) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), `hana-index-${label}-`));
     cleanup.add(root);
@@ -267,6 +297,20 @@ describe("knowledge index rebuild", () => {
     const reader = new ResourceIOKnowledgeIndexSourceReader({
       resourceIO,
       root: { kind: "local-file", path: workspace },
+      resolveAddress(relativePath) {
+        const rootPath = realOrResolved(workspace);
+        const candidatePath = realOrResolved(path.join(
+          workspace,
+          ...relativePath.split("/"),
+        ));
+        if (!isInside(rootPath, candidatePath)) {
+          throw Object.assign(new Error("knowledge source path escaped"), {
+            code: "knowledge_resource_out_of_scope",
+          });
+        }
+        return { kind: "local-file", path: candidatePath };
+      },
+      revalidate() {},
       now: () => 1_000,
     });
     const identities = new Map<string, ProviderRootIdentity>([
@@ -335,6 +379,34 @@ function identity(
     scopeToken,
     caseMode: "sensitive",
   };
+}
+
+function realOrResolved(filePath: string): string {
+  try {
+    return path.normalize(fs.realpathSync(filePath));
+  } catch {
+    const suffix: string[] = [];
+    let current = path.resolve(filePath);
+    while (true) {
+      try {
+        return path.join(
+          path.normalize(fs.realpathSync(current)),
+          ...suffix.reverse(),
+        );
+      } catch {
+        const parent = path.dirname(current);
+        if (parent === current) return path.resolve(filePath);
+        suffix.push(path.basename(current));
+        current = parent;
+      }
+    }
+  }
+}
+
+function isInside(rootPath: string, candidatePath: string): boolean {
+  const relative = path.relative(rootPath, candidatePath);
+  return relative === ""
+    || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function readyGeneration(

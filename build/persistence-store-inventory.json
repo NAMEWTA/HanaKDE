@@ -2900,7 +2900,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 357,
+      "line": 372,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(this.channelsDir, { recursive: true })",
       "reason": "Creates the channel root.",
@@ -2909,7 +2909,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 403,
+      "line": 418,
       "kind": "persistent-store-constructor",
       "excerpt": "new PreferencesManager({ userDir: this.userDir, agentsDir: this.agentsDir })",
       "reason": "Constructs the preferences owner.",
@@ -2918,7 +2918,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 404,
+      "line": 419,
       "kind": "persistent-store-constructor",
       "excerpt": "new InputDraftsStore({ hanakoHome: this.hanakoHome })",
       "reason": "Constructs draft/project stores.",
@@ -2927,7 +2927,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 422,
+      "line": 437,
       "kind": "persistent-store-constructor",
       "excerpt": "new SessionProjectCatalogStore({ userDir: this.userDir })",
       "reason": "Constructs draft/project stores.",
@@ -2936,7 +2936,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 655,
+      "line": 670,
       "kind": "persistent-store-constructor",
       "excerpt": "new TaskRegistry({ persistencePath: path.join(this.hanakoHome, \".ephemeral\", \"plugin-tasks.json\"), getSessionIdForPath: (sessionPath) => this.getSessionIdForPath(sessionPath), })",
       "reason": "Constructs the plugin task registry.",
@@ -2945,7 +2945,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 1332,
+      "line": 1411,
       "kind": "persistent-store-constructor",
       "excerpt": "new SessionManifestStore({ dbPath })",
       "reason": "Constructs the manifest store during engine construction.",
@@ -2954,7 +2954,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 1353,
+      "line": 1432,
       "kind": "persistent-store-constructor",
       "excerpt": "new SessionManifestStore({ dbPath })",
       "reason": "Constructs the manifest store during engine construction.",
@@ -2963,7 +2963,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 2297,
+      "line": 2376,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(skillsDir, { recursive: true })",
       "reason": "Creates the user skill root.",
@@ -2972,7 +2972,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 2479,
+      "line": 2558,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(filePath)",
       "reason": "Deletes an expired legacy ephemeral session JSONL locator.",
@@ -2981,7 +2981,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 2533,
+      "line": 2616,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(pluginDevSourcesDir, { recursive: true })",
       "reason": "Creates the plugin development source root.",
@@ -3395,7 +3395,7 @@
     },
     {
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
-      "line": 590,
+      "line": 608,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
@@ -3404,7 +3404,7 @@
     },
     {
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
-      "line": 591,
+      "line": 609,
       "kind": "atomic-write",
       "excerpt": "atomicWriteSync(filePath, `${JSON.stringify(data, null, 2)}\\n`)",
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
@@ -5384,7 +5384,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1222,
+      "line": 1230,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5393,7 +5393,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1226,
+      "line": 1234,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5402,7 +5402,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1741,
+      "line": 1749,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5411,7 +5411,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2233,
+      "line": 2238,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(hanakoHome, { recursive: true })",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5420,7 +5420,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2234,
+      "line": 2239,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(crashLogPath, content, \"utf-8\")",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5429,7 +5429,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2295,
+      "line": 2300,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(lastSeenVersionPath), { recursive: true })",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5438,7 +5438,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2296,
+      "line": 2301,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(lastSeenVersionPath, JSON.stringify({ version }))",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5447,7 +5447,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2364,
+      "line": 2369,
       "kind": "write-file",
       "excerpt": "fs.promises.writeFile(windowStatePath, JSON.stringify(state, null, 2) + \"\\n\")",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5456,7 +5456,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2463,
+      "line": 2468,
       "kind": "mkdir",
       "excerpt": "fs.promises.mkdir(path.dirname(quickChatWindowStatePath), { recursive: true })",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5465,7 +5465,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2464,
+      "line": 2469,
       "kind": "write-file",
       "excerpt": "fs.promises.writeFile(quickChatWindowStatePath, JSON.stringify(state, null, 2) + \"\\n\")",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5474,7 +5474,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4217,
+      "line": 4222,
       "kind": "append-file",
       "excerpt": "require(\"fs\").appendFileSync(require(\"path\").join(hanakoHome, \"browser-cmd.log\"), `${new Date().toISOString()} ${redactMainLogText(line)}\\n`)",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5483,7 +5483,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4784,
+      "line": 4789,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(tmpHtml, htmlContent, \"utf-8\")",
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
@@ -5492,7 +5492,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4838,
+      "line": 4843,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(tmpHtml)",
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
@@ -5501,7 +5501,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5403,
+      "line": 5604,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(tmpDir, { recursive: true })",
       "reason": "Creates a request-scoped skill preview directory under Electron's operating-system temp path.",
@@ -5510,7 +5510,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5549,
+      "line": 5750,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content, \"utf-8\")",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5519,7 +5519,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5571,
+      "line": 5772,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(resolved), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5528,7 +5528,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5572,
+      "line": 5773,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(resolved, Buffer.from(base64Data, \"base64\"))",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5537,7 +5537,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5583,
+      "line": 5784,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(destinationPath), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5546,7 +5546,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5584,
+      "line": 5785,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, destinationPath)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5555,7 +5555,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5617,
+      "line": 5818,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(dir, { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5564,7 +5564,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5618,
+      "line": 5819,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, pngBuffer)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5573,7 +5573,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 6142,
+      "line": 6345,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(path.join(hanakoHome, \"server-info.json\"))",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -7220,7 +7220,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 214,
+      "line": 273,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7229,7 +7229,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 215,
+      "line": 274,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7238,7 +7238,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 234,
+      "line": 293,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7247,7 +7247,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 236,
+      "line": 295,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content, { flag: \"wx\" })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7256,7 +7256,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 278,
+      "line": 337,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, text, \"utf-8\")",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7265,7 +7265,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 292,
+      "line": 351,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(filePath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7274,7 +7274,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 304,
+      "line": 363,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(filePath, { recursive: true, force: false })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7283,7 +7283,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 321,
+      "line": 380,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7292,7 +7292,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 324,
+      "line": 383,
       "kind": "copy-file",
       "excerpt": "fs.cpSync(sourcePath, targetPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7301,7 +7301,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 326,
+      "line": 385,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7310,7 +7310,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 359,
+      "line": 418,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7319,7 +7319,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 360,
+      "line": 419,
       "kind": "rename",
       "excerpt": "fs.renameSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7328,7 +7328,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 377,
+      "line": 436,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(trashPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7337,7 +7337,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 379,
+      "line": 438,
       "kind": "rename",
       "excerpt": "fs.renameSync(filePath, payloadPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7346,7 +7346,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 380,
+      "line": 439,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(path.join(trashPath, \"metadata.json\"), JSON.stringify({ schemaVersion: 1, trashId, originalPath: filePath, originalName: path.basename(filePath), deletedAt: new Date().toISOString(), ...(options.metadata && typeof options.m",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7355,7 +7355,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 524,
+      "line": 583,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(entryPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7364,7 +7364,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1110,
+      "line": 1315,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7373,7 +7373,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1111,
+      "line": 1316,
       "kind": "write-file",
       "excerpt": "fs.promises.open(filePath, \"wx\", 0o600)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7382,7 +7382,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1144,
+      "line": 1349,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7391,7 +7391,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1175,
+      "line": 1380,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(stagingPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7400,7 +7400,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1189,
+      "line": 1394,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7409,7 +7409,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1211,
+      "line": 1416,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7418,7 +7418,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1297,
+      "line": 1502,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(path.join(originalDirectoryPath, stagingName), { recursive: true, force: true, })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7427,7 +7427,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1312,
+      "line": 1517,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(path.join(movedDirectory, stagingName), { recursive: true, force: true, })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -8399,7 +8399,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 479,
+      "line": 482,
       "kind": "persistent-store-constructor",
       "excerpt": "new DeferredResultStore( hub.eventBus, path.join(hanakoHome, \".ephemeral\", \"deferred-tasks.json\"), { getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null }, )",
       "reason": "Constructs the deferred result store.",
@@ -8408,7 +8408,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 682,
+      "line": 685,
       "kind": "persistent-store-constructor",
       "excerpt": "new ConfirmStore({ getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null, })",
       "reason": "ConfirmStore is deliberately process-memory-only: pending approvals time out or abort with their session and have no restart replay contract.",
@@ -8417,7 +8417,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 687,
+      "line": 690,
       "kind": "persistent-store-constructor",
       "excerpt": "new SubagentRunStore( path.join(hanakoHome, \"subagent-runs.json\"), { getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null }, )",
       "reason": "Constructs subagent stores.",
@@ -8426,7 +8426,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 693,
+      "line": 696,
       "kind": "persistent-store-constructor",
       "excerpt": "new SubagentThreadStore( path.join(hanakoHome, \"subagent-threads.json\"), { getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null }, )",
       "reason": "Constructs subagent stores.",
@@ -8435,7 +8435,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 704,
+      "line": 707,
       "kind": "persistent-store-constructor",
       "excerpt": "new WorkflowActivityStore( path.join(hanakoHome, \"workflow-activity.json\"), )",
       "reason": "Constructs the workflow activity store.",
@@ -8444,7 +8444,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 1122,
+      "line": 1126,
       "kind": "append-file",
       "excerpt": "fs.promises.appendFile(_bwsLogPath, chunk)",
       "reason": "Appends the browser worker log.",
@@ -8453,7 +8453,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 1181,
+      "line": 1185,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(serverInfoPath, JSON.stringify({ pid: process.pid, port: actualPort, host, configuredHost: serverRuntimeState.listenHost, networkMode: serverRuntimeState.mode, configuredMode: serverRuntimeState.configuredMode, configuredLi",
       "reason": "Writes or deletes live server discovery state.",
@@ -8462,7 +8462,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 1282,
+      "line": 1287,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(path.join(hanakoHome, \"server-info.json\"))",
       "reason": "Writes or deletes live server discovery state.",

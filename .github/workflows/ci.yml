@@ -5,13 +5,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: ["24.15.0"]
 
     steps:
@@ -84,6 +85,58 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  knowledge-workspace-e2e:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        project: [desktop-full, web-open, web-full]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 24.15.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium and Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Chromium
+        if: runner.os != 'Linux'
+        run: npx playwright install chromium
+
+      - name: Build desktop test artifacts
+        run: npm run build:preload && npm run build:renderer
+
+      - name: Run Knowledge Workspace project/platform gate
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ] && [ "${{ matrix.project }}" = "desktop-full" ]; then
+            xvfb-run --auto-servernum npx playwright test \
+              -c tests/knowledge-workspace-e2e/playwright.config.ts \
+              --project=${{ matrix.project }}
+          else
+            npx playwright test \
+              -c tests/knowledge-workspace-e2e/playwright.config.ts \
+              --project=${{ matrix.project }}
+          fi
+
+      - name: Upload Knowledge Workspace E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: knowledge-e2e-${{ matrix.os }}-${{ matrix.project }}
+          path: tests/knowledge-workspace-e2e/artifacts
+          if-no-files-found: ignore
 
   # 独立于上面 test 矩阵：只跑边界 lint 脚本本身，给"开/闭边界回归"一个比
   # 全量矩阵（typecheck/lint/build/test 跑完才轮到 npm test 里的边界用例）

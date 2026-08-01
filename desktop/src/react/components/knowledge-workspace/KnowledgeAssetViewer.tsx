@@ -357,6 +357,8 @@ export function KnowledgeAssetViewer({
     <section
       aria-label={tr("knowledge.asset.label")}
       className={styles.assetViewer}
+      data-knowledge-asset-error={state.status === "error" ? state.code : undefined}
+      data-knowledge-asset-status={state.status}
       data-knowledge-asset-viewer=""
       role="region"
       tabIndex={0}

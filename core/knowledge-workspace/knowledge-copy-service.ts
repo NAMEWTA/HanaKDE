@@ -15,6 +15,7 @@ import {
 } from "../../lib/knowledge-workspace/knowledge-operation-plan.ts";
 import type {
   ResourceMutationResult,
+  ResourceMoveResult,
   ResourceOperationContext,
   ResourceRef,
   ResourceStat,
@@ -91,10 +92,30 @@ export type KnowledgeCopyContext = ResourceOperationContext & {
   signal?: AbortSignal;
 };
 
+export type KnowledgeInternalPasteRequest = Readonly<{
+  intent: "copy" | "cut";
+  items: readonly KnowledgeResourceAddress[];
+  target: Readonly<{ sourceKey: string; directoryPath: string }>;
+}>;
+
+export type KnowledgeInternalPasteItemResult =
+  | Readonly<{
+    ok: true;
+    sourceAddress: KnowledgeResourceAddress;
+    targetAddress: KnowledgeResourceAddress;
+    effect: "copy" | "move";
+  }>
+  | Readonly<{
+    ok: false;
+    sourceAddress: KnowledgeResourceAddress;
+    errorCode: KnowledgeErrorCode;
+  }>;
+
 type SourceRegistrySurface = {
   get(sourceKey: string): KnowledgeSourceDto | null;
   revalidate(sourceKey: string): Promise<void>;
   resolveAddress(address: KnowledgeResourceAddress): Promise<ResourceRef>;
+  rootRef?(sourceKey: string): ResourceRef;
 };
 
 type ResourceIoSurface = {
@@ -112,6 +133,14 @@ type ResourceIoSurface = {
     request: ResourceTransferRequest,
     context?: ResourceOperationContext,
   ): Promise<ResourceTransferResult>;
+  move?(
+    from: ResourceRef,
+    to: ResourceRef,
+    context?: ResourceOperationContext & {
+      expectedSourceVersion?: ResourceStat["version"];
+      expectedTargetVersion?: null;
+    },
+  ): Promise<ResourceMoveResult>;
 };
 
 export class KnowledgeCopyService {
@@ -356,6 +385,118 @@ export class KnowledgeCopyService {
     return results;
   }
 
+  async pasteResources(
+    input: KnowledgeInternalPasteRequest,
+    context: KnowledgeCopyContext = {},
+  ): Promise<KnowledgeInternalPasteItemResult[]> {
+    throwIfAborted(context.signal);
+    const request = validateInternalPasteRequest(input);
+    const sourceKey = request.items[0].sourceKey;
+    if (request.intent === "cut" && sourceKey !== request.target.sourceKey) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "cross-source cut must be converted to copy explicitly",
+      );
+    }
+    await this.#requireSource(sourceKey, ["stat", "read"]);
+    const target = await this.#requireSource(
+      request.target.sourceKey,
+      request.intent === "cut" ? ["stat", "move"] : ["stat", "transfer"],
+    );
+    if (request.intent === "cut" && typeof this.#resourceIO.move !== "function") {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_unavailable",
+        "knowledge move is unavailable",
+      );
+    }
+    const targetDirectoryRef = request.target.directoryPath
+      ? await this.#sourceRegistry.resolveAddress({
+          sourceKey: target.sourceKey,
+          relativePath: request.target.directoryPath,
+        })
+      : this.#sourceRegistry.rootRef?.(target.sourceKey);
+    if (!targetDirectoryRef) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_unavailable",
+        "knowledge source root is unavailable",
+      );
+    }
+    const results: KnowledgeInternalPasteItemResult[] = [];
+    for (const sourceAddress of request.items) {
+      throwIfAborted(context.signal);
+      try {
+        const sourceRef = await this.#sourceRegistry.resolveAddress(sourceAddress);
+        const sourceStat = await this.#resourceIO.stat(sourceRef, context);
+        if (!sourceStat.exists) throw createKnowledgeWorkspaceError(
+          "knowledge_resource_not_found",
+          "knowledge copy source does not exist",
+        );
+        const targetAddress = await this.#allocatePasteAddress(
+          target.sourceKey,
+          request.target.directoryPath,
+          basename(sourceAddress.relativePath),
+          sourceStat.isDirectory,
+          context,
+        );
+        const targetRef = await this.#sourceRegistry.resolveAddress(targetAddress);
+        if (request.intent === "cut") {
+          await this.#resourceIO.move!(sourceRef, targetRef, {
+            ...context,
+            expectedSourceVersion: sourceStat.version,
+            expectedTargetVersion: null,
+            operationId: context.operationId ?? this.#randomUUID(),
+          });
+        } else {
+          await this.#resourceIO.transfer({
+            source: sourceRef,
+            targetDirectory: targetDirectoryRef,
+            targetName: basename(targetAddress.relativePath),
+            expectedTargetVersion: null,
+            operationId: this.#randomUUID(),
+            signal: context.signal,
+          }, context);
+        }
+        results.push(Object.freeze({
+          ok: true,
+          sourceAddress: Object.freeze({ ...sourceAddress }),
+          targetAddress: Object.freeze(targetAddress),
+          effect: request.intent === "cut" ? "move" : "copy",
+        }));
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        results.push(Object.freeze({
+          ok: false,
+          sourceAddress: Object.freeze({ ...sourceAddress }),
+          errorCode: normalizeKnowledgeErrorCode(ownErrorCode(error))
+            ?? "knowledge_resource_unavailable",
+        }));
+      }
+    }
+    return results;
+  }
+
+  async #allocatePasteAddress(
+    sourceKey: string,
+    directoryPath: string,
+    originalName: string,
+    directory: boolean,
+    context: KnowledgeCopyContext,
+  ): Promise<KnowledgeResourceAddress> {
+    for (let index = 1; index <= MAX_KEEP_BOTH_ATTEMPTS; index += 1) {
+      const name = pasteKeepBothName(originalName, index, directory);
+      const address = {
+        sourceKey,
+        relativePath: joinPath(directoryPath, name),
+      };
+      const ref = await this.#sourceRegistry.resolveAddress(address);
+      if (!(await this.#resourceIO.stat(ref, context)).exists) return address;
+    }
+    throw createKnowledgeWorkspaceError(
+      "knowledge_resource_conflict",
+      "knowledge paste target names are exhausted",
+    );
+  }
+
   async #requireSource(
     sourceKey: string,
     capabilities: readonly KnowledgeSourceCapability[],
@@ -419,6 +560,65 @@ export class KnowledgeCopyService {
       );
     }
   }
+}
+
+function validateInternalPasteRequest(
+  input: KnowledgeInternalPasteRequest,
+): KnowledgeInternalPasteRequest {
+  if (
+    !input
+    || !["copy", "cut"].includes(input.intent)
+    || !Array.isArray(input.items)
+    || input.items.length === 0
+    || !input.target
+    || typeof input.target.directoryPath !== "string"
+    || (
+      input.target.directoryPath !== ""
+      && parseKnowledgeResourceAddress({
+        sourceKey: input.target.sourceKey,
+        relativePath: input.target.directoryPath,
+      }).ok === false
+    )
+  ) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge paste request is invalid",
+    );
+  }
+  const parsedItems = input.items.map(item => {
+    const parsed = parseKnowledgeResourceAddress(item);
+    if (parsed.ok === false) throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge paste source address is invalid",
+    );
+    return parsed.value;
+  });
+  const sourceKey = parsedItems[0].sourceKey;
+  if (parsedItems.some(item => item.sourceKey !== sourceKey)) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge paste selection must belong to one source",
+    );
+  }
+  const normalized = parsedItems.filter((item, index) => !parsedItems.some((ancestor, candidate) => (
+    candidate !== index
+    && ancestor.relativePath !== item.relativePath
+    && item.relativePath.startsWith(`${ancestor.relativePath}/`)
+  )));
+  return Object.freeze({
+    intent: input.intent,
+    items: Object.freeze(normalized.map(item => Object.freeze(item))),
+    target: Object.freeze({ ...input.target }),
+  });
+}
+
+function pasteKeepBothName(name: string, index: number, directory: boolean): string {
+  if (index === 1) return name;
+  if (directory) return `${name}_${index}`;
+  const dot = name.lastIndexOf(".");
+  return dot > 0
+    ? `${name.slice(0, dot)}_${index}${name.slice(dot)}`
+    : `${name}_${index}`;
 }
 
 const MIME_EXTENSIONS: Readonly<Record<string, string>> = Object.freeze({

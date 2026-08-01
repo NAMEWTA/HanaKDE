@@ -167,6 +167,32 @@ describe('KnowledgeResourceTree', () => {
     ]);
   });
 
+  it('publishes selected files in both tree-operation and editor-attachment drag formats', async () => {
+    const list = vi.fn(async () => listResult([
+      { name: 'Page.md', isDirectory: false },
+      { name: 'photo.png', isDirectory: false },
+    ]));
+    renderTree({ client: treeClient(list), sources: [mainSource] });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+    const page = await screen.findByRole('treeitem', { name: /Page\.md/u });
+    const values = new Map<string, string>();
+
+    fireEvent.dragStart(page, {
+      dataTransfer: {
+        setData: (type: string, value: string) => values.set(type, value),
+        effectAllowed: 'none',
+      },
+    });
+
+    expect(JSON.parse(values.get('application/x-openhanako-knowledge-resources+json') ?? 'null'))
+      .toMatchObject({ sourceKey: 'main', addresses: [{ relativePath: 'Page.md' }] });
+    expect(JSON.parse(values.get('application/x-hanako-knowledge-editor-resources+json') ?? 'null'))
+      .toEqual([{
+        sourceAddress: { sourceKey: 'main', relativePath: 'Page.md' },
+        kind: 'page',
+      }]);
+  });
+
   it('aborts a pending branch when it is collapsed and ignores the stale result', async () => {
     let resolveList: ((value: RendererResourceListResult) => void) | undefined;
     let signal: AbortSignal | undefined;

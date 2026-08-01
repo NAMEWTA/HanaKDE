@@ -4,13 +4,17 @@ import path from "path";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { upsertStudioMount } from "../core/studio-mounts.ts";
+import { HanaEngine } from "../core/engine.ts";
 import { normalizePrincipal } from "../core/security-principal.ts";
+import { createSandboxResourceIO } from "../lib/resource-io/sandbox-resource-io.ts";
+import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
 import { ResourceIO } from "../lib/resource-io/resource-io.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import {
   createKnowledgeWorkspaceRoute,
 } from "../server/routes/knowledge-workspace.ts";
+import { SourceRegistry } from "../core/knowledge-workspace/source-registry.ts";
 import { createResourceIoRoute } from "../server/routes/resource-io.ts";
 
 describe("knowledge workspace source route", () => {
@@ -95,6 +99,150 @@ describe("knowledge workspace source route", () => {
       ok: true,
       sourceKey: "research",
     });
+  });
+
+  it("rebuilds one source through the Engine public index facade", async () => {
+    const { engine } = setup();
+    const bindKnowledgeIndexWorkspace = vi.fn(async () => ({}));
+    const rebuildKnowledgeIndex = vi.fn(async () => ({
+      state: "ready" as const,
+      generationId: "route-generation",
+      sequence: 4,
+    }));
+    Object.assign(engine, {
+      bindKnowledgeIndexWorkspace,
+      rebuildKnowledgeIndex,
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const response = await app.request(
+      "/api/knowledge-workspace/index/main/rebuild",
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      sourceKey: "main",
+      health: {
+        state: "ready",
+        generationId: "route-generation",
+        sequence: 4,
+      },
+    });
+    expect(bindKnowledgeIndexWorkspace).toHaveBeenCalledWith(
+      expect.any(SourceRegistry),
+    );
+    expect(rebuildKnowledgeIndex).toHaveBeenCalledWith(
+      "main",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("maps an internal rebuild failure to a retryable sanitized index error", async () => {
+    const { engine } = setup();
+    Object.assign(engine, {
+      bindKnowledgeIndexWorkspace: vi.fn(async () => ({})),
+      rebuildKnowledgeIndex: vi.fn(async () => {
+        throw Object.assign(new Error("SQLITE_CANTOPEN /private/index.sqlite"), {
+          code: "SQLITE_CANTOPEN",
+        });
+      }),
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const response = await app.request(
+      "/api/knowledge-workspace/index/main/rebuild",
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      code: "knowledge_index_unavailable",
+      httpStatus: 503,
+      retryable: true,
+    });
+  });
+
+  it("keeps a newly mounted source bound across sequential main and source rebuilds", async () => {
+    const { main, research } = setup();
+    if (!tempRoot) throw new Error("test root unavailable");
+    fs.writeFileSync(path.join(main, "Main.md"), "# Main", "utf8");
+    fs.writeFileSync(path.join(research, "Research.md"), "# Research", "utf8");
+    const hanakoHome = path.join(tempRoot, "hana");
+    const eventBus = new ResourceEventBus({ emit: () => {} });
+    const resourceIO = createSandboxResourceIO({
+      cwd: main,
+      agentDir: main,
+      workspace: main,
+      workspaceFolders: [main],
+      authorizedFolders: [main, research],
+      hanakoHome,
+      getSandboxEnabled: () => false,
+      eventBus,
+      studioId: "studio_1",
+    });
+    const watchRegistry = new ResourceWatchRegistry({
+      eventBus,
+      resolveWatchTarget: (resource) => resourceIO.resolveWatchTarget(resource),
+    });
+    const engine = Object.create(HanaEngine.prototype) as HanaEngine;
+    Object.assign(engine, {
+      hanakoHome,
+      _knowledgeIndexRuntime: null,
+      _resourceEventBus: eventBus,
+      _resourceIO: resourceIO,
+      _resourceWatchRegistry: watchRegistry,
+      _runtimeContext: {
+        serverId: "server_1",
+        serverNodeId: "node_1",
+        userId: "user_1",
+        studioId: "studio_1",
+        connectionKind: "local",
+        credentialKind: "loopback_token",
+      },
+    });
+    Object.defineProperties(engine, {
+      currentSessionPath: { configurable: true, value: null },
+      defaultDeskCwd: { configurable: true, value: main },
+      homeCwd: { configurable: true, value: main },
+      deskCwd: { configurable: true, value: main },
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const registered = await app.request("/api/knowledge-workspace/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceKey: "research",
+        displayName: "Research",
+        mountId: "mount_research",
+      }),
+    });
+    expect(registered.status).toBe(201);
+    expect((await (await app.request("/api/knowledge-workspace/sources")).json()).sources)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ sourceKey: "research" }),
+      ]));
+
+    const mainRebuild = await app.request(
+      "/api/knowledge-workspace/index/main/rebuild",
+      { method: "POST" },
+    );
+    expect(mainRebuild.status).toBe(200);
+    const researchRebuild = await app.request(
+      "/api/knowledge-workspace/index/research/rebuild",
+      { method: "POST" },
+    );
+    expect(researchRebuild.status).toBe(200);
+    expect(await researchRebuild.json()).toMatchObject({
+      sourceKey: "research",
+      health: { state: "ready" },
+    });
+
+    await engine.disposeKnowledgeIndexRuntime();
   });
 
   it("projects a recovering operation source as degraded without exposing journal identity", async () => {

@@ -48,6 +48,7 @@ import { createWebAuthRoute } from "../routes/web-auth.ts";
 import { createWebSocketAuthRoute } from "../routes/ws-auth.ts";
 import { createStudioWorkspacesRoute } from "../routes/studio-workspaces.ts";
 import {
+  configureKnowledgeNativeBridge,
   createKnowledgeWorkspaceRoute,
   prepareKnowledgeOperationRecovery,
 } from "../routes/knowledge-workspace.ts";
@@ -81,10 +82,12 @@ export async function registerOpenRoutes(
     bridgeManagerRef,
     confirmStore,
     appVersion,
+    nativeBridgeToken,
   } = ctx;
 
   // Operation recovery owns persisted file facts. Finish the barrier before
   // registering any Knowledge mutation route in either Open or Full.
+  configureKnowledgeNativeBridge(engine, nativeBridgeToken, serverAuthService);
   await prepareKnowledgeOperationRecovery(engine);
 
   const { restRoute: chatRestRoute, wsRoute: chatWsRoute } = createChatRoute(engine, hub, { upgradeWebSocket });

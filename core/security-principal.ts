@@ -52,6 +52,7 @@ export function normalizePrincipal(input: Record<string, any> = {}) {
     bridgeAccountId: stringOrNull(input.bridgeAccountId),
     platformAccountId: stringOrNull(input.platformAccountId),
     officialServiceKind: stringOrNull(input.officialServiceKind),
+    sessionId: stringOrNull(input.sessionId),
     connectionKind: enumValue(input.connectionKind, CONNECTION_KINDS, null),
     credentialKind: enumValue(input.credentialKind, CREDENTIAL_KINDS, null),
     authMethod: stringOrNull(input.authMethod),

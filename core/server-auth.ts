@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { authenticateDeviceCredential } from "./device-registry.ts";
 import { normalizePrincipal } from "./security-principal.ts";
 import { authenticateWebSession } from "./web-session-store.ts";
@@ -9,6 +10,8 @@ export function createServerAuthService({
 }) {
   if (!hanakoHome) throw new Error("hanakoHome required");
   if (!isNonEmptyString(loopbackToken)) throw new Error("loopbackToken required");
+  const localSessionsByToken = new Map<string, Readonly<{ sessionId: string }>>();
+  const localSessionTokensById = new Map<string, string>();
 
   function resolveRuntimeContext() {
     return typeof runtimeContext === "function" ? runtimeContext() : runtimeContext;
@@ -70,6 +73,17 @@ export function createServerAuthService({
       return allowAuth(createLocalPrincipal(resolveRuntimeContext()));
     }
 
+    const localSession = localSessionsByToken.get(parsed.token);
+    if (localSession) {
+      if (connectionKind !== "local") {
+        return denyAuth("loopback_token_requires_local_transport", {
+          credentialSource: parsed.source,
+          connectionKind,
+        });
+      }
+      return allowAuth(createLocalPrincipal(resolveRuntimeContext(), localSession));
+    }
+
     const devicePrincipal = authenticateDeviceCredential(hanakoHome, parsed.token, { now });
     if (!devicePrincipal) {
       return denyAuth("invalid_credential", {
@@ -96,10 +110,35 @@ export function createServerAuthService({
     });
   }
 
+  function issueLocalSessionCredential({ sessionId } = {} as { sessionId?: string }) {
+    if (!isNonEmptyString(sessionId) || sessionId.trim().length > 128) {
+      throw new TypeError("sessionId required");
+    }
+    const normalizedSessionId = sessionId.trim();
+    const previousToken = localSessionTokensById.get(normalizedSessionId);
+    if (previousToken) localSessionsByToken.delete(previousToken);
+    const token = crypto.randomBytes(32).toString("base64url");
+    localSessionsByToken.set(token, Object.freeze({ sessionId: normalizedSessionId }));
+    localSessionTokensById.set(normalizedSessionId, token);
+    return Object.freeze({ token, sessionId: normalizedSessionId });
+  }
+
+  function revokeLocalSessionCredential({ sessionId } = {} as { sessionId?: string }) {
+    if (!isNonEmptyString(sessionId)) return false;
+    const normalizedSessionId = sessionId.trim();
+    const token = localSessionTokensById.get(normalizedSessionId);
+    if (!token) return false;
+    localSessionTokensById.delete(normalizedSessionId);
+    localSessionsByToken.delete(token);
+    return true;
+  }
+
   return Object.freeze({
     authenticateRequest,
     authenticateRequestDetailed,
     authenticateToken,
+    issueLocalSessionCredential,
+    revokeLocalSessionCredential,
   });
 }
 
@@ -117,7 +156,7 @@ function parseCredential({ authorization, queryToken, allowQueryToken, connectio
   return { token: queryToken.trim(), source: "query" };
 }
 
-function createLocalPrincipal(runtimeContext) {
+function createLocalPrincipal(runtimeContext, localSession: { sessionId: string } | null = null) {
   return normalizePrincipal({
     kind: "local_user",
     credentialKind: "loopback_token",
@@ -129,6 +168,7 @@ function createLocalPrincipal(runtimeContext) {
     studioId: runtimeContext?.studioId ?? null,
     platformAccountId: runtimeContext?.platformAccountId ?? null,
     officialServiceKind: runtimeContext?.officialServiceKind ?? null,
+    sessionId: localSession?.sessionId ?? null,
     scopes: Array.isArray(runtimeContext?.capabilities) ? [...runtimeContext.capabilities] : ["chat", "resources", "tools"],
   });
 }

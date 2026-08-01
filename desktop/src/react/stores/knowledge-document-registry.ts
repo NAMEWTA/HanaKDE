@@ -262,7 +262,7 @@ function validateAddress(
   address: KnowledgeResourceAddress,
 ): KnowledgeResourceAddress {
   const parsed = parseKnowledgeResourceAddress(address);
-  if (!parsed.ok) {
+  if (parsed.ok === false) {
     throw new TypeError(`invalid knowledge address: ${parsed.error.code}`);
   }
   return parsed.value;

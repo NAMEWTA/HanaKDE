@@ -53,7 +53,10 @@ function waitForFile(filePath, { timeoutMs, intervalMs = 200 }) {
         reject(new Error(`timed out after ${timeoutMs}ms waiting for ${filePath}`));
         return;
       }
-      setTimeout(tick, intervalMs);
+      const timer = setTimeout(tick, intervalMs);
+      // A losing Promise.race branch must not keep the smoke command alive
+      // after the spawned server has already exited and the result is known.
+      timer.unref?.();
     };
     tick();
   });
@@ -67,6 +70,7 @@ function waitForExit(child, { timeoutMs }) {
     const timer = setTimeout(() => {
       reject(new Error(`timed out after ${timeoutMs}ms waiting for process exit`));
     }, timeoutMs);
+    timer.unref?.();
     child.once("exit", (code, signal) => {
       clearTimeout(timer);
       resolve({ code, signal });

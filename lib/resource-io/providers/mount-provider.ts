@@ -4,6 +4,7 @@ import { loadStudioMountRegistry } from "../../../core/studio-mounts.ts";
 import { capabilityDenied, providerNotAvailable, ResourceIOError } from "../errors.ts";
 import { resourceKeyForRef } from "../resource-refs.ts";
 import { resolveLocalFsRootIdentity } from "../root-identity.ts";
+import { RESOURCE_READ_PROOF } from "../types.ts";
 import type {
   MaterializeResult,
   ResourceDescriptor,
@@ -402,7 +403,7 @@ export class MountProvider {
   mapResult<T extends { resourceKey: string; resource: any; filePath?: string }>(ref: ResourceRef, result: T): T {
     if (ref.kind !== "mount") return result;
     const mountPath = normalizeMountPath(ref.path);
-    return {
+    const mapped = {
       ...result,
       resourceKey: resourceKeyForRef({ kind: "mount", mountId: ref.mountId, path: mountPath }),
       resource: {
@@ -413,6 +414,16 @@ export class MountProvider {
         ...(result.filePath || result.resource?.filePath ? { filePath: result.filePath || result.resource.filePath } : {}),
       } satisfies ResourceDescriptor,
     };
+    const proof = (result as unknown as ResourceStat)[RESOURCE_READ_PROOF];
+    if (proof) {
+      Object.defineProperty(mapped, RESOURCE_READ_PROOF, {
+        value: proof,
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return mapped;
   }
 
   mapMoveResult(from: ResourceRef, to: ResourceRef, result: ResourceMoveResult): ResourceMoveResult {

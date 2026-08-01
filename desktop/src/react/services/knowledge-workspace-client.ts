@@ -199,6 +199,23 @@ export type RendererKnowledgeSearchResult = {
   groups: RendererKnowledgeSearchGroup[];
 };
 
+export type RendererKnowledgeBacklinkItem = {
+  sourceAddress: KnowledgeResourceAddress;
+  ordinal: number;
+  linkKind: 'wikilink' | 'embed' | 'markdown' | 'content-ref';
+  fragment: string | null;
+  fromOffset: number;
+  toOffset: number;
+};
+
+export type RendererKnowledgeBacklinksResult = {
+  kind: 'backlinks';
+  sourceKey: string;
+  generationId: string;
+  items: RendererKnowledgeBacklinkItem[];
+  hasMore: boolean;
+};
+
 export type RendererKnowledgeEditorCopyInput = {
   sourceAddress: KnowledgeResourceAddress;
   pageAddress: KnowledgeResourceAddress;
@@ -220,6 +237,17 @@ export type RendererKnowledgeRenameOperationRequest = {
   to: KnowledgeResourceAddress;
   expectedVersion: RendererResourceVersion;
 };
+
+export type RendererKnowledgeMoveOperationRequest = {
+  kind: 'move';
+  from: KnowledgeResourceAddress;
+  to: KnowledgeResourceAddress;
+  expectedVersion: RendererResourceVersion;
+};
+
+export type RendererKnowledgeOperationRequest =
+  | RendererKnowledgeRenameOperationRequest
+  | RendererKnowledgeMoveOperationRequest;
 
 export type RendererKnowledgeOperationState =
   | 'PLANNED'
@@ -252,7 +280,7 @@ export type RendererKnowledgeOperationPlan = {
   schemaVersion: 1;
   operationId: string;
   requestHash: string;
-  kind: 'rename';
+  kind: 'rename' | 'move';
   createdAt: string;
   expiresAt: string;
   checkpointRequired: true;
@@ -271,7 +299,7 @@ export type RendererKnowledgeOperationSummary = {
   schemaVersion: 1;
   operationId: string;
   requestHash: string;
-  kind: 'rename';
+  kind: 'rename' | 'move';
   state: RendererKnowledgeOperationState;
   createdAt?: string;
   expiresAt?: string;
@@ -299,7 +327,7 @@ export type RendererKnowledgeOperationSummary = {
 
 export interface KnowledgeOperationClient {
   plan(
-    request: RendererKnowledgeRenameOperationRequest,
+    request: RendererKnowledgeOperationRequest,
     options?: KnowledgeWorkspaceRequestOptions,
   ): Promise<RendererKnowledgeOperationPlan>;
   commit(
@@ -373,6 +401,12 @@ export interface KnowledgeWorkspaceClient {
     },
     options?: KnowledgeWorkspaceRequestOptions,
   ): Promise<RendererKnowledgeEditorCopyResult>;
+  createResource(input: { kind: 'page' | 'folder'; sourceKey: string; directoryPath: string; name: string }, options?: KnowledgeWorkspaceRequestOptions): Promise<{ kind: 'page' | 'folder'; address: KnowledgeResourceAddress }>;
+  pasteResources(input: { intent: 'copy' | 'cut'; items: readonly KnowledgeResourceAddress[]; target: { sourceKey: string; directoryPath: string } }, options?: KnowledgeWorkspaceRequestOptions): Promise<Array<Record<string, unknown>>>;
+  trashResources(addresses: readonly KnowledgeResourceAddress[], options?: KnowledgeWorkspaceRequestOptions): Promise<{ batchId: string; sourceKey: string; items: Array<Record<string, unknown>> }>;
+  listTrash(sourceKey: string, options?: KnowledgeWorkspaceRequestOptions): Promise<Array<Record<string, unknown>>>;
+  restoreTrash(sourceKey: string, batchId: string, entryIds?: readonly string[], options?: KnowledgeWorkspaceRequestOptions): Promise<Array<Record<string, unknown>>>;
+  createNativeGrant(action: 'openDefault' | 'reveal' | 'systemTrash', address: KnowledgeResourceAddress, options?: KnowledgeWorkspaceRequestOptions): Promise<{ grantId: string; expiresAt: number }>;
   listSources(options?: KnowledgeWorkspaceRequestOptions): Promise<KnowledgeSourceDto[]>;
   registerSource(
     input: RegisterKnowledgeSourceInput,
@@ -391,6 +425,14 @@ export interface KnowledgeWorkspaceClient {
     },
     options?: KnowledgeWorkspaceRequestOptions,
   ): Promise<RendererKnowledgeSearchResult>;
+  querySavedBacklinks(
+    input: {
+      address: KnowledgeResourceAddress;
+      generationId?: string;
+      limit?: number;
+    },
+    options?: KnowledgeWorkspaceRequestOptions,
+  ): Promise<RendererKnowledgeBacklinksResult>;
   applyResourceEvent(
     event: unknown,
     handlers?: KnowledgeResourceEventHandlers,
@@ -541,7 +583,7 @@ export function createKnowledgeWorkspaceClient({
       return parseResourceStatResult(body);
     },
     async list(address, options = {}) {
-      const safeAddress = validateKnowledgeAddress(address);
+      const safeAddress = validateKnowledgeListAddress(address);
       const body = await requestJson(fetchImpl, '/api/resource-io/list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -819,6 +861,49 @@ export function createKnowledgeWorkspaceClient({
       }
       return result;
     },
+    async createResource(input, options = {}) {
+      const body = await requestJson(fetchImpl, '/api/knowledge-workspace/resources/create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: options.signal,
+      });
+      if (!isRecord(body) || !isRecord(body.result) || !['page', 'folder'].includes(String(body.result.kind))) throw invalidResponse('create.result');
+      return { kind: body.result.kind as 'page' | 'folder', address: validateKnowledgeAddress(body.result.address as KnowledgeResourceAddress) };
+    },
+    async pasteResources(input, options = {}) {
+      const body = await requestJson(fetchImpl, '/api/knowledge-workspace/resources/paste', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: options.signal,
+      });
+      if (!isRecord(body) || !Array.isArray(body.results) || body.results.some(item => !isRecord(item))) throw invalidResponse('paste.results');
+      return body.results;
+    },
+    async trashResources(addresses, options = {}) {
+      const body = await requestJson(fetchImpl, '/api/knowledge-workspace/trash', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses }), signal: options.signal,
+      });
+      if (!isRecord(body) || !isRecord(body.result) || typeof body.result.batchId !== 'string' || typeof body.result.sourceKey !== 'string' || !Array.isArray(body.result.items)) throw invalidResponse('trash.result');
+      return { batchId: body.result.batchId, sourceKey: body.result.sourceKey, items: body.result.items.filter(isRecord) };
+    },
+    async listTrash(sourceKey, options = {}) {
+      validateSourceKey(sourceKey);
+      const body = await requestJson(fetchImpl, `/api/knowledge-workspace/trash/${encodeURIComponent(sourceKey)}`, { method: 'GET', signal: options.signal });
+      if (!isRecord(body) || !Array.isArray(body.batches) || body.batches.some(batch => !isRecord(batch))) throw invalidResponse('trash.batches');
+      return body.batches;
+    },
+    async restoreTrash(sourceKey, batchId, entryIds, options = {}) {
+      validateSourceKey(sourceKey);
+      if (!/^[0-9a-f-]{36}$/iu.test(batchId)) throw invalidResponse('trash.batchId');
+      const body = await requestJson(fetchImpl, `/api/knowledge-workspace/trash/${encodeURIComponent(sourceKey)}/${encodeURIComponent(batchId)}/restore`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(entryIds ? { entryIds } : {}) }), signal: options.signal,
+      });
+      if (!isRecord(body) || !Array.isArray(body.results) || body.results.some(result => !isRecord(result))) throw invalidResponse('trash.restore');
+      return body.results;
+    },
+    async createNativeGrant(action, address, options = {}) {
+      const body = await requestJson(fetchImpl, '/api/knowledge-workspace/native/grants', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, address: validateKnowledgeAddress(address) }), signal: options.signal,
+      });
+      if (!isRecord(body) || !isRecord(body.grant) || typeof body.grant.grantId !== 'string' || typeof body.grant.expiresAt !== 'number') throw invalidResponse('native.grant');
+      return { grantId: body.grant.grantId, expiresAt: body.grant.expiresAt };
+    },
     async searchKnowledge(input, options = {}) {
       validateKnowledgeSearchInput(input);
       const body = await requestJson(
@@ -832,6 +917,46 @@ export function createKnowledgeWorkspaceClient({
         },
       );
       return parseKnowledgeSearchEnvelope(body);
+    },
+    async querySavedBacklinks(input, options = {}) {
+      const address = validateKnowledgeAddress(input?.address);
+      if (
+        input.generationId !== undefined
+        && (
+          typeof input.generationId !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(input.generationId)
+        )
+      ) {
+        throw invalidResponse('query.generationId');
+      }
+      if (
+        input.limit !== undefined
+        && (
+          !Number.isSafeInteger(input.limit)
+          || Number(input.limit) < 1
+          || Number(input.limit) > 100
+        )
+      ) {
+        throw invalidResponse('query.limit');
+      }
+      const body = await requestJson(
+        fetchImpl,
+        '/api/knowledge-workspace/query',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            kind: 'backlinks',
+            address,
+            ...(input.generationId === undefined
+              ? {}
+              : { generationId: input.generationId }),
+            ...(input.limit === undefined ? {} : { limit: input.limit }),
+          }),
+          signal: options.signal,
+        },
+      );
+      return parseKnowledgeBacklinksEnvelope(body, address.sourceKey);
     },
     async listSources(options = {}) {
       const body = await requestJson(fetchImpl, '/api/knowledge-workspace/sources', {
@@ -1072,6 +1197,99 @@ function parseKnowledgeSearchItem(
   };
 }
 
+function parseKnowledgeBacklinksEnvelope(
+  input: unknown,
+  expectedSourceKey: string,
+): RendererKnowledgeBacklinksResult {
+  if (
+    !isRecord(input)
+    || Object.keys(input).length !== 1
+    || !isRecord(input.result)
+  ) {
+    throw invalidResponse('query.result');
+  }
+  const result = input.result;
+  rejectResponseFields(
+    result,
+    new Set([
+      'kind',
+      'sourceKey',
+      'generationId',
+      'items',
+      'hasMore',
+    ]),
+    'query.result',
+  );
+  if (
+    result.kind !== 'backlinks'
+    || result.sourceKey !== expectedSourceKey
+    || typeof result.generationId !== 'string'
+    || result.generationId.length === 0
+    || !Array.isArray(result.items)
+    || typeof result.hasMore !== 'boolean'
+  ) {
+    throw invalidResponse('query.result');
+  }
+  return {
+    kind: 'backlinks',
+    sourceKey: expectedSourceKey,
+    generationId: result.generationId,
+    items: result.items.map((item, index) =>
+      parseKnowledgeBacklinkItem(item, expectedSourceKey, index)
+    ),
+    hasMore: result.hasMore,
+  };
+}
+
+function parseKnowledgeBacklinkItem(
+  input: unknown,
+  expectedSourceKey: string,
+  index: number,
+): RendererKnowledgeBacklinkItem {
+  const field = `query.items.${index}`;
+  if (!isRecord(input)) throw invalidResponse(field);
+  rejectResponseFields(
+    input,
+    new Set([
+      'sourceAddress',
+      'ordinal',
+      'linkKind',
+      'fragment',
+      'fromOffset',
+      'toOffset',
+    ]),
+    field,
+  );
+  const address = parseKnowledgeResourceAddress(input.sourceAddress);
+  if (
+    address.ok === false
+    || address.value.sourceKey !== expectedSourceKey
+    || !Number.isSafeInteger(input.ordinal)
+    || Number(input.ordinal) < 0
+    || !['wikilink', 'embed', 'markdown', 'content-ref'].includes(
+      String(input.linkKind),
+    )
+    || (
+      input.fragment !== null
+      && typeof input.fragment !== 'string'
+    )
+    || !Number.isSafeInteger(input.fromOffset)
+    || Number(input.fromOffset) < 0
+    || !Number.isSafeInteger(input.toOffset)
+    || Number(input.toOffset) < Number(input.fromOffset)
+  ) {
+    throw invalidResponse(field);
+  }
+  return {
+    sourceAddress: address.value,
+    ordinal: input.ordinal as number,
+    linkKind: input.linkKind as RendererKnowledgeBacklinkItem['linkKind'],
+    fragment: input.fragment as string | null,
+    fromOffset: input.fromOffset as number,
+    toOffset: input.toOffset as number,
+  };
+}
+
 function parseKnowledgeEditorCopyEnvelope(
   input: unknown,
 ): RendererKnowledgeEditorCopyResult {
@@ -1224,6 +1442,14 @@ function validateKnowledgeAddress(input: KnowledgeResourceAddress): KnowledgeRes
   const parsed = parseKnowledgeResourceAddress(input);
   if (parsed.ok === false) throw new KnowledgeWorkspaceClientError(parsed.error);
   return parsed.value;
+}
+
+function validateKnowledgeListAddress(
+  input: KnowledgeResourceAddress,
+): KnowledgeResourceAddress {
+  if (input?.relativePath !== '') return validateKnowledgeAddress(input);
+  validateSourceKey(input.sourceKey);
+  return { sourceKey: input.sourceKey, relativePath: '' };
 }
 
 function parseResourceReadResult(input: unknown): RendererResourceReadResult {
@@ -1440,9 +1666,9 @@ const OPERATION_ROLLBACK_STATUSES = new Set([
 const OPERATION_HASH_PATTERN = /^[a-f0-9]{64}$/;
 
 function validateKnowledgeOperationRequest(
-  input: RendererKnowledgeRenameOperationRequest,
-): RendererKnowledgeRenameOperationRequest {
-  if (!isRecord(input) || input.kind !== 'rename') {
+  input: RendererKnowledgeOperationRequest,
+): RendererKnowledgeOperationRequest {
+  if (!isRecord(input) || (input.kind !== 'rename' && input.kind !== 'move')) {
     throw invalidResponse('operation.kind');
   }
   rejectResponseFields(
@@ -1468,7 +1694,7 @@ function validateKnowledgeOperationRequest(
     'operation.expectedVersion',
   );
   return {
-    kind: 'rename',
+    kind: input.kind,
     from,
     to,
     expectedVersion,
@@ -1528,7 +1754,7 @@ function parseKnowledgeOperationPlanEnvelope(
     schemaVersion: 1,
     operationId: plan.operationId as string,
     requestHash: plan.requestHash as string,
-    kind: 'rename',
+    kind: plan.kind as RendererKnowledgeOperationPlan['kind'],
     createdAt: plan.createdAt as string,
     expiresAt: plan.expiresAt as string,
     checkpointRequired: true,
@@ -1638,7 +1864,7 @@ function parseKnowledgeOperationSummary(
     schemaVersion: 1,
     operationId: input.operationId as string,
     requestHash: input.requestHash as string,
-    kind: 'rename',
+    kind: input.kind as RendererKnowledgeOperationSummary['kind'],
     state: input.state as RendererKnowledgeOperationState,
     ...(typeof input.createdAt === 'string' ? { createdAt: input.createdAt } : {}),
     ...(typeof input.expiresAt === 'string' ? { expiresAt: input.expiresAt } : {}),
@@ -1823,7 +2049,7 @@ function parseProjectionState(
 function validateOperationIdentity(input: Record<string, unknown>): void {
   if (
     input.schemaVersion !== 1
-    || input.kind !== 'rename'
+    || (input.kind !== 'rename' && input.kind !== 'move')
     || !isOperationCorrelationId(input.operationId)
     || typeof input.requestHash !== 'string'
     || !OPERATION_HASH_PATTERN.test(input.requestHash)
@@ -2117,7 +2343,8 @@ function isOptionalSafeStudioId(value: unknown): boolean {
       typeof value === 'string'
       && value.length > 0
       && value.length <= 256
-      && !/[\/\\\p{Cc}]/u.test(value)
+      && !value.includes('/')
+      && !/[\\\p{Cc}]/u.test(value)
     );
 }
 

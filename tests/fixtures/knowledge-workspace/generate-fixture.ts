@@ -24,7 +24,7 @@ export interface FixtureManifest {
     { readonly sourceKey: "main"; readonly role: "main"; readonly displayName: "Main" },
     { readonly sourceKey: "research"; readonly role: "mounted"; readonly displayName: "Research" },
     { readonly sourceKey: "archive"; readonly role: "mounted"; readonly displayName: "Archive" },
-    { readonly sourceKey: "资料"; readonly role: "mounted"; readonly displayName: "资料" },
+    { readonly sourceKey: "materials"; readonly role: "mounted"; readonly displayName: "资料" },
   ];
   readonly treeEntryCounts: readonly [number, number];
   readonly resources: {
@@ -163,7 +163,7 @@ export type KnowledgeScenarioFixture =
   | {
       readonly id: "searchWarmTrigram";
       readonly kind: "search";
-      readonly query: "資料";
+      readonly query: "資料庫";
       readonly expectedEntries: number;
       readonly resources: () => Generator<ResourceFixtureEntry>;
     }
@@ -257,7 +257,7 @@ export function buildFixtureManifest(profile: FixtureProfile): FixtureManifest {
       { sourceKey: "main", role: "main", displayName: "Main" },
       { sourceKey: "research", role: "mounted", displayName: "Research" },
       { sourceKey: "archive", role: "mounted", displayName: "Archive" },
-      { sourceKey: "资料", role: "mounted", displayName: "资料" },
+      { sourceKey: "materials", role: "mounted", displayName: "资料" },
     ],
     treeEntryCounts: [scaled(10_000, scale), scaled(100_000, scale)],
     resources: {
@@ -374,7 +374,7 @@ function resourceBody(
     return Buffer.from(`${lines.join(index % 2 === 0 ? "\n" : "\r\n")}\n`, "utf8");
   }
   if (kind === "safeText") {
-    return Buffer.from(`safe text ${index}\nseed:${seed}\n資料\n`, "utf8");
+    return Buffer.from(`safe text ${index}\nseed:${seed}\n資料庫\n`, "utf8");
   }
   return Buffer.alloc(0);
 }
@@ -386,7 +386,7 @@ export function* iterateResourceEntries(
   const fullCount = tree === "tree10k" ? 10_000 : 100_000;
   const count = scaled(fullCount, profile.scale);
   const random = createPrng(profile.seed);
-  const sourceKeys = ["main", "research", "archive", "资料"];
+  const sourceKeys = ["main", "research", "archive", "materials"];
   const kindLimits = {
     markdown: scaled(fullCount * 0.6, profile.scale),
     safeText: scaled(fullCount * 0.2, profile.scale),
@@ -448,7 +448,7 @@ function deterministicUuidV4(seed: number, operationIndex: number): string {
 export function generateWatchEvents(profile: FixtureProfile): WatchFixtureEvent[] {
   const count = scaled(5_000, profile.scale);
   const random = createPrng(profile.seed);
-  const sourceKeys = ["main", "research", "archive", "资料"];
+  const sourceKeys = ["main", "research", "archive", "materials"];
   const events: WatchFixtureEvent[] = [];
   let sequence = 0;
   for (let index = 0; index < count; index += 1) {
@@ -497,7 +497,7 @@ export function generateWatchEvents(profile: FixtureProfile): WatchFixtureEvent[
 
 export function createTabs(profile: FixtureProfile): TabFixture[] {
   const count = scaled(100, profile.scale);
-  const sourceKeys = ["main", "research", "archive", "资料"];
+  const sourceKeys = ["main", "research", "archive", "materials"];
   return Array.from({ length: count }, (_, index) => ({
     tabId: `tab-${index.toString().padStart(3, "0")}`,
     group: (index % 4) as 0 | 1 | 2 | 3,
@@ -532,7 +532,7 @@ function createDenseWikilinksDocument(profile: FixtureProfile): Buffer {
 function* iterateJournalRecords(profile: FixtureProfile): Generator<JournalFixtureRecord> {
   const count = scaled(1_000, profile.scale);
   const states: JournalFixtureRecord["state"][] = ["PREPARED", "COMMITTING", "ROLLING_BACK"];
-  const sourceKeys = ["main", "research", "archive", "资料"];
+  const sourceKeys = ["main", "research", "archive", "materials"];
   for (let index = 0; index < count; index += 1) {
     yield {
       operationId: deterministicUuidV4(profile.seed, 10_000 + index),
@@ -598,7 +598,7 @@ export function createKnowledgeFixtureDataset(profile: FixtureProfile): Knowledg
         return {
           id,
           kind: "search",
-          query: "資料",
+          query: "資料庫",
           expectedEntries: manifest.treeEntryCounts[1],
           resources: () => resources("tree100k"),
         };
@@ -833,7 +833,7 @@ export async function materializeFixture<T>(
     const dataset = createKnowledgeFixtureDataset(options.profile);
     const { manifest } = dataset;
     const sourceRoots = manifest.sources.map((source) => {
-      const sourceRoot = path.join(root, source.sourceKey === "资料" ? "source-unicode" : `source-${source.sourceKey}`);
+      const sourceRoot = path.join(root, source.sourceKey === "materials" ? "source-unicode" : `source-${source.sourceKey}`);
       fs.mkdirSync(sourceRoot, { recursive: true });
       return sourceRoot;
     });

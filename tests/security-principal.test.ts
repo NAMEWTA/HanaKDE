@@ -16,6 +16,7 @@ describe("security principal", () => {
       userId: "user_1",
       studioId: "studio_1",
       serverNodeId: "node_1",
+      sessionId: "desktop-window-7",
       scopes: ["chat", "resources"],
     });
 
@@ -26,6 +27,7 @@ describe("security principal", () => {
       userId: "user_1",
       studioId: "studio_1",
       serverNodeId: "node_1",
+      sessionId: "desktop-window-7",
       credentialKind: "loopback_token",
       connectionKind: "local",
       trustState: "local",

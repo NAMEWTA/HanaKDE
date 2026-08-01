@@ -1,11 +1,13 @@
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
-import type { EditorView } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import {
   knowledgeWritableSources,
   orderKnowledgeUnsavedDocuments,
@@ -23,6 +25,7 @@ import {
 import {
   registerKnowledgeWorkspaceCloseGuard,
 } from '../../services/knowledge-workspace-lifecycle';
+import { invokeKnowledgeNativeGrant } from '../../services/knowledge-native-client';
 import {
   knowledgeDocumentKey,
   type KnowledgeDocumentRegistry,
@@ -105,7 +108,22 @@ export interface KnowledgeEditorGroupsHandle {
   pinView(viewId: string): boolean;
   closeView(viewId: string): boolean;
   prepareToClose(): Promise<boolean>;
+  prepareResourceRemoval(addresses: readonly KnowledgeResourceAddress[]): Promise<boolean>;
   moveView(viewId: string, targetGroupId: string): boolean;
+  focusView(viewId: string): boolean;
+  revealOffset(viewId: string, offset: number): boolean;
+  openCurrentOutbound(
+    address: KnowledgeResourceAddress,
+    groupId: string,
+    fragment: string | null,
+    sourceKind: 'wikilink' | 'markdown_link',
+    embedded: boolean,
+  ): Promise<boolean>;
+  openBacklink(
+    resource: KnowledgeOpenResource,
+    groupId: string,
+    offset: number,
+  ): boolean;
 }
 
 export interface KnowledgeEditorGroupsProps {
@@ -130,7 +148,10 @@ export interface KnowledgeEditorGroupsProps {
   onActiveTargetChange?(
     target: {
       viewId: string;
+      groupId: string;
       kind: KnowledgeEditorResourceKind;
+      address: KnowledgeResourceAddress;
+      sourceName: string;
     } | null,
   ): void;
 }
@@ -352,7 +373,9 @@ export const KnowledgeEditorGroups = forwardRef<
   const pendingUnsavedCloseRef = useRef<PendingUnsavedClose | null>(null);
   const editorViewsRef = useRef(new Map<string, EditorView>());
   const pendingFragmentByViewRef = useRef(new Map<string, string>());
-  const [, setEditorViewRevision] = useState(0);
+  const pendingOffsetByViewRef = useRef(new Map<string, number>());
+  const pendingFocusViewIdsRef = useRef(new Set<string>());
+  const [editorViewRevision, setEditorViewRevision] = useState(0);
   const [findSession, setFindSession] =
     useState<KnowledgeFindSession | null>(null);
 
@@ -413,6 +436,12 @@ export const KnowledgeEditorGroups = forwardRef<
     if (editorView) editorViewsRef.current.set(viewId, editorView);
     else editorViewsRef.current.delete(viewId);
     if (editorView) {
+      if (pendingFocusViewIdsRef.current.delete(viewId)) editorView.focus();
+      const offset = pendingOffsetByViewRef.current.get(viewId);
+      if (offset !== undefined) {
+        pendingOffsetByViewRef.current.delete(viewId);
+        revealAndRecordEditorOffset(viewId, editorView, offset);
+      }
       const fragment = pendingFragmentByViewRef.current.get(viewId);
       if (fragment !== undefined) {
         pendingFragmentByViewRef.current.delete(viewId);
@@ -663,6 +692,113 @@ export const KnowledgeEditorGroups = forwardRef<
     return result;
   };
 
+  const revealOffset = (viewId: string, offset: number): boolean => {
+    if (!Number.isSafeInteger(offset) || offset < 0) return false;
+    const editorView = editorViewsRef.current.get(viewId);
+    if (!editorView) {
+      if (!findTab(layoutRef.current.root, tab => tab.viewId === viewId)) {
+        return false;
+      }
+      const documentView = registry.getState().views[viewId];
+      const session = documentView
+        ? registry.getState().sessions[documentView.sessionKey]
+        : undefined;
+      const target = Math.max(0, Math.min(session?.buffer.length ?? offset, offset));
+      pendingOffsetByViewRef.current.set(viewId, target);
+      if (documentView) {
+        registry.getState().updateDocumentView(viewId, {
+          cursor: target,
+          selection: { anchor: target, head: target },
+        });
+      }
+      return true;
+    }
+    return revealAndRecordEditorOffset(viewId, editorView, offset);
+  };
+
+  const focusView = (viewId: string): boolean => {
+    const editorView = editorViewsRef.current.get(viewId);
+    if (editorView) {
+      editorView.focus();
+      return true;
+    }
+    if (!findTab(layoutRef.current.root, tab => tab.viewId === viewId)) return false;
+    pendingFocusViewIdsRef.current.add(viewId);
+    setEditorViewRevision(revision => revision + 1);
+    return true;
+  };
+
+  const revealAndRecordEditorOffset = useCallback((
+    viewId: string,
+    editorView: EditorView,
+    offset: number,
+  ): boolean => {
+    const target = Math.max(0, Math.min(editorView.state.doc.length, offset));
+    revealEditorOffset(editorView, target);
+    registry.getState().updateDocumentView(viewId, {
+      cursor: target,
+      selection: { anchor: target, head: target },
+    });
+    return true;
+  }, [registry]);
+
+  const openCurrentOutbound = async (
+    address: KnowledgeResourceAddress,
+    groupId: string,
+    fragment: string | null,
+    sourceKind: 'wikilink' | 'markdown_link',
+    embedded: boolean,
+  ): Promise<boolean> => {
+    const group = findGroup(layoutRef.current.root, groupId);
+    const page = group?.tabs.find(tab => tab.viewId === group.activeViewId);
+    if (!page || page.kind !== 'markdown') return false;
+    const result = await openKnowledgeLink({
+      kind: 'internal',
+      sourceKind,
+      embedded,
+      address,
+      fragment,
+      availability: 'available',
+    }, page.address, groupId);
+    return result.ok;
+  };
+
+  const openBacklink = (
+    resource: KnowledgeOpenResource,
+    groupId: string,
+    offset: number,
+  ): boolean => {
+    const existingSession = registry.getState().sessions[
+      knowledgeDocumentKey(resource.address)
+    ];
+    const opened = openResource(resource, {
+      mode: 'preview',
+      groupId,
+    });
+    // Backlink offsets describe the saved generation. Reusing a dirty shared
+    // session keeps the buffer authoritative, so applying that old offset
+    // could select unrelated text.
+    if (existingSession?.dirty) return true;
+    if (!Number.isSafeInteger(offset) || offset < 0) return false;
+    const openedView = registry.getState().views[opened.viewId];
+    const openedSession = openedView
+      ? registry.getState().sessions[openedView.sessionKey]
+      : undefined;
+    const target = Math.max(
+      0,
+      Math.min(openedSession?.buffer.length ?? offset, offset),
+    );
+    pendingOffsetByViewRef.current.set(opened.viewId, target);
+    if (openedView) {
+      registry.getState().updateDocumentView(opened.viewId, {
+        cursor: target,
+        selection: { anchor: target, head: target },
+      });
+    }
+    setEditorViewRevision(revision => revision + 1);
+    return true;
+  };
+
   const openInSide = (
     resource: KnowledgeOpenResource,
     options: KnowledgeOpenSideOptions = {},
@@ -785,6 +921,8 @@ export const KnowledgeEditorGroups = forwardRef<
     nextViewId.current = 1;
     editorViewsRef.current.clear();
     pendingFragmentByViewRef.current.clear();
+    pendingOffsetByViewRef.current.clear();
+    pendingFocusViewIdsRef.current.clear();
     setFindSession(null);
     commitLayout(createInitialLayout(initialGroupId));
   }, [registry, workspaceKey]);
@@ -981,6 +1119,58 @@ export const KnowledgeEditorGroups = forwardRef<
   };
   prepareToCloseRef.current = prepareToClose;
 
+  const prepareResourceRemoval = async (
+    addresses: readonly KnowledgeResourceAddress[],
+  ): Promise<boolean> => {
+    if (pendingUnsavedCloseRef.current) return false;
+    const tabs = allTabs(layoutRef.current.root);
+    const activeGroup = findGroup(
+      layoutRef.current.root,
+      layoutRef.current.activeGroupId,
+    );
+    const activeViewId = activeGroup?.activeViewId ?? null;
+    const affected = (candidate: KnowledgeResourceAddress) => addresses.some(
+      address => address.sourceKey === candidate.sourceKey && (
+        address.relativePath === candidate.relativePath
+        || candidate.relativePath.startsWith(`${address.relativePath}/`)
+      ),
+    );
+    const documents = new Map<string, KnowledgeLifecycleDocument>();
+    for (const [displayOrder, tab] of tabs.entries()) {
+      if (tab.kind !== 'markdown' || !affected(tab.address)) continue;
+      const session = registry.getState().sessions[
+        knowledgeDocumentKey(tab.address)
+      ];
+      if (!session) continue;
+      const existing = documents.get(session.key);
+      if (existing) {
+        existing.viewIds.push(tab.viewId);
+        existing.active ||= tab.viewId === activeViewId;
+      } else {
+        documents.set(session.key, {
+          sessionKey: session.key,
+          address: { ...session.address },
+          sourceName: tab.sourceName,
+          buffer: session.buffer,
+          dirty: session.dirty,
+          orphan: session.orphan,
+          resourceState: session.resourceState,
+          viewIds: [tab.viewId],
+          displayOrder,
+          active: tab.viewId === activeViewId,
+        });
+      }
+    }
+    for (const document of orderKnowledgeUnsavedDocuments([...documents.values()])) {
+      const tab = tabs.find(candidate => (
+        candidate.kind === 'markdown'
+        && knowledgeDocumentKey(candidate.address) === document.sessionKey
+      ));
+      if (tab && !await requestLifecycleDecision(tab)) return false;
+    }
+    return true;
+  };
+
   useImperativeHandle(ref, () => ({
     openResource,
     openInSide,
@@ -989,7 +1179,12 @@ export const KnowledgeEditorGroups = forwardRef<
     pinView,
     closeView,
     prepareToClose,
+    prepareResourceRemoval,
     moveView,
+    focusView,
+    revealOffset,
+    openCurrentOutbound,
+    openBacklink,
   }));
 
   useEffect(() => {
@@ -1010,11 +1205,34 @@ export const KnowledgeEditorGroups = forwardRef<
   ) ?? null;
   const activeTargetViewId = activeTab?.viewId ?? null;
   const activeTargetKind = activeTab?.kind ?? null;
-  useEffect(() => {
-    onActiveTargetChange?.(activeTargetViewId && activeTargetKind
-      ? { viewId: activeTargetViewId, kind: activeTargetKind }
-      : null);
+  useLayoutEffect(() => {
+    if (!activeTargetViewId) return;
+    const offset = pendingOffsetByViewRef.current.get(activeTargetViewId);
+    const editorView = editorViewsRef.current.get(activeTargetViewId);
+    if (offset === undefined || !editorView) return;
+    pendingOffsetByViewRef.current.delete(activeTargetViewId);
+    revealAndRecordEditorOffset(activeTargetViewId, editorView, offset);
   }, [
+    activeTargetViewId,
+    editorViewRevision,
+    revealAndRecordEditorOffset,
+  ]);
+  useEffect(() => {
+    onActiveTargetChange?.(
+      activeGroup && activeTab && activeTargetViewId && activeTargetKind
+      ? {
+          viewId: activeTargetViewId,
+          groupId: activeGroup.id,
+          kind: activeTargetKind,
+          address: activeTab.address,
+          sourceName: activeTab.sourceName,
+        }
+      : null,
+    );
+  }, [
+    activeGroup,
+    activeGroup?.id,
+    activeTab,
     activeTargetKind,
     activeTargetViewId,
     onActiveTargetChange,
@@ -1176,6 +1394,12 @@ export const KnowledgeEditorGroups = forwardRef<
                   address={tab.address}
                   sourceName={tab.sourceName}
                   client={client}
+                  openDefault={address => invokeKnowledgeNativeGrant(
+                    client ?? knowledgeWorkspaceClient,
+                    'openDefault',
+                    address,
+                  )}
+                  {...conflictServices}
                 />
               )}
             </div>
@@ -1227,3 +1451,13 @@ export const KnowledgeEditorGroups = forwardRef<
     </div>
   );
 });
+
+function revealEditorOffset(view: EditorView, offset: number): boolean {
+  const target = Math.max(0, Math.min(view.state.doc.length, offset));
+  view.dispatch({
+    selection: { anchor: target },
+    effects: EditorView.scrollIntoView(target, { y: 'center' }),
+  });
+  view.focus();
+  return true;
+}

@@ -1,7 +1,7 @@
 # Ticket 56: 交付回收站恢复、清理与系统废纸篓
 
 - **被阻塞于：** [`04-define-errors-and-diagnostics.md`](./04-define-errors-and-diagnostics.md)、[`10-trace-knowledge-operation-protocol.md`](./10-trace-knowledge-operation-protocol.md)、[`14-establish-malicious-workspace-tests.md`](./14-establish-malicious-workspace-tests.md)、[`23-define-knowledge-address-resolver.md`](./23-define-knowledge-address-resolver.md)、[`44-deliver-knowledge-query-apis.md`](./44-deliver-knowledge-query-apis.md)、[`51-deliver-import-native-picker.md`](./51-deliver-import-native-picker.md)、[`55-deliver-workspace-trash-delete.md`](./55-deliver-workspace-trash-delete.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -65,9 +65,16 @@
 
 ## 验收标准
 
-- [ ] 目录冲突整体改名；只改同批双方恢复的引用；系统废纸篓失败保留工作区副本和 manifest。
-- [ ] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 目录冲突整体改名；只改同批双方恢复的引用；系统废纸篓失败保留工作区副本和 manifest。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **实现结果：** 回收站列表/恢复/冲突后缀/同批链接调整、30 天 cleanup 与失败保留副本的系统废纸篓流程已交付。
+- **精确自动化：** `knowledge-trash restore/native trash/TrashView` 相关测试包含于最终聚合命令，23 files、65/65 tests 通过；E2E-KW-020 已在 macOS arm64 的实际 Playwright project 中通过。
+- **仓库门禁：** `npm run lint`（0 errors）、`npm run typecheck`、`npm run lint:boundary`、Open/Full/Renderer/preload/main/server build 与本机 E2E 矩阵通过；完整 `npm test` 的最终复跑由 Ticket 57 汇总。
+- **提交与偏差：** 实现位于当前工作树（基于 HEAD `442ef4f4`，本次未创建提交）；无产品或架构偏差，未使用内置插件。

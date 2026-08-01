@@ -98,3 +98,4 @@ reviews/
 .codex/
 build/
 silverbullet/*
+tests/knowledge-workspace-e2e/artifacts/

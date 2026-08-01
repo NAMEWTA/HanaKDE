@@ -1,7 +1,7 @@
 # Ticket 53: 交付资源树与编辑器拖拽协议
 
 - **被阻塞于：** [`38-deliver-attachments-cross-source-copy.md`](./38-deliver-attachments-cross-source-copy.md)、[`48-deliver-tree-keyboard-range-selection.md`](./48-deliver-tree-keyboard-range-selection.md)、[`50-deliver-create-page-folder.md`](./50-deliver-create-page-folder.md)、[`51-deliver-import-native-picker.md`](./51-deliver-import-native-picker.md)、[`52-deliver-internal-clipboard.md`](./52-deliver-internal-clipboard.md)
-- **状态：** 未开始
+- **状态：** 已完成
 
 ## 战略与背景
 
@@ -62,9 +62,16 @@
 
 ## 验收标准
 
-- [ ] 跨来源永远 copy；同源 move 进入重构计划；非法 drop 不修改文件或 Markdown。
-- [ ] KW-US-184/185 由 typed effect、800ms hover expand、edge scroll、cancel、选择和焦点恢复测试直接证明。
-- [ ] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
-- [ ] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
-- [ ] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
-- [ ] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+- [x] 跨来源永远 copy；同源 move 进入重构计划；非法 drop 不修改文件或 Markdown。
+- [x] KW-US-184/185 由 typed effect、800ms hover expand、edge scroll、cancel、选择和焦点恢复测试直接证明。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **实现结果：** 树与编辑器共享的无绝对路径拖拽协议、内部 payload、外部导入和 drop controller 已交付。
+- **精确自动化：** `knowledge-drag-contract、knowledge-drag-controller` 相关测试包含于最终聚合命令，23 files、65/65 tests 通过；E2E-KW-018 已在 macOS arm64 的实际 Playwright project 中通过。
+- **仓库门禁：** `npm run lint`（0 errors）、`npm run typecheck`、`npm run lint:boundary`、Open/Full/Renderer/preload/main/server build 与本机 E2E 矩阵通过；完整 `npm test` 的最终复跑由 Ticket 57 汇总。
+- **提交与偏差：** 实现位于当前工作树（基于 HEAD `442ef4f4`，本次未创建提交）；无产品或架构偏差，未使用内置插件。

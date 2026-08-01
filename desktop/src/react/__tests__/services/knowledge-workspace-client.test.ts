@@ -1150,4 +1150,102 @@ describe('knowledge workspace client', () => {
         details: { field: 'search.address' },
       });
   });
+
+  it('queries saved backlinks and validates the source-relative response', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      result: {
+        kind: 'backlinks',
+        sourceKey: 'main',
+        generationId: 'generation-2',
+        items: [{
+          sourceAddress: {
+            sourceKey: 'main',
+            relativePath: 'Notes/Referrer.md',
+          },
+          ordinal: 0,
+          linkKind: 'wikilink',
+          fragment: 'Section',
+          fromOffset: 10,
+          toOffset: 31,
+        }],
+        hasMore: false,
+      },
+    }));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.querySavedBacklinks({
+      address: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Target.md',
+      },
+      generationId: 'generation-2',
+      limit: 50,
+    })).resolves.toEqual({
+      kind: 'backlinks',
+      sourceKey: 'main',
+      generationId: 'generation-2',
+      items: [{
+        sourceAddress: {
+          sourceKey: 'main',
+          relativePath: 'Notes/Referrer.md',
+        },
+        ordinal: 0,
+        linkKind: 'wikilink',
+        fragment: 'Section',
+        fromOffset: 10,
+        toOffset: 31,
+      }],
+      hasMore: false,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/knowledge-workspace/query',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          kind: 'backlinks',
+          address: {
+            sourceKey: 'main',
+            relativePath: 'Notes/Target.md',
+          },
+          generationId: 'generation-2',
+          limit: 50,
+        }),
+      }),
+    );
+  });
+
+  it('rejects cross-source and unknown backlink fields before exposing them', async () => {
+    const client = createKnowledgeWorkspaceClient({
+      fetchImpl: vi.fn(async () => jsonResponse({
+        result: {
+          kind: 'backlinks',
+          sourceKey: 'main',
+          generationId: 'generation-2',
+          items: [{
+            sourceAddress: {
+              sourceKey: 'research',
+              relativePath: 'Notes/Referrer.md',
+            },
+            ordinal: 0,
+            linkKind: 'wikilink',
+            fragment: null,
+            fromOffset: 10,
+            toOffset: 20,
+            absolutePath: '/private/referrer.md',
+          }],
+          hasMore: false,
+        },
+      })),
+    });
+
+    await expect(client.querySavedBacklinks({
+      address: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Target.md',
+      },
+    })).rejects.toMatchObject({
+      code: 'knowledge_operation_precondition_failed',
+      details: { field: 'query.items.0' },
+    });
+  });
 });

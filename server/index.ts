@@ -348,6 +348,9 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
   }
 
   const SERVER_TOKEN = process.env.HANA_TOKEN || crypto.randomBytes(16).toString("hex");
+  const NATIVE_BRIDGE_TOKEN = process.env.HANA_SERVER_OWNER === "desktop"
+    ? crypto.randomBytes(32).toString("base64url")
+    : null;
   const envPort = Number.parseInt(process.env.HANA_PORT || "", 10);
   const envPortPinned = Number.isInteger(envPort) && envPort >= 0;
   if (!envPortPinned) {
@@ -575,7 +578,7 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
       c.header("Access-Control-Allow-Credentials", "true");
     }
     c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Hana-Native-Bridge");
     if (c.req.method === "OPTIONS") return c.text("", 204);
 
     const transport = inferHttpConnectionKind({
@@ -922,6 +925,7 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     bridgeManagerRef,
     confirmStore,
     appVersion,
+    nativeBridgeToken: NATIVE_BRIDGE_TOKEN,
   };
   await registerOpenRoutes(app, ctx);
   app.route("/api", createMobileWorkbenchRoute(engine));
@@ -1189,6 +1193,7 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
         configuredPort: serverRuntimeState.configuredPort,
         network: createServerRuntimeNetworkSummary(),
         token: SERVER_TOKEN,
+        ...(NATIVE_BRIDGE_TOKEN ? { nativeBridgeToken: NATIVE_BRIDGE_TOKEN } : {}),
         version: appVersion,
         ownerKind: process.env.HANA_SERVER_OWNER === "desktop" ? "desktop" : "standalone",
         ownerPid: Number.parseInt(process.env.HANA_SERVER_OWNER_PID || "", 10) || null,

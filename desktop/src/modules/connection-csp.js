@@ -3,7 +3,8 @@
   var BASE_CSP = {
     "default-src": ["'self'"],
     "connect-src": ["'self'", "ws://127.0.0.1:*", "http://127.0.0.1:*"],
-    "img-src": ["'self'", "data:", "file:", "http://127.0.0.1:*"],
+    "img-src": ["'self'", "data:", "blob:", "file:", "http://127.0.0.1:*"],
+    "media-src": ["'self'", "data:", "blob:"],
     "style-src": ["'self'", "'unsafe-inline'"],
     "script-src": ["'self'"],
     "font-src": ["'self'", "data:"],

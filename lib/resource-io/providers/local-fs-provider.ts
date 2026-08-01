@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { ResourceIOError, resourceAccessDenied, resourceNotFound, targetAlreadyExists } from "../errors.ts";
 import { normalizeResourceRef, resourceKeyForRef } from "../resource-refs.ts";
 import { resolveLocalFsRootIdentity } from "../root-identity.ts";
+import { RESOURCE_READ_PROOF, RESOURCE_SCOPE_ROOT } from "../types.ts";
 import {
   TRANSFER_MAX_CHUNK_BYTES,
   TRANSFER_MAX_DEPTH,
@@ -30,6 +31,7 @@ import type {
   ResourceMovePreconditions,
   ResourceOpenReadOptions,
   ResourceOpenReadResult,
+  ResourceReadProof,
   ResourceReadResult,
   ResourceRef,
   ResourceSearchResult,
@@ -60,6 +62,21 @@ type LocalFsProviderOptions = {
 };
 
 const SEARCH_SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage"]);
+const LOCAL_READ_PROOFS = new WeakSet<object>();
+
+type LocalPathIdentityEntry = Readonly<{
+  filePath: string;
+  identity: FileIdentity;
+  kind: "directory" | "file";
+  changeToken: string;
+}>;
+
+type LocalPathIdentityProof = Readonly<{
+  filePath: string;
+  entries: readonly LocalPathIdentityEntry[];
+  targetIdentity: FileIdentity;
+  targetStat: fs.Stats;
+}>;
 
 export class LocalFsProvider {
   readonly id = "local_fs" as const;
@@ -105,8 +122,13 @@ export class LocalFsProvider {
 
   async stat(ref: ResourceRef | unknown): Promise<ResourceStat> {
     const filePath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, filePath, this.cwd);
     this.assertAllowed(filePath, "read");
-    if (!fs.existsSync(filePath)) {
+    let pathProof: LocalPathIdentityProof;
+    try {
+      pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
       return {
         resourceKey: localResourceKey(filePath),
         resource: this.resourceForPath(filePath),
@@ -115,28 +137,39 @@ export class LocalFsProvider {
         filePath,
       };
     }
-    const stat = fs.statSync(filePath);
-    return {
+    this.revalidateReadProof(filePath, pathProof);
+    const stat = pathProof.targetStat;
+    return attachResourceReadProof({
       resourceKey: localResourceKey(filePath),
       resource: this.resourceForPath(filePath),
       exists: true,
       isDirectory: stat.isDirectory(),
       version: versionFromStat(stat),
       filePath,
-    };
+    }, localResourceReadProof(pathProof));
   }
 
   async read(ref: ResourceRef | unknown): Promise<ResourceReadResult> {
-    const filePath = this.resolvePath(ref);
-    this.assertAllowed(filePath, "read");
-    const stat = fs.statSync(filePath);
-    if (!stat.isFile()) throw new Error(`resource is not a file: ${filePath}`);
+    const stat = await this.stat(ref);
+    if (!stat.exists) throw resourceNotFound(stat.filePath || "resource");
+    if (stat.isDirectory) throw safeOpenReadError("not_a_file", 400);
+    const opened = await this.openRead(ref, {
+      expectedVersion: stat.version,
+      [RESOURCE_READ_PROOF]: stat[RESOURCE_READ_PROOF],
+    });
+    const chunks: Buffer[] = [];
+    let byteLength = 0;
+    for await (const chunk of opened.body) {
+      const copy = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+      chunks.push(copy);
+      byteLength += copy.byteLength;
+    }
     return {
-      resourceKey: localResourceKey(filePath),
-      resource: this.resourceForPath(filePath),
-      content: fs.readFileSync(filePath),
-      version: versionFromStat(stat),
-      filePath,
+      resourceKey: opened.resourceKey,
+      resource: opened.resource,
+      content: Buffer.concat(chunks, byteLength),
+      version: opened.version,
+      ...(opened.filePath ? { filePath: opened.filePath } : {}),
     };
   }
 
@@ -146,6 +179,17 @@ export class LocalFsProvider {
   ): Promise<ResourceOpenReadResult> {
     const filePath = this.resolvePath(ref);
     this.assertAllowed(filePath, "read");
+    const suppliedProof = localPathProofFromResourceReadProof(
+      options[RESOURCE_READ_PROOF],
+      filePath,
+    );
+    const proofRoot = suppliedProof?.entries[0]?.filePath
+      || localReadProofRoot(ref, filePath, this.cwd);
+    const pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    if (suppliedProof && !sameLocalPathIdentityProof(suppliedProof, pathProof)) {
+      throw safeOpenReadError("resource_version_conflict", 409);
+    }
+    const expectedPathProof = suppliedProof || pathProof;
     const noFollow = typeof fs.constants.O_NOFOLLOW === "number"
       ? fs.constants.O_NOFOLLOW
       : 0;
@@ -154,8 +198,7 @@ export class LocalFsProvider {
       descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
       const opened = fs.fstatSync(descriptor);
       if (!opened.isFile()) throw safeOpenReadError("not_a_file", 400);
-      const current = fs.statSync(filePath);
-      if (!sameFileIdentity(fileIdentity(opened), current)) {
+      if (!sameFileIdentity(expectedPathProof.targetIdentity, opened)) {
         throw safeOpenReadError("resource_version_conflict", 409);
       }
       const version = versionFromStat(opened);
@@ -173,7 +216,7 @@ export class LocalFsProvider {
       ) {
         throw safeOpenReadError("invalid_read_range", 416);
       }
-      this.assertAllowed(filePath, "read");
+      this.revalidateReadProof(filePath, expectedPathProof);
       const body = openedLocalFileBody({
         descriptor,
         filePath,
@@ -181,7 +224,7 @@ export class LocalFsProvider {
         end,
         expectedIdentity: fileIdentity(opened),
         expectedVersion: version,
-        revalidateScope: () => this.assertAllowed(filePath, "read"),
+        revalidateScope: () => this.revalidateReadProof(filePath, expectedPathProof),
       });
       descriptor = null;
       return {
@@ -204,6 +247,22 @@ export class LocalFsProvider {
         throw safeOpenReadError("resource_access_denied", 403);
       }
       throw error;
+    }
+  }
+
+  revalidateReadProof(filePath: string, proof: LocalPathIdentityProof): void {
+    this.assertAllowed(filePath, "read");
+    let current: LocalPathIdentityProof;
+    try {
+      current = captureLocalPathIdentityProof(
+        filePath,
+        proof.entries[0]?.filePath || this.cwd,
+      );
+    } catch {
+      throw safeOpenReadError("resource_version_conflict", 409);
+    }
+    if (!sameLocalPathIdentityProof(proof, current)) {
+      throw safeOpenReadError("resource_version_conflict", 409);
     }
   }
 
@@ -680,7 +739,9 @@ export class LocalFsProvider {
     const rawPath = path.isAbsolute(normalized.path)
       ? path.normalize(normalized.path)
       : path.resolve(this.cwd, normalized.path);
-    return realOrResolved(rawPath);
+    const resolved = realOrResolved(rawPath);
+    assertTrustedScopeContains(normalized, resolved);
+    return resolved;
   }
 
   resourceForPath(filePath: string): ResourceDescriptor {
@@ -727,6 +788,150 @@ export class LocalFsProvider {
 
 function localResourceKey(filePath: string): string {
   return resourceKeyForRef({ kind: "local-file", path: filePath });
+}
+
+function captureLocalPathIdentityProof(
+  filePath: string,
+  proofRoot: string,
+): LocalPathIdentityProof {
+  const normalized = path.resolve(filePath);
+  const normalizedRoot = realOrResolved(proofRoot);
+  const relativeToRoot = path.relative(normalizedRoot, normalized);
+  const anchoredInsideRoot = relativeToRoot === ""
+    || (!relativeToRoot.startsWith("..") && !path.isAbsolute(relativeToRoot));
+  const anchor = anchoredInsideRoot ? normalizedRoot : path.dirname(normalized);
+  const segments = path.relative(anchor, normalized).split(path.sep).filter(Boolean);
+  const candidates = [anchor, ...segments.map((_, index) => (
+    path.join(anchor, ...segments.slice(0, index + 1))
+  ))];
+  const entries: LocalPathIdentityEntry[] = [];
+  let targetStat: fs.Stats | null = null;
+  for (const [index, candidate] of candidates.entries()) {
+    const stat = fs.lstatSync(candidate, { bigint: true });
+    if (stat.isSymbolicLink()) {
+      throw safeOpenReadError("symbolic_link_not_allowed", 400);
+    }
+    const isTarget = index === candidates.length - 1;
+    if (!isTarget && !stat.isDirectory()) {
+      const error = new Error("Resource path parent is not a directory") as NodeJS.ErrnoException;
+      error.code = "ENOTDIR";
+      throw error;
+    }
+    if (!stat.isDirectory() && !stat.isFile()) {
+      throw safeOpenReadError("unsupported_file_kind", 400);
+    }
+    entries.push(Object.freeze({
+      filePath: path.normalize(candidate),
+      identity: Object.freeze({
+        device: Number(stat.dev),
+        inode: Number(stat.ino),
+        birthtimeMs: Number(stat.birthtimeNs) / 1_000_000,
+      }),
+      kind: stat.isDirectory() ? "directory" : "file",
+      changeToken: [stat.ctimeNs, stat.mtimeNs, stat.size, stat.mode]
+        .map(value => value.toString())
+        .join(":"),
+    }));
+    if (isTarget) targetStat = fs.lstatSync(candidate);
+  }
+  if (!targetStat || entries.length === 0) {
+    throw safeOpenReadError("resource_not_found", 404);
+  }
+  return Object.freeze({
+    filePath: path.normalize(normalized),
+    entries: Object.freeze(entries),
+    targetIdentity: fileIdentity(targetStat),
+    targetStat,
+  });
+}
+
+function localReadProofRoot(
+  ref: ResourceRef | unknown,
+  filePath: string,
+  providerCwd: string,
+): string {
+  const normalized = normalizeResourceRef(ref);
+  const scopeRoot = normalized[RESOURCE_SCOPE_ROOT];
+  if (typeof scopeRoot === "string" && scopeRoot.length > 0) {
+    const root = realOrResolved(scopeRoot);
+    const relative = path.relative(root, path.resolve(filePath));
+    if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
+      return root;
+    }
+    throw safeOpenReadError("resource_access_denied", 403);
+  }
+  return providerCwd;
+}
+
+function assertTrustedScopeContains(ref: ResourceRef, filePath: string): void {
+  const scopeRoot = ref[RESOURCE_SCOPE_ROOT];
+  if (typeof scopeRoot !== "string" || scopeRoot.length === 0) return;
+  const root = realOrResolved(scopeRoot);
+  const relative = path.relative(root, path.resolve(filePath));
+  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) return;
+  throw resourceAccessDenied("scope", filePath, "trusted_scope_escape", {
+    safeMessage: "Resource is outside authorized roots",
+  });
+}
+
+function sameLocalPathIdentityProof(
+  expected: LocalPathIdentityProof,
+  current: LocalPathIdentityProof,
+): boolean {
+  return expected.filePath === current.filePath
+    && expected.entries.length === current.entries.length
+    && expected.entries.every((entry, index) => {
+      const candidate = current.entries[index];
+      return Boolean(
+        candidate
+        && entry.filePath === candidate.filePath
+        && entry.kind === candidate.kind
+        && entry.changeToken === candidate.changeToken
+        && sameIdentity(entry.identity, candidate.identity),
+      );
+    });
+}
+
+function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
+  return left.device === right.device
+    && left.inode === right.inode
+    && left.birthtimeMs === right.birthtimeMs;
+}
+
+function localResourceReadProof(pathProof: LocalPathIdentityProof): ResourceReadProof {
+  LOCAL_READ_PROOFS.add(pathProof);
+  return Object.freeze({ providerId: "local_fs", value: pathProof });
+}
+
+function localPathProofFromResourceReadProof(
+  proof: ResourceReadProof | undefined,
+  filePath: string,
+): LocalPathIdentityProof | null {
+  if (proof === undefined) return null;
+  const value = proof?.value;
+  if (
+    proof.providerId !== "local_fs"
+    || !value
+    || typeof value !== "object"
+    || !LOCAL_READ_PROOFS.has(value)
+    || (value as LocalPathIdentityProof).filePath !== path.normalize(path.resolve(filePath))
+  ) {
+    throw safeOpenReadError("resource_version_conflict", 409);
+  }
+  return value as LocalPathIdentityProof;
+}
+
+function attachResourceReadProof<T extends object>(
+  result: T,
+  proof: ResourceReadProof,
+): T {
+  Object.defineProperty(result, RESOURCE_READ_PROOF, {
+    value: proof,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return result;
 }
 
 function versionFromStat(stat: fs.Stats): ResourceVersion {

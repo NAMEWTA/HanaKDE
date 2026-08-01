@@ -1,6 +1,6 @@
 # OpenHanako 知识工作区 Goal Plan
 
-**状态：** 已规划，尚未进入实现  
+**状态：** Tickets 01–56 已实现；Ticket 57 本机门禁通过，等待 Windows/Linux 与 reference performance runner
 **规划日期：** 2026-07-25  
 **Change：** `2026-07-24-openhanako-knowledge-workspace`
 

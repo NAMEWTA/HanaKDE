@@ -44,6 +44,8 @@ export interface CompositionContext {
   confirmStore: any;
   /** Product version string surfaced by `/api/server/identity`. */
   appVersion: string;
+  /** Desktop Main-only credential; null for standalone servers. */
+  nativeBridgeToken: string | null;
 }
 
 export interface CompositionRoot {

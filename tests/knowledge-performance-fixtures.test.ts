@@ -170,7 +170,7 @@ describe("knowledge performance fixtures", () => {
       { sourceKey: "main", sameNameRelativePath: "Shared/SameName.md" },
       { sourceKey: "research", sameNameRelativePath: "Shared/SameName.md" },
       { sourceKey: "archive", sameNameRelativePath: "Shared/SameName.md" },
-      { sourceKey: "资料", sameNameRelativePath: "Shared/SameName.md" },
+      { sourceKey: "materials", sameNameRelativePath: "Shared/SameName.md" },
     ]);
     expect(first?.read().byteLength).toBeGreaterThan(0);
     expect(createTabs(profile)).toHaveLength(100);
@@ -187,13 +187,14 @@ describe("knowledge performance fixtures", () => {
       "main:Shared/SameName.md",
       "research:Shared/SameName.md",
       "archive:Shared/SameName.md",
-      "资料:Shared/SameName.md",
+      "materials:Shared/SameName.md",
     ]);
   });
 
   it("provides discriminated, consumable inputs for all twelve benchmark scenarios", () => {
     const dataset = createKnowledgeFixtureDataset(resolveFixtureProfile("full"));
     const dense = dataset.scenario("denseWikilinks50k");
+    const trigram = dataset.scenario("searchWarmTrigram");
     const recovery = dataset.scenario("operationRecovery1k");
     const ids = [
       "initialTree10k",
@@ -212,6 +213,8 @@ describe("knowledge performance fixtures", () => {
 
     expect(ids.map((id) => dataset.scenario(id).id)).toEqual(ids);
     expect(dense.kind).toBe("dense-wikilinks");
+    expect(trigram.kind).toBe("search");
+    if (trigram.kind === "search") expect([...trigram.query]).toHaveLength(3);
     if (dense.kind === "dense-wikilinks") {
       expect((dense.readDocument().toString("utf8").match(/\[\[Dense-Target-/g) ?? []).length).toBe(
         50_000,

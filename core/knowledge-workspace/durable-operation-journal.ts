@@ -527,7 +527,7 @@ function validateRecord(value: unknown): KnowledgeOperationJournalRecord {
     record.schemaVersion !== 1
     || typeof record.operationId !== "string"
     || !isKnowledgeOperationRequestHash(record.requestHash)
-    || record.kind !== "rename"
+    || (record.kind !== "rename" && record.kind !== "move")
     || !isOperationState(record.state)
     || !Array.isArray(record.items)
     || record.items.length !== 1
@@ -537,7 +537,8 @@ function validateRecord(value: unknown): KnowledgeOperationJournalRecord {
   assertKnowledgeOperationId(record.operationId);
   const request = parseKnowledgeOperationRequest(record.request);
   if (
-    record.requestHash !== hashKnowledgeOperationRequest(request)
+    record.kind !== request.kind
+    || record.requestHash !== hashKnowledgeOperationRequest(request)
     || (
       record.committedRequestHash !== undefined
       && (
@@ -585,7 +586,7 @@ function validateRecord(value: unknown): KnowledgeOperationJournalRecord {
     ...(committedRequestHash
       ? { committedRequestHash }
       : {}),
-    kind: "rename",
+    kind: request.kind,
     request,
     owner,
     requestId,
@@ -610,7 +611,7 @@ function validateResult(value: unknown): KnowledgeOperationResult {
     result.schemaVersion !== 1
     || typeof result.operationId !== "string"
     || !isKnowledgeOperationRequestHash(result.requestHash)
-    || result.kind !== "rename"
+    || (result.kind !== "rename" && result.kind !== "move")
     || !isOperationState(result.state)
     || !Array.isArray(result.items)
     || result.items.length !== 1
@@ -623,8 +624,9 @@ function validateResult(value: unknown): KnowledgeOperationResult {
   ) {
     throw new TypeError("invalid knowledge operation result");
   }
+  const kind = result.kind as KnowledgeOperationRequest["kind"];
   assertKnowledgeOperationId(result.operationId);
-  const items = result.items.map(validateResultItem);
+  const items = result.items.map(item => validateResultItem(item, kind));
   assertJournalStateConsistency(result.state, items[0].state);
   const summary = validateSummary(result.summary);
   const expectedSummary = {
@@ -652,7 +654,7 @@ function validateResult(value: unknown): KnowledgeOperationResult {
     schemaVersion: 1,
     operationId: result.operationId,
     requestHash: result.requestHash,
-    kind: "rename",
+    kind,
     state: result.state,
     completedAt: validIsoDate(result.completedAt),
     items: Object.freeze(items),
@@ -813,11 +815,14 @@ function validateStep(value: unknown): KnowledgeOperationStep {
   });
 }
 
-function validateResultItem(value: unknown): KnowledgeOperationResultItem {
+function validateResultItem(
+  value: unknown,
+  kind: KnowledgeOperationRequest["kind"],
+): KnowledgeOperationResultItem {
   const item = plainRecord(value);
   rejectUnknownFields(item, RESULT_ITEM_FIELDS);
   const fromRequest = parseKnowledgeOperationRequest({
-    kind: "rename",
+    kind,
     from: item.from,
     to: item.to,
     expectedVersion: { sequence: 0 },
