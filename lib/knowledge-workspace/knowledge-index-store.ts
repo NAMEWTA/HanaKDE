@@ -354,6 +354,7 @@ export class KnowledgeIndexStore {
   readonly #now: () => number;
   readonly #processIsAlive: (pid: number) => boolean;
   readonly #fileSystem: KnowledgeIndexFileSystem;
+  readonly #searchCandidateCache = new Map<string, readonly KnowledgeIndexSearchQueryRow[]>();
   readonly #leaseCounts = new Map<string, number>();
   #activeRebuild: KnowledgeIndexRebuild | null = null;
   #lockedOwnerHint: string | null = null;
@@ -542,6 +543,7 @@ export class KnowledgeIndexStore {
     return new KnowledgeIndexQueryLease({
       database,
       manifest: current.manifest,
+      searchCandidateCache: this.#searchCandidateCache,
       release: () => {
         const remaining = (this.#leaseCounts.get(generationId) ?? 1) - 1;
         if (remaining > 0) this.#leaseCounts.set(generationId, remaining);
@@ -1275,17 +1277,20 @@ export class KnowledgeIndexQueryLease {
   readonly #database: DatabaseLike;
   readonly #manifest: KnowledgeIndexManifest;
   readonly #release: () => void;
+  readonly #searchCandidateCache: Map<string, readonly KnowledgeIndexSearchQueryRow[]> | null;
   #released = false;
 
   constructor(options: {
     database: DatabaseLike;
     manifest: KnowledgeIndexManifest;
     release: () => void;
+    searchCandidateCache?: Map<string, readonly KnowledgeIndexSearchQueryRow[]>;
   }) {
     this.generationId = options.manifest.generationId;
     this.#database = options.database;
     this.#manifest = options.manifest;
     this.#release = options.release;
+    this.#searchCandidateCache = options.searchCandidateCache ?? null;
   }
 
   inspect(): KnowledgeIndexInspection {
@@ -1426,6 +1431,12 @@ export class KnowledgeIndexQueryLease {
   }): readonly KnowledgeIndexSearchQueryRow[] {
     this.#assertActive();
     const includeDisplayText = input.includeDisplayText !== false;
+    const cacheKey = includeDisplayText
+      ? null
+      : `${this.generationId}:${input.ftsQuery ?? "<all>"}:${input.offset}:${input.limit}`;
+    if (cacheKey && this.#searchCandidateCache?.has(cacheKey)) {
+      return this.#searchCandidateCache.get(cacheKey)!;
+    }
     const where = input.ftsQuery === null
       ? ""
       : "WHERE content_fts MATCH ?";
@@ -1448,7 +1459,7 @@ export class KnowledgeIndexQueryLease {
     const rows = this.#database.prepare(sql).all(
       ...params,
     ) as Array<Record<string, unknown>>;
-    return Object.freeze(rows.map((row) => Object.freeze({
+    const result = Object.freeze(rows.map((row) => Object.freeze({
       resourceId: Number(row.resource_id),
       relativePath: String(row.relative_path),
       basename: String(row.basename),
@@ -1463,6 +1474,15 @@ export class KnowledgeIndexQueryLease {
       metadataFold: String(row.metadata_fold),
       bodyFold: String(row.body_fold),
     })));
+    if (cacheKey && this.#searchCandidateCache) {
+      this.#searchCandidateCache.set(cacheKey, result);
+      while (this.#searchCandidateCache.size > 64) {
+        const oldest = this.#searchCandidateCache.keys().next().value;
+        if (typeof oldest !== "string") break;
+        this.#searchCandidateCache.delete(oldest);
+      }
+    }
+    return result;
   }
 
   querySearchDisplayText(resourceIds: readonly number[]): ReadonlyMap<number, {
