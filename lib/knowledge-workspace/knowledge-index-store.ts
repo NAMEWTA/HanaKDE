@@ -355,6 +355,7 @@ export class KnowledgeIndexStore {
   readonly #processIsAlive: (pid: number) => boolean;
   readonly #fileSystem: KnowledgeIndexFileSystem;
   readonly #searchCandidateCache = new Map<string, readonly KnowledgeIndexSearchQueryRow[]>();
+  #queryManifestCache: { manifest: KnowledgeIndexManifest; cachedAtMs: number } | null = null;
   readonly #leaseCounts = new Map<string, number>();
   #activeRebuild: KnowledgeIndexRebuild | null = null;
   #lockedOwnerHint: string | null = null;
@@ -520,10 +521,17 @@ export class KnowledgeIndexStore {
   }
 
   acquireQueryLease(): KnowledgeIndexQueryLease {
-    const current = this.#readCurrent();
+    const cached = this.#queryManifestCache;
+    const current = cached && this.#now() - cached.cachedAtMs < 1_000
+      ? { manifest: cached.manifest, databaseReadable: true }
+      : this.#readCurrent();
     if (!current.manifest || !current.databaseReadable) {
       throw indexUnavailable("knowledge index generation is unavailable");
     }
+    this.#queryManifestCache = {
+      manifest: current.manifest,
+      cachedAtMs: this.#now(),
+    };
     const generationId = current.manifest.generationId;
     const generationPath = this.#generationPath(generationId);
     let database: DatabaseLike;
@@ -556,6 +564,8 @@ export class KnowledgeIndexStore {
     lastCompleteSequence: number;
     changes: readonly KnowledgeIndexIncrementalChange[];
   }): void {
+    this.#queryManifestCache = null;
+    this.#searchCandidateCache.clear();
     if (this.#activeRebuild) {
       throw indexUnavailable(
         "knowledge index incremental update waits for active rebuild",
@@ -701,6 +711,8 @@ export class KnowledgeIndexStore {
     rebuild: KnowledgeIndexRebuild,
     lastCompleteSequence: number,
   ): void {
+    this.#queryManifestCache = null;
+    this.#searchCandidateCache.clear();
     this.#assertActive(rebuild);
     const sequence = validSequence(
       lastCompleteSequence,
