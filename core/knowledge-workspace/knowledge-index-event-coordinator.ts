@@ -495,7 +495,7 @@ export class KnowledgeIndexEventCoordinator {
         throwIfAborted(controller.signal);
         batch.push(document);
         processed += 1;
-        if (batch.length >= 64 || this.#now() - lastYieldAt >= 50) {
+        if (batch.length >= 2 || this.#now() - lastYieldAt >= 50) {
           rebuild.replaceResources(batch.splice(0));
         }
         if (processed % 200 === 0 || this.#now() - lastYieldAt >= 50) {

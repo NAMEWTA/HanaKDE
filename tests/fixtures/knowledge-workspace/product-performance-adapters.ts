@@ -44,7 +44,7 @@ type Prepared = {
 const WORKSPACE_FINGERPRINT = createHash("sha256").update("knowledge-reference-workspace").digest("hex");
 const SOURCE_KEYS = ["main", "research", "archive", "materials"] as const;
 const FORMAT = Object.freeze({ hadBom: false, lineEnding: "lf" as const, mixedLineEndings: false });
-const REBUILD_BATCH_SIZE = 2;
+const REBUILD_BATCH_SIZE = 1;
 
 export function createKnowledgeProductPerformanceAdapters(options: {
   scratchParent: string;
