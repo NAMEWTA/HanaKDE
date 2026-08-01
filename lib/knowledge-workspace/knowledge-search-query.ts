@@ -20,7 +20,7 @@ const SEARCH_BATCH_SIZE = 256;
 // Keep broad/short-term searches responsive. The cursor still exposes more
 // results within this bounded candidate window without allowing an unindexed
 // term to turn every renderer request into a full 100k-row scan.
-const SEARCH_MAX_CANDIDATES = 900;
+const SEARCH_MAX_CANDIDATES = 500;
 const SEARCH_SORT_KEY = "score-desc,path-byte,resource-id";
 
 export type KnowledgeSearchSource = Readonly<{
