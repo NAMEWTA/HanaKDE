@@ -479,7 +479,7 @@ export class KnowledgeIndexStore {
       // An unpublished build is disposable on crash; NORMAL keeps each bulk
       // indexing slice responsive. Publication restores FULL before metadata
       // and checkpoint durability are asserted.
-      database.pragma("synchronous = NORMAL");
+      database.pragma("synchronous = OFF");
       createSchema(database);
       const createdAtMs = this.#now();
       writeMeta(database, {
