@@ -351,9 +351,20 @@ function rebuildStores(
     startedSequence: 0,
   })]));
   let maxTaskMs = 0;
+  const batches = new Map<string, ResourceFixtureEntry[]>();
   for (const entry of entries) {
+    const batch = batches.get(entry.sourceKey) ?? [];
+    batch.push(entry);
+    batches.set(entry.sourceKey, batch);
+    if (batch.length < 64) continue;
     const started = performance.now();
-    rebuilds.get(entry.sourceKey)!.replaceResource(indexDocument(entry));
+    rebuilds.get(entry.sourceKey)!.replaceResources(batch.splice(0).map(indexDocument));
+    maxTaskMs = Math.max(maxTaskMs, performance.now() - started);
+  }
+  for (const [sourceKey, batch] of batches) {
+    if (batch.length === 0) continue;
+    const started = performance.now();
+    rebuilds.get(sourceKey)!.replaceResources(batch.map(indexDocument));
     maxTaskMs = Math.max(maxTaskMs, performance.now() - started);
   }
   for (const rebuild of rebuilds.values()) rebuild.publish({ lastCompleteSequence: 0 });

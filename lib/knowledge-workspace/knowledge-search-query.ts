@@ -288,11 +288,11 @@ async function searchSource(
       })
       : 0;
     const ftsQuery = candidateFtsQuery(expression);
-    const matches: Array<{
-      row: KnowledgeIndexSearchQueryRow;
-      score: number;
-      snippets: readonly KnowledgeSearchSnippet[];
-    }> = [];
+  const matches: Array<{
+    row: KnowledgeIndexSearchQueryRow;
+    score: number;
+    branch: readonly string[];
+  }> = [];
     let candidateOffset = 0;
     while (true) {
       assertNotAborted(options.signal);
@@ -300,6 +300,7 @@ async function searchSource(
         ftsQuery,
         offset: candidateOffset,
         limit: SEARCH_BATCH_SIZE,
+        includeDisplayText: false,
       });
       for (const row of rows) {
         const branch = matchingBranch(row, expression);
@@ -307,7 +308,7 @@ async function searchSource(
         matches.push({
           row,
           score: searchScore(row, branch),
-          snippets: snippetsFor(row, branch),
+          branch,
         });
       }
       if (rows.length < SEARCH_BATCH_SIZE) break;
@@ -321,13 +322,23 @@ async function searchSource(
     ));
     const limit = request.limit ?? KNOWLEDGE_SEARCH_DEFAULT_LIMIT;
     const selected = matches.slice(offset, offset + limit);
+    const displayText = typeof lease.querySearchDisplayText === "function"
+      ? lease.querySearchDisplayText(selected.map(({ row }) => row.resourceId))
+      : new Map<number, { frontmatterJson: string | null; bodyText: string | null }>();
+    const selectedWithSnippets = selected.map((match) => {
+      const display = displayText.get(match.row.resourceId);
+      const row = display
+        ? { ...match.row, frontmatterJson: display.frontmatterJson, bodyText: display.bodyText }
+        : match.row;
+      return { ...match, row, snippets: snippetsFor(row, match.branch) };
+    });
     const nextOffset = offset + selected.length;
     return Object.freeze({
       state: "ready",
       sourceKey: source.sourceKey,
       displayName: source.displayName,
       generationId: lease.generationId,
-      items: Object.freeze(selected.map(({ row, score, snippets }) =>
+      items: Object.freeze(selectedWithSnippets.map(({ row, score, snippets }) =>
         Object.freeze({
           address: Object.freeze({
             sourceKey: source.sourceKey,

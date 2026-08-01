@@ -490,16 +490,21 @@ export class KnowledgeIndexEventCoordinator {
       });
       let processed = 0;
       let lastYieldAt = this.#now();
+      const batch: KnowledgeIndexResourceDocument[] = [];
       for await (const document of source.scan(controller.signal)) {
         throwIfAborted(controller.signal);
-        rebuild.replaceResource(document);
+        batch.push(document);
         processed += 1;
+        if (batch.length >= 64 || this.#now() - lastYieldAt >= 50) {
+          rebuild.replaceResources(batch.splice(0));
+        }
         if (processed % 200 === 0 || this.#now() - lastYieldAt >= 50) {
           rebuild.setProgress(Math.min(0.9, processed / (processed + 200)));
           await this.#yieldNow();
           lastYieldAt = this.#now();
         }
       }
+      if (batch.length > 0) rebuild.replaceResources(batch.splice(0));
 
       while (state.replay.size > 0) {
         const replay = state.replay;

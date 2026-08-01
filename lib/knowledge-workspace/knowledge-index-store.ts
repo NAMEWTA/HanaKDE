@@ -1176,8 +1176,24 @@ export class KnowledgeIndexRebuild {
   }
 
   replaceResource(document: KnowledgeIndexResourceDocument): void {
+    this.replaceResources([document]);
+  }
+
+  replaceResources(documents: readonly KnowledgeIndexResourceDocument[]): void {
     this[REBUILD_ASSERT_HEALTHY]();
-    replaceResourceDocument(rebuildInternals(this).database, document);
+    if (documents.length === 0) return;
+    const database = rebuildInternals(this).database;
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const document of documents) {
+        this[REBUILD_ASSERT_HEALTHY]();
+        replaceResourceDocumentRows(database, document);
+      }
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   deleteResource(relativePath: string): void {
@@ -1401,15 +1417,17 @@ export class KnowledgeIndexQueryLease {
     ftsQuery: string | null;
     offset: number;
     limit: number;
+    includeDisplayText?: boolean;
   }): readonly KnowledgeIndexSearchQueryRow[] {
     this.#assertActive();
+    const includeDisplayText = input.includeDisplayText !== false;
     const where = input.ftsQuery === null
       ? ""
       : "WHERE content_fts MATCH ?";
     const sql = `
       SELECT resources.resource_id, resources.relative_path,
         resources.basename, resources.kind, pages.title,
-        pages.frontmatter_json, pages.body_text,
+        ${includeDisplayText ? "pages.frontmatter_json, pages.body_text" : "NULL AS frontmatter_json, NULL AS body_text"},
         content_fts.title_fold, content_fts.path_fold,
         content_fts.metadata_fold, content_fts.body_fold
       FROM content_fts
@@ -1440,6 +1458,27 @@ export class KnowledgeIndexQueryLease {
       metadataFold: String(row.metadata_fold),
       bodyFold: String(row.body_fold),
     })));
+  }
+
+  querySearchDisplayText(resourceIds: readonly number[]): ReadonlyMap<number, {
+    frontmatterJson: string | null;
+    bodyText: string | null;
+  }> {
+    this.#assertActive();
+    if (resourceIds.length === 0) return new Map();
+    const placeholders = resourceIds.map(() => "?").join(",");
+    const rows = this.#database.prepare(`
+      SELECT resource_id, frontmatter_json, body_text
+      FROM pages
+      WHERE resource_id IN (${placeholders})
+    `).all(...resourceIds) as Array<Record<string, unknown>>;
+    return new Map(rows.map((row) => [
+      Number(row.resource_id),
+      Object.freeze({
+        frontmatterJson: row.frontmatter_json === null ? null : String(row.frontmatter_json),
+        bodyText: row.body_text === null ? null : String(row.body_text),
+      }),
+    ]));
   }
 
   release(): void {
@@ -1634,21 +1673,6 @@ export function foldSearchText(value: string): string {
     throw new TypeError("foldSearchText requires a string");
   }
   return value.normalize("NFC").toLocaleLowerCase("und");
-}
-
-function replaceResourceDocument(
-  database: DatabaseLike,
-  document: KnowledgeIndexResourceDocument,
-): void {
-  validateResourceDocument(document);
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    replaceResourceDocumentRows(database, document);
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
 }
 
 function applyIncrementalChange(
