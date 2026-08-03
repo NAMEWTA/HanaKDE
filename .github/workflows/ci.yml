@@ -53,11 +53,12 @@ jobs:
 
       # The tag-only Build workflow verifies the extracted Windows standalone
       # package by launching its real hana-server.cmd and exercising exec_command.
-      # Keep that release boundary covered in ordinary CI too, using a throwaway
-      # signing key/keyset that exists only under RUNNER_TEMP. Production release
-      # jobs still require the repository HANA_SIGN_KEY secret and pinned keyset.
+      # Preserve that main-branch guard with a throwaway keyset, but keep PR's
+      # ten-minute regular-test matrix focused on its three real test runs.
+      # Otherwise Windows spends the whole matrix budget packaging before
+      # `npm test` can establish its own platform result.
       - name: Prepare ephemeral signing key for Windows standalone smoke
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         shell: bash
         run: |
           node scripts/artifact-keygen.mjs \
@@ -72,23 +73,23 @@ jobs:
           echo "HANA_SIGN_KEYSET=$RUNNER_TEMP/hana-ci-keyset.json" >> "$GITHUB_ENV"
 
       - name: Download MinGit for Windows standalone smoke
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/download-mingit.js
 
       - name: Build Windows server bundle for standalone smoke
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/build-server.mjs win32 x64
 
       - name: Build Windows standalone server archive in CI
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/build-standalone-server-artifact.mjs x64
 
       - name: Smoke-test packaged Windows standalone server
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/verify-standalone-server-artifact.mjs x64 --smoke
 
       - name: Run tests
-        run: npm test
+        run: npm test -- --maxWorkers=4
 
   knowledge-workspace-e2e:
     runs-on: ${{ matrix.os }}

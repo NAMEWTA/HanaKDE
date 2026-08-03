@@ -75,7 +75,10 @@ describe("Computer Use preference routes", () => {
       providers: [],
       activeLease: null,
     });
-    expect(body.selectedProviderId).toBe(body.settings.provider_by_platform[process.platform] || null);
+    // makeApp pins the route's trusted platform to darwin; never let the
+    // host runner platform turn this contract assertion into a CI-dependent
+    // expectation.
+    expect(body.selectedProviderId).toBe(body.settings.provider_by_platform.darwin || null);
   });
 
   it("updates settings", async () => {

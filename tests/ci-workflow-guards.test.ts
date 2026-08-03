@@ -102,7 +102,7 @@ describe("ci.yml: Windows restricted-token helper is exercised before release bu
     expect(packIndex).toBeGreaterThan(serverIndex);
     expect(verifyIndex).toBeGreaterThan(packIndex);
     for (const index of [keyIndex, minGitIndex, serverIndex, packIndex, verifyIndex]) {
-      expect(steps[index]?.if).toBe("runner.os == 'Windows'");
+      expect(steps[index]?.if).toBe("runner.os == 'Windows' && github.event_name != 'pull_request'");
     }
     expect(stepRun(steps[keyIndex])).toContain("$RUNNER_TEMP/hana-ci-sign-key.pem");
     expect(stepRun(steps[keyIndex])).toContain("HANA_SIGN_KEYSET=$RUNNER_TEMP/hana-ci-keyset.json");
