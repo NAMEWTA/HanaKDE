@@ -763,22 +763,24 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
   const racedName = 'Raced.md';
   const raceCurrent = path.join(workspaceSandbox.mainSource, 'race-current');
   const raceHolding = path.join(workspaceSandbox.mainSource, 'race-holding');
-  const raceLink = path.join(workspaceSandbox.mainSource, 'race-link');
   await fs.mkdir(raceCurrent);
   await fs.writeFile(path.join(raceCurrent, racedName), 'inside-race-token\n', 'utf8');
   await fs.writeFile(path.join(outsideDirectory, racedName), 'outside-race-secret-token\n', 'utf8');
-  await fs.symlink(
-    outsideDirectory,
-    raceLink,
-    process.platform === 'win32' ? 'junction' : 'dir',
-  );
   let keepRacing = true;
   let swapCount = 0;
   const attacker = (async () => {
     while (keepRacing) {
+      // Replace the exact parent in place. Keeping the holding directory out
+      // of the swap avoids a platform-dependent rename-over-junction window
+      // (which can leave the test's attacker, rather than the provider, with
+      // an ENOENT on Linux/Windows).
       await fs.rename(raceCurrent, raceHolding);
-      await fs.rename(raceLink, raceCurrent);
-      await fs.rename(raceCurrent, raceLink);
+      await fs.symlink(
+        outsideDirectory,
+        raceCurrent,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      await fs.unlink(raceCurrent);
       await fs.rename(raceHolding, raceCurrent);
       swapCount += 1;
     }

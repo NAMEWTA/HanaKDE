@@ -5,7 +5,14 @@ const {
 // Must run before loading the desktop main (or any module that can create an
 // HTTPS client). In normal Electron app mode arbitrary Node CLI flags are not
 // supported, so extend this process's Node TLS defaults directly.
-enableWindowsSystemCaForCurrentProcess();
+// Hosted Knowledge E2E does not perform outbound TLS. On Windows runners,
+// enumerating the system certificate store before Electron has connected its
+// inspector can block startup indefinitely, so the isolated fixture opts out
+// explicitly. Production and every ordinary desktop launch retain the system
+// CA contract.
+if (process.env.HANA_KNOWLEDGE_E2E !== "1") {
+  enableWindowsSystemCaForCurrentProcess();
+}
 
 const fs = require("fs");
 const os = require("os");

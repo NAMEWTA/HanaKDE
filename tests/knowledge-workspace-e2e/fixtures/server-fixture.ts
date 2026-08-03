@@ -67,6 +67,7 @@ export function createKnowledgeLaunchConfig(
       HANA_ROOT: path.resolve(productRoot),
       HANA_PORT: "0",
       HANA_CREATE_STARTUP_SESSION: "0",
+      HANA_KNOWLEDGE_E2E: "1",
     },
   };
 }
