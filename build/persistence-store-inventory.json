@@ -6644,7 +6644,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 937,
+      "line": 938,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -7364,7 +7364,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1315,
+      "line": 1321,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7373,7 +7373,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1316,
+      "line": 1322,
       "kind": "write-file",
       "excerpt": "fs.promises.open(filePath, \"wx\", 0o600)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7382,7 +7382,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1349,
+      "line": 1355,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7391,7 +7391,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1380,
+      "line": 1386,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(stagingPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7400,7 +7400,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1394,
+      "line": 1400,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7409,7 +7409,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1416,
+      "line": 1422,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7418,18 +7418,18 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1502,
+      "line": 1508,
       "kind": "remove-path",
-      "excerpt": "fs.rmSync(path.join(originalDirectoryPath, stagingName), { recursive: true, force: true, })",
+      "excerpt": "fs.rmSync(path.join(originalDirectoryPath, stagingName), { recursive: true, force: true, maxRetries: 3, retryDelay: 25, })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "storeId": null,
       "exemptionId": "external-resource-io"
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1517,
+      "line": 1525,
       "kind": "remove-path",
-      "excerpt": "fs.rmSync(path.join(movedDirectory, stagingName), { recursive: true, force: true, })",
+      "excerpt": "fs.rmSync(path.join(movedDirectory, stagingName), { recursive: true, force: true, maxRetries: 3, retryDelay: 25, })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "storeId": null,
       "exemptionId": "external-resource-io"

@@ -639,12 +639,18 @@ export class LocalFsProvider {
         filePath: finalPath,
       };
     } catch (err) {
-      cleanupStagingTree(
-        targetDirectoryIdentity,
-        dirPath,
-        stagingName,
-        cleanupSearchRoot(this.cwd),
-      );
+      try {
+        cleanupStagingTree(
+          targetDirectoryIdentity,
+          dirPath,
+          stagingName,
+          cleanupSearchRoot(this.cwd),
+        );
+      } catch {
+        // Cleanup is only permitted under the captured directory identity and
+        // must never replace the operation's already-classified outcome with
+        // a platform-specific path error.
+      }
       throw err;
     }
   }
@@ -1502,6 +1508,8 @@ function cleanupStagingTree(
     fs.rmSync(path.join(originalDirectoryPath, stagingName), {
       recursive: true,
       force: true,
+      maxRetries: 3,
+      retryDelay: 25,
     });
     return;
   }
@@ -1517,6 +1525,8 @@ function cleanupStagingTree(
   fs.rmSync(path.join(movedDirectory, stagingName), {
     recursive: true,
     force: true,
+    maxRetries: 3,
+    retryDelay: 25,
   });
 }
 

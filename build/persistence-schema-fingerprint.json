@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:fe06f58519dc01f1618604cfb0d00649c66bbc6864fb93f80715b9d3c80b2848",
+  "payloadFingerprint": "sha256:80e57fe4a103e70f57cd9ffe9a62031ce589602a12593af264782cc1621750cc",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2998,8 +2998,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Registered Knowledge index publication validation, cross-platform durability, and native-trash receipt writes changed only audited receipt line locations; the 59 registered stores, 796 owned sites, store schemas, recovery journal contract, and DATA_EPOCH remain unchanged.",
-    "payloadFingerprint": "sha256:fe06f58519dc01f1618604cfb0d00649c66bbc6864fb93f80715b9d3c80b2848"
+    "compatibilityReason": "Registered Knowledge index read-sidecar cleanup, fixture materialization efficiency, and ResourceIO transfer cleanup changed only audited implementation line locations; the 59 registered stores, 796 owned sites, store schemas, recovery journal contract, and DATA_EPOCH remain unchanged.",
+    "payloadFingerprint": "sha256:80e57fe4a103e70f57cd9ffe9a62031ce589602a12593af264782cc1621750cc"
   },
   "schemas": [
     {
@@ -3224,7 +3224,7 @@
           "sourceHash": "sha256:10844a5e4f8868145a872d20ba471f3c359aaba2aa6ae8c441f2a8f91d54e3c6"
         }
       ],
-      "sourceHash": "sha256:fa7b48c77a82f81be45b01bfabee6318759734e7f4ee421a89bf39563a11d9a6",
+      "sourceHash": "sha256:f63b9f7486c38e3cff3b4f4be377fdd8db9424fbb23bdaa959cb3312f9930f03",
       "storeId": "knowledge-index-generations"
     },
     {
@@ -7345,7 +7345,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 937,
+      "line": 938,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7985,7 +7985,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 1315,
+      "line": 1321,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7993,7 +7993,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 1316,
+      "line": 1322,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8001,7 +8001,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 1349,
+      "line": 1355,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8009,7 +8009,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1380,
+      "line": 1386,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8017,7 +8017,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 1394,
+      "line": 1400,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8025,7 +8025,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 1416,
+      "line": 1422,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8033,7 +8033,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1502,
+      "line": 1508,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8041,7 +8041,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1517,
+      "line": 1525,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null

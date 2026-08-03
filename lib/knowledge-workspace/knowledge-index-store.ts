@@ -934,6 +934,7 @@ export class KnowledgeIndexStore {
         throw new Error("generation is not a regular file");
       }
       validateWalSidecar(generationPath, this.#fileSystem);
+      removeStaleReadSidecars(generationPath, this.#fileSystem);
       database = new Database(generationPath, {
         readonly: true,
         fileMustExist: true,
@@ -2511,6 +2512,31 @@ function validateWalSidecar(
     || (walStat.size - 32) % (pageSize + 24) !== 0
   ) {
     throw new Error("knowledge index WAL frame layout is invalid");
+  }
+}
+
+/**
+ * A published generation is immutable. Older partitions can nevertheless
+ * retain an empty WAL or a stale SHM file after a prior reader exits. SQLite
+ * does not need either sidecar when the WAL has no frames, and on Windows a
+ * copied stale SHM can make an otherwise valid legacy generation appear
+ * corrupt. Validate the WAL first, then remove only these harmless remnants
+ * before opening the read-only database.
+ */
+function removeStaleReadSidecars(
+  databasePath: string,
+  fileSystem: KnowledgeIndexFileSystem,
+): void {
+  const walPath = `${databasePath}-wal`;
+  if (fileSystem.exists(walPath) && fileSystem.stat(walPath).size > 0) return;
+  for (const suffix of ["-wal", "-shm"]) {
+    try {
+      fileSystem.remove(`${databasePath}${suffix}`, { force: true });
+    } catch {
+      // A concurrently closing reader can still hold a stale sidecar on
+      // Windows. It is best-effort cleanup; database validation remains
+      // fail-closed if that file is genuinely needed or malformed.
+    }
   }
 }
 

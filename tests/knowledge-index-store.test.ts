@@ -198,6 +198,9 @@ describe("knowledge index store", () => {
     fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
     fs.cpSync(compactPath, legacyPath, { recursive: true });
     fs.rmSync(compactPath, { recursive: true, force: true });
+    // A legacy partition may have kept a reader's SHM sidecar. It has no
+    // published WAL frames and must not make the immutable generation corrupt.
+    fs.writeFileSync(path.join(legacyPath, "generation-generation-1.sqlite-shm"), Buffer.alloc(32));
 
     expect(createStore(hanakoHome).health()).toEqual({
       state: "ready",

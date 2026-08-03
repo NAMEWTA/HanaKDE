@@ -844,6 +844,7 @@ export async function materializeFixture<T>(
       fixtureIdentity: dataset.identity,
     };
     fs.writeFileSync(manifestPath, `${JSON.stringify(envelope, null, 2)}\n`, "utf8");
+    const materializedDirectories = new Set(sourceRoots);
     const writeResources: MaterializedFixture["writeResources"] = async ({
       tree,
       limit = Number.POSITIVE_INFINITY,
@@ -859,7 +860,11 @@ export async function materializeFixture<T>(
         }
         const sourceIndex = manifest.sources.findIndex((source) => source.sourceKey === entry.sourceKey);
         const target = path.join(sourceRoots[sourceIndex]!, ...entry.relativePath.split("/"));
-        fs.mkdirSync(path.dirname(target), { recursive: true });
+        const targetDirectory = path.dirname(target);
+        if (!materializedDirectories.has(targetDirectory)) {
+          fs.mkdirSync(targetDirectory, { recursive: true });
+          materializedDirectories.add(targetDirectory);
+        }
         const body = entry.read();
         if (body.byteLength > 0) {
           fs.writeFileSync(target, body);
