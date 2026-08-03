@@ -499,7 +499,10 @@ function writeFsyncedFile(filePath: string, content: string): void {
 }
 
 function fsyncFile(filePath: string): void {
-  const handle = fs.openSync(filePath, fs.constants.O_RDONLY);
+  // The recovery copy is created with mode 0600 immediately above.  Opening
+  // it read/write keeps the required fsync valid on hosted NTFS, where Node
+  // can reject fsync on an otherwise readable handle with EPERM.
+  const handle = fs.openSync(filePath, fs.constants.O_RDWR);
   try {
     fs.fsyncSync(handle);
   } finally {

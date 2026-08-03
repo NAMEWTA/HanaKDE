@@ -6,13 +6,20 @@ export default defineConfig({
   timeout: 120_000,
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  // A release gate reports its first-run behavior. A retry must never turn a
+  // platform regression into a passing Knowledge Workspace result.
+  retries: 0,
   workers: 1,
+  // Workspace fixtures intentionally exercise hostile filenames, link swaps,
+  // and sentinel content. Playwright traces, page snapshots and screenshots
+  // can retain that data (and error context includes test source), so CI only
+  // publishes the sanitized status assertions written by the reporter.
+  preserveOutput: "never",
   reporter: [["list"]],
   use: {
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    trace: "off",
+    screenshot: "off",
+    video: "off",
   },
   projects: [
     {

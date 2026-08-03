@@ -65,7 +65,23 @@ describe("durable knowledge operation journal", () => {
       createdAt: "2026-07-28T00:00:00.000Z",
       expiresAt: "2026-07-28T00:15:00.000Z",
     });
-    journal.write({ ...record, state: "PREPARING" });
+    const openSync = vi.spyOn(fs, "openSync");
+    let fsyncedRecoveryCopyWithReadWriteHandle = false;
+    try {
+      journal.write({ ...record, state: "PREPARING" });
+      fsyncedRecoveryCopyWithReadWriteHandle = openSync.mock.calls.some(
+        ([filePath, flags]) => filePath === path.join(
+          tempRoot!,
+          "knowledge-workspace",
+          "operations",
+          "v1",
+          OPERATION_ID,
+          "journal.json.prev.tmp",
+        ) && flags === fs.constants.O_RDWR,
+      );
+    } finally {
+      openSync.mockRestore();
+    }
 
     const operationDir = path.join(
       tempRoot,
@@ -82,6 +98,7 @@ describe("durable knowledge operation journal", () => {
       path.join(operationDir, "journal.json.prev"),
       "utf8",
     )).state).toBe("PLANNED");
+    expect(fsyncedRecoveryCopyWithReadWriteHandle).toBe(true);
     expect(fs.existsSync(path.join(operationDir, "journal.json.tmp"))).toBe(false);
     const serialized = fs.readFileSync(path.join(operationDir, "journal.json"), "utf8");
     expect(serialized).not.toContain(tempRoot);
