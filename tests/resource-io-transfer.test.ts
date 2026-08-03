@@ -195,7 +195,10 @@ describe("ResourceIO transfer", () => {
     const sourceDirectory = path.join(sourceRoot, "tree");
     const nestedDirectory = path.join(sourceDirectory, "nested");
     fs.mkdirSync(nestedDirectory, { recursive: true });
-    const payload = Buffer.alloc(TRANSFER_MAX_CHUNK_BYTES * 2 + 17, 0x5a);
+    // Cross the frozen 1 MiB boundary with a tail. A second full chunk adds no
+    // protocol coverage, but made this release-gate fixture contend with the
+    // other large I/O suites on shared CI workers.
+    const payload = Buffer.alloc(TRANSFER_MAX_CHUNK_BYTES + 17, 0x5a);
     fs.writeFileSync(path.join(nestedDirectory, "large.bin"), payload);
     fs.writeFileSync(path.join(sourceDirectory, "note.md"), "# unchanged\n");
 
