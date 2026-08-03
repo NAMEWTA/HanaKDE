@@ -278,6 +278,13 @@ test('E2E-KW-010 drags cross-source pages/assets through copy-before-link and le
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sourceKey: 'research', displayName: 'Research', mountId: 'knowledge_e2e_mount_1' }),
   }));
+  // Complete the provider-owned root enumeration before the renderer opens
+  // its tree. This is a real ResourceIO request (not a test-only route) and
+  // makes the first Windows tree expansion observe the files written above.
+  await json(await knowledgeApp.apiFetch('/api/resource-io/list', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: { sourceKey: 'main', relativePath: '' } }),
+  }));
   const workspace = await openKnowledge(knowledgeApp.page);
   await expandMain(workspace);
   const notes = workspace.locator('[data-source-key="main"][data-resource-path="Notes"]');
@@ -351,6 +358,10 @@ test('E2E-KW-011 isolates enhanced Markdown rendering from active HTML', async (
     ].join('\n'),
     'utf8',
   );
+  await json(await knowledgeApp.apiFetch('/api/resource-io/list', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: { sourceKey: 'main', relativePath: '' } }),
+  }));
   const workspace = await openKnowledge(knowledgeApp.page);
   await openTreeFile(workspace, 'Render.md');
   await expect(workspace.getByText('Render', { exact: true }).last()).toBeVisible();

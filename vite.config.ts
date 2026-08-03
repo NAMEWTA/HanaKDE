@@ -328,6 +328,13 @@ export default defineConfig({
       },
     },
   },
+  // Mermaid is lazy at the application boundary, but the development web
+  // server must prepare its browser dependency before the first Knowledge
+  // document asks to render one. Without this Vite can spend the fixed UI
+  // observation window transforming Mermaid on a cold Windows checkout.
+  optimizeDeps: {
+    include: ['mermaid'],
+  },
   build: {
     outDir: '../dist-renderer',
     emptyOutDir: true,
