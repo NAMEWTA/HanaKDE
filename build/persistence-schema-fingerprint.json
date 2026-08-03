@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:0daa33f05fd1405a989bfee0fe0855dae7572296c0c5f619145509f655f3dcaa",
+  "payloadFingerprint": "sha256:fe06f58519dc01f1618604cfb0d00649c66bbc6864fb93f80715b9d3c80b2848",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2999,7 +2999,7 @@
   "review": {
     "classification": "compatible",
     "compatibilityReason": "Registered Knowledge index publication validation, cross-platform durability, and native-trash receipt writes changed only audited receipt line locations; the 59 registered stores, 796 owned sites, store schemas, recovery journal contract, and DATA_EPOCH remain unchanged.",
-    "payloadFingerprint": "sha256:0daa33f05fd1405a989bfee0fe0855dae7572296c0c5f619145509f655f3dcaa"
+    "payloadFingerprint": "sha256:fe06f58519dc01f1618604cfb0d00649c66bbc6864fb93f80715b9d3c80b2848"
   },
   "schemas": [
     {
@@ -3241,7 +3241,7 @@
           "sourceHash": "sha256:8cd79c4f50791840e80ec7d803f74037971b54794890057a18739e4535619a58"
         }
       ],
-      "sourceHash": "sha256:77313122e0c6ca80dc151dba99c7a5e27d1a11b62e2368d537eae242d23a22df",
+      "sourceHash": "sha256:c6987bb06c7318279e4a731fdd17e584bd5897ae79eac0a5a1c33c02992a058f",
       "storeId": "knowledge-operation-journal"
     },
     {

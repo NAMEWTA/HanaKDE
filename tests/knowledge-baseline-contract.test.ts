@@ -217,12 +217,13 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(config).toMatchObject({
       testDir: "./specs",
       outputDir: "./artifacts",
-      retries: process.env.CI ? 1 : 0,
+      retries: 0,
+      preserveOutput: "never",
       workers: 1,
       use: {
-        trace: "retain-on-failure",
-        screenshot: "only-on-failure",
-        video: "retain-on-failure",
+        trace: "off",
+        screenshot: "off",
+        video: "off",
       },
     });
   });
