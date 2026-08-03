@@ -62,6 +62,17 @@ function fingerprintPathSegment(fingerprint: string): string {
   return Buffer.from(fingerprint, "hex").toString("base64url");
 }
 
+/**
+ * Legacy v1 partitions include two full fingerprints. Under a normal Windows
+ * profile their database filename can cross the conservative Win32 path
+ * limit, even though Node can copy and inspect the files. SQLite accepts the
+ * namespaced form, which keeps those existing partitions readable while new
+ * partitions continue to use the compact layout.
+ */
+function sqliteDatabasePath(filePath: string): string {
+  return process.platform === "win32" ? path.toNamespacedPath(filePath) : filePath;
+}
+
 export type KnowledgeIndexHealth =
   | { state: "ready"; generationId: string; sequence: number }
   | {
@@ -537,7 +548,7 @@ export class KnowledgeIndexStore {
 
     let database: DatabaseLike | null = null;
     try {
-      database = new Database(buildPath) as unknown as DatabaseLike;
+      database = new Database(sqliteDatabasePath(buildPath)) as unknown as DatabaseLike;
       configureDatabase(database);
       // An unpublished build is disposable on crash; NORMAL keeps each bulk
       // indexing slice responsive. Publication restores FULL before metadata
@@ -599,7 +610,7 @@ export class KnowledgeIndexStore {
     const generationPath = this.#generationPath(generationId);
     let database: DatabaseLike;
     try {
-      database = new Database(generationPath, {
+      database = new Database(sqliteDatabasePath(generationPath), {
         readonly: true,
         fileMustExist: true,
       }) as unknown as DatabaseLike;
@@ -670,7 +681,7 @@ export class KnowledgeIndexStore {
       const generationPath = this.#generationPath(
         current.manifest.generationId,
       );
-      database = new Database(generationPath, {
+      database = new Database(sqliteDatabasePath(generationPath), {
         fileMustExist: true,
       }) as unknown as DatabaseLike;
       configureDatabase(database);
@@ -935,7 +946,7 @@ export class KnowledgeIndexStore {
       }
       validateWalSidecar(generationPath, this.#fileSystem);
       removeStaleReadSidecars(generationPath, this.#fileSystem);
-      database = new Database(generationPath, {
+      database = new Database(sqliteDatabasePath(generationPath), {
         readonly: true,
         fileMustExist: true,
       }) as unknown as DatabaseLike;

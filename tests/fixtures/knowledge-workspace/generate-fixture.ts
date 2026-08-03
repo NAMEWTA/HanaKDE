@@ -851,6 +851,10 @@ export async function materializeFixture<T>(
       signal,
     }) => {
       let written = 0;
+      const pendingWrites: Array<Promise<void>> = [];
+      const flushWrites = async () => {
+        await Promise.all(pendingWrites.splice(0));
+      };
       for (const entry of dataset.resources(tree)) {
         if (written >= limit) break;
         if (signal?.aborted) {
@@ -867,13 +871,21 @@ export async function materializeFixture<T>(
         }
         const body = entry.read();
         if (body.byteLength > 0) {
-          fs.writeFileSync(target, body);
+          pendingWrites.push(fs.promises.writeFile(target, body));
         } else {
-          fs.writeFileSync(target, `${JSON.stringify(entry.metadata)}\n`, "utf8");
+          pendingWrites.push(fs.promises.writeFile(
+            target,
+            `${JSON.stringify(entry.metadata)}\n`,
+            "utf8",
+          ));
         }
         written += 1;
-        if (written % 256 === 0) await Promise.resolve();
+        // NTFS performs 10,000 single synchronous writes well beyond the
+        // fixture's fixed timeout. Keep the dataset bounded while allowing a
+        // small, deterministic batch to overlap filesystem latency.
+        if (pendingWrites.length >= 32) await flushWrites();
       }
+      await flushWrites();
       return written;
     };
     return await consume({ root, sourceRoots, manifestPath, manifest, dataset, writeResources });

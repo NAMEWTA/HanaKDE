@@ -678,6 +678,36 @@ describe("ResourceIO transfer", () => {
     expect(listStagingArtifacts(movedTargetRoot)).toEqual([]);
   });
 
+  it("normalizes raw provider access errors before a transfer response is exposed", async () => {
+    const { sandbox, targetRoot } = makeSandbox();
+    const sourceProvider = {
+      id: "resource",
+      capabilities: () => ({ exportTree: true }),
+      async *exportTree() {
+        yield { kind: "directory", path: [] };
+        throw Object.assign(new Error("EPERM: denied <provider-private-path>"), {
+          code: "EPERM",
+        });
+      },
+    } satisfies Partial<ResourceProvider>;
+    const resourceIO = new ResourceIO({
+      providers: {
+        resource: sourceProvider as ResourceProvider,
+        local_fs: new LocalFsProvider({ cwd: sandbox }),
+      },
+    });
+
+    await expect(resourceIO.transfer({
+      source: { kind: "resource", resourceId: "denied-source" },
+      targetDirectory: { kind: "local-file", path: targetRoot },
+      targetName: "copy.bin",
+      operationId: OPERATION_ID,
+    }, { source: "api" })).rejects.toMatchObject({
+      code: "resource_access_denied",
+      status: 403,
+    });
+  });
+
   it("rejects an upstream chunk larger than 1 MiB instead of slicing it after allocation", async () => {
     const { sandbox, targetRoot } = makeSandbox();
     const sourceProvider = {
