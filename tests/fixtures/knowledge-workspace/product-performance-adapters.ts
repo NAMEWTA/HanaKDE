@@ -78,8 +78,8 @@ export function createKnowledgeProductPerformanceAdapters(options: {
     await ensureSearchTemplate(context.dataset);
     const prepared = prepareEmpty(context);
     fs.cpSync(
-      path.join(templateHome, "knowledge-workspace"),
-      path.join(prepared.home, "knowledge-workspace"),
+      path.join(templateHome, "kw"),
+      path.join(prepared.home, "kw"),
       { recursive: true },
     );
     prepared.stores = createStores(prepared.home);

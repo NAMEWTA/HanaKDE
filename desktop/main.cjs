@@ -550,10 +550,10 @@ const _intentionalServerStops = new WeakSet();
 let serverPort = null;
 let serverToken = null;
 let nativeBridgeToken = null;
-// Bind renderer credentials to the WebContents object, not its recycled numeric id.
-// Electron may reuse ids after a window closes; an id-keyed cache could then pair a
-// grant with a stale session identity during a subsequent native action.
-let knowledgeWindowServerSessions = new WeakMap();
+// Electron can surface distinct JavaScript wrappers for one WebContents across
+// IPC callbacks, so cache by its numeric id.  The destroyed callback below
+// removes only its own generation before that id can be reused.
+let knowledgeWindowServerSessions = new Map();
 let isQuitting = false;  // 区分关窗口（hide）和真正退出（quit）
 let tray = null;
 let reusedServerPid = null; // 复用已有 server 时记录其 PID，用 owner 字段决定是否关闭
@@ -1145,7 +1145,7 @@ function isDesktopOwnedServerInfo(info) {
 
 async function startServer() {
   nativeBridgeToken = null;
-  knowledgeWindowServerSessions = new WeakMap();
+  knowledgeWindowServerSessions = new Map();
   const serverInfoPath = path.join(hanakoHome, "server-info.json");
 
   // ── 1. 检查是否有已运行的 server（Electron crash 后遗留的守护进程） ──
@@ -5073,7 +5073,8 @@ async function knowledgeNativeServerRequest(routePath, body, authorizationToken 
 async function getKnowledgeWindowServerToken(sender) {
   if (!serverToken || !serverPort) return serverToken;
   if (!nativeBridgeToken || !sender || typeof sender.id !== "number") return serverToken;
-  const cached = knowledgeWindowServerSessions.get(sender);
+  const senderId = sender.id;
+  const cached = knowledgeWindowServerSessions.get(senderId);
   if (cached && cached.serverPort === serverPort && cached.masterToken === serverToken) return cached.token;
 
   const windowKey = `desktop-window-${sender.id}-${crypto.randomUUID()}`;
@@ -5082,10 +5083,10 @@ async function getKnowledgeWindowServerToken(sender) {
     throw new Error("Knowledge native window session credential is invalid");
   }
   const entry = { windowKey, token: issued.token, serverPort, masterToken: serverToken };
-  knowledgeWindowServerSessions.set(sender, entry);
+  knowledgeWindowServerSessions.set(senderId, entry);
   sender.once("destroyed", () => {
-    if (knowledgeWindowServerSessions.get(sender) !== entry) return;
-    knowledgeWindowServerSessions.delete(sender);
+    if (knowledgeWindowServerSessions.get(senderId) !== entry) return;
+    knowledgeWindowServerSessions.delete(senderId);
     void knowledgeNativeServerRequest("sessions/revoke", { windowKey }, serverToken).catch(() => {});
   });
   return entry.token;

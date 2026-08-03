@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   KnowledgeIndexStore,
+  knowledgeIndexCompactPartitionPath,
 } from "../lib/knowledge-workspace/knowledge-index-store.ts";
 
 const WORKSPACE_FINGERPRINT = "d".repeat(64);
@@ -172,11 +173,8 @@ describe("knowledge index schema generations", () => {
 });
 
 function partitionPath(hanakoHome: string): string {
-  return path.join(
+  return knowledgeIndexCompactPartitionPath(
     hanakoHome,
-    "knowledge-workspace",
-    "index",
-    "v1",
     WORKSPACE_FINGERPRINT,
     SOURCE_FINGERPRINT,
   );

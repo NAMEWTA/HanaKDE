@@ -146,7 +146,7 @@ test('E2E-KW-014 detects schema drift and corruption, serves the ready generatio
   expect(JSON.stringify(search)).toContain('Indexed.md');
 
   const firstGeneration = (status.health as { generationId: string }).generationId;
-  const indexRoot = path.join(workspaceSandbox.hanaHome, 'knowledge-workspace', 'index', 'v1');
+  const indexRoot = path.join(workspaceSandbox.hanaHome, 'kw', 'i', 'v1');
   const currentPath = await findFile(indexRoot, 'current.json');
   let current = JSON.parse(await fs.readFile(currentPath, 'utf8')) as { generationId: string };
   let generationPath = path.join(path.dirname(currentPath), `generation-${current.generationId}.sqlite`);
@@ -774,15 +774,34 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
       // of the swap avoids a platform-dependent rename-over-junction window
       // (which can leave the test's attacker, rather than the provider, with
       // an ENOENT on Linux/Windows).
-      await fs.rename(raceCurrent, raceHolding);
-      await fs.symlink(
-        outsideDirectory,
-        raceCurrent,
-        process.platform === 'win32' ? 'junction' : 'dir',
-      );
-      await fs.unlink(raceCurrent);
-      await fs.rename(raceHolding, raceCurrent);
-      swapCount += 1;
+      let holding = false;
+      let linked = false;
+      try {
+        await fs.rename(raceCurrent, raceHolding);
+        holding = true;
+        await fs.symlink(
+          outsideDirectory,
+          raceCurrent,
+          process.platform === 'win32' ? 'junction' : 'dir',
+        );
+        linked = true;
+        await fs.unlink(raceCurrent);
+        linked = false;
+        await fs.rename(raceHolding, raceCurrent);
+        holding = false;
+        swapCount += 1;
+      } catch (error) {
+        // Windows can briefly hold a directory while a guarded read closes.
+        // Restore the in-root parent before retrying; only a completed actual
+        // junction/symlink replacement increments swapCount.
+        if (linked) await fs.unlink(raceCurrent).catch(() => {});
+        if (holding) await fs.rename(raceHolding, raceCurrent).catch(() => {});
+        const code = (error as NodeJS.ErrnoException).code;
+        if (!['EBUSY', 'EEXIST', 'ENOENT', 'ENOTEMPTY', 'EPERM'].includes(code ?? '')) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
   })();
   let safeReadCount = 0;

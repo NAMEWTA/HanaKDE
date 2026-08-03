@@ -11,6 +11,10 @@ export const KNOWLEDGE_INDEX_ROOT = path.join(
   "index",
   "v1",
 );
+// Keep the original root as a read-compatible legacy location.  Two 64-byte
+// hex directory names below it can cross Windows' conservative path limit
+// once a normal user profile and a generation filename are included.
+const KNOWLEDGE_INDEX_COMPACT_ROOT = path.join("kw", "i", "v1");
 export const KNOWLEDGE_INDEX_BUILD_RETENTION_MS = 24 * 60 * 60 * 1_000;
 export const KNOWLEDGE_INDEX_WRITER_HEARTBEAT_MS = 10_000;
 export const KNOWLEDGE_INDEX_SAME_HOST_STALE_MS = 60_000;
@@ -27,6 +31,36 @@ const META_KEYS = Object.freeze([
   "last_complete_sequence",
   "extractor_contract_version",
 ]);
+
+export function knowledgeIndexCompactPartitionPath(
+  hanakoHome: string,
+  workspaceFingerprint: string,
+  sourceFingerprint: string,
+): string {
+  return path.join(
+    hanakoHome,
+    KNOWLEDGE_INDEX_COMPACT_ROOT,
+    fingerprintPathSegment(workspaceFingerprint),
+    fingerprintPathSegment(sourceFingerprint),
+  );
+}
+
+function knowledgeIndexLegacyPartitionPath(
+  hanakoHome: string,
+  workspaceFingerprint: string,
+  sourceFingerprint: string,
+): string {
+  return path.join(
+    hanakoHome,
+    KNOWLEDGE_INDEX_ROOT,
+    workspaceFingerprint,
+    sourceFingerprint,
+  );
+}
+
+function fingerprintPathSegment(fingerprint: string): string {
+  return Buffer.from(fingerprint, "hex").toString("base64url");
+}
 
 export type KnowledgeIndexHealth =
   | { state: "ready"; generationId: string; sequence: number }
@@ -393,12 +427,21 @@ export class KnowledgeIndexStore {
     this.#now = options.now ?? Date.now;
     this.#processIsAlive = options.processIsAlive ?? processIsAlive;
     this.#fileSystem = options.fileSystem ?? nodeKnowledgeIndexFileSystem;
-    this.#partitionPath = path.join(
+    const legacyPartitionPath = knowledgeIndexLegacyPartitionPath(
       options.hanakoHome,
-      KNOWLEDGE_INDEX_ROOT,
       workspaceFingerprint,
       this.#sourceFingerprint,
     );
+    // Existing indexes remain usable without a migration.  Fresh partitions
+    // use base64url fingerprints and a compact root, preserving the complete
+    // 256-bit identities while leaving room for Windows profile paths.
+    this.#partitionPath = this.#fileSystem.exists(legacyPartitionPath)
+      ? legacyPartitionPath
+      : knowledgeIndexCompactPartitionPath(
+        options.hanakoHome,
+        workspaceFingerprint,
+        this.#sourceFingerprint,
+      );
     ensureManagedDirectory(
       options.hanakoHome,
       path.relative(options.hanakoHome, this.#partitionPath),

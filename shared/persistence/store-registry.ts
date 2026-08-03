@@ -367,7 +367,7 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     id: "knowledge-index-generations",
     ownerModule: "lib/knowledge-workspace/knowledge-index-store.ts",
     pathPatterns: [
-      "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+      "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
     ],
     pathKind: "tree",
     format: "mixed-directory",

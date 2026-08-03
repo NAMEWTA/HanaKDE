@@ -143,7 +143,7 @@ describe("persistent store registry", () => {
     expect(knowledgeIndex.epochPolicy).toBe("regenerable");
     expect(knowledgeIndex.affectedByEpochMigration).toBe(false);
     expect(knowledgeIndex.pathPattern).toBe(
-      "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+      "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
     );
 
     const pluginData = PERSISTENT_STORES.find((store) => store.id === "plugin-runtime-data")!;

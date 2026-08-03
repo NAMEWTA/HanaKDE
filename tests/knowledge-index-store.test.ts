@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   KNOWLEDGE_INDEX_SCHEMA_VERSION,
   KnowledgeIndexStore,
+  knowledgeIndexCompactPartitionPath,
   foldSearchText,
   nodeKnowledgeIndexFileSystem,
   type KnowledgeIndexFileSystem,
@@ -173,6 +174,34 @@ describe("knowledge index store", () => {
     });
     expect(oldLease.inspect().generationId).toBe("generation-1");
     oldLease.release();
+  });
+
+  it("continues to read a valid legacy partition while fresh partitions use the compact path", () => {
+    const hanakoHome = temporaryHome("legacy-path");
+    const created = createStore(hanakoHome);
+    created.beginRebuild({
+      rebuildId: "compact",
+      generationId: "generation-1",
+      startedSequence: 0,
+    }).publish({ lastCompleteSequence: 1 });
+    const compactPath = partitionPath(hanakoHome, SOURCE_FINGERPRINT);
+    const legacyPath = path.join(
+      hanakoHome,
+      "knowledge-workspace",
+      "index",
+      "v1",
+      WORKSPACE_FINGERPRINT,
+      SOURCE_FINGERPRINT,
+    );
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    fs.cpSync(compactPath, legacyPath, { recursive: true });
+    fs.rmSync(compactPath, { recursive: true, force: true });
+
+    expect(createStore(hanakoHome).health()).toEqual({
+      state: "ready",
+      generationId: "generation-1",
+      sequence: 1,
+    });
   });
 
   it("turns AbortSignal and staging rename failure into non-destructive rebuild outcomes", () => {
@@ -380,19 +409,19 @@ describe("knowledge index store", () => {
     () => {
       const hanakoHome = temporaryHome("symlink");
       const outside = temporaryHome("symlink-outside");
-      fs.mkdirSync(path.join(hanakoHome, "knowledge-workspace"), {
+      fs.mkdirSync(path.join(hanakoHome, "kw", "i"), {
         recursive: true,
       });
       fs.symlinkSync(
         outside,
-        path.join(hanakoHome, "knowledge-workspace", "index"),
+        path.join(hanakoHome, "kw", "i", "v1"),
         "dir",
       );
       expect(() => createStore(hanakoHome)).toThrow(
         expect.objectContaining({ code: "knowledge_index_unavailable" }),
       );
 
-      fs.rmSync(path.join(hanakoHome, "knowledge-workspace", "index"), {
+      fs.rmSync(path.join(hanakoHome, "kw", "i", "v1"), {
         force: true,
       });
       const store = createStore(hanakoHome);
@@ -565,11 +594,8 @@ function partitionPath(
   hanakoHome: string,
   sourceFingerprint: string,
 ): string {
-  return path.join(
+  return knowledgeIndexCompactPartitionPath(
     hanakoHome,
-    "knowledge-workspace",
-    "index",
-    "v1",
     WORKSPACE_FINGERPRINT,
     sourceFingerprint,
   );
