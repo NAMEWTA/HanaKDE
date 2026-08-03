@@ -66,7 +66,7 @@ describe("quality gates", () => {
 
     const lintIndex = runSteps.indexOf("npm run lint");
     const buildIndex = runSteps.indexOf("npm run build:renderer");
-    const testIndex = runSteps.indexOf("npm test");
+    const testIndex = runSteps.indexOf("npm test -- --maxWorkers=4");
 
     expect(lintIndex).toBeGreaterThan(-1);
     expect(lintIndex).toBeLessThan(buildIndex);
