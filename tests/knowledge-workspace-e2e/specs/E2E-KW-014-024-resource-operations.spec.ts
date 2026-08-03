@@ -14,6 +14,10 @@ async function openKnowledge(page: Page): Promise<Locator> {
   await page.locator('[data-tab="knowledge"]').click();
   const workspace = page.locator('[data-knowledge-workspace]');
   await expect(workspace).toBeVisible({ timeout: 90_000 });
+  await expect(
+    workspace.locator('[role="treeitem"][data-source-key="main"]').first()
+      .getByRole('button').first(),
+  ).toBeVisible({ timeout: 90_000 });
   return workspace;
 }
 

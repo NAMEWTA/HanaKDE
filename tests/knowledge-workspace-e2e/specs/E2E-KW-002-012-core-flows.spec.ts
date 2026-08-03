@@ -7,6 +7,13 @@ async function openKnowledge(page: Page): Promise<Locator> {
   await page.locator('[data-tab="knowledge"]').click();
   const workspace = page.locator('[data-knowledge-workspace]');
   await expect(workspace).toBeVisible({ timeout: 90_000 });
+  // The shell renders before the async source capability request completes.
+  // Wait for the real listable root rather than clicking its non-interactive
+  // loading placeholder on a cold Windows Vite start.
+  await expect(
+    workspace.locator('[role="treeitem"][data-source-key="main"]').first()
+      .getByRole('button').first(),
+  ).toBeVisible({ timeout: 90_000 });
   return workspace;
 }
 

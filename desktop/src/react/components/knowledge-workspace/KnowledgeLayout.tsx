@@ -335,6 +335,14 @@ export function KnowledgeLayout({
         directoryPath={selection.targetDirectoryPath ?? ''}
         onClose={() => setCreateKind(null)}
         onCreated={(result) => {
+          // A successful create already has a canonical address. Refresh and
+          // reveal that exact branch immediately instead of waiting for the
+          // best-effort filesystem watcher, which can be delayed on NTFS.
+          resourceTreeRef.current?.locateResource({
+            kind: result.kind === 'folder' ? 'folder' : 'resource',
+            sourceKey: result.address.sourceKey,
+            relativePath: result.address.relativePath,
+          });
           if (result.kind !== 'page') return;
           const sourceName = renderedSources.find(source => source.sourceKey === result.address.sourceKey)?.displayName ?? result.address.sourceKey;
           const opened = editorGroupsRef.current?.openResource({ address: result.address, sourceName, kind: 'markdown' }, { mode: 'pinned' });
