@@ -258,6 +258,62 @@ describe("LocalFsProvider", () => {
     expect(fs.existsSync(path.join(cwd, "copy.md"))).toBe(false);
   });
 
+  it("keeps list and search inside the source when a directory contains a real link", async () => {
+    const { cwd, provider } = makeProvider();
+    const outside = path.join(path.dirname(cwd), "outside-list-search");
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(cwd, "Visible.md"), "inside-search-token\n");
+    fs.writeFileSync(path.join(outside, "outside-secret.md"), "outside-list-search-secret\n");
+    fs.symlinkSync(
+      outside,
+      path.join(cwd, "escape"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    const list = await provider.list({ kind: "local-file", path: "." });
+    expect(list.items.map((item) => item.name)).toContain("Visible.md");
+    expect(list.items.map((item) => item.name)).not.toContain("escape");
+
+    const textSearch = await provider.search(
+      { kind: "local-file", path: "." },
+      { query: "outside-list-search-secret" },
+    );
+    const nameSearch = await provider.search(
+      { kind: "local-file", path: "." },
+      { query: "escape", mode: "name" },
+    );
+    expect(textSearch.matches).toEqual([]);
+    expect(nameSearch.matches).toEqual([]);
+  });
+
+  it("refuses to materialize a target replaced after authorization", async () => {
+    let target = "";
+    let swapped = false;
+    const { cwd, provider } = makeProvider(vi.fn(() => {
+      if (!swapped && target) {
+        const outside = path.join(path.dirname(cwd), "outside-materialize");
+        fs.mkdirSync(outside);
+        fs.writeFileSync(path.join(outside, "secret.md"), "outside-materialize-secret\n");
+        fs.renameSync(target, `${target}.holding`);
+        fs.symlinkSync(
+          path.join(outside, "secret.md"),
+          target,
+          process.platform === "win32" ? "file" : "file",
+        );
+        swapped = true;
+      }
+      return { allowed: true };
+    }));
+    target = path.join(cwd, "materialize.md");
+    fs.writeFileSync(target, "inside-materialize-token\n");
+
+    await expect(provider.materialize({ kind: "local-file", path: "materialize.md" }))
+      .rejects.toMatchObject({
+        code: "symbolic_link_not_allowed",
+        status: 400,
+      });
+  });
+
   it("opens a bounded provider-owned read stream without buffering the whole file", async () => {
     const { cwd, provider } = makeProvider();
     fs.writeFileSync(path.join(cwd, "stream.txt"), "abcdef", "utf-8");

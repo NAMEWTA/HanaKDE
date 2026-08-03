@@ -456,8 +456,11 @@ export class LocalFsProvider {
 
   async materialize(ref: ResourceRef | unknown): Promise<MaterializeResult> {
     const filePath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, filePath, this.cwd);
     this.assertAllowed(filePath, "read");
-    const stat = fs.statSync(filePath);
+    const pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    this.revalidateReadProof(filePath, pathProof);
+    const stat = pathProof.targetStat;
     return {
       resourceKey: localResourceKey(filePath),
       resource: this.resourceForPath(filePath),
@@ -690,20 +693,41 @@ export class LocalFsProvider {
 
   async list(ref: ResourceRef | unknown): Promise<ResourceListResult> {
     const dirPath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, dirPath, this.cwd);
     this.assertAllowed(dirPath, "read");
     try {
+      const pathProof = captureLocalPathIdentityProof(dirPath, proofRoot);
+      if (!pathProof.targetStat.isDirectory()) {
+        throw safeOpenReadError("not_a_directory", 400);
+      }
+      this.revalidateReadProof(dirPath, pathProof);
       const items = fs.readdirSync(dirPath, { withFileTypes: true })
-        .map((entry) => {
+        .flatMap((entry) => {
           const fullPath = path.join(dirPath, entry.name);
-          const stat = fs.statSync(fullPath);
-          return {
+          let stat: fs.Stats;
+          try {
+            // Never follow a symlink/junction merely to render a directory
+            // row: its metadata could belong to a source-external target.
+            stat = fs.lstatSync(fullPath);
+          } catch (error) {
+            const code = (error as NodeJS.ErrnoException)?.code;
+            if (["ENOENT", "ENOTDIR", "EACCES", "EPERM"].includes(code ?? "")) {
+              return [];
+            }
+            throw error;
+          }
+          if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) {
+            return [];
+          }
+          return [{
             name: entry.name,
-            isDirectory: entry.isDirectory(),
-            size: entry.isDirectory() ? null : stat.size,
+            isDirectory: stat.isDirectory(),
+            size: stat.isDirectory() ? null : stat.size,
             mtimeMs: stat.mtimeMs,
-          };
+          }];
         })
         .sort((a, b) => a.name.localeCompare(b.name));
+      this.revalidateReadProof(dirPath, pathProof);
       return {
         resourceKey: localResourceKey(dirPath),
         resource: this.resourceForPath(dirPath),
@@ -723,13 +747,20 @@ export class LocalFsProvider {
 
   async search(ref: ResourceRef | unknown, { query, mode, limit }: { query?: string; mode?: string; limit?: number } = {}): Promise<ResourceSearchResult> {
     const rootPath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, rootPath, this.cwd);
     this.assertAllowed(rootPath, "read");
+    const pathProof = captureLocalPathIdentityProof(rootPath, proofRoot);
+    if (!pathProof.targetStat.isDirectory()) {
+      throw safeOpenReadError("not_a_directory", 400);
+    }
+    this.revalidateReadProof(rootPath, pathProof);
     const needle = String(query || "");
     const matches = needle
       ? mode === "name"
         ? searchNames(rootPath, needle, this.guard, limit)
         : searchText(rootPath, needle, this.guard)
       : [];
+    this.revalidateReadProof(rootPath, pathProof);
     return {
       resourceKey: localResourceKey(rootPath),
       resource: this.resourceForPath(rootPath),
@@ -1033,10 +1064,22 @@ function realOrResolved(filePath: string): string {
 function searchText(rootPath: string, query: string, guard: Guard | null) {
   const matches: { filePath: string; line: number; text: string }[] = [];
   const visit = (current: string) => {
-    const stat = fs.statSync(current);
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch {
+      return;
+    }
+    if (stat.isSymbolicLink()) return;
     if (stat.isDirectory()) {
       if (SEARCH_SKIP_DIRS.has(path.basename(current))) return;
-      for (const entry of fs.readdirSync(current)) visit(path.join(current, entry));
+      let entries: string[] = [];
+      try {
+        entries = fs.readdirSync(current);
+      } catch {
+        return;
+      }
+      for (const entry of entries) visit(path.join(current, entry));
       return;
     }
     if (!stat.isFile()) return;
@@ -1044,7 +1087,8 @@ function searchText(rootPath: string, query: string, guard: Guard | null) {
       const allowed = guard.check(current, "read");
       if (!allowed.allowed) return;
     }
-    const text = fs.readFileSync(current, "utf-8");
+    const text = readSearchableLocalText(current, rootPath);
+    if (text === null) return;
     text.split(/\r?\n/).forEach((line, index) => {
       if (line.includes(query)) matches.push({ filePath: current, line: index + 1, text: line });
     });
@@ -1079,33 +1123,77 @@ function searchNames(rootPath: string, query: string, guard: Guard | null, limit
     for (const entry of entries) {
       if (matches.length >= max) break;
       if (entry.name.startsWith(".")) continue;
-      if (entry.isDirectory() && SEARCH_SKIP_DIRS.has(entry.name)) continue;
       const fullPath = path.join(current, entry.name);
+      let stat: fs.Stats;
+      try {
+        stat = fs.lstatSync(fullPath);
+      } catch {
+        continue;
+      }
+      if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) continue;
+      if (stat.isDirectory() && SEARCH_SKIP_DIRS.has(entry.name)) continue;
       if (guard) {
         const allowed = guard.check(fullPath, "read");
         if (!allowed.allowed) continue;
       }
       if (entry.name.toLowerCase().includes(needle)) {
-        try {
-          const stat = fs.statSync(fullPath);
-          matches.push({
-            filePath: fullPath,
-            line: 0,
-            text: entry.name,
-            name: entry.name,
-            relativePath: toSlashRelative(rootPath, fullPath),
-            parentSubdir: toSlashRelative(rootPath, path.dirname(fullPath)),
-            isDirectory: entry.isDirectory(),
-            size: entry.isDirectory() ? null : stat.size,
-            mtimeMs: stat.mtimeMs,
-          });
-        } catch {}
+        matches.push({
+          filePath: fullPath,
+          line: 0,
+          text: entry.name,
+          name: entry.name,
+          relativePath: toSlashRelative(rootPath, fullPath),
+          parentSubdir: toSlashRelative(rootPath, path.dirname(fullPath)),
+          isDirectory: stat.isDirectory(),
+          size: stat.isDirectory() ? null : stat.size,
+          mtimeMs: stat.mtimeMs,
+        });
       }
-      if (entry.isDirectory()) visit(fullPath);
+      if (stat.isDirectory()) visit(fullPath);
     }
   };
   visit(rootPath);
   return matches.slice(0, max);
+}
+
+/**
+ * Search has to inspect text without retaining the old stat+readFileSync
+ * escape hatch. Bind every candidate to its in-root ancestry, use no-follow
+ * open, and prove that the path still names that same file after reading.
+ */
+function readSearchableLocalText(filePath: string, rootPath: string): string | null {
+  let pathProof: LocalPathIdentityProof;
+  try {
+    pathProof = captureLocalPathIdentityProof(filePath, rootPath);
+  } catch {
+    return null;
+  }
+  if (!pathProof.targetStat.isFile()) return null;
+  const noFollow = typeof fs.constants.O_NOFOLLOW === "number"
+    ? fs.constants.O_NOFOLLOW
+    : 0;
+  let descriptor: number | null = null;
+  try {
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isFile() || !sameFileIdentity(pathProof.targetIdentity, opened)) {
+      return null;
+    }
+    const text = fs.readFileSync(descriptor, "utf-8");
+    const completed = fs.fstatSync(descriptor);
+    const current = captureLocalPathIdentityProof(filePath, rootPath);
+    if (
+      !sameFileIdentity(pathProof.targetIdentity, completed)
+      || !sameLocalPathIdentityProof(pathProof, current)
+    ) {
+      return null;
+    }
+    return text;
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== null) fs.closeSync(descriptor);
+  }
 }
 
 function toSlashRelative(rootPath: string, filePath: string): string {
