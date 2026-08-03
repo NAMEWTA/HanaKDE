@@ -1,0 +1,745 @@
+{
+  "schemaVersion": 1,
+  "fixtureSeed": 20260725,
+  "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+  "commit": "a0cb87819aec578ca448de926352844803b7cc05",
+  "platform": "darwin-arm64",
+  "environment": {
+    "productionBuild": true,
+    "devtools": false,
+    "debugLogging": false
+  },
+  "machine": {
+    "cpu": "Apple M5",
+    "logicalCpuCount": 10,
+    "memoryBytes": 17179869184,
+    "os": "darwin-25.5.0",
+    "filesystem": "apfs",
+    "storage": "ssd",
+    "node": "v24.16.0"
+  },
+  "scenarios": [
+    {
+      "id": "initialTree10k",
+      "warmupCount": 3,
+      "samplesMs": [
+        15.89604200000008,
+        14.819417000000044,
+        14.849333000000001,
+        16.489458000000013,
+        18.676415999999904,
+        14.72862500000008,
+        15.437167000000045,
+        16.737541999999962,
+        14.28691600000002,
+        15.175707999999986
+      ],
+      "rssSamplesBytes": [
+        199147520,
+        203128832,
+        206569472,
+        219627520,
+        245039104,
+        246300672,
+        245121024,
+        270352384,
+        271597568,
+        270614528
+      ],
+      "measurement": {
+        "p50Ms": 15.175707999999986,
+        "p95Ms": 18.676415999999904,
+        "minMs": 14.28691600000002,
+        "maxMs": 18.676415999999904,
+        "peakRssBytes": 271597568,
+        "cancelMs": null,
+        "maxTaskMs": 1.3319999999999936,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 18.615584000000013,
+          "peakRssBytes": 276561920
+        },
+        "pass": true,
+        "p95RegressionRatio": 0.003268,
+        "rssRegressionRatio": -0.01795,
+        "failures": []
+      }
+    },
+    {
+      "id": "hugeTree100k",
+      "warmupCount": 3,
+      "samplesMs": [
+        127.60975000000008,
+        134.621625,
+        127.36420799999996,
+        124.44879199999991,
+        126.50529200000005,
+        126.00433300000009,
+        129.98395900000014,
+        129.5564999999997,
+        126.16312500000004,
+        130.50437499999998
+      ],
+      "rssSamplesBytes": [
+        445890560,
+        476790784,
+        484196352,
+        486932480,
+        489373696,
+        498286592,
+        500072448,
+        500957184,
+        503382016,
+        506347520
+      ],
+      "measurement": {
+        "p50Ms": 127.36420799999996,
+        "p95Ms": 134.621625,
+        "minMs": 124.44879199999991,
+        "maxMs": 134.621625,
+        "peakRssBytes": 506347520,
+        "cancelMs": 0.037374999999883585,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": 50577408,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 135.72854199999983,
+          "peakRssBytes": 493568000
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.008155,
+        "rssRegressionRatio": 0.025892,
+        "failures": []
+      }
+    },
+    {
+      "id": "markdown10MiB",
+      "warmupCount": 3,
+      "samplesMs": [
+        509.19779199999994,
+        510.366,
+        505.4904999999999,
+        506.38895800000046,
+        507.78899999999976,
+        505.92295899999954,
+        503.99512499999946,
+        507.5970419999994,
+        503.40004099999896,
+        503.285041000001
+      ],
+      "rssSamplesBytes": [
+        642875392,
+        632406016,
+        632406016,
+        674365440,
+        632406016,
+        632438784,
+        674398208,
+        632455168,
+        632455168,
+        674414592
+      ],
+      "measurement": {
+        "p50Ms": 505.92295899999954,
+        "p95Ms": 510.366,
+        "minMs": 503.285041000001,
+        "maxMs": 510.366,
+        "peakRssBytes": 674414592,
+        "cancelMs": null,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": true
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 525.3150829999995,
+          "peakRssBytes": 656261120
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.028457,
+        "rssRegressionRatio": 0.027662,
+        "failures": []
+      }
+    },
+    {
+      "id": "denseWikilinks50k",
+      "warmupCount": 3,
+      "samplesMs": [
+        13.82104199999958,
+        13.757416999998895,
+        14.023999999999432,
+        15.02770799999962,
+        13.329332999999679,
+        13.374416999999085,
+        13.441166000000521,
+        14.669332999999824,
+        13.161000000000058,
+        13.337375000000975
+      ],
+      "rssSamplesBytes": [
+        689258496,
+        696975360,
+        704937984,
+        690962432,
+        695812096,
+        703381504,
+        711114752,
+        695828480,
+        700727296,
+        705544192
+      ],
+      "measurement": {
+        "p50Ms": 13.441166000000521,
+        "p95Ms": 15.02770799999962,
+        "minMs": 13.161000000000058,
+        "maxMs": 15.02770799999962,
+        "peakRssBytes": 711114752,
+        "cancelMs": 0.006124999999883585,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": 15.02770799999962,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 16.290666999999303,
+          "peakRssBytes": 692125696
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.077527,
+        "rssRegressionRatio": 0.027436,
+        "failures": []
+      }
+    },
+    {
+      "id": "watcherBurst5k",
+      "warmupCount": 3,
+      "samplesMs": [
+        9.531458000001294,
+        11.715707999999722,
+        9.896332999998776,
+        11.556666000000405,
+        9.281457999999475,
+        11.625959000000876,
+        9.154333000000406,
+        14.159999999999854,
+        9.401707999999417,
+        11.356292000000394
+      ],
+      "rssSamplesBytes": [
+        697352192,
+        697352192,
+        697384960,
+        697384960,
+        697401344,
+        697401344,
+        697401344,
+        612040704,
+        612040704,
+        612040704
+      ],
+      "measurement": {
+        "p50Ms": 9.896332999998776,
+        "p95Ms": 14.159999999999854,
+        "minMs": 9.154333000000406,
+        "maxMs": 14.159999999999854,
+        "peakRssBytes": 697401344,
+        "cancelMs": null,
+        "maxTaskMs": 0.45008400000006077,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 14.45837500000016,
+          "peakRssBytes": 678510592
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.020637,
+        "rssRegressionRatio": 0.027841,
+        "failures": []
+      }
+    },
+    {
+      "id": "searchWarmTrigram",
+      "warmupCount": 3,
+      "samplesMs": [
+        3.6789170000010927,
+        3.6287910000028205,
+        3.6614169999993464,
+        3.578750000000582,
+        3.5368749999979627,
+        3.6152079999992566,
+        3.6131249999998545,
+        3.587666999999783,
+        3.555207999997947,
+        3.5869579999998678
+      ],
+      "rssSamplesBytes": [
+        1074331648,
+        1078050816,
+        1081802752,
+        1085554688,
+        1089323008,
+        1089404928,
+        1089404928,
+        1089404928,
+        1089421312,
+        1089421312
+      ],
+      "measurement": {
+        "p50Ms": 3.587666999999783,
+        "p95Ms": 3.6789170000010927,
+        "minMs": 3.5368749999979627,
+        "maxMs": 3.6789170000010927,
+        "peakRssBytes": 1089421312,
+        "cancelMs": 0.015833999997994397,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 4.094958000001498,
+          "peakRssBytes": 1071448064
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.101598,
+        "rssRegressionRatio": 0.016775,
+        "failures": []
+      }
+    },
+    {
+      "id": "searchWarmShort",
+      "warmupCount": 3,
+      "samplesMs": [
+        3.6112500000017462,
+        3.3202499999970314,
+        3.560124999999971,
+        3.6981250000026193,
+        3.250291999996989,
+        3.293875000003027,
+        3.292250000002241,
+        3.22491699999955,
+        3.5874580000017886,
+        3.313417000001209
+      ],
+      "rssSamplesBytes": [
+        1090207744,
+        1090207744,
+        1090207744,
+        1090207744,
+        1090207744,
+        1090207744,
+        1090224128,
+        1090224128,
+        1090273280,
+        1090273280
+      ],
+      "measurement": {
+        "p50Ms": 3.313417000001209,
+        "p95Ms": 3.6981250000026193,
+        "minMs": 3.22491699999955,
+        "maxMs": 3.6981250000026193,
+        "peakRssBytes": 1090273280,
+        "cancelMs": 0.014917000000423286,
+        "maxTaskMs": null,
+        "firstPageP95Ms": 3.6981250000026193,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 3.6826250000012806,
+          "peakRssBytes": 1072349184
+        },
+        "pass": true,
+        "p95RegressionRatio": 0.004209,
+        "rssRegressionRatio": 0.016715,
+        "failures": []
+      }
+    },
+    {
+      "id": "searchColdOpen",
+      "warmupCount": 3,
+      "samplesMs": [
+        522.2148339999985,
+        522.158958,
+        543.2697919999991,
+        524.8897920000018,
+        533.5072080000027,
+        526.9092079999973,
+        528.351999999999,
+        526.2223749999976,
+        525.3355410000004,
+        521.6688330000034
+      ],
+      "rssSamplesBytes": [
+        1090306048,
+        1090306048,
+        1090306048,
+        1090306048,
+        1090306048,
+        1090306048,
+        1090306048,
+        1090322432,
+        1090322432,
+        1090322432
+      ],
+      "measurement": {
+        "p50Ms": 525.3355410000004,
+        "p95Ms": 543.2697919999991,
+        "minMs": 521.6688330000034,
+        "maxMs": 543.2697919999991,
+        "peakRssBytes": 1090322432,
+        "cancelMs": null,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 556.5575420000023,
+          "peakRssBytes": 1072398336
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.023875,
+        "rssRegressionRatio": 0.016714,
+        "failures": []
+      }
+    },
+    {
+      "id": "multiView100Tabs",
+      "warmupCount": 3,
+      "samplesMs": [
+        0.514500000004773,
+        0.5220839999965392,
+        0.5035419999985606,
+        0.4932090000002063,
+        0.46758300000510644,
+        0.4718749999956344,
+        0.4769589999996242,
+        0.4662079999980051,
+        0.4610839999950258,
+        0.4586249999993015
+      ],
+      "rssSamplesBytes": [
+        1090322432,
+        1090322432,
+        1090322432,
+        1090322432,
+        1090322432,
+        1090322432,
+        1090322432,
+        1090322432,
+        1090322432,
+        1090322432
+      ],
+      "measurement": {
+        "p50Ms": 0.4718749999956344,
+        "p95Ms": 0.5220839999965392,
+        "minMs": 0.4586249999993015,
+        "maxMs": 0.5220839999965392,
+        "peakRssBytes": 1090322432,
+        "cancelMs": null,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": 0.5220839999965392,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": 2,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 0.556750000003376,
+          "peakRssBytes": 1072398336
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.062265,
+        "rssRegressionRatio": 0.016714,
+        "failures": []
+      }
+    },
+    {
+      "id": "fullRebuild100k",
+      "warmupCount": 3,
+      "samplesMs": [
+        6764.703167,
+        6787.81291700001,
+        6995.730792000002,
+        6767.626584000012,
+        6788.508375000005,
+        6791.506208000006,
+        6772.605374999999,
+        6796.530415999994,
+        6813.356958000004,
+        6777.274207999988
+      ],
+      "rssSamplesBytes": [
+        1103331328,
+        1103626240,
+        1103626240,
+        1103626240,
+        1103626240,
+        1103626240,
+        1104068608,
+        1104068608,
+        1104068608,
+        1104068608
+      ],
+      "measurement": {
+        "p50Ms": 6787.81291700001,
+        "p95Ms": 6995.730792000002,
+        "minMs": 6764.703167,
+        "maxMs": 6995.730792000002,
+        "peakRssBytes": 1104068608,
+        "cancelMs": 0.01691700000083074,
+        "maxTaskMs": 47.04791700000351,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 8083.436083999986,
+          "peakRssBytes": 1082572800
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.13456,
+        "rssRegressionRatio": 0.019856,
+        "failures": []
+      }
+    },
+    {
+      "id": "generationSwitch",
+      "warmupCount": 3,
+      "samplesMs": [
+        23.0087910000002,
+        23.852375000002212,
+        25.383583000002545,
+        25.634958000009647,
+        21.9184580000001,
+        25.595916999998735,
+        27.46891599999799,
+        26.665500000002794,
+        24.22775000000547,
+        25.133499999996275
+      ],
+      "rssSamplesBytes": [
+        1104068608,
+        1104068608,
+        1104084992,
+        1104084992,
+        1104084992,
+        1104084992,
+        1104101376,
+        1104101376,
+        1104101376,
+        1104101376
+      ],
+      "measurement": {
+        "p50Ms": 25.133499999996275,
+        "p95Ms": 27.46891599999799,
+        "minMs": 21.9184580000001,
+        "maxMs": 27.46891599999799,
+        "peakRssBytes": 1104101376,
+        "cancelMs": null,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 24.813374999997905,
+          "peakRssBytes": 1082589184
+        },
+        "pass": true,
+        "p95RegressionRatio": 0.107021,
+        "rssRegressionRatio": 0.019871,
+        "failures": []
+      }
+    },
+    {
+      "id": "operationRecovery1k",
+      "warmupCount": 3,
+      "samplesMs": [
+        115.96549999999115,
+        114.22620800000732,
+        110.90837499999907,
+        110.72662500001024,
+        108.43824999997742,
+        113.91787500001374,
+        109.17229099999531,
+        115.29162499998347,
+        116.6385420000006,
+        116.0692080000008
+      ],
+      "rssSamplesBytes": [
+        1101594624,
+        1101594624,
+        1101627392,
+        1101660160,
+        1101676544,
+        1101676544,
+        1101676544,
+        1101709312,
+        1101725696,
+        1101725696
+      ],
+      "measurement": {
+        "p50Ms": 113.91787500001374,
+        "p95Ms": 116.6385420000006,
+        "minMs": 108.43824999997742,
+        "maxMs": 116.6385420000006,
+        "peakRssBytes": 1101725696,
+        "cancelMs": null,
+        "maxTaskMs": null,
+        "firstPageP95Ms": null,
+        "incrementalP95Ms": null,
+        "switchP95Ms": null,
+        "additionalPeakRssBytes": null,
+        "activeViewHeadroom": null,
+        "rejectOverLimitBeforeEditorView": null
+      },
+      "pass": true,
+      "absoluteFailures": [],
+      "baselineDisposition": {
+        "mode": "compared",
+        "baseline": {
+          "commit": "9649b75227dfba1d2c62617d04dadf45e2599417",
+          "fixtureHash": "7114e0979c64565b07045a783a247279261be20fe7ff0769e12880b4c1819745",
+          "status": "passed",
+          "selection": "latest-passing-same-runner",
+          "p95Ms": 160.21916700000293,
+          "peakRssBytes": 1077985280
+        },
+        "pass": true,
+        "p95RegressionRatio": -0.272006,
+        "rssRegressionRatio": 0.022023,
+        "failures": []
+      }
+    }
+  ],
+  "pass": true,
+  "baselineMode": "compare"
+}

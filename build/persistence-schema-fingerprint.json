@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:d25d2a1343a72e350d887018a0f3c845335b431f9c00339d814305a682727f9d",
+  "payloadFingerprint": "sha256:0fae09ee928c210dbc9c01640b89d40e0cd192a90e2540481da9f8bd52e30143",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2998,8 +2998,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Knowledge rebuild batching and Markdown parser scan scheduling preserve registered schemas, stores, DATA_EPOCH, and persisted payload shapes.",
-    "payloadFingerprint": "sha256:d25d2a1343a72e350d887018a0f3c845335b431f9c00339d814305a682727f9d"
+    "compatibilityReason": "Registered Knowledge index publication validation and native-trash receipt writes changed only audited receipt line locations; the 59 registered stores, 796 owned sites, store schemas, recovery journal contract, and DATA_EPOCH remain unchanged.",
+    "payloadFingerprint": "sha256:0fae09ee928c210dbc9c01640b89d40e0cd192a90e2540481da9f8bd52e30143"
   },
   "schemas": [
     {
@@ -3182,7 +3182,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:f3501533c2eb49b86b2260de8b67dcd825615ef365b18b73216a1e308588ea59",
+      "sourceHash": "sha256:c2deccf4d007e801cf447301e23953393d1e8fa3ac1b1732322c097b5f8840ed",
       "storeId": "desktop-window-version-state"
     },
     {
@@ -3224,7 +3224,7 @@
           "sourceHash": "sha256:10844a5e4f8868145a872d20ba471f3c359aaba2aa6ae8c441f2a8f91d54e3c6"
         }
       ],
-      "sourceHash": "sha256:a9757015d7cfd51e11278f80485140d64cb19233cf6ad173b479c608868ed0ee",
+      "sourceHash": "sha256:318e10e41116b99e99fe9d81a77557ce9e06cabbd58f9ddd6970897642eaa19a",
       "storeId": "knowledge-index-generations"
     },
     {
@@ -6329,7 +6329,7 @@
     {
       "exemptionId": "desktop-skill-preview-temp",
       "kind": "mkdir",
-      "line": 5624,
+      "line": 5634,
       "reason": "Creates a request-scoped skill preview directory under Electron's operating-system temp path.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6337,7 +6337,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "write-file",
-      "line": 5770,
+      "line": 5780,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6345,7 +6345,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "mkdir",
-      "line": 5792,
+      "line": 5802,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6353,7 +6353,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "write-file",
-      "line": 5793,
+      "line": 5803,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6361,7 +6361,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "mkdir",
-      "line": 5804,
+      "line": 5814,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6369,7 +6369,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "copy-file",
-      "line": 5805,
+      "line": 5815,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6377,7 +6377,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "mkdir",
-      "line": 5838,
+      "line": 5848,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6385,7 +6385,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "write-file",
-      "line": 5839,
+      "line": 5849,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6393,7 +6393,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 6365,
+      "line": 6375,
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "server-runtime-info"
@@ -7345,7 +7345,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 909,
+      "line": 910,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"

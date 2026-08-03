@@ -5501,7 +5501,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5624,
+      "line": 5634,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(tmpDir, { recursive: true })",
       "reason": "Creates a request-scoped skill preview directory under Electron's operating-system temp path.",
@@ -5510,7 +5510,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5770,
+      "line": 5780,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content, \"utf-8\")",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5519,7 +5519,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5792,
+      "line": 5802,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(resolved), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5528,7 +5528,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5793,
+      "line": 5803,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(resolved, Buffer.from(base64Data, \"base64\"))",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5537,7 +5537,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5804,
+      "line": 5814,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(destinationPath), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5546,7 +5546,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5805,
+      "line": 5815,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, destinationPath)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5555,7 +5555,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5838,
+      "line": 5848,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(dir, { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5564,7 +5564,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5839,
+      "line": 5849,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, pngBuffer)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5573,7 +5573,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 6365,
+      "line": 6375,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(path.join(hanakoHome, \"server-info.json\"))",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -6644,7 +6644,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 909,
+      "line": 910,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
