@@ -844,7 +844,13 @@ export async function materializeFixture<T>(
       fixtureIdentity: dataset.identity,
     };
     fs.writeFileSync(manifestPath, `${JSON.stringify(envelope, null, 2)}\n`, "utf8");
-    const materializedDirectories = new Set(sourceRoots);
+    // A fixture entry owns its leaf path, so directory creation for distinct
+    // entries can proceed independently.  Keeping the directory promises
+    // here prevents an NTFS worker from serially walking every ancestor while
+    // the bounded write window is otherwise idle.
+    const materializedDirectories = new Map<string, Promise<void>>(
+      sourceRoots.map((sourceRoot) => [sourceRoot, Promise.resolve()]),
+    );
     const writeResources: MaterializedFixture["writeResources"] = async ({
       tree,
       limit = Number.POSITIVE_INFINITY,
@@ -865,19 +871,20 @@ export async function materializeFixture<T>(
         const sourceIndex = manifest.sources.findIndex((source) => source.sourceKey === entry.sourceKey);
         const target = path.join(sourceRoots[sourceIndex]!, ...entry.relativePath.split("/"));
         const targetDirectory = path.dirname(target);
-        if (!materializedDirectories.has(targetDirectory)) {
-          fs.mkdirSync(targetDirectory, { recursive: true });
-          materializedDirectories.add(targetDirectory);
+        let directoryReady = materializedDirectories.get(targetDirectory);
+        if (!directoryReady) {
+          directoryReady = fs.promises.mkdir(targetDirectory, { recursive: true }).then(() => undefined);
+          materializedDirectories.set(targetDirectory, directoryReady);
         }
         const body = entry.read();
         if (body.byteLength > 0) {
-          pendingWrites.push(fs.promises.writeFile(target, body));
+          pendingWrites.push(directoryReady.then(() => fs.promises.writeFile(target, body)));
         } else {
-          pendingWrites.push(fs.promises.writeFile(
-            target,
-            `${JSON.stringify(entry.metadata)}\n`,
-            "utf8",
-          ));
+          pendingWrites.push(
+            directoryReady.then(() =>
+              fs.promises.writeFile(target, `${JSON.stringify(entry.metadata)}\n`, "utf8"),
+            ),
+          );
         }
         written += 1;
         // A 32-entry batch still leaves NTFS repeatedly draining the libuv

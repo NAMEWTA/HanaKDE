@@ -91,13 +91,21 @@ jobs:
         if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/verify-standalone-server-artifact.mjs x64 --smoke
 
-      - name: Run tests
+      - name: Run general tests
         # The fixed four Vitest workers share libuv's default four I/O threads.
         # Give the real cross-platform filesystem suite sufficient independent
         # I/O capacity without changing its worker count or any test timeout.
+        # The 10,000-entry fixture has its own deterministic, single-worker
+        # filesystem gate below: letting unrelated suites contend for the same
+        # NTFS volume turns a valid fixture check into scheduler noise.
         env:
           UV_THREADPOOL_SIZE: 16
-        run: npm test -- --maxWorkers=4
+        run: npm test -- --maxWorkers=4 --exclude tests/knowledge-performance-fixtures.test.ts
+
+      - name: Run isolated Knowledge fixture filesystem gate
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: npx vitest run tests/knowledge-performance-fixtures.test.ts --maxWorkers=1
 
   knowledge-workspace-e2e:
     runs-on: ${{ matrix.os }}
