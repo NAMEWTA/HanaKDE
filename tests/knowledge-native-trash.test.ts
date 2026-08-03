@@ -71,4 +71,22 @@ describe('KnowledgeTrashService native cleanup', () => {
       }),
     ]);
   });
+
+  it('rejects a native failure completion when its receipt cannot be re-read', async () => {
+    const fixture = createKnowledgeTrashFixture({ 'unconfirmed.md': { content: 'unconfirmed' } });
+    await fixture.service.trash([{ sourceKey: 'main', relativePath: 'unconfirmed.md' }]);
+    const entry = (await fixture.service.list('main'))[0].entries[0];
+    fixture.resourceIO.writeExpectedVersion.mockImplementation(async (resource) => ({
+      changeType: 'modified' as const,
+      resourceKey: resource.path,
+      resource,
+      version: { sequence: 999, size: 0 },
+    }));
+
+    await expect(fixture.service.failSystemTrash(entry.trashAddress, 'knowledge_resource_unavailable'))
+      .rejects.toMatchObject({ code: 'knowledge_version_conflict' });
+    const listed = await fixture.service.list('main');
+    expect(listed[0].entries[0]).toMatchObject({ state: 'trashed' });
+    expect(listed[0].entries[0]).not.toHaveProperty('errorCode');
+  });
 });

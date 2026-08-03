@@ -33,6 +33,28 @@ describe('knowledge native grants', () => {
     })).toMatchObject({ windowKey: 'window-a' });
   });
 
+  it('retains an unconsumed system-trash grant for a trusted terminal failure only', () => {
+    const service = new KnowledgeNativeGrantService({ randomUUID: () => '00000000-0000-4000-8000-000000000054' });
+    const systemTrash = service.issue({
+      action: 'systemTrash', address: { sourceKey: 'main', relativePath: '.trash/batch/payload/000001.md' },
+      version: { etag: 'v1' }, ownerKey: 'owner', windowKey: 'window-a',
+    });
+    expect(service.failSystemTrash(systemTrash.grantId)).toMatchObject({
+      action: 'systemTrash',
+      address: { relativePath: '.trash/batch/payload/000001.md' },
+    });
+    expect(() => service.failSystemTrash(systemTrash.grantId)).toThrow();
+
+    const reveal = service.issue({
+      action: 'reveal', address: { sourceKey: 'main', relativePath: 'other.md' },
+      version: { etag: 'v2' }, ownerKey: 'owner', windowKey: 'window-a',
+    });
+    expect(() => service.failSystemTrash(reveal.grantId)).toThrow();
+    expect(service.consume({
+      grantId: reveal.grantId, action: 'reveal', ownerKey: 'owner', windowKey: 'window-a',
+    })).toMatchObject({ action: 'reveal' });
+  });
+
   it('compares only fixed-length native credentials', () => {
     const token = 'a'.repeat(43);
     expect(knowledgeNativeCredentialMatches(token, token)).toBe(true);

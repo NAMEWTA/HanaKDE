@@ -12,6 +12,7 @@ import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registr
 import { ResourceIO } from "../lib/resource-io/resource-io.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import {
+  configureKnowledgeNativeBridge,
   createKnowledgeWorkspaceRoute,
 } from "../server/routes/knowledge-workspace.ts";
 import { SourceRegistry } from "../core/knowledge-workspace/source-registry.ts";
@@ -627,6 +628,79 @@ describe("knowledge workspace source route", () => {
     expect(responseText).not.toContain(main);
     expect(fs.existsSync(oldPath)).toBe(false);
     expect(fs.readFileSync(newPath, "utf8")).toBe("real route");
+  });
+
+  it("records a retained system-trash failure when native consumption rejects a changed grant", async () => {
+    const { engine, main } = setup();
+    const resourceIO = new ResourceIO({
+      providers: {
+        local_fs: new LocalFsProvider({ cwd: main }),
+      },
+    });
+    Object.assign(engine, { resourceIO });
+    configureKnowledgeNativeBridge(engine, "a".repeat(43));
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "transportConnectionKind",
+        "local",
+      );
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "authPrincipal",
+        normalizePrincipal({
+          kind: "local_user",
+          userId: "user_1",
+          studioId: "studio_1",
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+          scopes: ["studio.owner", "files.read", "files.write"],
+        }),
+      );
+      await next();
+    });
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    fs.writeFileSync(path.join(main, "Retained.md"), "retained", "utf8");
+
+    const trashed = await app.request("/api/knowledge-workspace/trash", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        addresses: [{ sourceKey: "main", relativePath: "Retained.md" }],
+      }),
+    });
+    expect(trashed.status).toBe(200);
+    const batchId = (await trashed.json()).result.batchId as string;
+    const listed = await app.request("/api/knowledge-workspace/trash/main");
+    const entry = (await listed.json()).batches.find((batch: { batchId: string }) => batch.batchId === batchId)
+      .entries[0];
+    const grant = await app.request("/api/knowledge-workspace/native/grants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "systemTrash", address: entry.trashAddress }),
+    });
+    expect(grant.status).toBe(201);
+    const grantId = (await grant.json()).grant.grantId as string;
+    fs.appendFileSync(path.join(main, ...entry.trashAddress.relativePath.split("/")), "changed", "utf8");
+
+    const rejected = await app.request("/api/knowledge-workspace/native/consume", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Hana-Native-Bridge": "a".repeat(43),
+      },
+      body: JSON.stringify({ action: "systemTrash", grantId }),
+    });
+    expect(rejected.status).toBe(409);
+    expect(await rejected.text()).not.toContain(main);
+
+    const afterFailure = await app.request("/api/knowledge-workspace/trash/main");
+    expect((await afterFailure.json()).batches.find((batch: { batchId: string }) => batch.batchId === batchId))
+      .toEqual(expect.objectContaining({ entries: [expect.objectContaining({
+        state: "trashed",
+        errorCode: "knowledge_resource_unavailable",
+      })] }));
   });
 
   it("resolves public KnowledgeResourceAddress values before ResourceIO access", async () => {

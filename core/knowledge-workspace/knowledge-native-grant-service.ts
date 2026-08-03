@@ -58,6 +58,23 @@ export class KnowledgeNativeGrantService {
     this.#pendingSystemTrash.delete(grantId);
     return grant;
   }
+  failSystemTrash(grantId: string): KnowledgeNativeResourceGrant {
+    this.#sweep();
+    const pending = this.#pendingSystemTrash.get(grantId);
+    if (pending) {
+      this.#pendingSystemTrash.delete(grantId);
+      return pending;
+    }
+    const grant = this.#grants.get(grantId);
+    if (!grant || grant.action !== 'systemTrash') {
+      throw createKnowledgeWorkspaceError('knowledge_operation_precondition_failed', 'knowledge native trash completion is invalid');
+    }
+    // The native bridge may receive a terminal system-trash failure after a
+    // renderer session is rekeyed between grant issue and consume. This path
+    // exposes no resource path and accepts only system-trash grants.
+    this.#grants.delete(grantId);
+    return grant;
+  }
   #sweep(): void {
     const now = this.#now();
     for (const [id, grant] of this.#grants) if (grant.expiresAt <= now) this.#grants.delete(id);

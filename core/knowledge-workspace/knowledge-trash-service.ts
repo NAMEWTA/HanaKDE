@@ -288,11 +288,22 @@ export class KnowledgeTrashService {
       manifest = updateEntry(manifest, entry.entryId, patch);
       try {
         await this.#writeManifest(manifest, version, context);
-        return;
+        const confirmed = await this.#readManifest(address.sourceKey, manifest.batchId, context);
+        const confirmedEntry = confirmed.entries.find(candidate => candidate.entryId === entry.entryId);
+        if (
+          confirmedEntry?.state === patch.state
+          && confirmedEntry.errorCode === patch.errorCode
+        ) {
+          return;
+        }
       } catch (error) {
         if (!isKnowledgeVersionConflict(error) || attempt === 2) throw error;
       }
     }
+    throw createKnowledgeWorkspaceError(
+      'knowledge_version_conflict',
+      'knowledge system trash receipt could not be confirmed',
+    );
   }
 
   async #requireSource(sourceKey: string, mutation = true): Promise<KnowledgeSourceDto> {

@@ -664,16 +664,37 @@ export function createKnowledgeWorkspaceRoute(engine) {
       const grant = native.grants.consume({ grantId: body.grantId, action, ...nativeIdentity(auth.requestContext) });
       const registry = await registryFor(c, engine, auth.requestContext, registryState);
       const resourceIO = resourceIoFor(engine);
-      const ref = await registry.resolveAddress(grant.address);
-      const stat = await resourceIO.stat(ref, createApiResourceOperationContext({ requestContext: auth.requestContext, requestId: requestIdFromHono(c), reason: "knowledge-native-consume" }));
-      if (!stat.exists || !sameVersion(stat.version, grant.version) || typeof resourceIO.materialize !== "function") {
-        throw createKnowledgeWorkspaceError("knowledge_version_conflict", "knowledge native grant resource changed");
+      const context = createApiResourceOperationContext({
+        requestContext: auth.requestContext,
+        requestId: requestIdFromHono(c),
+        reason: "knowledge-native-consume",
+      }) as ResourceOperationContext;
+      try {
+        const ref = await registry.resolveAddress(grant.address);
+        const stat = await resourceIO.stat(ref, context);
+        if (!stat.exists || !sameVersion(stat.version, grant.version) || typeof resourceIO.materialize !== "function") {
+          throw createKnowledgeWorkspaceError("knowledge_version_conflict", "knowledge native grant resource changed");
+        }
+        const materialized = await resourceIO.materialize(ref);
+        if (!materialized?.filePath || !path.isAbsolute(materialized.filePath)) {
+          throw createKnowledgeWorkspaceError("knowledge_native_capability_unavailable", "knowledge native resource cannot be materialized");
+        }
+        return c.json({ grantId: grant.grantId, action: grant.action, filePath: materialized.filePath });
+      } catch (error) {
+        if (grant.action === "systemTrash") {
+          try {
+            const trash = new KnowledgeTrashService({ sourceRegistry: registry, resourceIO });
+            await trash.failSystemTrash(
+              grant.address,
+              "knowledge_resource_unavailable",
+              { ...context, reason: "knowledge-native-trash-consume-failed" },
+            );
+          } finally {
+            native.grants.discardSystemTrash(grant.grantId);
+          }
+        }
+        throw error;
       }
-      const materialized = await resourceIO.materialize(ref);
-      if (!materialized?.filePath || !path.isAbsolute(materialized.filePath)) {
-        throw createKnowledgeWorkspaceError("knowledge_native_capability_unavailable", "knowledge native resource cannot be materialized");
-      }
-      return c.json({ grantId: grant.grantId, action: grant.action, filePath: materialized.filePath });
     } catch (error) {
       return knowledgeRouteError(c, error);
     }
@@ -689,7 +710,7 @@ export function createKnowledgeWorkspaceRoute(engine) {
         throw createKnowledgeWorkspaceError("knowledge_operation_precondition_failed", "knowledge native completion is invalid");
       }
       if (!body.ok) {
-        const grant = native.grants.discardSystemTrash(body.grantId);
+        const grant = native.grants.failSystemTrash(body.grantId);
         const registry = await registryFor(c, engine, auth.requestContext, registryState);
         const trash = new KnowledgeTrashService({ sourceRegistry: registry, resourceIO: resourceIoFor(engine) });
         await trash.failSystemTrash(

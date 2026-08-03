@@ -5114,6 +5114,16 @@ async function performKnowledgeNativeGrantAction(action, grantId, authorizationT
   try {
     consumed = await knowledgeNativeServerRequest("consume", { action, grantId }, authorizationToken);
   } catch (error) {
+    // A system-trash grant may already have crossed the server-side consume
+    // boundary when validation fails (for example, a version changed between
+    // grant and materialization). Always offer its terminal failure receipt:
+    // the trusted bridge accepts only a pending or still-unconsumed
+    // system-trash grant, without widening the renderer-visible error surface.
+    if (action === "systemTrash") {
+      try {
+        await knowledgeNativeServerRequest("complete", { grantId, ok: false }, authorizationToken);
+      } catch {}
+    }
     throw sanitizeKnowledgeNativeActionError(action, error);
   }
   let ok = true;
