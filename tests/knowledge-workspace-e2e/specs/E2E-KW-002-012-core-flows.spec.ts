@@ -34,9 +34,11 @@ async function openSourceTreeFile(workspace: Locator, sourceKey: string, name: s
 }
 
 async function json(response: Response): Promise<Record<string, unknown>> {
-  const body = await response.json() as Record<string, unknown>;
-  expect(response.ok, JSON.stringify(body)).toBe(true);
-  return body;
+  // Failure output is part of the release artifact surface. Never attach an
+  // API response body here: security regressions must not echo test content,
+  // absolute paths, or bearer material into CI logs.
+  expect(response.ok, `Knowledge API returned ${response.status}`).toBe(true);
+  return await response.json() as Record<string, unknown>;
 }
 
 test('E2E-KW-002 keeps Open and Full on the same public DTO and capability shape', async ({ knowledgeApp }) => {

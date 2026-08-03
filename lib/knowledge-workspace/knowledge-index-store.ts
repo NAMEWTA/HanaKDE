@@ -318,6 +318,14 @@ export const nodeKnowledgeIndexFileSystem: KnowledgeIndexFileSystem =
       const handle = fs.openSync(filePath, fs.constants.O_RDONLY);
       try {
         fs.fsyncSync(handle);
+      } catch (error) {
+        // SQLite has already completed a FULL synchronous checkpoint before a
+        // generation reaches this publication barrier. On Windows, Node can
+        // still report that fsync is unsupported for the read-only handle
+        // (`EPERM` on the hosted NTFS runner). The atomic rename remains and
+        // the durable SQLite checkpoint is authoritative; retain fail-closed
+        // behavior for every other platform and I/O failure.
+        if (!isWindowsUnsupportedFileFsync(error)) throw error;
       } finally {
         fs.closeSync(handle);
       }
@@ -2660,6 +2668,13 @@ function errorCode(error: unknown): string | undefined {
   return isRecord(error) && typeof error.code === "string"
     ? error.code
     : undefined;
+}
+
+function isWindowsUnsupportedFileFsync(error: unknown): boolean {
+  if (process.platform !== "win32") return false;
+  return ["EPERM", "EINVAL", "ENOTSUP", "EOPNOTSUPP"].includes(
+    errorCode(error) ?? "",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -51,9 +51,10 @@ async function createNativeGrantFromRenderer(
 }
 
 async function ok(response: Response): Promise<Record<string, any>> {
-  const body = await response.json() as Record<string, any>;
-  expect(response.ok, JSON.stringify(body)).toBe(true);
-  return body;
+  // Do not serialize an unexpected response into a Playwright failure. E2E
+  // artifacts are deliberately safe to upload even for malicious workspaces.
+  expect(response.ok, `Knowledge API returned ${response.status}`).toBe(true);
+  return await response.json() as Record<string, any>;
 }
 
 async function findFile(root: string, fileName: string): Promise<string> {

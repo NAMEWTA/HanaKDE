@@ -43,7 +43,9 @@ async function writeFixtureFiles(
 
 async function requireOk(response: Response, operation: string): Promise<void> {
   if (response.ok) return;
-  throw new Error(`${operation} failed (${response.status}): ${await response.text()}`);
+  // Keep release artifacts path- and content-free if an authority regression
+  // makes this request fail.
+  throw new Error(`${operation} failed (${response.status})`);
 }
 
 async function openKnowledge(page: Page): Promise<Locator> {
