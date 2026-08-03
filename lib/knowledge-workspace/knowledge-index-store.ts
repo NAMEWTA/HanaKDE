@@ -385,6 +385,8 @@ type StoreOptions = {
   now?: () => number;
   processIsAlive?: (pid: number) => boolean;
   fileSystem?: KnowledgeIndexFileSystem;
+  /** Internal test hook; production publication waits up to five seconds. */
+  checkpointBusyTimeoutMs?: number;
 };
 
 export class KnowledgeIndexStore {
@@ -396,6 +398,7 @@ export class KnowledgeIndexStore {
   readonly #now: () => number;
   readonly #processIsAlive: (pid: number) => boolean;
   readonly #fileSystem: KnowledgeIndexFileSystem;
+  readonly #checkpointBusyTimeoutMs: number;
   readonly #searchCandidateCache = new Map<string, readonly KnowledgeIndexSearchQueryRow[]>();
   #queryManifestCache: { manifest: KnowledgeIndexManifest; cachedAtMs: number } | null = null;
   readonly #leaseCounts = new Map<string, number>();
@@ -435,6 +438,15 @@ export class KnowledgeIndexStore {
     this.#now = options.now ?? Date.now;
     this.#processIsAlive = options.processIsAlive ?? processIsAlive;
     this.#fileSystem = options.fileSystem ?? nodeKnowledgeIndexFileSystem;
+    const checkpointBusyTimeoutMs = options.checkpointBusyTimeoutMs ?? 5_000;
+    if (
+      !Number.isSafeInteger(checkpointBusyTimeoutMs)
+      || checkpointBusyTimeoutMs < 1
+      || checkpointBusyTimeoutMs > 5_000
+    ) {
+      throw new TypeError("knowledge index checkpoint busy timeout is invalid");
+    }
+    this.#checkpointBusyTimeoutMs = checkpointBusyTimeoutMs;
     const legacyPartitionPath = knowledgeIndexLegacyPartitionPath(
       options.hanakoHome,
       workspaceFingerprint,
@@ -784,6 +796,13 @@ export class KnowledgeIndexStore {
       validateCompleteGeneration(
         rebuildInternals(rebuild).database,
         this.#sourceFingerprint,
+      );
+      // Builds always start with the production 5s SQLite busy timeout. Tests
+      // can use a shorter bounded wait to exercise the same fail-closed
+      // checkpoint result without consuming the full test budget; this
+      // connection closes immediately after publication either way.
+      rebuildInternals(rebuild).database.pragma(
+        `busy_timeout = ${this.#checkpointBusyTimeoutMs}`,
       );
       const checkpoint = checkpointTruncate(rebuildInternals(rebuild).database);
       if (checkpoint.busy !== 0 || checkpoint.log !== checkpoint.checkpointed) {

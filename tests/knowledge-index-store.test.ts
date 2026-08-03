@@ -47,6 +47,7 @@ describe("knowledge index store", () => {
       fileSystem?: KnowledgeIndexFileSystem;
       processIsAlive?: (pid: number) => boolean;
       extractorContractVersion?: string;
+      checkpointBusyTimeoutMs?: number;
     } = {},
   ): KnowledgeIndexStore {
     return new KnowledgeIndexStore({
@@ -59,6 +60,7 @@ describe("knowledge index store", () => {
       fileSystem: options.fileSystem,
       processIsAlive: options.processIsAlive,
       extractorContractVersion: options.extractorContractVersion ?? "extractor-v1",
+      checkpointBusyTimeoutMs: options.checkpointBusyTimeoutMs,
     });
   }
 
@@ -261,7 +263,9 @@ describe("knowledge index store", () => {
 
   it("refuses checkpoint-busy staging content instead of publishing a main file without its WAL", () => {
     const hanakoHome = temporaryHome("checkpoint");
-    const store = createStore(hanakoHome);
+    const store = createStore(hanakoHome, SOURCE_FINGERPRINT, {
+      checkpointBusyTimeoutMs: 25,
+    });
     const rebuild = store.beginRebuild({
       rebuildId: "busy",
       generationId: "generation-busy",
@@ -275,20 +279,23 @@ describe("knowledge index store", () => {
     reader.exec("BEGIN");
     reader.prepare("SELECT value FROM meta WHERE key = 'generation_id'").get();
 
-    expect(() => rebuild.publish({ lastCompleteSequence: 1 })).toThrow(
-      expect.objectContaining({
-        code: "knowledge_index_unavailable",
-        details: { state: "checkpoint_busy" },
-      }),
-    );
-    expect(store.health()).toMatchObject({ state: "unavailable" });
-    expect(fs.existsSync(path.join(
-      partitionPath(hanakoHome, SOURCE_FINGERPRINT),
-      "current.json",
-    ))).toBe(false);
-    reader.exec("ROLLBACK");
-    reader.close();
-    rebuild.cancel();
+    try {
+      expect(() => rebuild.publish({ lastCompleteSequence: 1 })).toThrow(
+        expect.objectContaining({
+          code: "knowledge_index_unavailable",
+          details: { state: "checkpoint_busy" },
+        }),
+      );
+      expect(store.health()).toMatchObject({ state: "unavailable" });
+      expect(fs.existsSync(path.join(
+        partitionPath(hanakoHome, SOURCE_FINGERPRINT),
+        "current.json",
+      ))).toBe(false);
+    } finally {
+      reader.exec("ROLLBACK");
+      reader.close();
+      rebuild.cancel();
+    }
   });
 
   it("serializes writers with a recoverable same-host lock and never steals another host lock", () => {
