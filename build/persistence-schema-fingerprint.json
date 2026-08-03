@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:65d45164aa23ca296ecf43dc873b8bb7b58d140d83137fda58d8b7005a0d243f",
+  "payloadFingerprint": "sha256:318cb91a1a7ec546194ec382e990a11516e5d339ed9de9f741eca18e457819ee",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2998,8 +2998,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Knowledge index path encoding is storage-layout compatible: existing legacy partitions remain readable, new partitions retain full 256-bit identities, schema and DATA_EPOCH are unchanged.",
-    "payloadFingerprint": "sha256:65d45164aa23ca296ecf43dc873b8bb7b58d140d83137fda58d8b7005a0d243f"
+    "compatibilityReason": "Knowledge index path encoding and empty SQLite sidecar cleanup hardening are storage-layout compatible: legacy partitions remain readable, new partitions retain full 256-bit identities, publication remains fail-closed, and schemas plus DATA_EPOCH are unchanged.",
+    "payloadFingerprint": "sha256:318cb91a1a7ec546194ec382e990a11516e5d339ed9de9f741eca18e457819ee"
   },
   "schemas": [
     {
@@ -3224,7 +3224,7 @@
           "sourceHash": "sha256:10844a5e4f8868145a872d20ba471f3c359aaba2aa6ae8c441f2a8f91d54e3c6"
         }
       ],
-      "sourceHash": "sha256:30cee6a2e36ccd04eb4ab00635126d9ee805b71e7b63ba4da841cc47f43566ad",
+      "sourceHash": "sha256:a9757015d7cfd51e11278f80485140d64cb19233cf6ad173b479c608868ed0ee",
       "storeId": "knowledge-index-generations"
     },
     {
