@@ -89,6 +89,11 @@ jobs:
         run: node scripts/verify-standalone-server-artifact.mjs x64 --smoke
 
       - name: Run tests
+        # The fixed four Vitest workers share libuv's default four I/O threads.
+        # Give the real cross-platform filesystem suite sufficient independent
+        # I/O capacity without changing its worker count or any test timeout.
+        env:
+          UV_THREADPOOL_SIZE: 16
         run: npm test -- --maxWorkers=4
 
   knowledge-workspace-e2e:

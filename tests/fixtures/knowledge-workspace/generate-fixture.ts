@@ -880,10 +880,11 @@ export async function materializeFixture<T>(
           ));
         }
         written += 1;
-        // NTFS performs 10,000 single synchronous writes well beyond the
-        // fixture's fixed timeout. Keep the dataset bounded while allowing a
-        // small, deterministic batch to overlap filesystem latency.
-        if (pendingWrites.length >= 32) await flushWrites();
+        // A 32-entry batch still leaves NTFS repeatedly draining the libuv
+        // queue while the fixture creates its 10,000-entry smoke tree. Keep
+        // the write window bounded, but large enough to amortize that drain
+        // and retain all real files/paths in the fixed fixture.
+        if (pendingWrites.length >= 256) await flushWrites();
       }
       await flushWrites();
       return written;

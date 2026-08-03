@@ -58,6 +58,7 @@ describe('KnowledgeResourceTree keyboard selection', () => {
     const two = screen.getByRole('treeitem', { name: /two.md/ });
 
     fireEvent.click(docs);
+    await waitFor(() => expect(docs).toHaveAttribute('aria-selected', 'true'));
     fireEvent.keyDown(docs, { key: 'ArrowDown', shiftKey: true });
     await waitFor(() => {
       expect(docs).toHaveAttribute('aria-selected', 'true');
