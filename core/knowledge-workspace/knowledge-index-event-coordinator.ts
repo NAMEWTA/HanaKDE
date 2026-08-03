@@ -33,6 +33,12 @@ export const KNOWLEDGE_INDEX_EVENT_DEBOUNCE_MS = 100;
 export const KNOWLEDGE_INDEX_EVENT_MAX_DEBOUNCE_MS = 500;
 export const KNOWLEDGE_INDEX_EVENT_BURST_LIMIT = 5_000;
 export const KNOWLEDGE_INDEX_EVENT_BURST_WINDOW_MS = 10_000;
+/**
+ * A rebuild writes one SQLite transaction per batch.  Keeping this bounded
+ * preserves cancellation and renderer responsiveness without turning a large
+ * source scan into one transaction per resource.
+ */
+export const KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE = 64;
 
 export type KnowledgeIndexEventSource = Readonly<{
   eventPaths(event: ResourceEvent): readonly string[];
@@ -495,7 +501,10 @@ export class KnowledgeIndexEventCoordinator {
         throwIfAborted(controller.signal);
         batch.push(document);
         processed += 1;
-        if (batch.length >= 2 || this.#now() - lastYieldAt >= 50) {
+        if (
+          batch.length >= KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE
+          || this.#now() - lastYieldAt >= 50
+        ) {
           rebuild.replaceResources(batch.splice(0));
         }
         if (processed % 200 === 0 || this.#now() - lastYieldAt >= 50) {

@@ -36,6 +36,7 @@ const TAG_REQUIRED_CHARACTER = /[\p{L}\p{M}_]/u;
 const TAG_FORBIDDEN_PREFIX = /^[\p{L}\p{M}\p{N}_/\\#]$/u;
 const ESCAPABLE_MARKDOWN_CHARACTER = /^[!"#$%&'()*+,./:;<=>?@[\\\]^_`{|}~-]$/u;
 const PERIODIC_ABORT_MASK = 0x1ff;
+const EMPTY_ESCAPES = new Uint8Array(0);
 
 export class MarkdownKnowledgeIrAbortError extends Error {
   readonly code = "markdown_ir_aborted";
@@ -53,15 +54,13 @@ export function throwIfMarkdownIrAborted(signal?: AbortSignal): void {
 function sourceLines(source: string, signal?: AbortSignal): SourceLine[] {
   const lines: SourceLine[] = [];
   let from = 0;
-  let work = 0;
   while (from < source.length) {
     if ((lines.length & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
-    let to = from;
-    while (to < source.length && source[to] !== "\n" && source[to] !== "\r") {
-      if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
-      work += 1;
-      to += 1;
-    }
+    const nextCr = source.indexOf("\r", from);
+    const nextLf = source.indexOf("\n", from);
+    const to = nextCr < 0
+      ? nextLf < 0 ? source.length : nextLf
+      : nextLf < 0 ? nextCr : Math.min(nextCr, nextLf);
     let fullTo = to;
     if (source[fullTo] === "\r" && source[fullTo + 1] === "\n") fullTo += 2;
     else if (source[fullTo] === "\r" || source[fullTo] === "\n") fullTo += 1;
@@ -76,19 +75,24 @@ function parserInputWithOffsetPreservingLineBreaks(
   source: string,
   signal?: AbortSignal,
 ): string {
+  throwIfMarkdownIrAborted(signal);
+  let index = source.indexOf("\r");
+  if (index < 0) return source;
   const chunks: string[] = [];
   let unchangedFrom = 0;
-  for (let index = 0; index < source.length; index += 1) {
-    if ((index & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
-    if (source[index] !== "\r") continue;
+  let work = 0;
+  while (index >= 0) {
+    if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    work += 1;
     chunks.push(source.slice(unchangedFrom, index));
     if (source[index + 1] === "\n") {
       chunks.push(" \n");
-      index += 1;
+      unchangedFrom = index + 2;
     } else {
       chunks.push("\n");
+      unchangedFrom = index + 1;
     }
-    unchangedFrom = index + 1;
+    index = source.indexOf("\r", unchangedFrom);
   }
   chunks.push(source.slice(unchangedFrom));
   return chunks.join("");
@@ -465,6 +469,37 @@ function advanceExclusion(
     cursor += 1;
   }
   return cursor;
+}
+
+/**
+ * A lexical pass can only emit a token when its marker occurs outside the
+ * syntax ranges it must ignore.  Use the engine's string search to avoid a
+ * JavaScript walk over large plain-text documents, while retaining the exact
+ * scanner for every possible marker.
+ */
+function hasMarkerOutsideExclusions(
+  source: string,
+  marker: string,
+  exclusions: readonly MarkdownTextRange[],
+  signal?: AbortSignal,
+): boolean {
+  let markerOffset = source.indexOf(marker);
+  let exclusionCursor = 0;
+  let work = 0;
+  while (markerOffset >= 0) {
+    if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    work += 1;
+    exclusionCursor = advanceExclusion(
+      exclusions,
+      exclusionCursor,
+      markerOffset,
+      signal,
+    );
+    const exclusion = exclusions[exclusionCursor];
+    if (!exclusion || markerOffset < exclusion.from) return true;
+    markerOffset = source.indexOf(marker, Math.max(markerOffset + 1, exclusion.to));
+  }
+  return false;
 }
 
 function definitionContinuationContent(line: SourceLine): string | null {
@@ -1020,12 +1055,15 @@ export function lexMarkdownKnowledge(
     codeRanges,
     htmlRanges,
   ], signal);
-  const footnoteDefinitions = collectFootnoteDefinitions(
-    source,
-    lines,
-    footnoteDefinitionExclusions,
-    signal,
-  );
+  const hasFootnoteSyntax = source.includes("[^") || source.includes("^[");
+  const footnoteDefinitions = source.includes("[^")
+    ? collectFootnoteDefinitions(
+      source,
+      lines,
+      footnoteDefinitionExclusions,
+      signal,
+    )
+    : [];
   const structuralExclusions = mergeIntervalStreams([
     frontmatterRanges,
     codeRanges,
@@ -1034,26 +1072,6 @@ export function lexMarkdownKnowledge(
     htmlRanges,
     linkRanges,
   ], signal);
-  const escaped = escapeParity(source, signal);
-  const footnoteInlineExclusions = mergeIntervalStreams([
-    structuralExclusions,
-    tokenRangeStream(footnoteDefinitions, signal),
-  ], signal);
-  const footnoteInlineTokens = collectInlineFootnotes(
-    source,
-    escaped,
-    footnoteInlineExclusions,
-    footnoteDefinitions,
-    signal,
-  );
-  const wikilinks = collectWikilinks(
-    source,
-    lines,
-    escaped,
-    structuralExclusions,
-    signal,
-  );
-
   const linkSyntaxRanges: MarkdownTextRange[] = [];
   for (let index = 0; index < linkTokens.length; index += 1) {
     if ((index & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
@@ -1066,6 +1084,47 @@ export function lexMarkdownKnowledge(
     if ((index & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
     headingMarkerRanges.push(headingTokens[index].markerRange);
   }
+  const hasWikilinkSyntax = source.includes("[[");
+  const tagCandidateExclusions = mergeIntervalStreams([
+    frontmatterRanges,
+    codeRanges,
+    autolinkRanges,
+    urlRanges,
+    htmlRanges,
+    linkSyntaxRanges,
+    headingMarkerRanges,
+  ], signal);
+  const hasTagSyntax = hasMarkerOutsideExclusions(
+    source,
+    "#",
+    tagCandidateExclusions,
+    signal,
+  );
+  const escaped = hasFootnoteSyntax || hasWikilinkSyntax || hasTagSyntax
+    ? escapeParity(source, signal)
+    : EMPTY_ESCAPES;
+  const footnoteInlineExclusions = mergeIntervalStreams([
+    structuralExclusions,
+    tokenRangeStream(footnoteDefinitions, signal),
+  ], signal);
+  const footnoteInlineTokens = hasFootnoteSyntax
+    ? collectInlineFootnotes(
+      source,
+      escaped,
+      footnoteInlineExclusions,
+      footnoteDefinitions,
+      signal,
+    )
+    : [];
+  const wikilinks = hasWikilinkSyntax
+    ? collectWikilinks(
+      source,
+      lines,
+      escaped,
+      structuralExclusions,
+      signal,
+    )
+    : { tokens: [], tagExclusions: [] };
   const tagExclusions = mergeIntervalStreams([
     frontmatterRanges,
     codeRanges,
@@ -1076,7 +1135,9 @@ export function lexMarkdownKnowledge(
     headingMarkerRanges,
     wikilinks.tagExclusions,
   ], signal);
-  const tagTokens = collectTags(source, escaped, tagExclusions, signal);
+  const tagTokens = hasTagSyntax
+    ? collectTags(source, escaped, tagExclusions, signal)
+    : [];
   const tokens = mergeTokenStreams([
     frontmatter ? [frontmatter] : [],
     codeTokens,

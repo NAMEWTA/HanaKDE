@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { setImmediate as yieldImmediate } from "node:timers/promises";
 import { DurableKnowledgeOperationJournal } from "../../../core/knowledge-workspace/durable-operation-journal.ts";
+import {
+  KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE,
+} from "../../../core/knowledge-workspace/knowledge-index-event-coordinator.ts";
 import { createKnowledgeDocumentRegistry } from "../../../desktop/src/react/stores/knowledge-document-registry.ts";
 import {
   createKnowledgeTreeSelectionState,
@@ -44,7 +47,8 @@ type Prepared = {
 const WORKSPACE_FINGERPRINT = createHash("sha256").update("knowledge-reference-workspace").digest("hex");
 const SOURCE_KEYS = ["main", "research", "archive", "materials"] as const;
 const FORMAT = Object.freeze({ hadBom: false, lineEnding: "lf" as const, mixedLineEndings: false });
-const REBUILD_BATCH_SIZE = 1;
+// Exercise the same bounded transaction policy used by production rebuilds.
+const REBUILD_BATCH_SIZE = KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE;
 
 export function createKnowledgeProductPerformanceAdapters(options: {
   scratchParent: string;
