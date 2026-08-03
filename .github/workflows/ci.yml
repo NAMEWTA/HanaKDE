@@ -11,6 +11,9 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      # Each operating system is release evidence. Do not cancel Windows or
+      # Linux merely because another platform fails first.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: ["24.15.0"]
