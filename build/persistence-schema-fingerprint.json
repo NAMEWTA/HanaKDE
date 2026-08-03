@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:318cb91a1a7ec546194ec382e990a11516e5d339ed9de9f741eca18e457819ee",
+  "payloadFingerprint": "sha256:d25d2a1343a72e350d887018a0f3c845335b431f9c00339d814305a682727f9d",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2998,8 +2998,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Knowledge index path encoding and empty SQLite sidecar cleanup hardening are storage-layout compatible: legacy partitions remain readable, new partitions retain full 256-bit identities, publication remains fail-closed, and schemas plus DATA_EPOCH are unchanged.",
-    "payloadFingerprint": "sha256:318cb91a1a7ec546194ec382e990a11516e5d339ed9de9f741eca18e457819ee"
+    "compatibilityReason": "Knowledge rebuild batching and Markdown parser scan scheduling preserve registered schemas, stores, DATA_EPOCH, and persisted payload shapes.",
+    "payloadFingerprint": "sha256:d25d2a1343a72e350d887018a0f3c845335b431f9c00339d814305a682727f9d"
   },
   "schemas": [
     {
@@ -3217,7 +3217,7 @@
         },
         {
           "module": "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
-          "sourceHash": "sha256:c0b0f8afc1491628878a85b8460236aa176d39da1962aafcef8ef1cc17918774"
+          "sourceHash": "sha256:f95faf70f7eb96b87ca7b3c138db8c195f6fdac1e7b93462bec568ff0151a5ae"
         },
         {
           "module": "lib/knowledge-workspace/knowledge-query.ts",
