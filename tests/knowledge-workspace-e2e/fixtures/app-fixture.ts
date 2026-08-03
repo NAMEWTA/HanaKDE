@@ -142,7 +142,11 @@ export const test = base.extend<KnowledgeFixtures>({
             ),
             HANA_RENDERER_DIST: path.resolve("desktop/dist-renderer"),
           },
-          stdio: ["ignore", "pipe", "pipe"],
+          // Readiness, exit state, and sanitized Playwright artifacts are the
+          // fixture's diagnostics. Leaving child pipes unread can block a
+          // long-running Windows server and may preserve test-only paths in
+          // CI output.
+          stdio: "ignore",
         },
       );
       processes.push(server);
@@ -177,7 +181,7 @@ export const test = base.extend<KnowledgeFixtures>({
             HANA_DEV_WEB_SERVER_TOKEN: serverInfo.token,
           },
           shell: process.platform === "win32",
-          stdio: ["ignore", "pipe", "pipe"],
+          stdio: "ignore",
         },
       );
       processes.push(vite);
