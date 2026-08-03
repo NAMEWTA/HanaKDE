@@ -8158,6 +8158,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "core/knowledge-workspace/source-registry.ts",
           "kind": "import-statement"
         },
@@ -8167,7 +8172,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/resource-refs.ts (import-statement); lib/resource-io/providers/local-fs-provider.ts (import-statement); lib/resource-io/providers/mount-provider.ts (import-statement); +2 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by lib/resource-io/resource-refs.ts (import-statement); lib/resource-io/providers/local-fs-provider.ts (import-statement); lib/resource-io/providers/mount-provider.ts (import-statement); +3 more importer(s)."
     },
     {
       "path": "lib/resources/resource-envelope.ts",
