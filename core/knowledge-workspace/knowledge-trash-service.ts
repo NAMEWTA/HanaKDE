@@ -237,15 +237,11 @@ export class KnowledgeTrashService {
   }
 
   async completeSystemTrash(address: KnowledgeResourceAddress, context: KnowledgeTrashContext = {}): Promise<void> {
-    const match = /^\.trash\/([0-9a-f-]+)\/payload\//iu.exec(address.relativePath);
-    if (!match) throw precondition('knowledge system trash address is invalid');
-    let manifest = await this.#readManifest(address.sourceKey, match[1], context);
-    const entry = manifest.entries.find(candidate => candidate.trashAddress.relativePath === address.relativePath && candidate.state === 'trashed');
-    if (!entry) throw createKnowledgeWorkspaceError('knowledge_trash_entry_not_found', 'knowledge trash entry not found');
-    const manifestRef = await this.#manifestRef(address.sourceKey, manifest.batchId);
-    const version = (await this.#resourceIO.stat(manifestRef, context)).version ?? null;
-    manifest = updateEntry(manifest, entry.entryId, { state: 'cleaned', errorCode: undefined });
-    await this.#writeManifest(manifest, version, context);
+    await this.#updateSystemTrashEntry(
+      address,
+      { state: 'cleaned', errorCode: undefined },
+      context,
+    );
   }
 
   async failSystemTrash(
@@ -253,15 +249,50 @@ export class KnowledgeTrashService {
     errorCode: KnowledgeErrorCode,
     context: KnowledgeTrashContext = {},
   ): Promise<void> {
+    await this.#updateSystemTrashEntry(
+      address,
+      { state: 'trashed', errorCode },
+      context,
+    );
+  }
+
+  /**
+   * A native shell action is outside ResourceIO's transaction.  Its terminal
+   * receipt therefore needs its own bounded compare-and-swap loop: a watcher
+   * or another cleanup request may update the same manifest between read and
+   * write, but a failed system-trash action must never silently lose its
+   * retained-payload error marker.
+   */
+  async #updateSystemTrashEntry(
+    address: KnowledgeResourceAddress,
+    patch: Pick<KnowledgeTrashManifestEntry, 'state' | 'errorCode'>,
+    context: KnowledgeTrashContext,
+  ): Promise<void> {
     const match = /^\.trash\/([0-9a-f-]+)\/payload\//iu.exec(address.relativePath);
     if (!match) throw precondition('knowledge system trash address is invalid');
-    let manifest = await this.#readManifest(address.sourceKey, match[1], context);
-    const entry = manifest.entries.find(candidate => candidate.trashAddress.relativePath === address.relativePath && candidate.state === 'trashed');
-    if (!entry) throw createKnowledgeWorkspaceError('knowledge_trash_entry_not_found', 'knowledge trash entry not found');
-    const manifestRef = await this.#manifestRef(address.sourceKey, manifest.batchId);
-    const version = (await this.#resourceIO.stat(manifestRef, context)).version ?? null;
-    manifest = updateEntry(manifest, entry.entryId, { state: 'trashed', errorCode });
-    await this.#writeManifest(manifest, version, context);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await this.#sourceRegistry.revalidate(address.sourceKey);
+      let manifest = await this.#readManifest(address.sourceKey, match[1], context);
+      const entry = manifest.entries.find(candidate => (
+        candidate.trashAddress.relativePath === address.relativePath
+        && candidate.state === 'trashed'
+      ));
+      if (!entry) {
+        throw createKnowledgeWorkspaceError(
+          'knowledge_trash_entry_not_found',
+          'knowledge trash entry not found',
+        );
+      }
+      const manifestRef = await this.#manifestRef(address.sourceKey, manifest.batchId);
+      const version = (await this.#resourceIO.stat(manifestRef, context)).version ?? null;
+      manifest = updateEntry(manifest, entry.entryId, patch);
+      try {
+        await this.#writeManifest(manifest, version, context);
+        return;
+      } catch (error) {
+        if (!isKnowledgeVersionConflict(error) || attempt === 2) throw error;
+      }
+    }
   }
 
   async #requireSource(sourceKey: string, mutation = true): Promise<KnowledgeSourceDto> {
@@ -394,6 +425,9 @@ function basename(relativePath: string): string { return relativePath.slice(rela
 function precondition(message: string) { return createKnowledgeWorkspaceError('knowledge_operation_precondition_failed', message); }
 function publicCode(error: unknown): KnowledgeErrorCode {
   return normalizeKnowledgeErrorCode((error as { code?: unknown })?.code) ?? 'knowledge_resource_unavailable';
+}
+function isKnowledgeVersionConflict(error: unknown): boolean {
+  return (error as { code?: unknown })?.code === 'knowledge_version_conflict';
 }
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw Object.assign(new Error('knowledge trash operation aborted'), { name: 'AbortError' });

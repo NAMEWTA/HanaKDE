@@ -46,4 +46,29 @@ describe('KnowledgeTrashService native cleanup', () => {
       expect.objectContaining({ ok: true, restoredAddress: { sourceKey: 'main', relativePath: 'retry.md' } }),
     ]);
   });
+
+  it('re-reads and records a native failure when the manifest CAS races once', async () => {
+    const fixture = createKnowledgeTrashFixture({ 'race.md': { content: 'race' } });
+    const batch = await fixture.service.trash([{ sourceKey: 'main', relativePath: 'race.md' }]);
+    const entry = (await fixture.service.list('main'))[0].entries[0];
+    fixture.resourceIO.writeExpectedVersion.mockImplementationOnce(async (resource) => ({
+      ok: false,
+      conflict: true,
+      resourceKey: resource.path,
+      resource,
+    }));
+
+    await fixture.service.failSystemTrash(entry.trashAddress, 'knowledge_resource_unavailable');
+
+    expect(fixture.resourceIO.writeExpectedVersion).toHaveBeenCalledTimes(4);
+    expect(await fixture.service.list('main')).toEqual([
+      expect.objectContaining({
+        batchId: batch.batchId,
+        entries: [expect.objectContaining({
+          state: 'trashed',
+          errorCode: 'knowledge_resource_unavailable',
+        })],
+      }),
+    ]);
+  });
 });
