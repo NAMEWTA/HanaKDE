@@ -781,10 +781,11 @@ export class KnowledgeIndexStore {
       if (checkpoint.busy !== 0 || checkpoint.log !== checkpoint.checkpointed) {
         throw new Error("knowledge index checkpoint remained busy");
       }
-      validateCompleteGeneration(
-        rebuildInternals(rebuild).database,
-        this.#sourceFingerprint,
-      );
+      // The complete generation was validated immediately before the
+      // checkpoint. A successful checkpoint only transfers those validated
+      // pages from WAL to the main file; it cannot alter schema or metadata.
+      // Avoid running the same integrity/count scans twice on the critical
+      // publication path.
       rebuildInternals(rebuild).database.close();
       const buildPath = this.#buildPath(rebuild.rebuildId);
       rejectRequiredSidecar(buildPath, this.#fileSystem);
