@@ -4,7 +4,11 @@ import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import { ResourceAccessPolicy } from "../lib/resource-io/resource-access-policy.ts";
-import { RESOURCE_SCOPE_ROOT, type ResourceRef } from "../lib/resource-io/types.ts";
+import {
+  RESOURCE_LIST_BLOCKED_ENTRIES,
+  RESOURCE_SCOPE_ROOT,
+  type ResourceRef,
+} from "../lib/resource-io/types.ts";
 
 const CAPABILITY_KEYS = [
   "stat",
@@ -273,6 +277,8 @@ describe("LocalFsProvider", () => {
     const list = await provider.list({ kind: "local-file", path: "." });
     expect(list.items.map((item) => item.name)).toContain("Visible.md");
     expect(list.items.map((item) => item.name)).not.toContain("escape");
+    expect(list[RESOURCE_LIST_BLOCKED_ENTRIES]).toEqual(["escape"]);
+    expect(JSON.stringify(list)).not.toContain("escape");
 
     const textSearch = await provider.search(
       { kind: "local-file", path: "." },

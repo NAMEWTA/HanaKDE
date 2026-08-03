@@ -144,6 +144,14 @@ export type ResourceProviderId =
  */
 export const RESOURCE_READ_PROOF = Symbol("hana.resource-io.read-proof");
 
+/**
+ * Provider-only signal for directory entries intentionally omitted from a
+ * public list response (for example a symlink or junction). It is not
+ * serializable and lets integrity-sensitive in-process callers reject a scan
+ * while ordinary UI listing continues to show authorized entries.
+ */
+export const RESOURCE_LIST_BLOCKED_ENTRIES = Symbol("hana.resource-io.list-blocked-entries");
+
 export type ResourceReadProof = Readonly<{
   providerId: ResourceProviderId;
   value: unknown;
@@ -253,6 +261,7 @@ export type ResourceListResult = {
   resourceKey: string;
   resource: ResourceDescriptor;
   items: ResourceListItem[];
+  [RESOURCE_LIST_BLOCKED_ENTRIES]?: readonly string[];
 };
 
 export type ResourceSearchMatch = {

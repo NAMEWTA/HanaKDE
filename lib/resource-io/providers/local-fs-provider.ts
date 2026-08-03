@@ -4,7 +4,11 @@ import crypto from "crypto";
 import { ResourceIOError, resourceAccessDenied, resourceNotFound, targetAlreadyExists } from "../errors.ts";
 import { normalizeResourceRef, resourceKeyForRef } from "../resource-refs.ts";
 import { resolveLocalFsRootIdentity } from "../root-identity.ts";
-import { RESOURCE_READ_PROOF, RESOURCE_SCOPE_ROOT } from "../types.ts";
+import {
+  RESOURCE_LIST_BLOCKED_ENTRIES,
+  RESOURCE_READ_PROOF,
+  RESOURCE_SCOPE_ROOT,
+} from "../types.ts";
 import {
   TRANSFER_MAX_CHUNK_BYTES,
   TRANSFER_MAX_DEPTH,
@@ -701,6 +705,7 @@ export class LocalFsProvider {
         throw safeOpenReadError("not_a_directory", 400);
       }
       this.revalidateReadProof(dirPath, pathProof);
+      const blockedEntries: string[] = [];
       const items = fs.readdirSync(dirPath, { withFileTypes: true })
         .flatMap((entry) => {
           const fullPath = path.join(dirPath, entry.name);
@@ -716,7 +721,11 @@ export class LocalFsProvider {
             }
             throw error;
           }
-          if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) {
+          if (stat.isSymbolicLink()) {
+            blockedEntries.push(entry.name);
+            return [];
+          }
+          if (!stat.isDirectory() && !stat.isFile()) {
             return [];
           }
           return [{
@@ -728,11 +737,20 @@ export class LocalFsProvider {
         })
         .sort((a, b) => a.name.localeCompare(b.name));
       this.revalidateReadProof(dirPath, pathProof);
-      return {
+      const result: ResourceListResult = {
         resourceKey: localResourceKey(dirPath),
         resource: this.resourceForPath(dirPath),
         items,
       };
+      if (blockedEntries.length > 0) {
+        Object.defineProperty(result, RESOURCE_LIST_BLOCKED_ENTRIES, {
+          value: Object.freeze(blockedEntries.sort()),
+          enumerable: false,
+          configurable: false,
+          writable: false,
+        });
+      }
+      return result;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException)?.code;
       if (code === "ENOENT" || code === "ENOTDIR") throw resourceNotFound(dirPath);

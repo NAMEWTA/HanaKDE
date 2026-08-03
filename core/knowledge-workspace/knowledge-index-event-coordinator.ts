@@ -22,6 +22,9 @@ import type { ResourceIO } from "../../lib/resource-io/resource-io.ts";
 import {
   normalizeResourceRef,
 } from "../../lib/resource-io/resource-refs.ts";
+import {
+  RESOURCE_LIST_BLOCKED_ENTRIES,
+} from "../../lib/resource-io/types.ts";
 import type {
   ResourceEvent,
   ResourceEventCatchUpResult,
@@ -752,6 +755,14 @@ implements KnowledgeIndexEventSource {
         auditRead: true,
         reason: "knowledge-index-scan",
       });
+      if ((listing[RESOURCE_LIST_BLOCKED_ENTRIES]?.length ?? 0) > 0) {
+        // A UI can safely omit a link and keep showing its authorized
+        // siblings. An index rebuild is an integrity operation, so it must
+        // reject the whole source rather than silently publish a partial scan.
+        throw Object.assign(new Error("knowledge index source contains a blocked entry"), {
+          code: "knowledge_resource_out_of_scope",
+        });
+      }
       for (const item of [...listing.items].sort((left, right) =>
         left.name.localeCompare(right.name)
       )) {
