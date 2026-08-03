@@ -2414,7 +2414,15 @@ function rejectRequiredSidecar(
     if (suffix === "-wal" && fileSystem.stat(sidecar).size > 0) {
       throw new Error("knowledge index WAL still contains publishable content");
     }
-    fileSystem.remove(sidecar, { force: true });
+    try {
+      fileSystem.remove(sidecar, { force: true });
+    } catch {
+      // After the database is closed, Windows can retain a transient handle
+      // for an empty WAL/SHM sidecar. It is not part of the published
+      // generation (the database is renamed atomically) and abandoned-build
+      // cleanup will retry later. Never turn that harmless cleanup race into
+      // a failed publication; a non-empty WAL remains fail-closed above.
+    }
   }
 }
 

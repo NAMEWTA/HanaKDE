@@ -404,6 +404,41 @@ describe("knowledge index store", () => {
     });
   });
 
+  it("publishes when an empty Windows-style SHM sidecar is transiently locked", () => {
+    const hanakoHome = temporaryHome("locked-sidecar");
+    let sidecarRemovalAttempts = 0;
+    const transientSidecarFileSystem: KnowledgeIndexFileSystem = {
+      ...nodeKnowledgeIndexFileSystem,
+      exists(target) {
+        if (target.endsWith("build-sidecar.sqlite-shm")) return true;
+        return nodeKnowledgeIndexFileSystem.exists(target);
+      },
+      remove(target, options) {
+        if (target.endsWith("build-sidecar.sqlite-shm")) {
+          sidecarRemovalAttempts += 1;
+          throw Object.assign(new Error("sharing violation"), { code: "EPERM" });
+        }
+        nodeKnowledgeIndexFileSystem.remove(target, options);
+      },
+    };
+    const store = createStore(hanakoHome, SOURCE_FINGERPRINT, {
+      fileSystem: transientSidecarFileSystem,
+    });
+
+    store.beginRebuild({
+      rebuildId: "sidecar",
+      generationId: "generation-sidecar",
+      startedSequence: 0,
+    }).publish({ lastCompleteSequence: 1 });
+
+    expect(sidecarRemovalAttempts).toBeGreaterThan(0);
+    expect(store.health()).toEqual({
+      state: "ready",
+      generationId: "generation-sidecar",
+      sequence: 1,
+    });
+  });
+
   it.skipIf(process.platform === "win32")(
     "refuses a symlinked internal index directory or manifest",
     () => {

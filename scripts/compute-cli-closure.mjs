@@ -738,6 +738,11 @@ export function normalizeNftTraceFiles({ fileList, scratchRel }) {
     .map(toPosix)
     .filter((relPath) => {
       if (relPath === scratchRel || relPath === "package.json") return false;
+      // npm's installer can leave this impossible self-nested directory in an
+      // nft trace on one host but not another. It is neither a package file
+      // nor a runtime resolution target, so retaining it would make the
+      // committed, repository-relative closure platform-dependent.
+      if (relPath === "node_modules/node_modules") return false;
       // Native addon bytes are produced for a specific OS, architecture, and
       // Node ABI. The packaged server installs them with its target runtime;
       // including a locally rebuilt copy here would make this source closure

@@ -4,7 +4,10 @@ import { createPreferencesRoute } from "../server/routes/preferences.ts";
 
 function makeApp(engine, options: any = {}) {
   const app = new Hono();
-  app.route("/api", createPreferencesRoute(engine, options));
+  // These tests exercise the supported-provider contract with a mock host;
+  // pin that contract to a supported platform instead of inheriting the CI
+  // runner's platform (Linux intentionally has no Computer Use provider).
+  app.route("/api", createPreferencesRoute(engine, { platform: "darwin", ...options }));
   return app;
 }
 
