@@ -5109,13 +5109,22 @@ function knowledgeNativeFailure(error) {
 }
 
 async function performKnowledgeNativeGrantAction(action, grantId, authorizationToken) {
-  const consumed = await knowledgeNativeServerRequest("consume", { action, grantId }, authorizationToken);
+  let consumed;
+  try {
+    consumed = await knowledgeNativeServerRequest("consume", { action, grantId }, authorizationToken);
+  } catch (error) {
+    throw sanitizeKnowledgeNativeActionError(action, error);
+  }
   let ok = true;
   if (action === "openDefault") ok = (await shell.openPath(consumed.filePath)) === "";
   else if (action === "reveal") shell.showItemInFolder(consumed.filePath);
   else {
     try { fs.lstatSync(consumed.filePath); await shell.trashItem(consumed.filePath); } catch { ok = false; }
-    await knowledgeNativeServerRequest("complete", { grantId, ok }, authorizationToken);
+    try {
+      await knowledgeNativeServerRequest("complete", { grantId, ok }, authorizationToken);
+    } catch (error) {
+      throw sanitizeKnowledgeNativeActionError(action, error);
+    }
   }
   if (!ok) {
     const error = new Error("Knowledge native system action failed");
@@ -5123,6 +5132,13 @@ async function performKnowledgeNativeGrantAction(action, grantId, authorizationT
     throw error;
   }
   return { action, completed: true };
+}
+
+function sanitizeKnowledgeNativeActionError(action, error) {
+  if (action !== "systemTrash" || error?.code !== "knowledge_operation_precondition_failed") throw error;
+  const sanitized = new Error("Knowledge native system action unavailable");
+  sanitized.code = "knowledge_resource_unavailable";
+  return sanitized;
 }
 
 const knowledgeTrashRetentionScheduler = createKnowledgeTrashRetentionScheduler({

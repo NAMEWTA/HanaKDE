@@ -5384,7 +5384,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1230,
+      "line": 1233,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5393,7 +5393,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1234,
+      "line": 1237,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5402,7 +5402,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1749,
+      "line": 1752,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5411,7 +5411,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2238,
+      "line": 2241,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(hanakoHome, { recursive: true })",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5420,7 +5420,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2239,
+      "line": 2242,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(crashLogPath, content, \"utf-8\")",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5429,7 +5429,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2300,
+      "line": 2303,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(lastSeenVersionPath), { recursive: true })",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5438,7 +5438,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2301,
+      "line": 2304,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(lastSeenVersionPath, JSON.stringify({ version }))",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5447,7 +5447,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2369,
+      "line": 2372,
       "kind": "write-file",
       "excerpt": "fs.promises.writeFile(windowStatePath, JSON.stringify(state, null, 2) + \"\\n\")",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5456,7 +5456,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2468,
+      "line": 2471,
       "kind": "mkdir",
       "excerpt": "fs.promises.mkdir(path.dirname(quickChatWindowStatePath), { recursive: true })",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5465,7 +5465,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2469,
+      "line": 2472,
       "kind": "write-file",
       "excerpt": "fs.promises.writeFile(quickChatWindowStatePath, JSON.stringify(state, null, 2) + \"\\n\")",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5474,7 +5474,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4222,
+      "line": 4225,
       "kind": "append-file",
       "excerpt": "require(\"fs\").appendFileSync(require(\"path\").join(hanakoHome, \"browser-cmd.log\"), `${new Date().toISOString()} ${redactMainLogText(line)}\\n`)",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5483,7 +5483,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4789,
+      "line": 4792,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(tmpHtml, htmlContent, \"utf-8\")",
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
@@ -5492,7 +5492,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4843,
+      "line": 4846,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(tmpHtml)",
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
@@ -5501,7 +5501,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5604,
+      "line": 5623,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(tmpDir, { recursive: true })",
       "reason": "Creates a request-scoped skill preview directory under Electron's operating-system temp path.",
@@ -5510,7 +5510,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5750,
+      "line": 5769,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content, \"utf-8\")",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5519,7 +5519,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5772,
+      "line": 5791,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(resolved), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5528,7 +5528,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5773,
+      "line": 5792,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(resolved, Buffer.from(base64Data, \"base64\"))",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5537,7 +5537,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5784,
+      "line": 5803,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(destinationPath), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5546,7 +5546,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5785,
+      "line": 5804,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, destinationPath)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5555,7 +5555,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5818,
+      "line": 5837,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(dir, { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5564,7 +5564,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5819,
+      "line": 5838,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, pngBuffer)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5573,7 +5573,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 6345,
+      "line": 6364,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(path.join(hanakoHome, \"server-info.json\"))",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -6617,7 +6617,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 475,
+      "line": 477,
       "kind": "database-open",
       "excerpt": "new Database(buildPath)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6626,7 +6626,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 526,
+      "line": 539,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6635,7 +6635,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 594,
+      "line": 610,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6644,7 +6644,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 847,
+      "line": 866,
       "kind": "database-open",
       "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",

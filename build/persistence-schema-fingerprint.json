@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:94a303ebc4193eb69c1e8742cfa5bd11f88592d84dacb7fa5a598d514fe538b7",
+  "payloadFingerprint": "sha256:ab7889d6d74e07c01df655b988eeded53462fd1ef24f828739a7c7b34b6fc713",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2999,7 +2999,7 @@
   "review": {
     "classification": "compatible",
     "compatibilityReason": "Knowledge Workspace adds registered write sites and recovery journals without changing existing persisted schemas or DATA_EPOCH.",
-    "payloadFingerprint": "sha256:94a303ebc4193eb69c1e8742cfa5bd11f88592d84dacb7fa5a598d514fe538b7"
+    "payloadFingerprint": "sha256:ab7889d6d74e07c01df655b988eeded53462fd1ef24f828739a7c7b34b6fc713"
   },
   "schemas": [
     {
@@ -3182,7 +3182,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:999257c1dfabb485495b581f72c7cac0097b78064e21e71f471028bcd1ca4f1b",
+      "sourceHash": "sha256:8a570a243f8fa6dd56041434833434dfef2e998d2406667c9ffdaa447e62755d",
       "storeId": "desktop-window-version-state"
     },
     {
@@ -3213,18 +3213,18 @@
       "protocolModules": [
         {
           "module": "core/knowledge-workspace/knowledge-index-coordinator.ts",
-          "sourceHash": "sha256:e4b236c464771f7c3f7093fa2d87c91ce1bb731bd7ce01b03e85493d6ea3ca73"
+          "sourceHash": "sha256:2a169c4f20f3cae1c72ebfdc5edac8187221fdbd5214982ca541d5e0efa70c90"
         },
         {
           "module": "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
-          "sourceHash": "sha256:26acd729f9b036ce3edcf3c83b3000f0481a7203f03e69b34f74d649ea2571a0"
+          "sourceHash": "sha256:c0b0f8afc1491628878a85b8460236aa176d39da1962aafcef8ef1cc17918774"
         },
         {
           "module": "lib/knowledge-workspace/knowledge-query.ts",
           "sourceHash": "sha256:10844a5e4f8868145a872d20ba471f3c359aaba2aa6ae8c441f2a8f91d54e3c6"
         }
       ],
-      "sourceHash": "sha256:041bb53de1792352181e6170690675b4503bd03d01f0eb0f9c5c8d2e2d0f5265",
+      "sourceHash": "sha256:5a82ceaa026ab898fd0384948c716ef2b16ac0a9eba234d6167ff59264840ff3",
       "storeId": "knowledge-index-generations"
     },
     {
@@ -6225,7 +6225,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 1230,
+      "line": 1233,
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "server-runtime-info"
@@ -6233,7 +6233,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 1234,
+      "line": 1237,
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "server-runtime-info"
@@ -6241,7 +6241,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 1749,
+      "line": 1752,
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "server-runtime-info"
@@ -6249,7 +6249,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 2238,
+      "line": 2241,
       "reason": "Writes desktop crash or browser-command diagnostics.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-diagnostics"
@@ -6257,7 +6257,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 2239,
+      "line": 2242,
       "reason": "Writes desktop crash or browser-command diagnostics.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-diagnostics"
@@ -6265,7 +6265,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 2300,
+      "line": 2303,
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-window-version-state"
@@ -6273,7 +6273,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 2301,
+      "line": 2304,
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-window-version-state"
@@ -6281,7 +6281,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 2369,
+      "line": 2372,
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-window-version-state"
@@ -6289,7 +6289,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 2468,
+      "line": 2471,
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-window-version-state"
@@ -6297,7 +6297,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 2469,
+      "line": 2472,
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-window-version-state"
@@ -6305,7 +6305,7 @@
     {
       "exemptionId": null,
       "kind": "append-file",
-      "line": 4222,
+      "line": 4225,
       "reason": "Writes desktop crash or browser-command diagnostics.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "desktop-diagnostics"
@@ -6313,7 +6313,7 @@
     {
       "exemptionId": "desktop-screenshot-html-temp",
       "kind": "write-file",
-      "line": 4789,
+      "line": 4792,
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6321,7 +6321,7 @@
     {
       "exemptionId": "desktop-screenshot-html-temp",
       "kind": "remove-path",
-      "line": 4843,
+      "line": 4846,
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6329,7 +6329,7 @@
     {
       "exemptionId": "desktop-skill-preview-temp",
       "kind": "mkdir",
-      "line": 5604,
+      "line": 5623,
       "reason": "Creates a request-scoped skill preview directory under Electron's operating-system temp path.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6337,7 +6337,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "write-file",
-      "line": 5750,
+      "line": 5769,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6345,7 +6345,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "mkdir",
-      "line": 5772,
+      "line": 5791,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6353,7 +6353,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "write-file",
-      "line": 5773,
+      "line": 5792,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6361,7 +6361,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "mkdir",
-      "line": 5784,
+      "line": 5803,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6369,7 +6369,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "copy-file",
-      "line": 5785,
+      "line": 5804,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6377,7 +6377,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "mkdir",
-      "line": 5818,
+      "line": 5837,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6385,7 +6385,7 @@
     {
       "exemptionId": "desktop-caller-selected-output",
       "kind": "write-file",
-      "line": 5819,
+      "line": 5838,
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
       "sourceFile": "desktop/main.cjs",
       "storeId": null
@@ -6393,7 +6393,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 6345,
+      "line": 6364,
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
       "sourceFile": "desktop/main.cjs",
       "storeId": "server-runtime-info"
@@ -7321,7 +7321,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 475,
+      "line": 477,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7329,7 +7329,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 526,
+      "line": 539,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7337,7 +7337,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 594,
+      "line": 610,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7345,7 +7345,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 847,
+      "line": 866,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
