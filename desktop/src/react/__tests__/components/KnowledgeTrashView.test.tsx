@@ -142,4 +142,26 @@ describe('KnowledgeTrashView', () => {
     expect(screen.getByRole('button', { name: 'knowledge.trash.cleanupExpired' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'knowledge.trash.retryFailed' })).toBeEnabled();
   });
+
+  it('keeps a native-confirmed cleanup hidden when the subsequent refresh is temporarily unavailable', async () => {
+    const listTrash = vi.fn()
+      .mockResolvedValueOnce([trashBatch()])
+      .mockRejectedValueOnce(new Error('transient refresh failure'));
+    const createNativeGrant = vi.fn(async () => ({ grantId: 'grant-3', expiresAt: Date.now() + 60_000 }));
+    window.hana = {
+      ...window.hana,
+      knowledgeNativeInvoke: vi.fn(async () => ({ ok: true, cancelled: false, result: {} })),
+    } as typeof window.hana;
+    const client = { listTrash, createNativeGrant } as unknown as KnowledgeWorkspaceClient;
+    render(<KnowledgeTrashView client={client} sources={[{
+      sourceKey: 'main', displayName: 'Main', role: 'main', capabilities: ['read', 'write'], availability: 'available',
+    }]} open onClose={vi.fn()} systemTrashAvailable now={() => new Date('2026-08-01T00:00:00.000Z').getTime()} />);
+
+    expect(await screen.findByText('notes/page.md')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'knowledge.trash.cleanupExpired' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'knowledge.action.systemTrash' }));
+
+    await waitFor(() => expect(screen.queryByText('notes/page.md')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('knowledge.trash.operationError'));
+  });
 });

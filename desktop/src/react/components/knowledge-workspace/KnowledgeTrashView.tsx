@@ -20,6 +20,10 @@ function batchKey(batch: TrashBatch): string {
   return `${batch.sourceKey}:${batch.batchId}`;
 }
 
+function trashEntryKey(entry: TrashEntry): string {
+  return `${entry.trashAddress.sourceKey}:${entry.trashAddress.relativePath}`;
+}
+
 export function KnowledgeTrashView({ client, sources, open, onClose, systemTrashAvailable = false, now = Date.now }: {
   client: KnowledgeWorkspaceClient;
   sources: KnowledgeSourceDto[];
@@ -44,8 +48,10 @@ export function KnowledgeTrashView({ client, sources, open, onClose, systemTrash
       setBatches(all.flat().filter((batch): batch is TrashBatch => (
         typeof batch.batchId === 'string' && typeof batch.sourceKey === 'string' && Array.isArray(batch.entries)
       )));
+      return true;
     } catch {
       setError(true);
+      return false;
     } finally { setLoading(false); }
   }, [client, sources]);
   useEffect(() => { if (open) void refresh(); }, [open, refresh]);
@@ -56,17 +62,33 @@ export function KnowledgeTrashView({ client, sources, open, onClose, systemTrash
     setBusy(true);
     setError(false);
     let failed = false;
+    const cleaned = new Set<string>();
     for (const entry of entries) {
       try {
         await invokeKnowledgeNativeGrant(client, 'systemTrash', entry.trashAddress);
+        // Native success is returned only after Main has recorded the
+        // terminal server-side receipt. Keep that committed state visible
+        // even if the best-effort list refresh immediately afterwards hits
+        // a transient transport or watcher failure.
+        cleaned.add(trashEntryKey(entry));
       } catch {
         failed = true;
       }
     }
-    await refresh();
+    if (cleaned.size > 0) {
+      setBatches(current => current.map(batch => ({
+        ...batch,
+        entries: batch.entries.map(entry => (
+          cleaned.has(trashEntryKey(entry))
+            ? { ...entry, state: 'cleaned', errorCode: undefined }
+            : entry
+        )),
+      })));
+    }
+    const refreshed = await refresh();
     setSelection(null);
     setBusy(false);
-    setError(failed);
+    setError(failed || !refreshed);
   }, [client, refresh]);
   if (!open) return null;
   return (
