@@ -583,7 +583,7 @@ export class KnowledgeIndexStore {
         readonly: true,
         fileMustExist: true,
       }) as unknown as DatabaseLike;
-      configureDatabase(database);
+      configureReadOnlyDatabase(database);
     } catch {
       throw indexUnavailable("knowledge index generation is unavailable");
     }
@@ -2038,6 +2038,32 @@ function configureDatabase(database: DatabaseLike): void {
     || pragmas.tempStore !== 2
   ) {
     throw new Error("knowledge index SQLite pragma verification failed");
+  }
+}
+
+// Query leases only read a published generation.  Reapplying writer pragmas to
+// every lease is both unnecessary and material for the multi-source search
+// path: journal mode, synchronous and foreign-key enforcement neither change
+// a read-only connection's semantics nor make its snapshot safer.  Keep the
+// reader bounded while its readonly open mode and the full durable writer
+// configuration remain in place for builds, publications and incremental
+// updates.
+function configureReadOnlyDatabase(database: DatabaseLike): void {
+  // `synchronous` is connection-local. Keep the observable published-index
+  // contract stable for inspection without reconfiguring journal mode or
+  // foreign-key enforcement on every reader.
+  database.pragma("synchronous = FULL");
+  database.pragma("busy_timeout = 5000");
+  database.pragma("temp_store = MEMORY");
+  const pragmas = readPragmas(database);
+  if (
+    pragmas.foreignKeys !== 1
+    || pragmas.journalMode !== "wal"
+    || pragmas.synchronous !== 2
+    || pragmas.busyTimeout !== 5_000
+    || pragmas.tempStore !== 2
+  ) {
+    throw new Error("knowledge index read-only database pragma configuration failed");
   }
 }
 
