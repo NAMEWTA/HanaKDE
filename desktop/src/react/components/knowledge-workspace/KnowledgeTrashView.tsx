@@ -24,6 +24,18 @@ function trashEntryKey(entry: TrashEntry): string {
   return `${entry.trashAddress.sourceKey}:${entry.trashAddress.relativePath}`;
 }
 
+function preserveConfirmedCleanups(batches: TrashBatch[], confirmedCleanups: ReadonlySet<string>): TrashBatch[] {
+  if (confirmedCleanups.size === 0) return batches;
+  return batches.map(batch => ({
+    ...batch,
+    entries: batch.entries.map(entry => (
+      confirmedCleanups.has(trashEntryKey(entry))
+        ? { ...entry, state: 'cleaned', errorCode: undefined }
+        : entry
+    )),
+  }));
+}
+
 export function KnowledgeTrashView({ client, sources, open, onClose, systemTrashAvailable = false, now = Date.now }: {
   client: KnowledgeWorkspaceClient;
   sources: KnowledgeSourceDto[];
@@ -40,14 +52,18 @@ export function KnowledgeTrashView({ client, sources, open, onClose, systemTrash
   const [busy, setBusy] = useState(false);
   const [selection, setSelection] = useState<{ batch: string; ids: Set<string> } | null>(null);
   const [cleanupRequest, setCleanupRequest] = useState<{ entries: TrashEntry[] } | null>(null);
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (confirmedCleanups: ReadonlySet<string> = new Set()) => {
     setLoading(true);
     setError(false);
     try {
       const all = await Promise.all(sources.map(source => client.listTrash(source.sourceKey)));
-      setBatches(all.flat().filter((batch): batch is TrashBatch => (
+      const nextBatches = all.flat().filter((batch): batch is TrashBatch => (
         typeof batch.batchId === 'string' && typeof batch.sourceKey === 'string' && Array.isArray(batch.entries)
-      )));
+      ));
+      // A successful native call follows the server-side terminal receipt.
+      // The trash listing may nevertheless be one watcher cycle behind, so do
+      // not let that stale read resurrect a just-confirmed cleanup in this UI.
+      setBatches(preserveConfirmedCleanups(nextBatches, confirmedCleanups));
       return true;
     } catch {
       setError(true);
@@ -85,7 +101,7 @@ export function KnowledgeTrashView({ client, sources, open, onClose, systemTrash
         )),
       })));
     }
-    const refreshed = await refresh();
+    const refreshed = await refresh(cleaned);
     setSelection(null);
     setBusy(false);
     setError(failed || !refreshed);

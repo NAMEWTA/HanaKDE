@@ -164,4 +164,27 @@ describe('KnowledgeTrashView', () => {
     await waitFor(() => expect(screen.queryByText('notes/page.md')).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('knowledge.trash.operationError'));
   });
+
+  it('keeps a native-confirmed cleanup hidden when the immediate refresh is stale', async () => {
+    const listTrash = vi.fn()
+      .mockResolvedValueOnce([trashBatch()])
+      .mockResolvedValueOnce([trashBatch()]);
+    const createNativeGrant = vi.fn(async () => ({ grantId: 'grant-4', expiresAt: Date.now() + 60_000 }));
+    window.hana = {
+      ...window.hana,
+      knowledgeNativeInvoke: vi.fn(async () => ({ ok: true, cancelled: false, result: {} })),
+    } as typeof window.hana;
+    const client = { listTrash, createNativeGrant } as unknown as KnowledgeWorkspaceClient;
+    render(<KnowledgeTrashView client={client} sources={[{
+      sourceKey: 'main', displayName: 'Main', role: 'main', capabilities: ['read', 'write'], availability: 'available',
+    }]} open onClose={vi.fn()} systemTrashAvailable now={() => new Date('2026-08-01T00:00:00.000Z').getTime()} />);
+
+    expect(await screen.findByText('notes/page.md')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'knowledge.trash.cleanupExpired' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'knowledge.action.systemTrash' }));
+
+    await waitFor(() => expect(screen.queryByText('notes/page.md')).not.toBeInTheDocument());
+    expect(listTrash).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
