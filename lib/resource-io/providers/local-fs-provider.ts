@@ -189,7 +189,26 @@ export class LocalFsProvider {
     );
     const proofRoot = suppliedProof?.entries[0]?.filePath
       || localReadProofRoot(ref, filePath, this.cwd);
-    const pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    let pathProof: LocalPathIdentityProof;
+    try {
+      pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    } catch (error) {
+      // The address was resolved before this proof capture. A parent swap can
+      // therefore remove it (or make it non-directory) in the narrow gap;
+      // classify that as a stale proof, never as an unhandled filesystem
+      // exception that becomes a 500 at the route boundary.
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        throw safeOpenReadError("resource_version_conflict", 409);
+      }
+      if (code === "ELOOP") {
+        throw safeOpenReadError("symbolic_link_not_allowed", 400);
+      }
+      if (code === "EACCES" || code === "EPERM") {
+        throw safeOpenReadError("resource_access_denied", 403);
+      }
+      throw error;
+    }
     if (suppliedProof && !sameLocalPathIdentityProof(suppliedProof, pathProof)) {
       throw safeOpenReadError("resource_version_conflict", 409);
     }

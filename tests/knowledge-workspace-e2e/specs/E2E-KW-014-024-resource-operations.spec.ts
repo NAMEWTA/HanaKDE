@@ -809,8 +809,7 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
       }
     }
   })();
-  let safeReadCount = 0;
-  let rejectedReadCount = 0;
+  let completedReadCount = 0;
   try {
     for (let batch = 0; batch < 25; batch += 1) {
       const reads = await Promise.all(Array.from({ length: 8 }, () => (
@@ -830,11 +829,18 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
           'a raced read must never return source-external content',
         ).toBe(false);
         if (read.ok) {
-          safeReadCount += 1;
           expect(JSON.stringify(body)).toContain('inside-race-token');
         } else {
-          rejectedReadCount += 1;
+          // A read that loses the identity/scope race must fail closed. It
+          // may never surface as a server error, which could conceal a
+          // provider failure rather than a deliberate authorization denial.
+          const errorCode = typeof (body as { code?: unknown })?.code === 'string'
+            ? (body as { code: string }).code
+            : 'missing_error_code';
+          expect(read.status, `raced read error code: ${errorCode}`).toBeGreaterThanOrEqual(400);
+          expect(read.status, `raced read error code: ${errorCode}`).toBeLessThan(500);
         }
+        completedReadCount += 1;
       }
     }
   } finally {
@@ -842,8 +848,13 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
     await attacker;
   }
   expect(swapCount).toBeGreaterThan(0);
-  expect(safeReadCount + rejectedReadCount).toBe(200);
-  expect(rejectedReadCount).toBeGreaterThan(0);
+  // Completion can race either side of a real parent replacement. A stable
+  // provider is permitted to return authorized in-root bytes for every
+  // request when it acquires each proof before a swap; forcing at least one
+  // rejection would turn that safe outcome into a scheduler-dependent test.
+  // The invariant is exhaustive: every completed response is authorized
+  // content or a sanitized 4xx denial, never a source-external body or 5xx.
+  expect(completedReadCount).toBe(200);
 
   await fs.writeFile(
     path.join(workspaceSandbox.mainSource, 'Unsafe.md'),

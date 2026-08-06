@@ -62,13 +62,22 @@ const SAFE_DETAIL_TEXT_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
 const LEGACY_CODE_MAP: Readonly<Record<string, KnowledgeErrorCode>> = Object.freeze({
   resource_not_found: "knowledge_resource_not_found",
   target_already_exists: "knowledge_resource_conflict",
+  // A provider-owned read proof changed while a route was reading. This is a
+  // normal fail-closed security outcome, not an internal server failure.
+  resource_version_conflict: "knowledge_version_conflict",
+  resource_changed_during_read: "knowledge_version_conflict",
   resource_access_denied: "knowledge_resource_out_of_scope",
+  symbolic_link_not_allowed: "knowledge_resource_out_of_scope",
   capability_denied: "knowledge_resource_out_of_scope",
   provider_not_available: "knowledge_resource_unavailable",
   resource_event_catch_up_unavailable: "knowledge_resource_unavailable",
   cross_provider_copy_unsupported: "knowledge_transfer_entry_unsupported",
   cross_provider_move_unsupported: "knowledge_transfer_entry_unsupported",
   invalid_resource_ref: "knowledge_operation_precondition_failed",
+  not_a_file: "knowledge_operation_precondition_failed",
+  not_a_directory: "knowledge_operation_precondition_failed",
+  invalid_read_range: "knowledge_operation_precondition_failed",
+  unsupported_file_kind: "knowledge_operation_precondition_failed",
   resource_expired: "knowledge_operation_precondition_failed",
   invalid_resource_path: "knowledge_operation_precondition_failed",
   resource_not_file: "knowledge_operation_precondition_failed",
