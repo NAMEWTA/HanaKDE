@@ -6,7 +6,7 @@ export type KnowledgeLaunchConfig = {
   host: "127.0.0.1";
   requestedPort: 0;
   workspaceRoot: string;
-  electronArgs: [string];
+  electronArgs: string[];
 };
 
 const PASSTHROUGH_ENV_KEYS = [
@@ -38,6 +38,7 @@ export function createKnowledgeLaunchConfig(
   workspace: KnowledgeWorkspaceSandbox,
   sourceEnv: NodeJS.ProcessEnv = process.env,
   productRoot: string = process.cwd(),
+  platform: NodeJS.Platform = process.platform,
 ): KnowledgeLaunchConfig {
   const parsedHome = path.parse(workspace.userHome);
   const relativeHome = workspace.userHome.slice(parsedHome.root.length);
@@ -48,7 +49,19 @@ export function createKnowledgeLaunchConfig(
     host: "127.0.0.1",
     requestedPort: 0,
     workspaceRoot: workspace.mainSource,
-    electronArgs: [`--user-data-dir=${workspace.electronUserData}`],
+    electronArgs: [
+      `--user-data-dir=${workspace.electronUserData}`,
+      // GitHub-hosted Windows has no interactive GPU session. These are
+      // fixture-only Chromium switches, applied before Electron reaches
+      // app.whenReady(), so Playwright can attach to the actual desktop main
+      // process rather than timing out in GPU initialization.
+      ...(platform === "win32" ? [
+        "--disable-gpu",
+        "--disable-gpu-compositing",
+        "--disable-gpu-rasterization",
+        "--disable-software-rasterizer",
+      ] : []),
+    ],
     env: {
       ...selectedProcessEnvironment(sourceEnv),
       HOME: workspace.userHome,

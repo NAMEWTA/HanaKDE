@@ -279,6 +279,19 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
           HANA_PORT: "0",
         },
       });
+      const windowsLaunch = createKnowledgeLaunchConfig(
+        first,
+        inheritedEnvironment,
+        repositoryRoot,
+        "win32",
+      );
+      expect(windowsLaunch.electronArgs).toEqual([
+        `--user-data-dir=${first.electronUserData}`,
+        "--disable-gpu",
+        "--disable-gpu-compositing",
+        "--disable-gpu-rasterization",
+        "--disable-software-rasterizer",
+      ]);
       expect(firstLaunch.env).not.toHaveProperty("HANA_TOKEN");
       expect(firstLaunch.env).not.toHaveProperty("SECRET_UNRELATED");
       expect(secondLaunch.env.HANA_PORT).toBe("0");

@@ -66,7 +66,12 @@ describe("quality gates", () => {
 
     const lintIndex = runSteps.indexOf("npm run lint");
     const buildIndex = runSteps.indexOf("npm run build:renderer");
-    const testIndex = runSteps.indexOf("npm test -- --maxWorkers=4");
+    // Knowledge's heavyweight filesystem fixture runs in a dedicated,
+    // single-worker CI step. The general suite must still run with the
+    // repository's four-worker gate, before that focused fixture step.
+    const testIndex = runSteps.findIndex((run) => (
+      typeof run === "string" && run.startsWith("npm test -- --maxWorkers=4")
+    ));
 
     expect(lintIndex).toBeGreaterThan(-1);
     expect(lintIndex).toBeLessThan(buildIndex);

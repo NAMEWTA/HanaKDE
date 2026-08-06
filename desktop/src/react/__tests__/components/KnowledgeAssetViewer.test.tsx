@@ -266,6 +266,38 @@ describe("KnowledgeAssetViewer", () => {
     expect(screen.getByRole("region", { name: "Asset viewer" })).toBeInTheDocument();
   });
 
+  it("keeps validated file information visible while a watch refresh is pending", async () => {
+    let publish: ((signal: KnowledgeAssetViewerChangeSignal) => void) | undefined;
+    let resolveRefresh: ((value: RendererResourceStatResult) => void) | undefined;
+    const statImpl = vi.fn()
+      .mockResolvedValueOnce(stat(4))
+      .mockImplementationOnce(() => new Promise<RendererResourceStatResult>((resolve) => {
+        resolveRefresh = resolve;
+      }));
+
+    render(
+      <KnowledgeAssetViewer
+        address={{ sourceKey: "main", relativePath: "Assets/unknown.bin" }}
+        client={viewerClient({ statImpl })}
+        refreshDelayMs={0}
+        subscribeToChanges={(listener) => {
+          publish = listener;
+          return () => {};
+        }}
+        watchSource={() => () => {}}
+      />,
+    );
+
+    expect(await screen.findByText("No safe built-in preview")).toBeInTheDocument();
+    act(() => publish?.({ kind: "resource-event" }));
+    await waitFor(() => expect(statImpl).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("No safe built-in preview")).toBeInTheDocument();
+    expect(screen.queryByText("Loading asset…")).not.toBeInTheDocument();
+
+    resolveRefresh?.(stat(4));
+    await waitFor(() => expect(statImpl).toHaveBeenCalledTimes(2));
+  });
+
   it("keeps failure state retryable, reports native degradation, and cancels stale work", async () => {
     const unavailable = new KnowledgeWorkspaceClientError({
       code: "knowledge_resource_unavailable",
