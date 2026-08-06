@@ -243,6 +243,8 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       const firstLaunch = createKnowledgeLaunchConfig(
         first,
         inheritedEnvironment,
+        repositoryRoot,
+        "darwin",
       );
       const secondLaunch = createKnowledgeLaunchConfig(second, {});
       const parsedUserHome = path.parse(first.userHome);
