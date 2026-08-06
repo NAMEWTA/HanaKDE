@@ -52,6 +52,12 @@ type DirectoryState = {
 
 type DirectoryStateMap = Record<string, DirectoryState>;
 
+// A source can be mounted while its first files are still being materialized
+// by an external writer. This is deliberately a single delayed snapshot, not
+// a polling interval: it closes the initial watcher-registration window while
+// leaving intentionally empty roots idle afterwards.
+const INITIAL_ROOT_CATCH_UP_DELAY_MS = 500;
+
 type WatchSource = (sourceKey: string) => () => void;
 type SubscribeToChanges = (
   listener: (signal: KnowledgeResourceTreeChangeSignal) => void,
@@ -349,7 +355,7 @@ export const KnowledgeResourceTree = forwardRef<
           if (currentSource) {
             void loadDirectoryRef.current?.(currentSource, '', true);
           }
-        }, Math.max(0, refreshDelayMs));
+        }, Math.max(INITIAL_ROOT_CATCH_UP_DELAY_MS, refreshDelayMs));
         initialRootCatchUpTimersRef.current.set(key, timer);
       }
     } catch {
