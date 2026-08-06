@@ -245,11 +245,13 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(appFixture).toContain('{ scope: "worker" }');
     expect(appFixture).toContain('if (workerInfo.project.name === "desktop-full")');
     expect(appFixture).toContain("const ELECTRON_QUIT_REQUEST_TIMEOUT_MS = 5_000;");
+    expect(appFixture).toContain("const WINDOWS_TASKKILL_TIMEOUT_MS = 5_000;");
     expect(appFixture).toContain("async function requestElectronQuit(application: ElectronApplication)");
     expect(appFixture).toContain("await requestElectronQuit(application);");
     expect(appFixture).toContain('if (process.platform === "win32")');
     expect(appFixture).toContain("Desktop fixture could not terminate its owned application");
     expect(appFixture).toContain("Desktop fixture could not terminate its owned server");
+    expect(appFixture).toContain("Desktop fixture taskkill did not complete");
     expect(appFixture).toContain("ELECTRON_QUIT_REQUEST_TIMEOUT_MS");
     expect(appFixture).toContain("await terminateProcessTree(child.pid);");
     expect(appFixture).not.toContain("vite.cmd");

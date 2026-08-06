@@ -51,6 +51,7 @@ type KnowledgeWorkerFixtures = {
 // accepts the request, so this request must not prevent the process-tree
 // verification and taskkill fallback below from running.
 const ELECTRON_QUIT_REQUEST_TIMEOUT_MS = 5_000;
+const WINDOWS_TASKKILL_TIMEOUT_MS = 5_000;
 
 /**
  * These are the same fixed applicability gates asserted in the individual
@@ -525,7 +526,10 @@ async function terminateProcessTree(pid: number | undefined): Promise<void> {
       "/T",
       "/F",
     ], { stdio: "ignore", windowsHide: true });
-    await new Promise<void>((resolve) => taskkill.once("exit", () => resolve()));
+    if (!await waitForProcessExit(taskkill, WINDOWS_TASKKILL_TIMEOUT_MS)) {
+      taskkill.kill();
+      throw new Error("Desktop fixture taskkill did not complete");
+    }
     return;
   }
   try {
