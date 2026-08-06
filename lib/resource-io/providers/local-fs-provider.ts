@@ -1447,27 +1447,26 @@ async function writeStagedFile(
   const handle = await fs.promises.open(filePath, "wx", 0o600);
   let written = 0;
   try {
-    for await (const chunk of body) {
-      throwIfTransferAborted(signal);
-      if (!(chunk instanceof Uint8Array) || chunk.byteLength > TRANSFER_MAX_CHUNK_BYTES) {
-        throw transferEntryUnsupported("invalid_file_chunk");
-      }
-      let offset = 0;
-      while (offset < chunk.byteLength) {
-        const result = await handle.write(
-          chunk,
-          offset,
-          chunk.byteLength - offset,
-          written + offset,
-        );
-        if (result.bytesWritten <= 0) {
-          throw transferVersionConflict("target_write_stalled");
+    // FileHandle.writeFile consumes AsyncIterable input incrementally. Keeping
+    // the stream in this form avoids materialising an upload in the main
+    // process and lets Node use its native sequential-write path instead of a
+    // JS-level positioned write for every chunk (notably expensive on Windows).
+    const streamWriter = handle as unknown as {
+      writeFile(input: AsyncIterable<Uint8Array>): Promise<void>;
+    };
+    await streamWriter.writeFile((async function* checkedChunks() {
+      for await (const chunk of body) {
+        throwIfTransferAborted(signal);
+        if (!(chunk instanceof Uint8Array) || chunk.byteLength > TRANSFER_MAX_CHUNK_BYTES) {
+          throw transferEntryUnsupported("invalid_file_chunk");
         }
-        offset += result.bytesWritten;
+        written += chunk.byteLength;
+        if (written > expectedSize) {
+          throw transferVersionConflict("source_size_increased");
+        }
+        yield chunk;
       }
-      written += chunk.byteLength;
-      if (written > expectedSize) throw transferVersionConflict("source_size_increased");
-    }
+    })());
     if (written !== expectedSize) throw transferVersionConflict("source_size_changed");
     await handle.sync();
     return written;
