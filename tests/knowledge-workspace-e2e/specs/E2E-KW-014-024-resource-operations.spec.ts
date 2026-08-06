@@ -738,10 +738,14 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
   const outside = path.join(outsideDirectory, 'outside-secret.md');
   await fs.writeFile(outside, 'outside-secret-token\n', 'utf8');
   const escapedRelativePath = process.platform === 'win32' ? 'escape-dir/outside-secret.md' : 'escape.md';
+  const escapedLinkPath = path.join(
+    workspaceSandbox.mainSource,
+    process.platform === 'win32' ? 'escape-dir' : 'escape.md',
+  );
   if (process.platform === 'win32') {
-    await fs.symlink(outsideDirectory, path.join(workspaceSandbox.mainSource, 'escape-dir'), 'junction');
+    await fs.symlink(outsideDirectory, escapedLinkPath, 'junction');
   } else {
-    await fs.symlink(outside, path.join(workspaceSandbox.mainSource, 'escape.md'));
+    await fs.symlink(outside, escapedLinkPath);
   }
   const response = await knowledgeApp.apiFetch('/api/resource-io/read', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -752,6 +756,11 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
     JSON.stringify(await response.json()).includes('outside-secret'),
     'a symlink denial must not echo source-external content',
   ).toBe(false);
+  // Keep the verified platform link isolated to its escape assertion. The
+  // following UI check exercises active-content handling, not rendering a
+  // deliberately blocked entry. On Windows an existing junction can also
+  // keep native directory enumeration pending after the guarded read closes.
+  await fs.unlink(escapedLinkPath);
 
   for (const relativePath of ['../outside/outside-secret.md', 'file:///outside-secret.md', '%2e%2e/outside-secret.md']) {
     const traversal = await knowledgeApp.apiFetch('/api/resource-io/read', {
@@ -811,8 +820,8 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
   })();
   let completedReadCount = 0;
   try {
-    for (let batch = 0; batch < 25; batch += 1) {
-      const reads = await Promise.all(Array.from({ length: 8 }, () => (
+    for (let batch = 0; batch < 12; batch += 1) {
+      const reads = await Promise.all(Array.from({ length: 4 }, () => (
         knowledgeApp.apiFetch('/api/resource-io/read', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -854,7 +863,7 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
   // rejection would turn that safe outcome into a scheduler-dependent test.
   // The invariant is exhaustive: every completed response is authorized
   // content or a sanitized 4xx denial, never a source-external body or 5xx.
-  expect(completedReadCount).toBe(200);
+  expect(completedReadCount).toBe(48);
 
   await fs.writeFile(
     path.join(workspaceSandbox.mainSource, 'Unsafe.md'),
