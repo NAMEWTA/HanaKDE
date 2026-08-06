@@ -66,10 +66,11 @@ describe("quality gates", () => {
 
     const lintIndex = runSteps.indexOf("npm run lint");
     const buildIndex = runSteps.indexOf("npm run build:renderer");
-    // Knowledge's heavyweight filesystem fixture and the independent
-    // esbuild/NFT closure census both run in dedicated single-worker CI
-    // steps. The general suite must still run with the repository's
-    // four-worker gate, before those focused gates.
+    // Knowledge's heavyweight filesystem fixture, the independent
+    // esbuild/NFT closure census, and the jsdom/store workspace panel
+    // regression each run in dedicated single-worker CI steps. The general
+    // suite must still run with the repository's four-worker gate, before
+    // those focused gates.
     const testIndex = runSteps.findIndex((run) => (
       typeof run === "string" && run.startsWith("npm test -- --maxWorkers=4")
     ));
@@ -80,6 +81,10 @@ describe("quality gates", () => {
     expect(lintIndex).toBeLessThan(testIndex);
     expect(generalTest).toContain("--exclude tests/knowledge-performance-fixtures.test.ts");
     expect(generalTest).toContain("--exclude tests/cli-closure-census.test.ts");
+    expect(generalTest).toContain("--exclude desktop/src/react/__tests__/components/DeskSection.test.tsx");
+    expect(runSteps).toContain(
+      "npx vitest run desktop/src/react/__tests__/components/DeskSection.test.tsx --maxWorkers=1",
+    );
     expect(runSteps).toContain(
       "npx vitest run tests/knowledge-performance-fixtures.test.ts --maxWorkers=1",
     );
