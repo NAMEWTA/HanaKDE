@@ -69,6 +69,7 @@ export function normalizeKnowledgeTreeSelection(
   visibleNodes: readonly KnowledgeTreeVisibleNode[],
   preferredSourceKey?: string | null,
 ): string[] {
+  if (keys.length === 0) return [];
   const nodeByKey = new Map(visibleNodes.map(node => [node.key, node]));
   const firstNode = keys.map(key => nodeByKey.get(key)).find(Boolean);
   const sourceKey = preferredSourceKey ?? firstNode?.sourceKey ?? null;

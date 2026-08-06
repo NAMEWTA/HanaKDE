@@ -375,6 +375,26 @@ type DatabaseLike = {
   open: boolean;
 };
 
+type DatabaseStatement = ReturnType<DatabaseLike["prepare"]>;
+
+type ResourceDocumentStatements = Readonly<{
+  existingResource: DatabaseStatement;
+  deleteFts: DatabaseStatement;
+  deleteHeadings: DatabaseStatement;
+  deleteLinks: DatabaseStatement;
+  deleteTags: DatabaseStatement;
+  deleteTasks: DatabaseStatement;
+  deletePage: DatabaseStatement;
+  updateResource: DatabaseStatement;
+  insertResource: DatabaseStatement;
+  insertPage: DatabaseStatement;
+  insertHeading: DatabaseStatement;
+  insertLink: DatabaseStatement;
+  insertTag: DatabaseStatement;
+  insertTask: DatabaseStatement;
+  insertFts: DatabaseStatement;
+}>;
+
 const REBUILD_INTERNALS = new WeakMap<KnowledgeIndexRebuild, {
   database: DatabaseLike;
   writerLock: KnowledgeIndexWriterLock;
@@ -1292,11 +1312,12 @@ export class KnowledgeIndexRebuild {
     this[REBUILD_ASSERT_HEALTHY]();
     if (documents.length === 0) return;
     const database = rebuildInternals(this).database;
+    const statements = resourceDocumentStatements(database);
     database.exec("BEGIN IMMEDIATE");
     try {
       for (const document of documents) {
         this[REBUILD_ASSERT_HEALTHY]();
-        replaceResourceDocumentRows(database, document);
+        replaceResourceDocumentRows(database, document, statements);
       }
       database.exec("COMMIT");
     } catch (error) {
@@ -1863,34 +1884,22 @@ function applyIncrementalChange(
 function replaceResourceDocumentRows(
   database: DatabaseLike,
   document: KnowledgeIndexResourceDocument,
+  statements: ResourceDocumentStatements = resourceDocumentStatements(database),
 ): void {
   const { resource } = document;
-  const existing = database.prepare(
-    "SELECT resource_id AS resourceId FROM resources WHERE relative_path = ?",
-  ).get(resource.relativePath) as { resourceId: number } | undefined;
+  const existing = statements.existingResource.get(resource.relativePath) as {
+    resourceId: number;
+  } | undefined;
   let resourceId: number;
   if (existing) {
     resourceId = Number(existing.resourceId);
-    database.prepare("DELETE FROM content_fts WHERE rowid = ?").run(resourceId);
-    database.prepare("DELETE FROM headings WHERE resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM links WHERE source_resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM tags WHERE resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM tasks WHERE resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM pages WHERE resource_id = ?").run(resourceId);
-    database.prepare(`
-        UPDATE resources
-           SET parent_path = ?,
-               basename = ?,
-               extension = ?,
-               kind = ?,
-               size_bytes = ?,
-               mtime_ms = ?,
-               version_token = ?,
-               content_state = ?,
-               content_reason = ?,
-               indexed_at_ms = ?
-         WHERE resource_id = ?
-    `).run(
+    statements.deleteFts.run(resourceId);
+    statements.deleteHeadings.run(resourceId);
+    statements.deleteLinks.run(resourceId);
+    statements.deleteTags.run(resourceId);
+    statements.deleteTasks.run(resourceId);
+    statements.deletePage.run(resourceId);
+    statements.updateResource.run(
       resource.parentPath,
       resource.basename,
       resource.extension,
@@ -1904,21 +1913,7 @@ function replaceResourceDocumentRows(
       resourceId,
     );
   } else {
-    const inserted = database.prepare(`
-        INSERT INTO resources (
-          relative_path,
-          parent_path,
-          basename,
-          extension,
-          kind,
-          size_bytes,
-          mtime_ms,
-          version_token,
-          content_state,
-          content_reason,
-          indexed_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    const inserted = statements.insertResource.run(
       resource.relativePath,
       resource.parentPath,
       resource.basename,
@@ -1935,11 +1930,7 @@ function replaceResourceDocumentRows(
   }
 
   if (document.page) {
-    database.prepare(`
-        INSERT INTO pages (
-          resource_id, title, frontmatter_json, body_text, body_hash
-        ) VALUES (?, ?, ?, ?, ?)
-    `).run(
+    statements.insertPage.run(
       resourceId,
       document.page.title,
       document.page.frontmatterJson,
@@ -1947,13 +1938,8 @@ function replaceResourceDocumentRows(
       document.page.bodyHash,
     );
   }
-  const insertHeading = database.prepare(`
-      INSERT INTO headings (
-        resource_id, ordinal, level, text, slug, from_offset, to_offset
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
   for (const heading of document.headings) {
-    insertHeading.run(
+    statements.insertHeading.run(
       resourceId,
       heading.ordinal,
       heading.level,
@@ -1963,20 +1949,8 @@ function replaceResourceDocumentRows(
       heading.toOffset,
     );
   }
-  const insertLink = database.prepare(`
-      INSERT INTO links (
-        source_resource_id,
-        ordinal,
-        link_kind,
-        raw_target,
-        resolved_relative_path,
-        fragment,
-        from_offset,
-        to_offset
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
   for (const link of document.links) {
-    insertLink.run(
+    statements.insertLink.run(
       resourceId,
       link.ordinal,
       link.linkKind,
@@ -1987,19 +1961,11 @@ function replaceResourceDocumentRows(
       link.toOffset,
     );
   }
-  const insertTag = database.prepare(`
-      INSERT INTO tags (resource_id, tag, origin) VALUES (?, ?, ?)
-    `);
   for (const tag of document.tags) {
-    insertTag.run(resourceId, tag.tag, tag.origin);
+    statements.insertTag.run(resourceId, tag.tag, tag.origin);
   }
-  const insertTask = database.prepare(`
-      INSERT INTO tasks (
-        resource_id, ordinal, checked, text, from_offset, to_offset
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `);
   for (const task of document.tasks) {
-    insertTask.run(
+    statements.insertTask.run(
       resourceId,
       task.ordinal,
       task.checked ? 1 : 0,
@@ -2008,11 +1974,7 @@ function replaceResourceDocumentRows(
       task.toOffset,
     );
   }
-  database.prepare(`
-      INSERT INTO content_fts (
-        rowid, resource_id, title_fold, path_fold, metadata_fold, body_fold
-      ) VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
+  statements.insertFts.run(
     resourceId,
     resourceId,
     document.search.titleFold,
@@ -2020,6 +1982,62 @@ function replaceResourceDocumentRows(
     document.search.metadataFold,
     document.search.bodyFold,
   );
+}
+
+function resourceDocumentStatements(database: DatabaseLike): ResourceDocumentStatements {
+  return {
+    existingResource: database.prepare(
+      "SELECT resource_id AS resourceId FROM resources WHERE relative_path = ?",
+    ),
+    deleteFts: database.prepare("DELETE FROM content_fts WHERE rowid = ?"),
+    deleteHeadings: database.prepare("DELETE FROM headings WHERE resource_id = ?"),
+    deleteLinks: database.prepare("DELETE FROM links WHERE source_resource_id = ?"),
+    deleteTags: database.prepare("DELETE FROM tags WHERE resource_id = ?"),
+    deleteTasks: database.prepare("DELETE FROM tasks WHERE resource_id = ?"),
+    deletePage: database.prepare("DELETE FROM pages WHERE resource_id = ?"),
+    updateResource: database.prepare(`
+      UPDATE resources
+         SET parent_path = ?, basename = ?, extension = ?, kind = ?,
+             size_bytes = ?, mtime_ms = ?, version_token = ?,
+             content_state = ?, content_reason = ?, indexed_at_ms = ?
+       WHERE resource_id = ?
+    `),
+    insertResource: database.prepare(`
+      INSERT INTO resources (
+        relative_path, parent_path, basename, extension, kind, size_bytes,
+        mtime_ms, version_token, content_state, content_reason, indexed_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertPage: database.prepare(`
+      INSERT INTO pages (
+        resource_id, title, frontmatter_json, body_text, body_hash
+      ) VALUES (?, ?, ?, ?, ?)
+    `),
+    insertHeading: database.prepare(`
+      INSERT INTO headings (
+        resource_id, ordinal, level, text, slug, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertLink: database.prepare(`
+      INSERT INTO links (
+        source_resource_id, ordinal, link_kind, raw_target,
+        resolved_relative_path, fragment, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertTag: database.prepare(
+      "INSERT INTO tags (resource_id, tag, origin) VALUES (?, ?, ?)",
+    ),
+    insertTask: database.prepare(`
+      INSERT INTO tasks (
+        resource_id, ordinal, checked, text, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `),
+    insertFts: database.prepare(`
+      INSERT INTO content_fts (
+        rowid, resource_id, title_fold, path_fold, metadata_fold, body_fold
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `),
+  };
 }
 
 function validateIncrementalRelativePath(relativePath: string): string {

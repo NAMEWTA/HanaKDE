@@ -153,13 +153,21 @@ export class ResourceEventBus {
 function changedDedupeKey(input: ChangedInput): string | null {
   const version = input.version;
   if (!version) return null;
-  return JSON.stringify({
-    resourceKey: input.resourceKey,
-    changeType: input.changeType,
-    mtimeMs: version.mtimeMs,
-    size: version.size,
-    sha256: version.sha256,
-    etag: version.etag,
-    sequence: version.sequence,
-  });
+  // Delimiter-safe, type-tagged fields preserve the prior structural key
+  // semantics without allocating an object and serializing it for every
+  // filesystem notification in a burst.
+  return [
+    input.resourceKey,
+    input.changeType,
+    version.mtimeMs,
+    version.size,
+    version.sha256,
+    version.etag,
+    version.sequence,
+  ].map((value) => {
+    if (value === undefined) return "u";
+    if (value === null) return "n";
+    const text = String(value);
+    return `${typeof value}:${text.length}:${text}`;
+  }).join("|");
 }
