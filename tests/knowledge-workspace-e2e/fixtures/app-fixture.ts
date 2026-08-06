@@ -201,12 +201,13 @@ export const test = base.extend<KnowledgeFixtures>({
       );
       const clientPort = await reserveLoopbackPort();
       const vite = spawn(
-        path.resolve(
-          "node_modules",
-          ".bin",
-          process.platform === "win32" ? "vite.cmd" : "vite",
-        ),
+        process.execPath,
         [
+          // Invoking the package's CLI entry through the current Node binary
+          // avoids a Windows cmd.exe wrapper per E2E fixture. The wrapper
+          // otherwise remains a child of the Playwright worker and has caused
+          // a native worker exit during the later resource-operation stories.
+          path.resolve("node_modules", "vite", "bin", "vite.js"),
           "--config",
           path.resolve("vite.config.ts"),
           "--host",
@@ -225,8 +226,8 @@ export const test = base.extend<KnowledgeFixtures>({
             HANA_DEV_WEB_SERVER_URL: `http://127.0.0.1:${serverInfo.port}`,
             HANA_DEV_WEB_SERVER_TOKEN: serverInfo.token,
           },
-          shell: process.platform === "win32",
           stdio: "ignore",
+          windowsHide: true,
         },
       );
       processes.push(vite);

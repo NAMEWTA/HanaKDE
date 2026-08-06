@@ -228,6 +228,23 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     });
   });
 
+  it("launches the web E2E Vite process through Node instead of a Windows command shell", () => {
+    const appFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/app-fixture.ts",
+      ),
+      "utf8",
+    );
+
+    expect(appFixture).toContain(
+      'path.resolve("node_modules", "vite", "bin", "vite.js")',
+    );
+    expect(appFixture).toContain("windowsHide: true");
+    expect(appFixture).not.toContain("vite.cmd");
+    expect(appFixture).not.toContain("shell: process.platform === \"win32\"");
+  });
+
   it("builds isolated launch configs without inheriting user or Hana environment", async () => {
     const first = await createKnowledgeWorkspaceSandbox(0);
     const second = await createKnowledgeWorkspaceSandbox(0);
