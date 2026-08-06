@@ -39,9 +39,12 @@ export const KNOWLEDGE_INDEX_EVENT_BURST_WINDOW_MS = 10_000;
 /**
  * A rebuild writes one SQLite transaction per batch.  Keeping this bounded
  * preserves cancellation and renderer responsiveness without turning a large
- * source scan into one transaction per resource.
+ * source scan into one transaction per resource.  32 documents keeps the
+ * synchronous SQLite write below the 50 ms interaction budget on the
+ * reference 100k-resource corpus; larger batches can monopolize the main
+ * process while FTS rows are updated.
  */
-export const KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE = 64;
+export const KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE = 32;
 
 export type KnowledgeIndexEventSource = Readonly<{
   eventPaths(event: ResourceEvent): readonly string[];
