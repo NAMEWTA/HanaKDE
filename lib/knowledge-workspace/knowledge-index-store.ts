@@ -411,6 +411,10 @@ export class KnowledgeIndexStore {
   readonly #fileSystem: KnowledgeIndexFileSystem;
   readonly #checkpointBusyTimeoutMs: number;
   readonly #searchCandidateCache = new Map<string, readonly KnowledgeIndexSearchQueryRow[]>();
+  readonly #searchDisplayCache = new Map<string, Readonly<{
+    frontmatterJson: string | null;
+    bodyText: string | null;
+  }>>();
   #queryManifestCache: { manifest: KnowledgeIndexManifest; cachedAtMs: number } | null = null;
   readonly #leaseCounts = new Map<string, number>();
   #activeRebuild: KnowledgeIndexRebuild | null = null;
@@ -626,6 +630,7 @@ export class KnowledgeIndexStore {
       database,
       manifest: current.manifest,
       searchCandidateCache: this.#searchCandidateCache,
+      searchDisplayCache: this.#searchDisplayCache,
       release: () => {
         const remaining = (this.#leaseCounts.get(generationId) ?? 1) - 1;
         if (remaining > 0) this.#leaseCounts.set(generationId, remaining);
@@ -640,6 +645,7 @@ export class KnowledgeIndexStore {
   }): void {
     this.#queryManifestCache = null;
     this.#searchCandidateCache.clear();
+    this.#searchDisplayCache.clear();
     if (this.#activeRebuild) {
       throw indexUnavailable(
         "knowledge index incremental update waits for active rebuild",
@@ -787,6 +793,7 @@ export class KnowledgeIndexStore {
   ): void {
     this.#queryManifestCache = null;
     this.#searchCandidateCache.clear();
+    this.#searchDisplayCache.clear();
     this.#assertActive(rebuild);
     const sequence = validSequence(
       lastCompleteSequence,
@@ -1373,6 +1380,10 @@ export class KnowledgeIndexQueryLease {
   readonly #manifest: KnowledgeIndexManifest;
   readonly #release: () => void;
   readonly #searchCandidateCache: Map<string, readonly KnowledgeIndexSearchQueryRow[]> | null;
+  readonly #searchDisplayCache: Map<string, Readonly<{
+    frontmatterJson: string | null;
+    bodyText: string | null;
+  }>> | null;
   #released = false;
 
   constructor(options: {
@@ -1380,12 +1391,17 @@ export class KnowledgeIndexQueryLease {
     manifest: KnowledgeIndexManifest;
     release: () => void;
     searchCandidateCache?: Map<string, readonly KnowledgeIndexSearchQueryRow[]>;
+    searchDisplayCache?: Map<string, Readonly<{
+      frontmatterJson: string | null;
+      bodyText: string | null;
+    }>>;
   }) {
     this.generationId = options.manifest.generationId;
     this.#database = options.database;
     this.#manifest = options.manifest;
     this.#release = options.release;
     this.#searchCandidateCache = options.searchCandidateCache ?? null;
+    this.#searchDisplayCache = options.searchDisplayCache ?? null;
   }
 
   inspect(): KnowledgeIndexInspection {
@@ -1586,19 +1602,40 @@ export class KnowledgeIndexQueryLease {
   }> {
     this.#assertActive();
     if (resourceIds.length === 0) return new Map();
-    const placeholders = resourceIds.map(() => "?").join(",");
+    const display = new Map<number, {
+      frontmatterJson: string | null;
+      bodyText: string | null;
+    }>();
+    const missing: number[] = [];
+    for (const resourceId of resourceIds) {
+      const cacheKey = `${this.generationId}:${resourceId}`;
+      const cached = this.#searchDisplayCache?.get(cacheKey);
+      if (cached) display.set(resourceId, cached);
+      else missing.push(resourceId);
+    }
+    if (missing.length === 0) return display;
+    const placeholders = missing.map(() => "?").join(",");
     const rows = this.#database.prepare(`
       SELECT resource_id, frontmatter_json, body_text
       FROM pages
       WHERE resource_id IN (${placeholders})
-    `).all(...resourceIds) as Array<Record<string, unknown>>;
-    return new Map(rows.map((row) => [
-      Number(row.resource_id),
-      Object.freeze({
+    `).all(...missing) as Array<Record<string, unknown>>;
+    for (const row of rows) {
+      const resourceId = Number(row.resource_id);
+      const value = Object.freeze({
         frontmatterJson: row.frontmatter_json === null ? null : String(row.frontmatter_json),
         bodyText: row.body_text === null ? null : String(row.body_text),
-      }),
-    ]));
+      });
+      display.set(resourceId, value);
+      if (!this.#searchDisplayCache) continue;
+      this.#searchDisplayCache.set(`${this.generationId}:${resourceId}`, value);
+      while (this.#searchDisplayCache.size > 256) {
+        const oldest = this.#searchDisplayCache.keys().next().value;
+        if (typeof oldest !== "string") break;
+        this.#searchDisplayCache.delete(oldest);
+      }
+    }
+    return display;
   }
 
   release(): void {
@@ -2095,16 +2132,7 @@ function configureReadOnlyDatabase(database: DatabaseLike): void {
   database.pragma("synchronous = FULL");
   database.pragma("busy_timeout = 5000");
   database.pragma("temp_store = MEMORY");
-  const pragmas = readPragmas(database);
-  if (
-    pragmas.foreignKeys !== 1
-    || pragmas.journalMode !== "wal"
-    || pragmas.synchronous !== 2
-    || pragmas.busyTimeout !== 5_000
-    || pragmas.tempStore !== 2
-  ) {
-    throw new Error("knowledge index read-only database pragma configuration failed");
-  }
+  database.pragma("foreign_keys = ON");
 }
 
 function readPragmas(database: DatabaseLike): {

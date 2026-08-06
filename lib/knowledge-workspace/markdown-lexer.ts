@@ -53,18 +53,46 @@ export function throwIfMarkdownIrAborted(signal?: AbortSignal): void {
 
 function sourceLines(source: string, signal?: AbortSignal): SourceLine[] {
   const lines: SourceLine[] = [];
+  const hasCr = source.includes("\r");
+  const hasLf = source.includes("\n");
   let from = 0;
+  let work = 0;
+
+  // The overwhelmingly common single-ending documents can use the engine's
+  // linear `indexOf` search.  The previous nearest-delimiter implementation
+  // searched the whole remaining document for a missing opposite delimiter
+  // on every LF-only/CR-only line, making dense Markdown quadratic.
+  if (hasCr !== hasLf) {
+    const delimiter = hasCr ? "\r" : "\n";
+    while (from < source.length) {
+      if ((lines.length & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+      const next = source.indexOf(delimiter, from);
+      const to = next < 0 ? source.length : next;
+      const fullTo = next < 0 ? source.length : next + 1;
+      lines.push({ from, to, fullTo, text: source.slice(from, to) });
+      from = fullTo;
+    }
+    if (source.length === 0) lines.push({ from: 0, to: 0, fullTo: 0, text: "" });
+    return lines;
+  }
+
   while (from < source.length) {
-    if ((lines.length & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
-    const nextCr = source.indexOf("\r", from);
-    const nextLf = source.indexOf("\n", from);
-    const to = nextCr < 0
-      ? nextLf < 0 ? source.length : nextLf
-      : nextLf < 0 ? nextCr : Math.min(nextCr, nextLf);
+    if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    const lineStart = from;
+    while (
+      from < source.length
+      && source[from] !== "\r"
+      && source[from] !== "\n"
+    ) {
+      from += 1;
+      work += 1;
+      if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    }
+    const to = from;
     let fullTo = to;
     if (source[fullTo] === "\r" && source[fullTo + 1] === "\n") fullTo += 2;
     else if (source[fullTo] === "\r" || source[fullTo] === "\n") fullTo += 1;
-    lines.push({ from, to, fullTo, text: source.slice(from, to) });
+    lines.push({ from: lineStart, to, fullTo, text: source.slice(lineStart, to) });
     from = fullTo;
   }
   if (source.length === 0) lines.push({ from: 0, to: 0, fullTo: 0, text: "" });
