@@ -823,6 +823,12 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
         await fs.rename(raceHolding, raceCurrent);
         holding = false;
         swapCount += 1;
+        // Keep replacing this exact parent throughout every guarded read, but
+        // give the independently hosted server a scheduling turn after a real
+        // replacement. An unbounded successful fs loop can otherwise starve
+        // its watcher/revalidation work on a shared Linux CI CPU and turn the
+        // test harness itself into a connection-reset source.
+        await new Promise((resolve) => setTimeout(resolve, 1));
       } catch (error) {
         // Windows can briefly hold a directory while a guarded read closes.
         // Restore the in-root parent before retrying; only a completed actual
