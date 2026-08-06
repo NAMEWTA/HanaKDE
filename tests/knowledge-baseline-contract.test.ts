@@ -256,6 +256,16 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(appFixture).toContain("await terminateProcessTree(child.pid);");
     expect(appFixture).not.toContain("vite.cmd");
     expect(appFixture).not.toContain("shell: process.platform === \"win32\"");
+
+    const nativeFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/native-fixture.ts",
+      ),
+      "utf8",
+    );
+    expect(nativeFixture).toContain('if (process.platform === "win32")');
+    expect(nativeFixture).toContain("the owning fixture");
   });
 
   it("runs the Windows junction TOCTOU scenario in an independent, non-retried worker", () => {
