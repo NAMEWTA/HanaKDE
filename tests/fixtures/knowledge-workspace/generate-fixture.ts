@@ -328,13 +328,25 @@ function deterministicRelativePath(
   index: number,
   random: () => number,
   kind: ResourceFixtureEntry["kind"] = "markdown",
+  compactDirectories = false,
 ): string {
   if (index < 4) return "Shared/SameName.md";
   const depth = (index % 12) + 1;
   const parts: string[] = [];
   const variants = ["Alpha", "beta", "資料", "Über", "LongName-" + "x".repeat(48)];
   for (let segment = 0; segment < depth - 1; segment += 1) {
-    parts.push(`${variants[(index + segment) % variants.length]}-${Math.floor(random() * 97)}`);
+    // The bounded smoke profile still materializes every one of its 10,000
+    // files, but lets nearby entries share an on-disk directory spine. NTFS
+    // otherwise spends most of the fixed gate creating tens of thousands of
+    // one-file ancestors rather than exercising the tree, content, depth,
+    // Unicode, case, and long-name dimensions that the profile freezes.
+    // Consume the PRNG in both layouts so the full reference fixture stays
+    // bit-for-bit unchanged and no later deterministic stream is perturbed.
+    const randomBranch = Math.floor(random() * 97);
+    const branch = compactDirectories
+      ? Math.floor(index / 512).toString().padStart(3, "0")
+      : randomBranch;
+    parts.push(`${variants[(index + segment) % variants.length]}-${branch}`);
   }
   const extension = {
     markdown: ".md",
@@ -428,7 +440,12 @@ export function* iterateResourceEntries(
             : null;
     yield {
       sourceKey: sourceKeys[index % sourceKeys.length]!,
-      relativePath: deterministicRelativePath(index, random, kind),
+      relativePath: deterministicRelativePath(
+        index,
+        random,
+        kind,
+        profile.name === "smoke",
+      ),
       kind,
       ...semantics,
       read: () => resourceBody(index, kind, semantics, profile.seed),
@@ -453,7 +470,12 @@ export function generateWatchEvents(profile: FixtureProfile): WatchFixtureEvent[
   let sequence = 0;
   for (let index = 0; index < count; index += 1) {
     sequence += index === Math.floor(count / 2) ? 2 : 1;
-    const relativePath = deterministicRelativePath(index, random);
+    const relativePath = deterministicRelativePath(
+      index,
+      random,
+      "markdown",
+      profile.name === "smoke",
+    );
     const selector = index % 10;
     const base = {
       sequence,

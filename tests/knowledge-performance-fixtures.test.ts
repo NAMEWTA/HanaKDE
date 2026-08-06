@@ -75,6 +75,8 @@ describe("knowledge performance fixtures", () => {
   it("uses a bounded CI smoke profile while retaining every algorithm-limit dimension", () => {
     const smoke = buildFixtureManifest(resolveFixtureProfile("smoke"));
     const full = buildFixtureManifest(resolveFixtureProfile("full"));
+    const smokePaths = [...iterateResourceEntries(resolveFixtureProfile("smoke"), "tree100k")]
+      .map((entry) => entry.relativePath);
 
     expect(smoke.scale).toBe(0.1);
     expect(smoke.treeEntryCounts).toEqual(full.treeEntryCounts.map((count) => count / 10));
@@ -95,6 +97,9 @@ describe("knowledge performance fixtures", () => {
     expect(smoke.pathCharacteristics).toEqual(full.pathCharacteristics);
     expect(smoke.pathCharacteristics.maxDepth).toBe(12);
     expect(smoke.documentBytes).toEqual(full.documentBytes);
+    expect(Math.max(...smokePaths.map((relativePath) => relativePath.split("/").length))).toBe(12);
+    expect(smokePaths.filter((relativePath) => relativePath.includes("資料-")).length).toBeGreaterThan(0);
+    expect(smokePaths.filter((relativePath) => relativePath.includes("LongName-")).length).toBeGreaterThan(0);
   });
 
   it("lazily expresses the exact 100k full resource mix and semantic upper limits", () => {
