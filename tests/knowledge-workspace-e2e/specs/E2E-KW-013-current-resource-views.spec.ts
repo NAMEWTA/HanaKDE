@@ -63,13 +63,20 @@ async function searchKnowledge(
   query: string,
 ): Promise<void> {
   const input = workspace.getByRole("searchbox");
+  const submit = workspace.locator('button[type="submit"]');
+  // A repeated query does not emit an input event in every browser engine.
+  // Resetting it first makes the search state transition explicit, then a
+  // pointer submit exercises the same public form path without depending on
+  // the active preview/editor key handler (notably on Windows web runners).
+  await input.fill("");
   await input.fill(query);
+  await expect(submit).toBeEnabled();
   await Promise.all([
     page.waitForResponse((response) => (
       response.request().method() === "POST"
       && response.url().includes("/api/knowledge-workspace/search")
     )),
-    input.press("Enter"),
+    submit.click(),
   ]);
 }
 
