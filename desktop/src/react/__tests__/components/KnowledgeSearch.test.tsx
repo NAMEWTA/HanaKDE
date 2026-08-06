@@ -298,4 +298,38 @@ describe('KnowledgeSearch', () => {
     await act(async () => pending[0]?.resolve(result()));
     expect(screen.queryByText('Alpha paper')).not.toBeInTheDocument();
   });
+
+  it('cancels a loading query when its text changes so the replacement can submit', async () => {
+    const pending: Array<{
+      signal: AbortSignal | undefined;
+      resolve(value: RendererKnowledgeSearchResult): void;
+    }> = [];
+    const searchKnowledge = vi.fn((_, options = {}) =>
+      new Promise<RendererKnowledgeSearchResult>((resolve) => {
+        pending.push({ signal: options.signal, resolve });
+      })
+    );
+    render(
+      <KnowledgeSearch
+        client={testClient(searchKnowledge)}
+        sources={sources}
+        onOpen={() => {}}
+      />,
+    );
+    const searchbox = screen.getByRole('searchbox');
+    const submit = screen.getByRole('button', { name: 'Search' });
+
+    fireEvent.change(searchbox, { target: { value: 'first' } });
+    fireEvent.click(submit);
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(searchbox, { target: { value: 'second' } });
+    expect(pending[0]?.signal?.aborted).toBe(true);
+    expect(submit).toBeEnabled();
+
+    fireEvent.click(submit);
+    expect(searchKnowledge).toHaveBeenLastCalledWith({ query: 'second' }, expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }));
+  });
 });

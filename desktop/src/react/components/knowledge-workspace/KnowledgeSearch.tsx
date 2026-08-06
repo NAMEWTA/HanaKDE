@@ -190,7 +190,17 @@ export function KnowledgeSearch({
             value={query}
             placeholder={tr('knowledge.search.placeholder')}
             aria-describedby={scope ? 'knowledge-search-scope' : undefined}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              // A replacement query is a new user intent. Abort the previous
+              // request immediately so its loading state cannot keep the
+              // public submit control disabled while the user refines search.
+              if (status === 'loading') {
+                controllerRef.current?.abort();
+                requestRevisionRef.current += 1;
+                setStatus('idle');
+              }
+              setQuery(event.target.value);
+            }}
           />
         </label>
         {scope && (
