@@ -413,12 +413,24 @@ async function closeElectronApplication(
   const serverPid = knownServerPid ?? await readServerPid(hanaHome);
   const child = application.process();
   if (child.exitCode === null && child.signalCode === null) {
-    await requestElectronQuit(application);
-    // The Electron transport may close or its IPC reply may stall during
-    // shutdown. Process and owned-server verification below are authoritative.
-    if (!await waitForProcessExit(child, 15_000)) {
+    if (process.platform === "win32") {
+      // A timed-out main-process evaluate remains an in-flight Playwright IPC
+      // operation on Windows even after its caller's race has elapsed. That
+      // can retain the worker after the test has otherwise finished. The
+      // fixture owns the complete Electron tree, so use the existing native
+      // tree terminator instead of starting an IPC operation that cannot be
+      // cancelled. The exit checks below remain the source of truth.
       await terminateProcessTree(child.pid);
-      await waitForProcessExit(child, 5_000);
+    } else {
+      await requestElectronQuit(application);
+      // The Electron transport may close or its IPC reply may stall during
+      // shutdown. Process and owned-server verification below are authoritative.
+      if (!await waitForProcessExit(child, 15_000)) {
+        await terminateProcessTree(child.pid);
+      }
+    }
+    if (!await waitForProcessExit(child, 5_000)) {
+      throw new Error("Desktop fixture could not terminate its owned application");
     }
   }
   if (serverPid === null || await waitForPidExit(serverPid, 10_000)) return;
