@@ -3,6 +3,7 @@ import {
   expect,
   test as base,
   type Browser,
+  type BrowserContext,
   type ElectronApplication,
   type Page,
 } from "@playwright/test";
@@ -40,6 +41,10 @@ type KnowledgeFixtures = {
 };
 
 type KnowledgeRuntime = KnowledgeFixtures["knowledgeApp"]["runtime"];
+
+type KnowledgeWorkerFixtures = {
+  knowledgeBrowser: Browser;
+};
 
 /**
  * These are the same fixed applicability gates asserted in the individual
@@ -81,7 +86,19 @@ function isRuntimeApplicable(testInfo: { title: string }, runtime: KnowledgeRunt
   return story === undefined || runtimesByStory[story]?.includes(runtime) === true;
 }
 
-export const test = base.extend<KnowledgeFixtures>({
+export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
+  knowledgeBrowser: [async ({ playwright }, use) => {
+    // A fresh BrowserContext remains test-scoped below, so browser state never
+    // crosses a scenario boundary. Keeping Chromium itself worker-scoped
+    // avoids repeatedly creating and destroying the native browser host on
+    // Windows between consecutive Web stories.
+    const browser = await playwright.chromium.launch();
+    try {
+      await use(browser);
+    } finally {
+      await browser.close();
+    }
+  }, { scope: "worker" }],
   workspaceSandbox: async ({ playwright: _playwright }, use, testInfo) => {
     const sandbox = await createKnowledgeWorkspaceSandbox(testInfo.workerIndex);
     try {
@@ -122,7 +139,7 @@ export const test = base.extend<KnowledgeFixtures>({
     }
   },
   knowledgeApp: async (
-    { playwright, launchConfig, workspaceSandbox },
+    { knowledgeBrowser, launchConfig, workspaceSandbox },
     use,
     testInfo,
   ) => {
@@ -171,7 +188,7 @@ export const test = base.extend<KnowledgeFixtures>({
     }
 
     const processes: ChildProcess[] = [];
-    let browser: Browser | null = null;
+    let browserContext: BrowserContext | null = null;
     try {
       const server = spawn(
         process.execPath,
@@ -233,8 +250,8 @@ export const test = base.extend<KnowledgeFixtures>({
       processes.push(vite);
       const appUrl = `http://127.0.0.1:${clientPort}/index.html`;
       await waitForHttp(appUrl, vite);
-      browser = await playwright.chromium.launch();
-      const page = await browser.newPage();
+      browserContext = await knowledgeBrowser.newContext();
+      const page = await browserContext.newPage();
       await page.goto(appUrl, { waitUntil: "domcontentloaded" });
       await use({
         page,
@@ -243,7 +260,7 @@ export const test = base.extend<KnowledgeFixtures>({
         apiFetch: createAuthenticatedApiFetch(serverInfo),
       });
     } finally {
-      await browser?.close();
+      await browserContext?.close();
       await Promise.all(processes.reverse().map(stopChild));
     }
   },
@@ -353,6 +370,14 @@ async function waitForHttp(url: string, child: ChildProcess): Promise<void> {
 
 async function stopChild(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === "win32") {
+    // SIGTERM only reaches the direct child on Windows. Both server bootstrap
+    // and Vite can own descendants, so wait for taskkill's complete process
+    // tree before the next isolated fixture removes its workspace.
+    await terminateProcessTree(child.pid);
+    await waitForProcessExit(child, 5_000);
+    return;
+  }
   child.kill("SIGTERM");
   await Promise.race([
     new Promise<void>((resolve) => child.once("exit", () => resolve())),
