@@ -745,6 +745,21 @@ export function validateFixtureManifest(input: unknown): { ok: true } | { ok: fa
   return { ok: true };
 }
 
+async function removeFixtureRoot(root: string): Promise<void> {
+  // Each entry immediately below a generated fixture root is independent.
+  // Removing the source roots together avoids serial recursive deletion of a
+  // 10,000-file smoke fixture on NTFS, while still awaiting complete cleanup
+  // before the fixture is released to its caller.
+  const entries = await fs.promises.readdir(root);
+  await Promise.all(entries.map((entry) => fs.promises.rm(path.join(root, entry), {
+    recursive: true,
+    force: true,
+    maxRetries: 3,
+    retryDelay: 50,
+  })));
+  await fs.promises.rmdir(root);
+}
+
 type SafePlainDataResult =
   | { readonly ok: true; readonly value: unknown }
   | { readonly ok: false; readonly error: string };
@@ -887,17 +902,17 @@ export async function materializeFixture<T>(
           );
         }
         written += 1;
-        // A 32-entry batch still leaves NTFS repeatedly draining the libuv
+        // A 256-entry batch still leaves NTFS repeatedly draining the libuv
         // queue while the fixture creates its 10,000-entry smoke tree. Keep
         // the write window bounded, but large enough to amortize that drain
         // and retain all real files/paths in the fixed fixture.
-        if (pendingWrites.length >= 256) await flushWrites();
+        if (pendingWrites.length >= 1_024) await flushWrites();
       }
       await flushWrites();
       return written;
     };
     return await consume({ root, sourceRoots, manifestPath, manifest, dataset, writeResources });
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    await removeFixtureRoot(root);
   }
 }
