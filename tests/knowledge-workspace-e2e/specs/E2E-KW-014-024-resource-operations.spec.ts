@@ -774,6 +774,25 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
     ).toBe(false);
   }
 
+  // Exercise active-content and oversized-document handling while the source
+  // is stable. The independent TOCTOU attack below deliberately makes this
+  // source transiently unavailable, so it must not also determine whether
+  // the UI policy checks can find the otherwise authorized root.
+  await fs.writeFile(
+    path.join(workspaceSandbox.mainSource, 'Unsafe.md'),
+    '# Unsafe\n<script>window.__knowledgeUnsafe=1</script>\n',
+    'utf8',
+  );
+  await fs.writeFile(
+    path.join(workspaceSandbox.mainSource, 'TooLarge.md'),
+    Buffer.alloc(10 * 1024 * 1024 + 1, 0x78),
+  );
+  const workspace = await openKnowledge(knowledgeApp.page);
+  await openTreeFile(workspace, 'Unsafe.md');
+  expect(await knowledgeApp.page.evaluate(() => (window as Window & { __knowledgeUnsafe?: number }).__knowledgeUnsafe)).toBeUndefined();
+  await openTreeFile(workspace, 'TooLarge.md');
+  await expect(workspace.locator('[aria-label="Edit TooLarge.md"]')).toHaveCount(0);
+
   const racedName = 'Raced.md';
   const raceCurrent = path.join(workspaceSandbox.mainSource, 'race-current');
   const raceHolding = path.join(workspaceSandbox.mainSource, 'race-holding');
@@ -864,21 +883,6 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
   // The invariant is exhaustive: every completed response is authorized
   // content or a sanitized 4xx denial, never a source-external body or 5xx.
   expect(completedReadCount).toBe(48);
-
-  await fs.writeFile(
-    path.join(workspaceSandbox.mainSource, 'Unsafe.md'),
-    '# Unsafe\n<script>window.__knowledgeUnsafe=1</script>\n',
-    'utf8',
-  );
-  await fs.writeFile(
-    path.join(workspaceSandbox.mainSource, 'TooLarge.md'),
-    Buffer.alloc(10 * 1024 * 1024 + 1, 0x78),
-  );
-  const workspace = await openKnowledge(knowledgeApp.page);
-  await openTreeFile(workspace, 'Unsafe.md');
-  expect(await knowledgeApp.page.evaluate(() => (window as Window & { __knowledgeUnsafe?: number }).__knowledgeUnsafe)).toBeUndefined();
-  await openTreeFile(workspace, 'TooLarge.md');
-  await expect(workspace.locator('[aria-label="Edit TooLarge.md"]')).toHaveCount(0);
 });
 
 test('E2E-KW-024 isolates two Renderer contexts across open, save, conflict and native grants', async ({ knowledgeApp, workspaceSandbox }) => {
