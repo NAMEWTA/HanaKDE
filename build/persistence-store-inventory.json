@@ -6617,7 +6617,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 551,
+      "line": 575,
       "kind": "database-open",
       "excerpt": "new Database(sqliteDatabasePath(buildPath))",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6626,7 +6626,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 613,
+      "line": 637,
       "kind": "database-open",
       "excerpt": "new Database(sqliteDatabasePath(generationPath), { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6635,7 +6635,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 684,
+      "line": 710,
       "kind": "database-open",
       "excerpt": "new Database(sqliteDatabasePath(generationPath), { fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6644,7 +6644,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 949,
+      "line": 976,
       "kind": "database-open",
       "excerpt": "new Database(sqliteDatabasePath(generationPath), { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",

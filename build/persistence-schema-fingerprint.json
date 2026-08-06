@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:8440108a8deb33b350913170b4f059a612f1dad26d32d3314ab14056ea5b5dc9",
+  "payloadFingerprint": "sha256:446c76f9524cf1281d60a628041db187d49004bd802575a4a1bcae8ddcb8321e",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2998,8 +2998,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "No persistence schema or DATA_EPOCH change: LocalFS streamed staging-write implementation only shifts registered receipt line numbers.",
-    "payloadFingerprint": "sha256:8440108a8deb33b350913170b4f059a612f1dad26d32d3314ab14056ea5b5dc9"
+    "compatibilityReason": "Refreshes deterministic receipts after Knowledge Workspace performance hardening shifted registered Knowledge index source lines; store schemas, registered write ownership, recovery journal semantics, persisted bytes, and DATA_EPOCH remain unchanged.",
+    "payloadFingerprint": "sha256:446c76f9524cf1281d60a628041db187d49004bd802575a4a1bcae8ddcb8321e"
   },
   "schemas": [
     {
@@ -3217,14 +3217,14 @@
         },
         {
           "module": "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
-          "sourceHash": "sha256:763d8a247b1967a9569325ba31a274ba1f5dcbfaf336bd846b98b87a75c916a6"
+          "sourceHash": "sha256:cea88d2edb59ae67ed3e786b3afbca0c2be0ab45e7adb934ec44c146d039f7e8"
         },
         {
           "module": "lib/knowledge-workspace/knowledge-query.ts",
           "sourceHash": "sha256:10844a5e4f8868145a872d20ba471f3c359aaba2aa6ae8c441f2a8f91d54e3c6"
         }
       ],
-      "sourceHash": "sha256:781574de8a431f24a92d2f365746bec910bcba0bc1d86414adf60e97791ce57b",
+      "sourceHash": "sha256:c6ef397f647262885282c72784f7b0986d1b6d963593e7df6d33a82e96ca4041",
       "storeId": "knowledge-index-generations"
     },
     {
@@ -7321,7 +7321,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 551,
+      "line": 575,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7329,7 +7329,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 613,
+      "line": 637,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7337,7 +7337,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 684,
+      "line": 710,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7345,7 +7345,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 949,
+      "line": 976,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
