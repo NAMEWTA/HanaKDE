@@ -433,8 +433,18 @@ async function closeElectronApplication(
       throw new Error("Desktop fixture could not terminate its owned application");
     }
   }
-  if (serverPid === null || await waitForPidExit(serverPid, 10_000)) return;
-  await terminateProcessTree(serverPid);
+  if (serverPid === null) return;
+  if (process.platform === "win32") {
+    // The fixture owns this bootstrap process and has just terminated its
+    // Electron parent tree above. Do not spend ten seconds per isolated
+    // scenario waiting for a detached Windows child to observe a graceful
+    // parent shutdown; terminate and verify the owned tree directly.
+    await terminateProcessTree(serverPid);
+  } else if (await waitForPidExit(serverPid, 10_000)) {
+    return;
+  } else {
+    await terminateProcessTree(serverPid);
+  }
   if (!await waitForPidExit(serverPid, 5_000)) {
     throw new Error("Desktop fixture could not terminate its owned server");
   }
