@@ -221,9 +221,9 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         process.execPath,
         [
           // Invoking the package's CLI entry through the current Node binary
-          // avoids a Windows cmd.exe wrapper per E2E fixture. The wrapper
-          // otherwise remains a child of the Playwright worker and has caused
-          // a native worker exit during the later resource-operation stories.
+          // avoids a Windows cmd.exe wrapper per E2E fixture. Keeping the
+          // Vite process direct makes the fixture's process-tree ownership
+          // explicit during Windows teardown.
           path.resolve("node_modules", "vite", "bin", "vite.js"),
           "--config",
           path.resolve("vite.config.ts"),
