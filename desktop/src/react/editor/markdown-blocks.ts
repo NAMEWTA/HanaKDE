@@ -1,4 +1,4 @@
-import { syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import { findMarkdownFrontMatterRange } from '../utils/markdown-document';
 
@@ -32,7 +32,13 @@ export interface MarkdownBlockMove {
 export function collectMarkdownBlocks(state: EditorState): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = [];
   const protectedFrontMatter = findMarkdownFrontMatterRange(state.doc.toString());
-  let node = syntaxTree(state).topNode.firstChild;
+  // `syntaxTree` is allowed to be partial. Block-level operations must never
+  // silently omit the not-yet-parsed tail of a document, so complete the parse
+  // before walking its direct children. Keep the existing tree as a fallback
+  // for unusually large documents that cannot be completed in CodeMirror's
+  // bounded synchronous parsing window.
+  const tree = ensureSyntaxTree(state, state.doc.length) ?? syntaxTree(state);
+  let node = tree.topNode.firstChild;
 
   while (node) {
     const overlapsFrontMatter = protectedFrontMatter

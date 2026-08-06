@@ -353,7 +353,7 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     }
   });
 
-  it("restores Electron dialog methods through an idempotent disposer", async () => {
+  it("cleans up Electron dialog stubs according to the fixture lifetime", async () => {
     const originalOpen = async () => ({ canceled: true, filePaths: [] });
     const originalSave = async () => ({ canceled: true, filePath: "" });
     const dialog = {
@@ -386,8 +386,25 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
 
     await dispose();
     await dispose();
-    expect(dialog.showOpenDialog).toBe(originalOpen);
-    expect(dialog.showSaveDialog).toBe(originalSave);
+    if (process.platform === "win32") {
+      // The Windows fixture ends the complete app process tree after each
+      // scenario, so restoring a method through a potentially closing IPC
+      // channel is deliberately skipped. The stub must remain in place until
+      // that process is terminated.
+      expect(dialog.showOpenDialog).not.toBe(originalOpen);
+      expect(dialog.showSaveDialog).not.toBe(originalSave);
+      expect(await dialog.showOpenDialog()).toEqual({
+        canceled: false,
+        filePaths: ["/isolated/import.md"],
+      });
+      expect(await dialog.showSaveDialog()).toEqual({
+        canceled: false,
+        filePath: "/isolated/save.md",
+      });
+    } else {
+      expect(dialog.showOpenDialog).toBe(originalOpen);
+      expect(dialog.showSaveDialog).toBe(originalSave);
+    }
   });
 
   it("keeps all 193 user stories singly owned and release evidence fail-closed", () => {
