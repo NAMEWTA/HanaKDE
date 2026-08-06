@@ -66,6 +66,7 @@ const excludedRuntimeDirectories = new Set([
   "dist",
   "node_modules",
 ]);
+const ephemeralClosureScratchName = /^\.cli-closure-nft-scratch-[a-z0-9_-]+\.mjs$/i;
 const silverBulletRuntimeReference =
   /@silverbulletmd\/silverbullet|(?:^|[^A-Za-z0-9_-])silverbullet[\\/]/i;
 
@@ -181,6 +182,13 @@ function collectProductionTextFiles(
 
   for (const entry of readdirSync(absoluteDirectory, { withFileTypes: true })) {
     if (entry.isDirectory() && excludedRuntimeDirectories.has(entry.name)) {
+      continue;
+    }
+    // `compute-cli-closure` creates this esbuild/NFT input only while its
+    // dedicated audit is running, then removes it in finally. It is neither
+    // a runtime manifest nor distributable source, so racing a simultaneous
+    // integrity scan must not turn that temporary path into a required file.
+    if (relativeDirectory === "build" && ephemeralClosureScratchName.test(entry.name)) {
       continue;
     }
     const relativePath = path.posix.join(relativeDirectory, entry.name);
@@ -359,7 +367,9 @@ describe("SilverBullet reference integrity", () => {
   });
 
   it("keeps SilverBullet out of production sources and runtime manifests", async () => {
-    for (const relativePath of productionRuntimeFiles()) {
+    const runtimeFiles = productionRuntimeFiles();
+    expect(runtimeFiles.some((relativePath) => relativePath.startsWith("build/.cli-closure-nft-scratch-"))).toBe(false);
+    for (const relativePath of runtimeFiles) {
       let content = readFileSync(path.join(repoRoot, relativePath), "utf8");
       if (relativePath === "vitest.config.js") {
         const allowedDiscoveryExclude = '"silverbullet/**"';
