@@ -46,6 +46,12 @@ type KnowledgeWorkerFixtures = {
   knowledgeBrowser: Browser | null;
 };
 
+// Electron's main-process evaluation uses a separate IPC channel.  During
+// Windows shutdown the child can already be wedged while that channel still
+// accepts the request, so this request must not prevent the process-tree
+// verification and taskkill fallback below from running.
+const ELECTRON_QUIT_REQUEST_TIMEOUT_MS = 5_000;
+
 /**
  * These are the same fixed applicability gates asserted in the individual
  * stories. Keeping the lightweight classification here lets Playwright mark a
@@ -407,17 +413,9 @@ async function closeElectronApplication(
   const serverPid = knownServerPid ?? await readServerPid(hanaHome);
   const child = application.process();
   if (child.exitCode === null && child.signalCode === null) {
-    try {
-      await application.evaluate(({ app, BrowserWindow }) => {
-        for (const window of BrowserWindow.getAllWindows()) {
-          window.destroy();
-        }
-        app.quit();
-      });
-    } catch {
-      // The Electron transport may close before the evaluate reply arrives.
-      // Process and owned-server verification below remain authoritative.
-    }
+    await requestElectronQuit(application);
+    // The Electron transport may close or its IPC reply may stall during
+    // shutdown. Process and owned-server verification below are authoritative.
     if (!await waitForProcessExit(child, 15_000)) {
       await terminateProcessTree(child.pid);
       await waitForProcessExit(child, 5_000);
@@ -427,6 +425,25 @@ async function closeElectronApplication(
   await terminateProcessTree(serverPid);
   if (!await waitForPidExit(serverPid, 5_000)) {
     throw new Error("Desktop fixture could not terminate its owned server");
+  }
+}
+
+async function requestElectronQuit(application: ElectronApplication): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      application.evaluate(({ app, BrowserWindow }) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.destroy();
+        }
+        app.quit();
+      }).catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ELECTRON_QUIT_REQUEST_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
