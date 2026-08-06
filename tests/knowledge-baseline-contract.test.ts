@@ -241,8 +241,9 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       'path.resolve("node_modules", "vite", "bin", "vite.js")',
     );
     expect(appFixture).toContain("windowsHide: true");
-    expect(appFixture).toContain("knowledgeBrowser: [async ({ playwright }, use) =>");
+    expect(appFixture).toContain("knowledgeBrowser: [async ({ playwright }, use, workerInfo) =>");
     expect(appFixture).toContain('{ scope: "worker" }');
+    expect(appFixture).toContain('if (workerInfo.project.name === "desktop-full")');
     expect(appFixture).toContain("await terminateProcessTree(child.pid);");
     expect(appFixture).not.toContain("vite.cmd");
     expect(appFixture).not.toContain("shell: process.platform === \"win32\"");

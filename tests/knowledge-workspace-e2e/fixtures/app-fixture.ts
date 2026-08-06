@@ -43,7 +43,7 @@ type KnowledgeFixtures = {
 type KnowledgeRuntime = KnowledgeFixtures["knowledgeApp"]["runtime"];
 
 type KnowledgeWorkerFixtures = {
-  knowledgeBrowser: Browser;
+  knowledgeBrowser: Browser | null;
 };
 
 /**
@@ -87,7 +87,15 @@ function isRuntimeApplicable(testInfo: { title: string }, runtime: KnowledgeRunt
 }
 
 export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
-  knowledgeBrowser: [async ({ playwright }, use) => {
+  knowledgeBrowser: [async ({ playwright }, use, workerInfo) => {
+    // Desktop scenarios use Electron's own Chromium. Do not launch an unused
+    // Playwright Chromium process alongside it: on Windows that extra native
+    // host competes with Electron's process tree but cannot serve a desktop
+    // scenario. Web projects still share one browser per worker below.
+    if (workerInfo.project.name === "desktop-full") {
+      await use(null);
+      return;
+    }
     // A fresh BrowserContext remains test-scoped below, so browser state never
     // crosses a scenario boundary. Keeping Chromium itself worker-scoped
     // avoids repeatedly creating and destroying the native browser host on
@@ -250,6 +258,9 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
       processes.push(vite);
       const appUrl = `http://127.0.0.1:${clientPort}/index.html`;
       await waitForHttp(appUrl, vite);
+      if (knowledgeBrowser === null) {
+        throw new Error("web Knowledge fixture requires its worker browser");
+      }
       browserContext = await knowledgeBrowser.newContext();
       const page = await browserContext.newPage();
       await page.goto(appUrl, { waitUntil: "domcontentloaded" });
