@@ -158,14 +158,28 @@ jobs:
       - name: Run Knowledge Workspace project/platform gate
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Linux" ] && [ "${{ matrix.project }}" = "desktop-full" ]; then
-            xvfb-run --auto-servernum npx playwright test \
-              -c tests/knowledge-workspace-e2e/playwright.config.ts \
-              --project=${{ matrix.project }}
+          run_project() {
+            if [ "$RUNNER_OS" = "Linux" ] && [ "${{ matrix.project }}" = "desktop-full" ]; then
+              xvfb-run --auto-servernum npx playwright test \
+                -c tests/knowledge-workspace-e2e/playwright.config.ts \
+                --project=${{ matrix.project }} "$@"
+            else
+              npx playwright test \
+                -c tests/knowledge-workspace-e2e/playwright.config.ts \
+                --project=${{ matrix.project }} "$@"
+            fi
+          }
+
+          # E2E-KW-022 keeps a child process continuously replacing a parent
+          # directory with a junction on Windows. Run that real security gate
+          # in its own one-shot Playwright worker, then run every other Web
+          # Open story once. This is process isolation, not a retry: both
+          # commands are mandatory and retries stay disabled in the config.
+          if [ "$RUNNER_OS" = "Windows" ] && [ "${{ matrix.project }}" = "web-open" ]; then
+            run_project --grep 'E2E-KW-022'
+            run_project --grep-invert 'E2E-KW-022'
           else
-            npx playwright test \
-              -c tests/knowledge-workspace-e2e/playwright.config.ts \
-              --project=${{ matrix.project }}
+            run_project
           fi
 
       - name: Upload Knowledge Workspace E2E artifacts

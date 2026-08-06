@@ -248,6 +248,20 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(appFixture).not.toContain("shell: process.platform === \"win32\"");
   });
 
+  it("runs the Windows junction TOCTOU scenario in an independent, non-retried worker", () => {
+    const ci = fs.readFileSync(
+      path.join(repositoryRoot, ".github/workflows/ci.yml"),
+      "utf8",
+    );
+
+    expect(ci).toContain(
+      'if [ "$RUNNER_OS" = "Windows" ] && [ "${{ matrix.project }}" = "web-open" ]; then',
+    );
+    expect(ci).toContain("run_project --grep 'E2E-KW-022'");
+    expect(ci).toContain("run_project --grep-invert 'E2E-KW-022'");
+    expect(ci).toContain("This is process isolation, not a retry");
+  });
+
   it("builds isolated launch configs without inheriting user or Hana environment", async () => {
     const first = await createKnowledgeWorkspaceSandbox(0);
     const second = await createKnowledgeWorkspaceSandbox(0);
