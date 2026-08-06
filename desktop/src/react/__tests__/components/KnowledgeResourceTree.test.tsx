@@ -317,6 +317,25 @@ describe('KnowledgeResourceTree', () => {
     expect(screen.queryByText('main-before.md')).not.toBeInTheDocument();
   });
 
+  it('takes one catch-up snapshot when the first expanded source-root listing is empty', async () => {
+    let calls = 0;
+    const list = vi.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? listResult([])
+        : listResult([{ name: 'appeared-after-watch.md', isDirectory: false }]);
+    });
+
+    renderTree({
+      client: treeClient(list),
+      sources: [mainSource],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+
+    expect(await screen.findByText('appeared-after-watch.md')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
   it('restores expansion only inside the same workspace session', async () => {
     const list = vi.fn(async ({ relativePath }) => (
       relativePath === ''

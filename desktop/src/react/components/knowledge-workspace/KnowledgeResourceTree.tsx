@@ -221,6 +221,15 @@ export const KnowledgeResourceTree = forwardRef<
   const controllersRef = useRef(new Map<string, AbortController>());
   const requestIdsRef = useRef(new Map<string, number>());
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialRootCatchUpKeysRef = useRef(new Set<string>());
+  const initialRootCatchUpTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
+  const loadDirectoryRef = useRef<((
+    source: KnowledgeSourceDto,
+    relativePath: string,
+    force?: boolean,
+  ) => Promise<void>) | null>(null);
   const pendingLocateKeyRef = useRef<string | null>(null);
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
@@ -320,6 +329,29 @@ export const KnowledgeResourceTree = forwardRef<
           status: 'ready',
         },
       }));
+      // A source root can be created or externally populated immediately
+      // before this tree establishes its watch. One empty initial snapshot
+      // would otherwise remain visible until a later filesystem event. Take
+      // one delayed snapshot to close that blind window, without polling an
+      // intentionally empty workspace or changing explicit retry behavior.
+      if (
+        relativePath === ''
+        && visibleItems.length === 0
+        && !initialRootCatchUpKeysRef.current.has(key)
+      ) {
+        initialRootCatchUpKeysRef.current.add(key);
+        const timer = setTimeout(() => {
+          initialRootCatchUpTimersRef.current.delete(key);
+          if (workspaceKeyRef.current !== requestWorkspaceKey) return;
+          const currentSource = sourcesRef.current.find(
+            (candidate) => candidate.sourceKey === source.sourceKey,
+          );
+          if (currentSource) {
+            void loadDirectoryRef.current?.(currentSource, '', true);
+          }
+        }, Math.max(0, refreshDelayMs));
+        initialRootCatchUpTimersRef.current.set(key, timer);
+      }
     } catch {
       if (
         controller.signal.aborted
@@ -340,7 +372,9 @@ export const KnowledgeResourceTree = forwardRef<
         controllersRef.current.delete(key);
       }
     }
-  }, [client, sortBySource, updateDirectories, workspaceKey]);
+  }, [client, refreshDelayMs, sortBySource, updateDirectories, workspaceKey]);
+
+  loadDirectoryRef.current = loadDirectory;
 
   const refreshLoadedDirectories = useCallback(() => {
     const currentExpanded = useStore.getState().knowledgeExpandedPathsBySource;
@@ -363,6 +397,11 @@ export const KnowledgeResourceTree = forwardRef<
     for (const controller of controllersRef.current.values()) controller.abort();
     controllersRef.current.clear();
     requestIdsRef.current.clear();
+    for (const timer of initialRootCatchUpTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    initialRootCatchUpTimersRef.current.clear();
+    initialRootCatchUpKeysRef.current.clear();
     directoriesRef.current = {};
     setDirectories({});
     setSortBySource({});
@@ -418,6 +457,11 @@ export const KnowledgeResourceTree = forwardRef<
 
   useEffect(() => () => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    for (const timer of initialRootCatchUpTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    initialRootCatchUpTimersRef.current.clear();
+    initialRootCatchUpKeysRef.current.clear();
     for (const controller of controllersRef.current.values()) controller.abort();
     controllersRef.current.clear();
   }, []);
