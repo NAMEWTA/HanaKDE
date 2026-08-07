@@ -9,6 +9,7 @@ import {
 } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 import {
@@ -52,6 +53,15 @@ type KnowledgeWorkerFixtures = {
 // verification and taskkill fallback below from running.
 const ELECTRON_QUIT_REQUEST_TIMEOUT_MS = 5_000;
 const WINDOWS_TASKKILL_TIMEOUT_MS = 5_000;
+const nodeRequire = createRequire(import.meta.url);
+
+function resolveElectronExecutable(): string {
+  const executable = nodeRequire("electron");
+  if (typeof executable !== "string") {
+    throw new Error("Electron test executable is unavailable");
+  }
+  return executable;
+}
 
 /**
  * These are the same fixed applicability gates asserted in the individual
@@ -168,6 +178,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
     if (runtime === "desktop-full") {
       const electronApplication = await _electron.launch({
         args: [
+          ...(launchConfig.electronLoader ? ["-r", launchConfig.electronLoader] : []),
           path.resolve("desktop/bootstrap.cjs"),
           ...launchConfig.electronArgs,
         ],
@@ -176,6 +187,9 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
           ...launchConfig.env,
           HANA_DEV_NODE_BIN: process.execPath,
         },
+        ...(launchConfig.electronLoader
+          ? { executablePath: resolveElectronExecutable() }
+          : {}),
         timeout: 90_000,
       });
       let serverPid: number | null = null;

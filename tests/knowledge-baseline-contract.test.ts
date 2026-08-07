@@ -318,6 +318,7 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
         requestedPort: 0,
         workspaceRoot: first.mainSource,
         electronArgs: [`--user-data-dir=${first.electronUserData}`],
+        electronLoader: null,
         env: {
           PATH: "/test/bin",
           HOME: first.userHome,
@@ -344,6 +345,13 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       expect(windowsLaunch.electronArgs).toEqual([
         `--user-data-dir=${first.electronUserData}`,
       ]);
+      expect(windowsLaunch.electronLoader).toBe(path.join(
+        repositoryRoot,
+        "tests",
+        "knowledge-workspace-e2e",
+        "fixtures",
+        "windows-electron-loader.cjs",
+      ));
       expect(windowsLaunch.env.ELECTRON_NO_ATTACH_CONSOLE).toBe("1");
       expect(firstLaunch.env).not.toHaveProperty("HANA_TOKEN");
       expect(firstLaunch.env).not.toHaveProperty("SECRET_UNRELATED");

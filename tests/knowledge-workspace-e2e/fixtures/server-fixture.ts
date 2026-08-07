@@ -7,6 +7,7 @@ export type KnowledgeLaunchConfig = {
   requestedPort: 0;
   workspaceRoot: string;
   electronArgs: string[];
+  electronLoader: string | null;
 };
 
 const PASSTHROUGH_ENV_KEYS = [
@@ -52,6 +53,9 @@ export function createKnowledgeLaunchConfig(
     electronArgs: [
       `--user-data-dir=${workspace.electronUserData}`,
     ],
+    electronLoader: platform === "win32"
+      ? path.join(productRoot, "tests", "knowledge-workspace-e2e", "fixtures", "windows-electron-loader.cjs")
+      : null,
     env: {
       ...selectedProcessEnvironment(sourceEnv),
       HOME: workspace.userHome,
