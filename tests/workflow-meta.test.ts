@@ -25,6 +25,12 @@ describe("workflow meta extraction", () => {
     expect(meta.phases).toEqual([{ title: "X" }]);
   });
 
+  it("只接受静态 meta 字面量，不执行表达式", () => {
+    expect(() => extractMeta(
+      `export const meta = { name: 'a', description: dangerous() }\nreturn []`,
+    )).toThrow(/不是合法对象字面量/);
+  });
+
   it("缺 meta 抛错", () => {
     expect(() => extractMeta(`return 1`)).toThrow(/必须以 export const meta/);
   });

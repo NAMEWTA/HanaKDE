@@ -20,9 +20,17 @@ function makeTempDir(prefix: string) {
   return dir;
 }
 
-afterEach(() => {
+afterEach(async () => {
   for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+    // A rejected pack can still be unwinding an fs handle when the test body
+    // settles. Require cleanup to complete, but use Node's bounded ENOTEMPTY
+    // retry rather than leaving a transient temporary tree behind.
+    await fsp.rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 50,
+    });
   }
 });
 

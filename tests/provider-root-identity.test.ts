@@ -1,12 +1,13 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { upsertStudioMount } from "../core/studio-mounts.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import { MountProvider } from "../lib/resource-io/providers/mount-provider.ts";
 import {
   ProviderRootIdentityBroker,
+  resolveLocalFsRootIdentity,
 } from "../lib/resource-io/root-identity.ts";
 
 describe("provider root identity", () => {
@@ -45,6 +46,27 @@ describe("provider root identity", () => {
     expect(await broker.compareRoots(mainIdentity, childIdentity)).toBe("ancestor");
     expect(await broker.compareRoots(childIdentity, mainIdentity)).toBe("descendant");
     expect(await broker.compareRoots(mainIdentity, siblingIdentity)).toBe("disjoint");
+  });
+
+  it("falls back to canonical roots when a filesystem reports inode zero", async () => {
+    const { main, sibling } = setup();
+    const statSync = fs.statSync.bind(fs);
+    const statSpy = vi.spyOn(fs, "statSync").mockImplementation(((target, options) => {
+      const stat = statSync(target, options as fs.StatSyncOptions | undefined);
+      return Object.assign(Object.create(stat), { dev: 0, ino: 0 }) as fs.Stats;
+    }) as typeof fs.statSync);
+
+    try {
+      const mainIdentity = resolveLocalFsRootIdentity("local_fs", main);
+      const siblingIdentity = resolveLocalFsRootIdentity("local_fs", sibling);
+      expect(mainIdentity.opaqueRootId).not.toBe(siblingIdentity.opaqueRootId);
+      await expect(new ProviderRootIdentityBroker().compareRoots(
+        mainIdentity,
+        siblingIdentity,
+      )).resolves.toBe("disjoint");
+    } finally {
+      statSpy.mockRestore();
+    }
   });
 
   it("places local-file and local backing mounts in the same namespace", async () => {
