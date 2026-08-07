@@ -51,15 +51,6 @@ export function createKnowledgeLaunchConfig(
     workspaceRoot: workspace.mainSource,
     electronArgs: [
       `--user-data-dir=${workspace.electronUserData}`,
-      // GitHub-hosted Windows has neither an attached console nor a stable
-      // interactive desktop session. Run Electron's real main process,
-      // preload, renderer, and native bridge headlessly so Playwright's
-      // remote-debugging endpoint does not depend on a visible desktop. The
-      // flags must apply before Electron reaches app.whenReady().
-      ...(platform === "win32" ? [
-        "--no-stdio-init",
-        "--headless",
-      ] : []),
     ],
     env: {
       ...selectedProcessEnvironment(sourceEnv),
@@ -80,6 +71,11 @@ export function createKnowledgeLaunchConfig(
       HANA_PORT: "0",
       HANA_CREATE_STARTUP_SESSION: "0",
       HANA_KNOWLEDGE_E2E: "1",
+      // Playwright discovers Electron's Chromium endpoint from its process
+      // streams. Keep the real desktop process and stdio intact, while this
+      // early Windows-only Electron setting prevents an inherited console
+      // attachment from interfering with that endpoint handshake.
+      ...(platform === "win32" ? { ELECTRON_NO_ATTACH_CONSOLE: "1" } : {}),
     },
   };
 }

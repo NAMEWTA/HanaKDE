@@ -343,9 +343,8 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       );
       expect(windowsLaunch.electronArgs).toEqual([
         `--user-data-dir=${first.electronUserData}`,
-        "--no-stdio-init",
-        "--headless",
       ]);
+      expect(windowsLaunch.env.ELECTRON_NO_ATTACH_CONSOLE).toBe("1");
       expect(firstLaunch.env).not.toHaveProperty("HANA_TOKEN");
       expect(firstLaunch.env).not.toHaveProperty("SECRET_UNRELATED");
       expect(secondLaunch.env.HANA_PORT).toBe("0");
