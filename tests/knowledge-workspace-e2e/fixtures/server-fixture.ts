@@ -51,10 +51,12 @@ export function createKnowledgeLaunchConfig(
     workspaceRoot: workspace.mainSource,
     electronArgs: [
       `--user-data-dir=${workspace.electronUserData}`,
-      // GitHub-hosted Windows has no interactive GPU session. These
-      // fixture-only Chromium switches apply before Electron reaches
-      // app.whenReady(), while preserving the real desktop main process.
+      // GitHub-hosted Windows has neither an attached console nor an
+      // interactive GPU session. Both fixture-only constraints must apply
+      // before Electron reaches app.whenReady(), while preserving the real
+      // desktop main process and native bridge.
       ...(platform === "win32" ? [
+        "--no-stdio-init",
         "--disable-gpu",
         "--disable-gpu-compositing",
         "--disable-gpu-rasterization",

@@ -343,6 +343,7 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       );
       expect(windowsLaunch.electronArgs).toEqual([
         `--user-data-dir=${first.electronUserData}`,
+        "--no-stdio-init",
         "--disable-gpu",
         "--disable-gpu-compositing",
         "--disable-gpu-rasterization",
