@@ -15,6 +15,7 @@ import {
   KnowledgeResourceTree,
   type KnowledgeResourceTreeChangeSignal,
 } from '../../components/knowledge-workspace/KnowledgeResourceTree';
+import type { ResourceWatchRelease } from '../../services/resource-events';
 import { useStore } from '../../stores';
 
 const mainSource: KnowledgeSourceDto = {
@@ -88,7 +89,7 @@ function renderTree({
   subscribeToChanges?: (
     listener: (signal: KnowledgeResourceTreeChangeSignal) => void,
   ) => () => void;
-  watchSource?: (sourceKey: string) => () => void;
+  watchSource?: (sourceKey: string) => ResourceWatchRelease;
 }) {
   return render(
     <KnowledgeResourceTree
@@ -333,6 +334,38 @@ describe('KnowledgeResourceTree', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
 
     expect(await screen.findByText('appeared-after-watch.md')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalidates an expanded empty root when its source watch is confirmed', async () => {
+    let confirmWatch: (() => void) | undefined;
+    const watchReady = new Promise<void>((resolve) => {
+      confirmWatch = resolve;
+    });
+    const release = vi.fn() as ResourceWatchRelease;
+    Object.defineProperty(release, 'ready', {
+      value: watchReady,
+      enumerable: false,
+    });
+    let revision = 0;
+    const list = vi.fn(async () => (
+      revision === 0
+        ? listResult([])
+        : listResult([{ name: 'written-after-watch.md', isDirectory: false }])
+    ));
+
+    renderTree({
+      client: treeClient(list),
+      sources: [mainSource],
+      watchSource: () => release,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+
+    revision = 1;
+    act(() => confirmWatch?.());
+
+    expect(await screen.findByText('written-after-watch.md')).toBeInTheDocument();
     expect(list).toHaveBeenCalledTimes(2);
   });
 

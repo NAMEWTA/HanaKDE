@@ -22,6 +22,7 @@ import {
   retainKnowledgeSourceWatch,
   subscribeKnowledgeResourceTreeChanges,
   type KnowledgeResourceTreeChangeSignal,
+  type ResourceWatchRelease,
 } from '../../services/resource-events';
 import { useStore } from '../../stores';
 import {
@@ -59,7 +60,7 @@ type DirectoryStateMap = Record<string, DirectoryState>;
 // leaving intentionally empty roots idle afterwards.
 const INITIAL_ROOT_CATCH_UP_DELAY_MS = 500;
 
-type WatchSource = (sourceKey: string) => () => void;
+type WatchSource = (sourceKey: string) => ResourceWatchRelease;
 type SubscribeToChanges = (
   listener: (signal: KnowledgeResourceTreeChangeSignal) => void,
 ) => () => void;
@@ -232,6 +233,7 @@ export const KnowledgeResourceTree = forwardRef<
   const initialRootCatchUpTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
+  const watchReadyCatchUpKeysRef = useRef(new Set<string>());
   const loadDirectoryRef = useRef<((
     source: KnowledgeSourceDto,
     relativePath: string,
@@ -409,6 +411,7 @@ export const KnowledgeResourceTree = forwardRef<
     }
     initialRootCatchUpTimersRef.current.clear();
     initialRootCatchUpKeysRef.current.clear();
+    watchReadyCatchUpKeysRef.current.clear();
     directoriesRef.current = {};
     setDirectories({});
     setSortBySource({});
@@ -443,16 +446,38 @@ export const KnowledgeResourceTree = forwardRef<
   }, [sources, updateDirectories]);
 
   useEffect(() => {
+    let active = true;
     const releaseWatches = sources
       .filter((source) => (
         source.availability === 'available'
         && source.capabilities.includes('watch')
       ))
-      .map((source) => watchSource(source.sourceKey));
+      .map((source) => ({ source, release: watchSource(source.sourceKey) }));
+
+    for (const { source, release } of releaseWatches) {
+      void release.ready?.then(() => {
+        const key = directoryKey(source.sourceKey, '');
+        if (
+          !active
+          || workspaceKeyRef.current !== workspaceKey
+          || watchReadyCatchUpKeysRef.current.has(key)
+        ) {
+          return;
+        }
+        const currentSource = sourcesRef.current.find(
+          (candidate) => candidate.sourceKey === source.sourceKey,
+        );
+        if (!currentSource || !directoriesRef.current[key]) return;
+        watchReadyCatchUpKeysRef.current.add(key);
+        void loadDirectoryRef.current?.(currentSource, '', true);
+      });
+    }
+
     return () => {
-      for (const release of releaseWatches) release();
+      active = false;
+      for (const { release } of releaseWatches) release();
     };
-  }, [sources, watchSource]);
+  }, [sources, watchSource, workspaceKey]);
 
   useEffect(() => subscribeToChanges(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
@@ -469,6 +494,7 @@ export const KnowledgeResourceTree = forwardRef<
     }
     initialRootCatchUpTimersRef.current.clear();
     initialRootCatchUpKeysRef.current.clear();
+    watchReadyCatchUpKeysRef.current.clear();
     for (const controller of controllersRef.current.values()) controller.abort();
     controllersRef.current.clear();
   }, []);
