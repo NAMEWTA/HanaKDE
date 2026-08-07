@@ -51,16 +51,14 @@ export function createKnowledgeLaunchConfig(
     workspaceRoot: workspace.mainSource,
     electronArgs: [
       `--user-data-dir=${workspace.electronUserData}`,
-      // GitHub-hosted Windows has neither an attached console nor an
-      // interactive GPU session. Both fixture-only constraints must apply
-      // before Electron reaches app.whenReady(), while preserving the real
-      // desktop main process and native bridge.
+      // GitHub-hosted Windows has neither an attached console nor a stable
+      // interactive desktop session. Run Electron's real main process,
+      // preload, renderer, and native bridge headlessly so Playwright's
+      // remote-debugging endpoint does not depend on a visible desktop. The
+      // flags must apply before Electron reaches app.whenReady().
       ...(platform === "win32" ? [
         "--no-stdio-init",
-        "--disable-gpu",
-        "--disable-gpu-compositing",
-        "--disable-gpu-rasterization",
-        "--disable-software-rasterizer",
+        "--headless",
       ] : []),
     ],
     env: {
