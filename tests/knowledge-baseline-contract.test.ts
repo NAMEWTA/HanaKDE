@@ -343,7 +343,10 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       );
       expect(windowsLaunch.electronArgs).toEqual([
         `--user-data-dir=${first.electronUserData}`,
-        "--no-stdio-init",
+        "--disable-gpu",
+        "--disable-gpu-compositing",
+        "--disable-gpu-rasterization",
+        "--disable-software-rasterizer",
       ]);
       expect(firstLaunch.env).not.toHaveProperty("HANA_TOKEN");
       expect(firstLaunch.env).not.toHaveProperty("SECRET_UNRELATED");

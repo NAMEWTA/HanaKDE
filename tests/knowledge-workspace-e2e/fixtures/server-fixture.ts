@@ -51,11 +51,15 @@ export function createKnowledgeLaunchConfig(
     workspaceRoot: workspace.mainSource,
     electronArgs: [
       `--user-data-dir=${workspace.electronUserData}`,
-      // Playwright starts Electron without an attached Windows console. This
-      // fixture-only Electron switch avoids Node's stdio initialization path
-      // when the hosted worker has no usable NUL device; it must be present
-      // before Electron loads the application entrypoint.
-      ...(platform === "win32" ? ["--no-stdio-init"] : []),
+      // GitHub-hosted Windows has no interactive GPU session. These
+      // fixture-only Chromium switches apply before Electron reaches
+      // app.whenReady(), while preserving the real desktop main process.
+      ...(platform === "win32" ? [
+        "--disable-gpu",
+        "--disable-gpu-compositing",
+        "--disable-gpu-rasterization",
+        "--disable-software-rasterizer",
+      ] : []),
     ],
     env: {
       ...selectedProcessEnvironment(sourceEnv),

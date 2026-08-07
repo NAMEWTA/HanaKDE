@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -508,7 +509,9 @@ export const KnowledgeResourceTree = forwardRef<
   }), [toggleDirectory]);
   useEffect(() => () => dragController.dispose(), [dragController]);
 
-  useEffect(() => {
+  // A rendered row may receive a pointer event before passive effects run.
+  // Keep the reducer's semantic lookup in lockstep with that rendered list.
+  useLayoutEffect(() => {
     dispatchSelection({ type: 'replace-visible', nodes: visibleNodes });
   }, [visibleNodes]);
 
@@ -552,7 +555,9 @@ export const KnowledgeResourceTree = forwardRef<
       const next = [...current];
       for (const ancestor of ancestors) {
         if (!next.includes(ancestor)) next.push(ancestor);
-        void loadDirectory(source, ancestor);
+        // Locating a resource immediately after a mutation cannot rely on a
+        // platform watcher having delivered the invalidation already.
+        void loadDirectory(source, ancestor, true);
       }
       setExpandedPaths(target.sourceKey, next);
     },
