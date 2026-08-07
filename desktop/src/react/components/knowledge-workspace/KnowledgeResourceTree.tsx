@@ -341,6 +341,7 @@ export const KnowledgeResourceTree = forwardRef<
       }));
       if (
         relativePath === ''
+        && visibleItems.length === 0
         && confirmedWatchRootKeysRef.current.has(key)
         && !watchReadyCatchUpKeysRef.current.has(key)
       ) {

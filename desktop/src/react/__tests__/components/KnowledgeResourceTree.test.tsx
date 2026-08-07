@@ -382,11 +382,8 @@ describe('KnowledgeResourceTree', () => {
     let revision = 0;
     const list = vi.fn(async () => (
       revision === 0
-        ? listResult([{ name: 'existing.md', isDirectory: false }])
-        : listResult([
-            { name: 'existing.md', isDirectory: false },
-            { name: 'written-after-early-watch.md', isDirectory: false },
-          ])
+        ? listResult([])
+        : listResult([{ name: 'written-after-early-watch.md', isDirectory: false }])
     ));
 
     renderTree({

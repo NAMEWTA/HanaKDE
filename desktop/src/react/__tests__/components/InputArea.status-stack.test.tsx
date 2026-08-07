@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InputArea } from '../../components/InputArea';
@@ -313,6 +313,10 @@ describe('InputArea status stack', () => {
   });
 
   it('reveals screenshot notice directories in the workspace tree without replacing the desk root', async () => {
+    useStore.setState({
+      compactingSessions: [],
+      capabilityRefreshingSessions: [],
+    } as never);
     render(React.createElement(InputArea));
 
     window.dispatchEvent(new CustomEvent('hana-inline-notice', {
@@ -323,7 +327,9 @@ describe('InputArea status stack', () => {
       },
     }));
 
-    fireEvent.click(await screen.findByTestId('input-status-bars'));
+    const statusBars = await screen.findByTestId('input-status-bars');
+    await waitFor(() => expect(statusBars.textContent).toBe('slash-result'));
+    fireEvent.click(statusBars);
 
     expect(deskActionMocks.toggleJianSidebar).toHaveBeenCalledWith(true);
     expect(deskActionMocks.revealDeskDirectory).toHaveBeenCalledWith('/workspace/OH-Works');
