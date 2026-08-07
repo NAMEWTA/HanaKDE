@@ -233,6 +233,7 @@ export const KnowledgeResourceTree = forwardRef<
   const initialRootCatchUpTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
+  const confirmedWatchRootKeysRef = useRef(new Set<string>());
   const watchReadyCatchUpKeysRef = useRef(new Set<string>());
   const loadDirectoryRef = useRef<((
     source: KnowledgeSourceDto,
@@ -338,6 +339,14 @@ export const KnowledgeResourceTree = forwardRef<
           status: 'ready',
         },
       }));
+      if (
+        relativePath === ''
+        && confirmedWatchRootKeysRef.current.has(key)
+        && !watchReadyCatchUpKeysRef.current.has(key)
+      ) {
+        watchReadyCatchUpKeysRef.current.add(key);
+        void loadDirectoryRef.current?.(source, '', true);
+      }
       // A source root can be created or externally populated immediately
       // before this tree establishes its watch. One empty initial snapshot
       // would otherwise remain visible until a later filesystem event. Take
@@ -411,6 +420,7 @@ export const KnowledgeResourceTree = forwardRef<
     }
     initialRootCatchUpTimersRef.current.clear();
     initialRootCatchUpKeysRef.current.clear();
+    confirmedWatchRootKeysRef.current.clear();
     watchReadyCatchUpKeysRef.current.clear();
     directoriesRef.current = {};
     setDirectories({});
@@ -457,6 +467,7 @@ export const KnowledgeResourceTree = forwardRef<
     for (const { source, release } of releaseWatches) {
       void release.ready?.then(() => {
         const key = directoryKey(source.sourceKey, '');
+        confirmedWatchRootKeysRef.current.add(key);
         if (
           !active
           || workspaceKeyRef.current !== workspaceKey
@@ -494,6 +505,7 @@ export const KnowledgeResourceTree = forwardRef<
     }
     initialRootCatchUpTimersRef.current.clear();
     initialRootCatchUpKeysRef.current.clear();
+    confirmedWatchRootKeysRef.current.clear();
     watchReadyCatchUpKeysRef.current.clear();
     for (const controller of controllersRef.current.values()) controller.abort();
     controllersRef.current.clear();

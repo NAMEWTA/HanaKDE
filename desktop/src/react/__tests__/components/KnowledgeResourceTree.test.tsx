@@ -369,6 +369,39 @@ describe('KnowledgeResourceTree', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
+  it('revalidates after a watch confirms before the first root snapshot arrives', async () => {
+    let confirmWatch: (() => void) | undefined;
+    const watchReady = new Promise<void>((resolve) => {
+      confirmWatch = resolve;
+    });
+    const release = vi.fn() as ResourceWatchRelease;
+    Object.defineProperty(release, 'ready', {
+      value: watchReady,
+      enumerable: false,
+    });
+    let revision = 0;
+    const list = vi.fn(async () => (
+      revision === 0
+        ? listResult([{ name: 'existing.md', isDirectory: false }])
+        : listResult([
+            { name: 'existing.md', isDirectory: false },
+            { name: 'written-after-early-watch.md', isDirectory: false },
+          ])
+    ));
+
+    renderTree({
+      client: treeClient(list),
+      sources: [mainSource],
+      watchSource: () => release,
+    });
+    act(() => confirmWatch?.());
+    revision = 1;
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+
+    expect(await screen.findByText('written-after-early-watch.md')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
   it('restores expansion only inside the same workspace session', async () => {
     const list = vi.fn(async ({ relativePath }) => (
       relativePath === ''

@@ -176,9 +176,13 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
       testInfo.skip(true, `not applicable to ${runtime}`);
     }
     if (runtime === "desktop-full") {
+      const remoteDebuggingPort = launchConfig.electronLoader
+        ? await reserveLoopbackPort()
+        : null;
       const electronApplication = await _electron.launch({
         args: [
           ...(launchConfig.electronLoader ? ["-r", launchConfig.electronLoader] : []),
+          ...(remoteDebuggingPort ? [`--hana-playwright-cdp-port=${remoteDebuggingPort}`] : []),
           path.resolve("desktop/bootstrap.cjs"),
           ...launchConfig.electronArgs,
         ],
