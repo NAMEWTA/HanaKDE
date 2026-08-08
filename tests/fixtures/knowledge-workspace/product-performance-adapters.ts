@@ -16,6 +16,7 @@ import {
 } from "../../../desktop/src/react/components/knowledge-workspace/resource-tree-selection.ts";
 import { canonicalKnowledgeAddress } from "../../../lib/knowledge-workspace/knowledge-address.ts";
 import {
+  KNOWLEDGE_INDEX_ROOT,
   KnowledgeIndexStore,
   foldSearchText,
   type KnowledgeIndexResourceDocument,
@@ -81,9 +82,11 @@ export function createKnowledgeProductPerformanceAdapters(options: {
   const prepareSearch = async (context: ReferenceBenchmarkContext): Promise<Prepared> => {
     await ensureSearchTemplate(context.dataset);
     const prepared = prepareEmpty(context);
+    const targetIndexRoot = path.join(prepared.home, KNOWLEDGE_INDEX_ROOT);
+    fs.mkdirSync(path.dirname(targetIndexRoot), { recursive: true, mode: 0o700 });
     fs.cpSync(
-      path.join(templateHome, "kw"),
-      path.join(prepared.home, "kw"),
+      path.join(templateHome, KNOWLEDGE_INDEX_ROOT),
+      targetIndexRoot,
       { recursive: true },
     );
     prepared.stores = createStores(prepared.home);

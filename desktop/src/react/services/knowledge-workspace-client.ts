@@ -245,9 +245,15 @@ export type RendererKnowledgeMoveOperationRequest = {
   expectedVersion: RendererResourceVersion;
 };
 
+export type RendererKnowledgeDeleteOperationRequest = {
+  kind: 'delete';
+  addresses: readonly KnowledgeResourceAddress[];
+};
+
 export type RendererKnowledgeOperationRequest =
   | RendererKnowledgeRenameOperationRequest
-  | RendererKnowledgeMoveOperationRequest;
+  | RendererKnowledgeMoveOperationRequest
+  | RendererKnowledgeDeleteOperationRequest;
 
 export type RendererKnowledgeOperationState =
   | 'PLANNED'
@@ -276,13 +282,16 @@ export type RendererKnowledgeOperationProjectionState =
   | 'applied'
   | 'retrying';
 
-export type RendererKnowledgeOperationPlan = {
+type RendererKnowledgeOperationPlanBase = {
   schemaVersion: 1;
   operationId: string;
   requestHash: string;
-  kind: 'rename' | 'move';
   createdAt: string;
   expiresAt: string;
+};
+
+export type RendererKnowledgeRefactorOperationPlan = RendererKnowledgeOperationPlanBase & {
+  kind: 'rename' | 'move';
   checkpointRequired: true;
   items: Array<{
     from: KnowledgeResourceAddress;
@@ -295,23 +304,32 @@ export type RendererKnowledgeOperationPlan = {
   };
 };
 
-export type RendererKnowledgeOperationSummary = {
+export type RendererKnowledgeTrashOperationPlan = RendererKnowledgeOperationPlanBase & {
+  kind: 'delete' | 'restore' | 'cleanup';
+  sourceKey: string;
+  batchId: string;
+  items: Array<{
+    entryId: string;
+    originalAddress: KnowledgeResourceAddress;
+    trashAddress: KnowledgeResourceAddress;
+    targetAddress?: KnowledgeResourceAddress;
+    resourceKind: 'file' | 'directory';
+    expectedVersion: RendererResourceVersion;
+  }>;
+};
+
+export type RendererKnowledgeOperationPlan =
+  | RendererKnowledgeRefactorOperationPlan
+  | RendererKnowledgeTrashOperationPlan;
+
+type RendererKnowledgeOperationSummaryBase = {
   schemaVersion: 1;
   operationId: string;
   requestHash: string;
-  kind: 'rename' | 'move';
   state: RendererKnowledgeOperationState;
   createdAt?: string;
   expiresAt?: string;
   completedAt?: string;
-  items: Array<{
-    from: KnowledgeResourceAddress;
-    to: KnowledgeResourceAddress;
-    state: RendererKnowledgeOperationItemState;
-    checkpointId?: string;
-    errorCode?: string;
-    rollbackStatus?: 'not-required' | 'rolled-back' | 'failed';
-  }>;
   summary?: {
     succeeded: number;
     failed: number;
@@ -324,6 +342,38 @@ export type RendererKnowledgeOperationSummary = {
     index: RendererKnowledgeOperationProjectionState;
   };
 };
+
+export type RendererKnowledgeRefactorOperationSummary = RendererKnowledgeOperationSummaryBase & {
+  kind: 'rename' | 'move';
+  items: Array<{
+    from: KnowledgeResourceAddress;
+    to: KnowledgeResourceAddress;
+    state: RendererKnowledgeOperationItemState;
+    checkpointId?: string;
+    errorCode?: string;
+    rollbackStatus?: 'not-required' | 'rolled-back' | 'failed';
+  }>;
+};
+
+export type RendererKnowledgeTrashOperationSummary = RendererKnowledgeOperationSummaryBase & {
+  kind: 'delete' | 'restore' | 'cleanup';
+  sourceKey: string;
+  batchId: string;
+  items: Array<{
+    entryId: string;
+    originalAddress: KnowledgeResourceAddress;
+    trashAddress: KnowledgeResourceAddress;
+    targetAddress?: KnowledgeResourceAddress;
+    resourceKind: 'file' | 'directory';
+    expectedVersion?: RendererResourceVersion;
+    state: RendererKnowledgeOperationItemState;
+    errorCode?: string;
+  }>;
+};
+
+export type RendererKnowledgeOperationSummary =
+  | RendererKnowledgeRefactorOperationSummary
+  | RendererKnowledgeTrashOperationSummary;
 
 export interface KnowledgeOperationClient {
   plan(
@@ -405,6 +455,8 @@ export interface KnowledgeWorkspaceClient {
   pasteResources(input: { intent: 'copy' | 'cut'; items: readonly KnowledgeResourceAddress[]; target: { sourceKey: string; directoryPath: string } }, options?: KnowledgeWorkspaceRequestOptions): Promise<Array<Record<string, unknown>>>;
   trashResources(addresses: readonly KnowledgeResourceAddress[], options?: KnowledgeWorkspaceRequestOptions): Promise<{ batchId: string; sourceKey: string; items: Array<Record<string, unknown>> }>;
   listTrash(sourceKey: string, options?: KnowledgeWorkspaceRequestOptions): Promise<Array<Record<string, unknown>>>;
+  planTrashRestore(sourceKey: string, batchId: string, entryIds?: readonly string[], options?: KnowledgeWorkspaceRequestOptions): Promise<RendererKnowledgeTrashOperationPlan>;
+  planTrashCleanup(address: KnowledgeResourceAddress, options?: KnowledgeWorkspaceRequestOptions): Promise<RendererKnowledgeTrashOperationPlan>;
   restoreTrash(sourceKey: string, batchId: string, entryIds?: readonly string[], options?: KnowledgeWorkspaceRequestOptions): Promise<Array<Record<string, unknown>>>;
   createNativeGrant(action: 'openDefault' | 'reveal' | 'systemTrash', address: KnowledgeResourceAddress, options?: KnowledgeWorkspaceRequestOptions): Promise<{ grantId: string; expiresAt: number }>;
   listSources(options?: KnowledgeWorkspaceRequestOptions): Promise<KnowledgeSourceDto[]>;
@@ -876,11 +928,20 @@ export function createKnowledgeWorkspaceClient({
       return body.results;
     },
     async trashResources(addresses, options = {}) {
-      const body = await requestJson(fetchImpl, '/api/knowledge-workspace/trash', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addresses }), signal: options.signal,
-      });
-      if (!isRecord(body) || !isRecord(body.result) || typeof body.result.batchId !== 'string' || typeof body.result.sourceKey !== 'string' || !Array.isArray(body.result.items)) throw invalidResponse('trash.result');
-      return { batchId: body.result.batchId, sourceKey: body.result.sourceKey, items: body.result.items.filter(isRecord) };
+      const plan = await operations.plan({ kind: 'delete', addresses }, options);
+      if (plan.kind !== 'delete') throw invalidResponse('trash.plan');
+      const result = await operations.commit(plan.operationId, plan.requestHash, options);
+      if (result.kind !== 'delete') throw invalidResponse('trash.result');
+      return {
+        batchId: result.batchId,
+        sourceKey: result.sourceKey,
+        items: result.items.map((item) => ({
+          entryId: item.entryId,
+          originalAddress: item.originalAddress,
+          ok: item.state === 'applied',
+          ...(item.errorCode === undefined ? {} : { errorCode: item.errorCode }),
+        })),
+      };
     },
     async listTrash(sourceKey, options = {}) {
       validateSourceKey(sourceKey);
@@ -888,18 +949,58 @@ export function createKnowledgeWorkspaceClient({
       if (!isRecord(body) || !Array.isArray(body.batches) || body.batches.some(batch => !isRecord(batch))) throw invalidResponse('trash.batches');
       return body.batches;
     },
-    async restoreTrash(sourceKey, batchId, entryIds, options = {}) {
+    async planTrashRestore(sourceKey, batchId, entryIds, options = {}) {
       validateSourceKey(sourceKey);
-      if (!/^[0-9a-f-]{36}$/iu.test(batchId)) throw invalidResponse('trash.batchId');
-      const body = await requestJson(fetchImpl, `/api/knowledge-workspace/trash/${encodeURIComponent(sourceKey)}/${encodeURIComponent(batchId)}/restore`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(entryIds ? { entryIds } : {}) }), signal: options.signal,
+      validateOperationId(batchId);
+      if (entryIds !== undefined) entryIds.forEach(validateOperationId);
+      const body = await requestJson(fetchImpl, '/api/knowledge-workspace/trash/restore/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceKey, batchId, ...(entryIds ? { entryIds } : {}) }),
+        signal: options.signal,
       });
-      if (!isRecord(body) || !Array.isArray(body.results) || body.results.some(result => !isRecord(result))) throw invalidResponse('trash.restore');
-      return body.results;
+      const plan = parseKnowledgeOperationPlanEnvelope(body);
+      if (plan.kind !== 'restore') throw invalidResponse('trash.restore.plan');
+      return plan;
+    },
+    async planTrashCleanup(address, options = {}) {
+      const body = await requestJson(fetchImpl, '/api/knowledge-workspace/trash/cleanup/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: validateKnowledgeAddress(address) }),
+        signal: options.signal,
+      });
+      const plan = parseKnowledgeOperationPlanEnvelope(body);
+      if (plan.kind !== 'cleanup') throw invalidResponse('trash.cleanup.plan');
+      return plan;
+    },
+    async restoreTrash(sourceKey, batchId, entryIds, options = {}) {
+      const plan = await this.planTrashRestore(sourceKey, batchId, entryIds, options);
+      const result = await operations.commit(plan.operationId, plan.requestHash, options);
+      if (result.kind !== 'restore') throw invalidResponse('trash.restore');
+      return result.items.map((item) => ({
+        entryId: item.entryId,
+        ok: item.state === 'applied',
+        ...(item.state === 'applied' && item.targetAddress
+          ? { restoredAddress: item.targetAddress }
+          : {}),
+        ...(item.errorCode === undefined ? {} : { errorCode: item.errorCode }),
+      }));
     },
     async createNativeGrant(action, address, options = {}) {
+      const safeAddress = validateKnowledgeAddress(address);
+      const cleanupPlan = action === 'systemTrash'
+        ? await this.planTrashCleanup(safeAddress, options)
+        : null;
       const body = await requestJson(fetchImpl, '/api/knowledge-workspace/native/grants', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, address: validateKnowledgeAddress(address) }), signal: options.signal,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          address: safeAddress,
+          ...(cleanupPlan ? { operationId: cleanupPlan.operationId } : {}),
+        }),
+        signal: options.signal,
       });
       if (!isRecord(body) || !isRecord(body.grant) || typeof body.grant.grantId !== 'string' || typeof body.grant.expiresAt !== 'number') throw invalidResponse('native.grant');
       return { grantId: body.grant.grantId, expiresAt: body.grant.expiresAt };
@@ -1668,7 +1769,20 @@ const OPERATION_HASH_PATTERN = /^[a-f0-9]{64}$/;
 function validateKnowledgeOperationRequest(
   input: RendererKnowledgeOperationRequest,
 ): RendererKnowledgeOperationRequest {
-  if (!isRecord(input) || (input.kind !== 'rename' && input.kind !== 'move')) {
+  if (!isRecord(input)) {
+    throw invalidResponse('operation.kind');
+  }
+  if (input.kind === 'delete') {
+    rejectResponseFields(input, new Set(['kind', 'addresses']), 'operation');
+    if (!Array.isArray(input.addresses) || input.addresses.length === 0) {
+      throw invalidResponse('operation.addresses');
+    }
+    return {
+      kind: 'delete',
+      addresses: input.addresses.map((address) => validateKnowledgeAddress(address)),
+    };
+  }
+  if (input.kind !== 'rename' && input.kind !== 'move') {
     throw invalidResponse('operation.kind');
   }
   rejectResponseFields(
@@ -1708,6 +1822,50 @@ function parseKnowledgeOperationPlanEnvelope(
   rejectResponseFields(input, new Set(['plan']), 'plan');
   const plan = input.plan;
   if (!isRecord(plan)) throw invalidResponse('plan');
+  validateOperationIdentity(plan);
+  if (isTrashOperationKind(plan.kind)) {
+    rejectResponseFields(
+      plan,
+      new Set([
+        'schemaVersion',
+        'operationId',
+        'requestHash',
+        'kind',
+        'sourceKey',
+        'batchId',
+        'createdAt',
+        'expiresAt',
+        'items',
+      ]),
+      'plan',
+    );
+    if (
+      typeof plan.sourceKey !== 'string'
+      || typeof plan.batchId !== 'string'
+      || !isOperationCorrelationId(plan.batchId)
+      || !isIsoTimestampValue(plan.createdAt)
+      || !isIsoTimestampValue(plan.expiresAt)
+      || Date.parse(plan.expiresAt) - Date.parse(plan.createdAt) !== 15 * 60 * 1_000
+      || !Array.isArray(plan.items)
+      || plan.items.length === 0
+    ) {
+      throw invalidResponse('plan');
+    }
+    validateSourceKey(plan.sourceKey);
+    return {
+      schemaVersion: 1,
+      operationId: plan.operationId as string,
+      requestHash: plan.requestHash as string,
+      kind: plan.kind,
+      sourceKey: plan.sourceKey,
+      batchId: plan.batchId,
+      createdAt: plan.createdAt,
+      expiresAt: plan.expiresAt,
+      items: plan.items.map((item, index) =>
+        parseKnowledgeTrashOperationPlanItem(item, index)
+      ),
+    };
+  }
   rejectResponseFields(
     plan,
     new Set([
@@ -1723,7 +1881,6 @@ function parseKnowledgeOperationPlanEnvelope(
     ]),
     'plan',
   );
-  validateOperationIdentity(plan);
   if (
     plan.checkpointRequired !== true
     || !isIsoTimestampValue(plan.createdAt)
@@ -1754,7 +1911,7 @@ function parseKnowledgeOperationPlanEnvelope(
     schemaVersion: 1,
     operationId: plan.operationId as string,
     requestHash: plan.requestHash as string,
-    kind: plan.kind as RendererKnowledgeOperationPlan['kind'],
+    kind: plan.kind as RendererKnowledgeRefactorOperationPlan['kind'],
     createdAt: plan.createdAt as string,
     expiresAt: plan.expiresAt as string,
     checkpointRequired: true,
@@ -1766,10 +1923,55 @@ function parseKnowledgeOperationPlanEnvelope(
   };
 }
 
+function parseKnowledgeTrashOperationPlanItem(
+  input: unknown,
+  index: number,
+): RendererKnowledgeTrashOperationPlan['items'][number] {
+  const field = `plan.items.${index}`;
+  if (!isRecord(input)) throw invalidResponse(field);
+  rejectResponseFields(
+    input,
+    new Set([
+      'entryId',
+      'originalAddress',
+      'trashAddress',
+      'targetAddress',
+      'resourceKind',
+      'expectedVersion',
+    ]),
+    field,
+  );
+  if (
+    !isOperationCorrelationId(input.entryId)
+    || (input.resourceKind !== 'file' && input.resourceKind !== 'directory')
+  ) {
+    throw invalidResponse(field);
+  }
+  const expectedVersion = parseResourceVersion(input.expectedVersion);
+  if (!expectedVersion || Object.keys(expectedVersion).length === 0) {
+    throw invalidResponse(`${field}.expectedVersion`);
+  }
+  rejectResponseFields(
+    input.expectedVersion as Record<string, unknown>,
+    new Set(['mtimeMs', 'size', 'sha256', 'etag', 'sequence']),
+    `${field}.expectedVersion`,
+  );
+  return {
+    entryId: input.entryId,
+    originalAddress: validateKnowledgeAddress(input.originalAddress as KnowledgeResourceAddress),
+    trashAddress: validateKnowledgeAddress(input.trashAddress as KnowledgeResourceAddress),
+    ...(input.targetAddress === undefined
+      ? {}
+      : { targetAddress: validateKnowledgeAddress(input.targetAddress as KnowledgeResourceAddress) }),
+    resourceKind: input.resourceKind,
+    expectedVersion,
+  };
+}
+
 function parseKnowledgeOperationPlanItem(
   input: unknown,
   index: number,
-): RendererKnowledgeOperationPlan['items'][number] {
+): RendererKnowledgeRefactorOperationPlan['items'][number] {
   if (!isRecord(input)) throw invalidResponse(`plan.items.${index}`);
   rejectResponseFields(
     input,
@@ -1813,6 +2015,8 @@ function parseKnowledgeOperationSummary(
       'operationId',
       'requestHash',
       'kind',
+      'sourceKey',
+      'batchId',
       'state',
       'createdAt',
       'expiresAt',
@@ -1851,20 +2055,36 @@ function parseKnowledgeOperationSummary(
     event: parseProjectionState(input.projections.event, field),
     index: parseProjectionState(input.projections.index, field),
   };
-  const items = input.items.map((item, index) =>
-    parseKnowledgeOperationSummaryItem(item, field, index)
-  );
+  const trash = isTrashOperationKind(input.kind);
+  if (trash) {
+    if (
+      typeof input.sourceKey !== 'string'
+      || typeof input.batchId !== 'string'
+      || !isOperationCorrelationId(input.batchId)
+    ) {
+      throw invalidResponse(field);
+    }
+    validateSourceKey(input.sourceKey);
+  } else if (input.sourceKey !== undefined || input.batchId !== undefined) {
+    throw invalidResponse(field);
+  }
+  const items = trash
+    ? input.items.map((item, index) =>
+        parseKnowledgeTrashOperationSummaryItem(item, field, index)
+      )
+    : input.items.map((item, index) =>
+        parseKnowledgeOperationSummaryItem(item, field, index)
+      );
   const summary = input.summary === undefined
     ? undefined
     : parseKnowledgeOperationResultSummary(input.summary, field, items.length);
   if ((input.completedAt === undefined) !== (summary === undefined)) {
     throw invalidResponse(`${field}.summary`);
   }
-  return {
-    schemaVersion: 1,
+  const base = {
+    schemaVersion: 1 as const,
     operationId: input.operationId as string,
     requestHash: input.requestHash as string,
-    kind: input.kind as RendererKnowledgeOperationSummary['kind'],
     state: input.state as RendererKnowledgeOperationState,
     ...(typeof input.createdAt === 'string' ? { createdAt: input.createdAt } : {}),
     ...(typeof input.expiresAt === 'string' ? { expiresAt: input.expiresAt } : {}),
@@ -1874,6 +2094,78 @@ function parseKnowledgeOperationSummary(
     items,
     ...(summary ? { summary } : {}),
     projections,
+  };
+  return trash
+    ? {
+        ...base,
+        kind: input.kind as RendererKnowledgeTrashOperationSummary['kind'],
+        sourceKey: input.sourceKey as string,
+        batchId: input.batchId as string,
+        items: items as RendererKnowledgeTrashOperationSummary['items'],
+      }
+    : {
+        ...base,
+        kind: input.kind as RendererKnowledgeRefactorOperationSummary['kind'],
+        items: items as RendererKnowledgeRefactorOperationSummary['items'],
+      };
+}
+
+function parseKnowledgeTrashOperationSummaryItem(
+  input: unknown,
+  field: string,
+  index: number,
+): RendererKnowledgeTrashOperationSummary['items'][number] {
+  const itemField = `${field}.items.${index}`;
+  if (!isRecord(input)) throw invalidResponse(itemField);
+  rejectResponseFields(
+    input,
+    new Set([
+      'entryId',
+      'originalAddress',
+      'trashAddress',
+      'targetAddress',
+      'resourceKind',
+      'expectedVersion',
+      'state',
+      'errorCode',
+    ]),
+    itemField,
+  );
+  if (
+    !isOperationCorrelationId(input.entryId)
+    || (input.resourceKind !== 'file' && input.resourceKind !== 'directory')
+    || typeof input.state !== 'string'
+    || !OPERATION_ITEM_STATES.has(input.state as RendererKnowledgeOperationItemState)
+    || (
+      input.errorCode !== undefined
+      && (typeof input.errorCode !== 'string' || input.errorCode.length === 0)
+    )
+  ) {
+    throw invalidResponse(itemField);
+  }
+  let expectedVersion: RendererResourceVersion | undefined;
+  if (input.expectedVersion !== undefined) {
+    expectedVersion = parseResourceVersion(input.expectedVersion) ?? undefined;
+    if (!expectedVersion || Object.keys(expectedVersion).length === 0) {
+      throw invalidResponse(`${itemField}.expectedVersion`);
+    }
+    rejectResponseFields(
+      input.expectedVersion as Record<string, unknown>,
+      new Set(['mtimeMs', 'size', 'sha256', 'etag', 'sequence']),
+      `${itemField}.expectedVersion`,
+    );
+  }
+  return {
+    entryId: input.entryId,
+    originalAddress: validateKnowledgeAddress(input.originalAddress as KnowledgeResourceAddress),
+    trashAddress: validateKnowledgeAddress(input.trashAddress as KnowledgeResourceAddress),
+    ...(input.targetAddress === undefined
+      ? {}
+      : { targetAddress: validateKnowledgeAddress(input.targetAddress as KnowledgeResourceAddress) }),
+    resourceKind: input.resourceKind,
+    ...(expectedVersion ? { expectedVersion } : {}),
+    state: input.state as RendererKnowledgeOperationItemState,
+    ...(typeof input.errorCode === 'string' ? { errorCode: input.errorCode } : {}),
   };
 }
 
@@ -2049,13 +2341,25 @@ function parseProjectionState(
 function validateOperationIdentity(input: Record<string, unknown>): void {
   if (
     input.schemaVersion !== 1
-    || (input.kind !== 'rename' && input.kind !== 'move')
+    || !isKnowledgeOperationKind(input.kind)
     || !isOperationCorrelationId(input.operationId)
     || typeof input.requestHash !== 'string'
     || !OPERATION_HASH_PATTERN.test(input.requestHash)
   ) {
     throw invalidResponse('operation.identity');
   }
+}
+
+function isTrashOperationKind(
+  value: unknown,
+): value is RendererKnowledgeTrashOperationPlan['kind'] {
+  return value === 'delete' || value === 'restore' || value === 'cleanup';
+}
+
+function isKnowledgeOperationKind(
+  value: unknown,
+): value is RendererKnowledgeOperationSummary['kind'] {
+  return value === 'rename' || value === 'move' || isTrashOperationKind(value);
 }
 
 function validateOperationId(input: unknown): asserts input is string {

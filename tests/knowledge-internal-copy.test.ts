@@ -40,7 +40,9 @@ function fixture() {
       stat: vi.fn(async resource => ({
         exists: existing.has(key(resource)),
         isDirectory: existing.get(key(resource))?.directory ?? false,
-        version: { etag: key(resource) },
+        version: existing.has(key(resource))
+          ? { etag: `${key(resource)}:${existing.get(key(resource))!.bytes}` }
+          : undefined,
         resourceKey: key(resource),
         resource,
       })),
@@ -54,6 +56,23 @@ function fixture() {
 }
 
 describe('KnowledgeCopyService internal clipboard paste', () => {
+  it('rejects unexpected identity fields and malformed root targets before side effects', async () => {
+    const { service, transfer, move } = fixture();
+    await expect(service.planPasteResources({
+      intent: 'copy',
+      items: [address('main', 'a.md')],
+      target: { sourceKey: 'archive', directoryPath: '' },
+      principal: { userId: 'attacker' },
+    } as never)).rejects.toMatchObject({ code: 'knowledge_operation_precondition_failed' });
+    await expect(service.planPasteResources({
+      intent: 'copy',
+      items: [address('main', 'a.md')],
+      target: { sourceKey: '../archive', directoryPath: '' },
+    })).rejects.toMatchObject({ code: 'knowledge_operation_precondition_failed' });
+    expect(transfer).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+  });
+
   it('copies across sources byte-for-byte and allocates deterministic suffixes', async () => {
     const { service, existing } = fixture();
     const result = await service.pasteResources({
@@ -99,5 +118,55 @@ describe('KnowledgeCopyService internal clipboard paste', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ ok: false, sourceAddress: address('main', 'folder') });
     expect(result[1]).toMatchObject({ ok: true, sourceAddress: address('main', 'a.md') });
+  });
+
+  it('reserves deterministic keep-both targets for same-name items during side-effect-free planning', async () => {
+    const { service, existing, transfer, move } = fixture();
+    existing.set('main:one/a.md', { directory: false, bytes: 'one' });
+    existing.set('main:two/a.md', { directory: false, bytes: 'two' });
+
+    const plan = await service.planPasteResources({
+      intent: 'copy',
+      items: [address('main', 'one/a.md'), address('main', 'two/a.md')],
+      target: { sourceKey: 'archive', directoryPath: '' },
+    });
+
+    expect(plan).toEqual([
+      expect.objectContaining({
+        ok: true,
+        prepared: expect.objectContaining({ targetAddress: address('archive', 'a_2.md') }),
+      }),
+      expect.objectContaining({
+        ok: true,
+        prepared: expect.objectContaining({ targetAddress: address('archive', 'a_3.md') }),
+      }),
+    ]);
+    expect(transfer).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+    expect(existing.has('archive:a_2.md')).toBe(false);
+    expect(existing.has('archive:a_3.md')).toBe(false);
+  });
+
+  it('rejects a prepared paste when its source version or fixed target changes', async () => {
+    const { service, existing, transfer } = fixture();
+    const [planned] = await service.planPasteResources({
+      intent: 'copy',
+      items: [address('main', 'a.md')],
+      target: { sourceKey: 'archive', directoryPath: 'folder' },
+    });
+    if (!planned.ok) throw new Error('paste planning unexpectedly failed');
+
+    existing.set('main:a.md', { directory: false, bytes: 'changed' });
+    await expect(service.pastePrepared(planned.prepared)).rejects.toMatchObject({
+      code: 'knowledge_version_conflict',
+    });
+    expect(transfer).not.toHaveBeenCalled();
+
+    existing.set('main:a.md', { directory: false, bytes: 'alpha' });
+    existing.set('archive:folder/a.md', { directory: false, bytes: 'occupied' });
+    await expect(service.pastePrepared(planned.prepared)).rejects.toMatchObject({
+      code: 'knowledge_resource_conflict',
+    });
+    expect(transfer).not.toHaveBeenCalled();
   });
 });

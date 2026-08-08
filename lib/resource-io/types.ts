@@ -324,6 +324,7 @@ export type ResourceImportTreeOptions = {
   signal?: AbortSignal;
   expectedTargetVersion?: string | null;
   replaceExisting?: boolean;
+  mergeExisting?: "skip" | "keep-both" | "replace";
   operationId: string;
   abortTransfer?: () => void;
   revalidateSourceScope?: () => void | Promise<void>;
@@ -338,14 +339,31 @@ export type ResourceImportTreeResult = {
   filePath?: string;
 };
 
+export type ResourceImportTreeRecoveryOptions = {
+  operationId: string;
+  expectedTargetVersion: string;
+};
+
+export type ResourceImportTreeRecoveryResult = {
+  outcome: "none" | "committed" | "rolled-back";
+  version?: ResourceVersion;
+};
+
 export type ResourceTransferRequest = {
   source: ResourceRef;
   targetDirectory: ResourceRef;
   targetName: string;
   expectedTargetVersion?: string | null;
   replaceExisting?: boolean;
+  mergeExisting?: "skip" | "keep-both" | "replace";
   signal?: AbortSignal;
   operationId: string;
+};
+
+export type ResourceTransferRecoveryRequest = {
+  target: ResourceRef;
+  operationId: string;
+  expectedTargetVersion: ResourceVersion;
 };
 
 export type ResourceTransferResult = {
@@ -417,6 +435,10 @@ export type ResourceProvider = {
     entries: AsyncIterable<ResourceExportEntry>,
     options: ResourceImportTreeOptions,
   ) => Promise<ResourceImportTreeResult>;
+  recoverImportTreePublication?: (
+    target: ResourceRef,
+    options: ResourceImportTreeRecoveryOptions,
+  ) => Promise<ResourceImportTreeRecoveryResult>;
 };
 
 export type ResourcePrincipal = {

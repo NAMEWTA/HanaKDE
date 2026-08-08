@@ -3,7 +3,14 @@ import type { KnowledgeResourceAddress } from '../../shared/knowledge-workspace-
 export const KNOWLEDGE_TRASH_MANIFEST_VERSION = 1;
 export const KNOWLEDGE_TRASH_RETENTION_DAYS = 30;
 
-export type KnowledgeTrashEntryState = 'pending' | 'trashed' | 'restored' | 'cleaned' | 'failed';
+export type KnowledgeTrashEntryState =
+  | 'pending'
+  | 'trashed'
+  | 'restoring'
+  | 'cleaning'
+  | 'restored'
+  | 'cleaned'
+  | 'failed';
 
 export type KnowledgeTrashManifestEntry = Readonly<{
   entryId: string;
@@ -12,6 +19,9 @@ export type KnowledgeTrashManifestEntry = Readonly<{
   kind: 'file' | 'directory';
   deletedAt: string;
   state: KnowledgeTrashEntryState;
+  // A restore target is persisted before the payload move so restart recovery
+  // can distinguish a completed restore from an untouched payload.
+  restoreAddress?: KnowledgeResourceAddress;
   errorCode?: string;
 }>;
 
@@ -47,12 +57,18 @@ export function parseKnowledgeTrashManifest(input: unknown): KnowledgeTrashManif
       throw invalidManifest();
     }
     const state = candidate.state;
-    if (!['pending', 'trashed', 'restored', 'cleaned', 'failed'].includes(String(state))) {
+    if (!['pending', 'trashed', 'restoring', 'cleaning', 'restored', 'cleaned', 'failed'].includes(String(state))) {
       throw invalidManifest();
     }
     if (!['file', 'directory'].includes(String(candidate.kind))) throw invalidManifest();
     const errorCode = candidate.errorCode;
     if (errorCode !== undefined && (typeof errorCode !== 'string' || !/^[a-z][a-z0-9_]{1,63}$/u.test(errorCode))) {
+      throw invalidManifest();
+    }
+    const restoreAddress = candidate.restoreAddress === undefined
+      ? undefined
+      : parseAddress(candidate.restoreAddress, sourceKey, false);
+    if ((state === 'restoring') !== (restoreAddress !== undefined)) {
       throw invalidManifest();
     }
     return Object.freeze({
@@ -62,6 +78,7 @@ export function parseKnowledgeTrashManifest(input: unknown): KnowledgeTrashManif
       kind: candidate.kind as 'file' | 'directory',
       deletedAt: validIso(candidate.deletedAt),
       state: state as KnowledgeTrashEntryState,
+      ...(restoreAddress === undefined ? {} : { restoreAddress }),
       ...(errorCode === undefined ? {} : { errorCode: errorCode as string }),
     });
   });

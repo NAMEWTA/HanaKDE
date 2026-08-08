@@ -431,9 +431,29 @@ describe("knowledge operation recovery", () => {
       recoveryRequired: 0,
       expired: 0,
     }));
+    const trashRecover = vi.fn(async () => ({
+      scanned: 0,
+      finalized: 0,
+      rolledBack: 0,
+      recoveryRequired: 0,
+    }));
+    const atomicRecover = vi.fn(async () => ({
+      scanned: 0,
+      finalized: 0,
+      rolledBack: 0,
+      recoveryRequired: 0,
+    }));
     const coordinator = { recover };
     await expect(prepareKnowledgeOperationRecovery({
       knowledgeOperationCoordinator: coordinator,
+      knowledgeTrashOperationCoordinator: {
+        recover: trashRecover,
+        isSourceRecovering: () => false,
+      },
+      knowledgeAtomicOperationCoordinator: {
+        recover: atomicRecover,
+        isSourceRecovering: () => false,
+      },
       getRuntimeContext: () => ({
         userId: "user-1",
         studioId: "studio-1",
@@ -444,6 +464,8 @@ describe("knowledge operation recovery", () => {
       hanakoHome: "/hana",
     })).resolves.toBe(coordinator);
     expect(recover).toHaveBeenCalledOnce();
+    expect(trashRecover).toHaveBeenCalledOnce();
+    expect(atomicRecover).toHaveBeenCalledOnce();
 
     const openRootSource = fs.readFileSync(
       path.join(process.cwd(), "server/composition/open-root.ts"),

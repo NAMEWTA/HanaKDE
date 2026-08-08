@@ -50,6 +50,14 @@ export interface CompositionContext {
 
 export interface CompositionRoot {
   /**
+   * The legacy mobile Workbench route is still evidence-needed rather than
+   * either an open or closed-product route. The full entry supplies its
+   * factory explicitly so `server/index.ts` retains the actual mount call
+   * without making the standalone Open bundle import that unclassified
+   * module. The Open entry intentionally omits it.
+   */
+  createMobileWorkbenchRoute?: (engine: unknown) => Hono;
+  /**
    * Closed-product route registration hook. Absent (`undefined`) means the
    * open composition: only open routes are mounted. Supplied means the full
    * composition: called once, after all open routes are mounted, to add

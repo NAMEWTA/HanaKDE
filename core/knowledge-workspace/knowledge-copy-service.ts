@@ -69,10 +69,33 @@ export type KnowledgeEditorCopyResult = Readonly<{
 
 export type KnowledgeExternalEditorCopyRequest = Readonly<{
   source: ResourceRef;
+  sourceSizeBytes: number;
   originalName: string;
   mimeType?: string;
   pageAddress: KnowledgeResourceAddress;
   localDate: string;
+}>;
+
+export type KnowledgeEditorCopyPreparedItem = Readonly<{
+  source: ResourceRef;
+  sourceAddress?: KnowledgeResourceAddress;
+  expectedSourceVersion: NonNullable<ResourceStat["version"]>;
+  pageAddress: KnowledgeResourceAddress;
+  expectedPageVersion: NonNullable<ResourceStat["version"]>;
+  targetDirectoryAddress: KnowledgeResourceAddress;
+  targetAddress: KnowledgeResourceAddress;
+  kind: KnowledgeEditorCopyKind;
+  originalName: string;
+  embed: boolean;
+}>;
+
+export type KnowledgeEditorCopyPlan =
+  | Readonly<{ disposition: "reference"; result: KnowledgeEditorCopyResult }>
+  | Readonly<{ disposition: "copy"; prepared: KnowledgeEditorCopyPreparedItem }>;
+
+export type KnowledgeEditorCopyOperation = Readonly<{
+  plan: KnowledgeEditorCopyPlan;
+  execute(context: KnowledgeCopyContext): Promise<KnowledgeEditorCopyResult>;
 }>;
 
 export type KnowledgeEditorCopyBatchRequest = Readonly<{
@@ -110,6 +133,19 @@ export type KnowledgeInternalPasteItemResult =
     sourceAddress: KnowledgeResourceAddress;
     errorCode: KnowledgeErrorCode;
   }>;
+
+export type KnowledgeInternalPastePreparedItem = Readonly<{
+  intent: "copy" | "cut";
+  sourceAddress: KnowledgeResourceAddress;
+  targetAddress: KnowledgeResourceAddress;
+  target: Readonly<{ sourceKey: string; directoryPath: string }>;
+  resourceKind: "file" | "directory";
+  expectedSourceVersion: NonNullable<ResourceStat["version"]>;
+}>;
+
+export type KnowledgeInternalPastePlanItemResult =
+  | Readonly<{ ok: true; prepared: KnowledgeInternalPastePreparedItem }>
+  | Readonly<{ ok: false; sourceAddress: KnowledgeResourceAddress; errorCode: KnowledgeErrorCode }>;
 
 type SourceRegistrySurface = {
   get(sourceKey: string): KnowledgeSourceDto | null;
@@ -156,6 +192,260 @@ export class KnowledgeCopyService {
     this.#sourceRegistry = input.sourceRegistry;
     this.#resourceIO = input.resourceIO;
     this.#randomUUID = input.randomUUID ?? createKnowledgeOperationId;
+  }
+
+  async planCopyForEditor(
+    input: KnowledgeEditorCopyRequest,
+    context: KnowledgeCopyContext = {},
+  ): Promise<KnowledgeEditorCopyPlan> {
+    throwIfAborted(context.signal);
+    const request = validateCopyRequest(input);
+    const source = await this.#requireSource(
+      request.sourceAddress.sourceKey,
+      ["stat", "read"],
+    );
+    const targetSource = await this.#requireSource(
+      request.pageAddress.sourceKey,
+      ["stat", "read"],
+    );
+    const sourceRef = await this.#sourceRegistry.resolveAddress(
+      request.sourceAddress,
+    );
+    const pageRef = await this.#sourceRegistry.resolveAddress(
+      request.pageAddress,
+    );
+    const [sourceStat, pageStat] = await Promise.all([
+      this.#resourceIO.stat(sourceRef, context),
+      this.#resourceIO.stat(pageRef, context),
+    ]);
+    requireFile(sourceStat, "source");
+    requireFile(pageStat, "page");
+    const sourceVersion = requireVersion(sourceStat, "source");
+    const pageVersion = requireVersion(pageStat, "page");
+    const originalName = basename(request.sourceAddress.relativePath);
+    if (
+      request.kind === "page"
+      && !hasExtension(request.sourceAddress.relativePath, "md")
+    ) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "editor Page copy source must be Markdown",
+      );
+    }
+    if (source.sourceKey === targetSource.sourceKey) {
+      return Object.freeze({
+        disposition: "reference",
+        result: Object.freeze({
+          copied: false,
+          targetAddress: Object.freeze({ ...request.sourceAddress }),
+          bytesTransferred: 0,
+          embed: request.kind === "attachment" && isEmbeddable(originalName),
+          originalName,
+        }),
+      });
+    }
+    requireCapabilities(source, ["transfer"]);
+    return this.#planResolvedForEditor({
+      source: sourceRef,
+      sourceAddress: request.sourceAddress,
+      expectedSourceVersion: sourceVersion,
+      pageAddress: request.pageAddress,
+      expectedPageVersion: pageVersion,
+      kind: request.kind,
+      localDate: request.localDate,
+      originalName,
+      targetSource,
+      context,
+    });
+  }
+
+  async planExternalCopyForEditor(
+    input: KnowledgeExternalEditorCopyRequest,
+    context: KnowledgeCopyContext = {},
+  ): Promise<Extract<KnowledgeEditorCopyPlan, { disposition: "copy" }>> {
+    throwIfAborted(context.signal);
+    const request = validateExternalCopyRequest(input);
+    const targetSource = await this.#requireSource(
+      request.pageAddress.sourceKey,
+      ["stat", "read"],
+    );
+    const pageRef = await this.#sourceRegistry.resolveAddress(request.pageAddress);
+    const pageStat = await this.#resourceIO.stat(pageRef, context);
+    requireFile(pageStat, "page");
+    return this.#planResolvedForEditor({
+      source: request.source,
+      expectedSourceVersion: Object.freeze({ size: request.sourceSizeBytes }),
+      pageAddress: request.pageAddress,
+      expectedPageVersion: requireVersion(pageStat, "page"),
+      kind: "attachment",
+      localDate: request.localDate,
+      originalName: request.originalName,
+      targetSource,
+      context,
+    });
+  }
+
+  async copyPreparedForEditor(
+    prepared: KnowledgeEditorCopyPreparedItem,
+    context: KnowledgeCopyContext = {},
+  ): Promise<KnowledgeEditorCopyResult> {
+    throwIfAborted(context.signal);
+    await this.#requireSource(
+      prepared.targetAddress.sourceKey,
+      prepared.kind === "attachment"
+        ? ["stat", "write", "mkdir", "transfer"]
+        : ["stat", "write", "transfer"],
+    );
+    if (prepared.sourceAddress) {
+      await this.#requireSource(prepared.sourceAddress.sourceKey, ["stat", "read", "transfer"]);
+      const sourceStat = await this.#resourceIO.stat(
+        await this.#sourceRegistry.resolveAddress(prepared.sourceAddress),
+        context,
+      );
+      if (
+        !sourceStat.exists
+        || !versionsEqual(sourceStat.version, prepared.expectedSourceVersion)
+      ) {
+        throw createKnowledgeWorkspaceError(
+          "knowledge_version_conflict",
+          "editor copy source changed after planning",
+        );
+      }
+    }
+    const pageStat = await this.#resourceIO.stat(
+      await this.#sourceRegistry.resolveAddress(prepared.pageAddress),
+      context,
+    );
+    if (
+      !pageStat.exists
+      || pageStat.isDirectory
+      || !versionsEqual(pageStat.version, prepared.expectedPageVersion)
+    ) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_version_conflict",
+        "editor copy page changed after planning",
+      );
+    }
+    await this.#ensureTargetDirectory(
+      prepared.targetDirectoryAddress,
+      prepared.kind === "attachment",
+      context,
+    );
+    const targetRef = await this.#sourceRegistry.resolveAddress(prepared.targetAddress);
+    if ((await this.#resourceIO.stat(targetRef, context)).exists) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_conflict",
+        "editor copy target changed after planning",
+      );
+    }
+    const targetDirectoryRef = await this.#sourceRegistry.resolveAddress(
+      prepared.targetDirectoryAddress,
+    );
+    const transfer = await this.#resourceIO.transfer({
+      source: prepared.source,
+      targetDirectory: targetDirectoryRef,
+      targetName: basename(prepared.targetAddress.relativePath),
+      expectedTargetVersion: null,
+      operationId: context.operationId ?? this.#randomUUID(),
+      signal: context.signal,
+    }, {
+      ...context,
+      source: context.source ?? "api",
+    });
+    return Object.freeze({
+      copied: true,
+      targetAddress: prepared.targetAddress,
+      bytesTransferred: transfer.bytesTransferred,
+      embed: prepared.embed,
+      originalName: prepared.originalName,
+    });
+  }
+
+  async #planResolvedForEditor(input: {
+    source: ResourceRef;
+    sourceAddress?: KnowledgeResourceAddress;
+    expectedSourceVersion: NonNullable<ResourceStat["version"]>;
+    pageAddress: KnowledgeResourceAddress;
+    expectedPageVersion: NonNullable<ResourceStat["version"]>;
+    kind: KnowledgeEditorCopyKind;
+    localDate?: string;
+    originalName: string;
+    targetSource: KnowledgeSourceDto;
+    context: KnowledgeCopyContext;
+  }): Promise<Extract<KnowledgeEditorCopyPlan, { disposition: "copy" }>> {
+    requireCapabilities(
+      input.targetSource,
+      input.kind === "attachment"
+        ? ["write", "mkdir", "transfer"]
+        : ["write", "transfer"],
+    );
+    const pageDirectory = dirname(input.pageAddress.relativePath);
+    const targetDirectoryAddress = Object.freeze({
+      sourceKey: input.pageAddress.sourceKey,
+      relativePath: input.kind === "attachment"
+        ? joinPath(pageDirectory, "assets")
+        : pageDirectory,
+    });
+    const directoryStat = await this.#resourceIO.stat(
+      await this.#sourceRegistry.resolveAddress(targetDirectoryAddress),
+      input.context,
+    );
+    if (directoryStat.exists && !directoryStat.isDirectory) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_operation_precondition_failed",
+        "knowledge editor copy target directory is occupied",
+      );
+    }
+    if (!directoryStat.exists && input.kind !== "attachment") {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_not_found",
+        "knowledge editor copy target directory does not exist",
+      );
+    }
+    const baseName = input.kind === "attachment"
+      ? `${input.localDate}-${input.originalName}`
+      : input.originalName;
+    let targetAddress: KnowledgeResourceAddress | null = null;
+    for (let index = 1; index <= MAX_KEEP_BOTH_ATTEMPTS; index += 1) {
+      throwIfAborted(input.context.signal);
+      const candidate = Object.freeze({
+        sourceKey: targetDirectoryAddress.sourceKey,
+        relativePath: joinPath(
+          targetDirectoryAddress.relativePath,
+          keepBothName(baseName, index),
+        ),
+      });
+      if (!(await this.#resourceIO.stat(
+        await this.#sourceRegistry.resolveAddress(candidate),
+        input.context,
+      )).exists) {
+        targetAddress = candidate;
+        break;
+      }
+    }
+    if (!targetAddress) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_conflict",
+        "editor copy could not allocate a deterministic target name",
+      );
+    }
+    return Object.freeze({
+      disposition: "copy",
+      prepared: Object.freeze({
+        source: input.source,
+        ...(input.sourceAddress ? { sourceAddress: input.sourceAddress } : {}),
+        expectedSourceVersion: input.expectedSourceVersion,
+        pageAddress: input.pageAddress,
+        expectedPageVersion: input.expectedPageVersion,
+        targetDirectoryAddress,
+        targetAddress,
+        kind: input.kind,
+        originalName: input.originalName,
+        embed: input.kind === "attachment" && isEmbeddable(
+          basename(targetAddress.relativePath),
+        ),
+      }),
+    });
   }
 
   async copyForEditor(
@@ -222,56 +512,19 @@ export class KnowledgeCopyService {
     context: KnowledgeCopyContext = {},
   ): Promise<KnowledgeEditorCopyResult> {
     throwIfAborted(context.signal);
-    if (
-      typeof input !== "object"
-      || input === null
-      || Array.isArray(input)
-      || Object.keys(input).some(field => ![
-        "source",
-        "originalName",
-        "mimeType",
-        "pageAddress",
-        "localDate",
-      ].includes(field))
-      || !isSessionFileRef(input.source)
-      || (
-        input.mimeType !== undefined
-        && (
-          typeof input.mimeType !== "string"
-          || input.mimeType.length > 255
-          || /\p{Cc}/u.test(input.mimeType)
-        )
-      )
-      || !isValidLocalDate(input.localDate)
-    ) {
-      throw createKnowledgeWorkspaceError(
-        "knowledge_operation_precondition_failed",
-        "external editor copy request is invalid",
-      );
-    }
-    const pageAddress = requireAddress(input.pageAddress, "pageAddress");
-    if (!hasExtension(pageAddress.relativePath, "md")) {
-      throw createKnowledgeWorkspaceError(
-        "knowledge_operation_precondition_failed",
-        "external editor copy target must be a Markdown Page",
-      );
-    }
-    const originalName = normalizeExternalFileName(
-      input.originalName,
-      input.mimeType,
-    );
+    const request = validateExternalCopyRequest(input);
     const targetSource = await this.#requireSource(
-      pageAddress.sourceKey,
+      request.pageAddress.sourceKey,
       ["stat", "read"],
     );
-    const pageRef = await this.#sourceRegistry.resolveAddress(pageAddress);
+    const pageRef = await this.#sourceRegistry.resolveAddress(request.pageAddress);
     requireFile(await this.#resourceIO.stat(pageRef, context), "page");
     return this.#copyResolvedForEditor({
-      sourceRef: input.source,
-      pageAddress,
+      sourceRef: request.source,
+      pageAddress: request.pageAddress,
       kind: "attachment",
-      localDate: input.localDate,
-      originalName,
+      localDate: request.localDate,
+      originalName: request.originalName,
       targetSource,
       context,
     });
@@ -389,6 +642,36 @@ export class KnowledgeCopyService {
     input: KnowledgeInternalPasteRequest,
     context: KnowledgeCopyContext = {},
   ): Promise<KnowledgeInternalPasteItemResult[]> {
+    const results: KnowledgeInternalPasteItemResult[] = [];
+    for (const item of await this.planPasteResources(input, context)) {
+      throwIfAborted(context.signal);
+      if ("errorCode" in item) {
+        results.push(Object.freeze({
+          ok: false,
+          sourceAddress: item.sourceAddress,
+          errorCode: item.errorCode,
+        }));
+        continue;
+      }
+      try {
+        results.push(await this.pastePrepared(item.prepared, context));
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        results.push(Object.freeze({
+          ok: false,
+          sourceAddress: item.prepared.sourceAddress,
+          errorCode: normalizeKnowledgeErrorCode(ownErrorCode(error))
+            ?? "knowledge_resource_unavailable",
+        }));
+      }
+    }
+    return results;
+  }
+
+  async planPasteResources(
+    input: KnowledgeInternalPasteRequest,
+    context: KnowledgeCopyContext = {},
+  ): Promise<KnowledgeInternalPastePlanItemResult[]> {
     throwIfAborted(context.signal);
     const request = validateInternalPasteRequest(input);
     const sourceKey = request.items[0].sourceKey;
@@ -399,68 +682,41 @@ export class KnowledgeCopyService {
       );
     }
     await this.#requireSource(sourceKey, ["stat", "read"]);
-    const target = await this.#requireSource(
+    await this.#requireSource(
       request.target.sourceKey,
       request.intent === "cut" ? ["stat", "move"] : ["stat", "transfer"],
     );
     if (request.intent === "cut" && typeof this.#resourceIO.move !== "function") {
-      throw createKnowledgeWorkspaceError(
-        "knowledge_resource_unavailable",
-        "knowledge move is unavailable",
-      );
+      throw createKnowledgeWorkspaceError("knowledge_resource_unavailable", "knowledge move is unavailable");
     }
-    const targetDirectoryRef = request.target.directoryPath
-      ? await this.#sourceRegistry.resolveAddress({
-          sourceKey: target.sourceKey,
-          relativePath: request.target.directoryPath,
-        })
-      : this.#sourceRegistry.rootRef?.(target.sourceKey);
-    if (!targetDirectoryRef) {
-      throw createKnowledgeWorkspaceError(
-        "knowledge_resource_unavailable",
-        "knowledge source root is unavailable",
-      );
-    }
-    const results: KnowledgeInternalPasteItemResult[] = [];
+    const results: KnowledgeInternalPastePlanItemResult[] = [];
+    const reservedTargets = new Set<string>();
     for (const sourceAddress of request.items) {
-      throwIfAborted(context.signal);
       try {
         const sourceRef = await this.#sourceRegistry.resolveAddress(sourceAddress);
         const sourceStat = await this.#resourceIO.stat(sourceRef, context);
-        if (!sourceStat.exists) throw createKnowledgeWorkspaceError(
-          "knowledge_resource_not_found",
-          "knowledge copy source does not exist",
-        );
+        if (!sourceStat.exists || !sourceStat.version) {
+          throw createKnowledgeWorkspaceError("knowledge_resource_not_found", "knowledge copy source does not exist");
+        }
         const targetAddress = await this.#allocatePasteAddress(
-          target.sourceKey,
+          request.target.sourceKey,
           request.target.directoryPath,
           basename(sourceAddress.relativePath),
           sourceStat.isDirectory,
           context,
+          reservedTargets,
         );
-        const targetRef = await this.#sourceRegistry.resolveAddress(targetAddress);
-        if (request.intent === "cut") {
-          await this.#resourceIO.move!(sourceRef, targetRef, {
-            ...context,
-            expectedSourceVersion: sourceStat.version,
-            expectedTargetVersion: null,
-            operationId: context.operationId ?? this.#randomUUID(),
-          });
-        } else {
-          await this.#resourceIO.transfer({
-            source: sourceRef,
-            targetDirectory: targetDirectoryRef,
-            targetName: basename(targetAddress.relativePath),
-            expectedTargetVersion: null,
-            operationId: this.#randomUUID(),
-            signal: context.signal,
-          }, context);
-        }
+        reservedTargets.add(pasteAddressKey(targetAddress));
         results.push(Object.freeze({
           ok: true,
-          sourceAddress: Object.freeze({ ...sourceAddress }),
-          targetAddress: Object.freeze(targetAddress),
-          effect: request.intent === "cut" ? "move" : "copy",
+          prepared: Object.freeze({
+            intent: request.intent,
+            sourceAddress: Object.freeze({ ...sourceAddress }),
+            targetAddress: Object.freeze(targetAddress),
+            target: request.target,
+            resourceKind: sourceStat.isDirectory ? "directory" : "file",
+            expectedSourceVersion: Object.freeze({ ...sourceStat.version }),
+          }),
         }));
       } catch (error) {
         if (isAbortError(error)) throw error;
@@ -475,12 +731,76 @@ export class KnowledgeCopyService {
     return results;
   }
 
+  async pastePrepared(
+    prepared: KnowledgeInternalPastePreparedItem,
+    context: KnowledgeCopyContext = {},
+  ): Promise<Extract<KnowledgeInternalPasteItemResult, { ok: true }>> {
+    throwIfAborted(context.signal);
+    await this.#requireSource(prepared.sourceAddress.sourceKey, ["stat", "read"]);
+    const target = await this.#requireSource(
+      prepared.target.sourceKey,
+      prepared.intent === "cut" ? ["stat", "move"] : ["stat", "transfer"],
+    );
+    const sourceRef = await this.#sourceRegistry.resolveAddress(prepared.sourceAddress);
+    const targetRef = await this.#sourceRegistry.resolveAddress(prepared.targetAddress);
+    const [sourceStat, targetStat] = await Promise.all([
+      this.#resourceIO.stat(sourceRef, context),
+      this.#resourceIO.stat(targetRef, context),
+    ]);
+    if (
+      !sourceStat.exists
+      || !sourceStat.version
+      || !versionsEqual(sourceStat.version, prepared.expectedSourceVersion)
+    ) {
+      throw createKnowledgeWorkspaceError("knowledge_version_conflict", "knowledge paste source changed after planning");
+    }
+    if (targetStat.exists) {
+      throw createKnowledgeWorkspaceError("knowledge_resource_conflict", "knowledge paste target changed after planning");
+    }
+    if (prepared.intent === "cut") {
+      if (!this.#resourceIO.move) {
+        throw createKnowledgeWorkspaceError("knowledge_resource_unavailable", "knowledge move is unavailable");
+      }
+      await this.#resourceIO.move(sourceRef, targetRef, {
+        ...context,
+        expectedSourceVersion: prepared.expectedSourceVersion,
+        expectedTargetVersion: null,
+        operationId: context.operationId ?? this.#randomUUID(),
+      });
+    } else {
+      const targetDirectoryRef = prepared.target.directoryPath
+        ? await this.#sourceRegistry.resolveAddress({
+            sourceKey: target.sourceKey,
+            relativePath: prepared.target.directoryPath,
+          })
+        : this.#sourceRegistry.rootRef?.(target.sourceKey);
+      if (!targetDirectoryRef) {
+        throw createKnowledgeWorkspaceError("knowledge_resource_unavailable", "knowledge source root is unavailable");
+      }
+      await this.#resourceIO.transfer({
+        source: sourceRef,
+        targetDirectory: targetDirectoryRef,
+        targetName: basename(prepared.targetAddress.relativePath),
+        expectedTargetVersion: null,
+        operationId: context.operationId ?? this.#randomUUID(),
+        signal: context.signal,
+      }, context);
+    }
+    return Object.freeze({
+      ok: true,
+      sourceAddress: prepared.sourceAddress,
+      targetAddress: prepared.targetAddress,
+      effect: prepared.intent === "cut" ? "move" : "copy",
+    });
+  }
+
   async #allocatePasteAddress(
     sourceKey: string,
     directoryPath: string,
     originalName: string,
     directory: boolean,
     context: KnowledgeCopyContext,
+    reservedTargets: ReadonlySet<string> = new Set(),
   ): Promise<KnowledgeResourceAddress> {
     for (let index = 1; index <= MAX_KEEP_BOTH_ATTEMPTS; index += 1) {
       const name = pasteKeepBothName(originalName, index, directory);
@@ -488,6 +808,7 @@ export class KnowledgeCopyService {
         sourceKey,
         relativePath: joinPath(directoryPath, name),
       };
+      if (reservedTargets.has(pasteAddressKey(address))) continue;
       const ref = await this.#sourceRegistry.resolveAddress(address);
       if (!(await this.#resourceIO.stat(ref, context)).exists) return address;
     }
@@ -563,26 +884,44 @@ export class KnowledgeCopyService {
 }
 
 function validateInternalPasteRequest(
-  input: KnowledgeInternalPasteRequest,
+  input: unknown,
 ): KnowledgeInternalPasteRequest {
+  if (!isPlainRecord(input)) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge paste request is invalid",
+    );
+  }
+  const allowedFields = new Set(["intent", "items", "target"]);
+  if (Object.keys(input).some(field => !allowedFields.has(field))) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge paste request contains an unexpected field",
+    );
+  }
+  const target = input.target;
   if (
-    !input
+    typeof input.intent !== "string"
     || !["copy", "cut"].includes(input.intent)
     || !Array.isArray(input.items)
     || input.items.length === 0
-    || !input.target
-    || typeof input.target.directoryPath !== "string"
-    || (
-      input.target.directoryPath !== ""
-      && parseKnowledgeResourceAddress({
-        sourceKey: input.target.sourceKey,
-        relativePath: input.target.directoryPath,
-      }).ok === false
-    )
+    || !isPlainRecord(target)
+    || Object.keys(target).some(field => field !== "sourceKey" && field !== "directoryPath")
+    || typeof target.directoryPath !== "string"
   ) {
     throw createKnowledgeWorkspaceError(
       "knowledge_operation_precondition_failed",
       "knowledge paste request is invalid",
+    );
+  }
+  const parsedTarget = parseKnowledgeResourceAddress({
+    sourceKey: target.sourceKey,
+    relativePath: target.directoryPath || "__source_root__",
+  });
+  if (parsedTarget.ok === false) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge paste target is invalid",
     );
   }
   const parsedItems = input.items.map(item => {
@@ -606,10 +945,19 @@ function validateInternalPasteRequest(
     && item.relativePath.startsWith(`${ancestor.relativePath}/`)
   )));
   return Object.freeze({
-    intent: input.intent,
+    intent: input.intent as "copy" | "cut",
     items: Object.freeze(normalized.map(item => Object.freeze(item))),
-    target: Object.freeze({ ...input.target }),
+    target: Object.freeze({
+      sourceKey: parsedTarget.value.sourceKey,
+      directoryPath: target.directoryPath,
+    }),
   });
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function pasteKeepBothName(name: string, index: number, directory: boolean): string {
@@ -670,6 +1018,54 @@ function isSessionFileRef(input: unknown): input is Extract<
     && (input as { fileId: string }).fileId.length > 0
     && (input as { fileId: string }).fileId.length <= 256
     && !/\p{Cc}/u.test((input as { fileId: string }).fileId);
+}
+
+function validateExternalCopyRequest(
+  input: unknown,
+): KnowledgeExternalEditorCopyRequest {
+  if (
+    !isPlainRecord(input)
+    || Object.keys(input).some(field => ![
+      "source",
+      "sourceSizeBytes",
+      "originalName",
+      "mimeType",
+      "pageAddress",
+      "localDate",
+    ].includes(field))
+    || !isSessionFileRef(input.source)
+    || !Number.isSafeInteger(input.sourceSizeBytes)
+    || (input.sourceSizeBytes as number) < 0
+    || (
+      input.mimeType !== undefined
+      && (
+        typeof input.mimeType !== "string"
+        || input.mimeType.length > 255
+        || /\p{Cc}/u.test(input.mimeType)
+      )
+    )
+    || !isValidLocalDate(input.localDate)
+  ) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "external editor copy request is invalid",
+    );
+  }
+  const pageAddress = requireAddress(input.pageAddress, "pageAddress");
+  if (!hasExtension(pageAddress.relativePath, "md")) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "external editor copy target must be a Markdown Page",
+    );
+  }
+  return Object.freeze({
+    source: input.source,
+    sourceSizeBytes: input.sourceSizeBytes as number,
+    originalName: normalizeExternalFileName(input.originalName, input.mimeType),
+    ...(input.mimeType === undefined ? {} : { mimeType: input.mimeType as string }),
+    pageAddress,
+    localDate: input.localDate,
+  });
 }
 
 function validateCopyRequest(
@@ -773,6 +1169,19 @@ function requireFile(stat: ResourceStat, role: "source" | "page"): void {
   }
 }
 
+function requireVersion(
+  stat: ResourceStat,
+  role: "source" | "page",
+): NonNullable<ResourceStat["version"]> {
+  if (!stat.version) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      `knowledge copy ${role} version is unavailable`,
+    );
+  }
+  return Object.freeze({ ...stat.version });
+}
+
 function isValidLocalDate(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const match = DATE_PATTERN.exec(value);
@@ -798,6 +1207,10 @@ function dirname(relativePath: string): string {
 
 function joinPath(...parts: string[]): string {
   return parts.filter(Boolean).join("/");
+}
+
+function pasteAddressKey(address: KnowledgeResourceAddress): string {
+  return `${address.sourceKey}\0${address.relativePath}`;
 }
 
 function extensionOf(fileName: string): string {
@@ -853,6 +1266,12 @@ function isAbortError(error: unknown): boolean {
   return typeof error === "object"
     && error !== null
     && Object.getOwnPropertyDescriptor(error, "name")?.value === "AbortError";
+}
+
+function versionsEqual(left: ResourceStat["version"], right: ResourceStat["version"]): boolean {
+  if (left == null || right == null) return left == null && right == null;
+  return (["mtimeMs", "size", "sha256", "etag", "sequence"] as const)
+    .every((field) => left[field] === right[field]);
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

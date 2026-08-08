@@ -26,6 +26,11 @@ export type KnowledgeCreateResult = Readonly<{
   version?: ResourceMutationResult['version'];
 }>;
 
+export type KnowledgeCreatePlan = Readonly<{
+  request: KnowledgeCreateRequest;
+  address: KnowledgeResourceAddress;
+}>;
+
 type SourceRegistrySurface = {
   get(sourceKey: string): KnowledgeSourceDto | null;
   revalidate(sourceKey: string): Promise<void>;
@@ -62,6 +67,13 @@ export class KnowledgeCreateService {
     input: KnowledgeCreateRequest,
     context: ResourceOperationContext & { signal?: AbortSignal } = {},
   ): Promise<KnowledgeCreateResult> {
+    return this.createPrepared(await this.plan(input, context), context);
+  }
+
+  async plan(
+    input: KnowledgeCreateRequest,
+    context: ResourceOperationContext & { signal?: AbortSignal } = {},
+  ): Promise<KnowledgeCreatePlan> {
     throwIfAborted(context.signal);
     const request = validateCreateRequest(input);
     await this.#sourceRegistry.revalidate(request.sourceKey);
@@ -78,6 +90,30 @@ export class KnowledgeCreateService {
     throwIfAborted(context.signal);
     const prior = await this.#resourceIO.stat(ref, context);
     if (prior.exists) throw conflict();
+    return Object.freeze({ request, address });
+  }
+
+  async createPrepared(
+    plan: KnowledgeCreatePlan,
+    context: ResourceOperationContext & { signal?: AbortSignal } = {},
+  ): Promise<KnowledgeCreateResult> {
+    throwIfAborted(context.signal);
+    const request = validateCreateRequest(plan.request);
+    const expectedAddress = createAddress(request);
+    if (
+      plan.address.sourceKey !== expectedAddress.sourceKey
+      || plan.address.relativePath !== expectedAddress.relativePath
+    ) {
+      throw createKnowledgeWorkspaceError(
+        'knowledge_operation_precondition_failed',
+        'knowledge create plan is invalid',
+      );
+    }
+    await this.#sourceRegistry.revalidate(request.sourceKey);
+    requireWritableSource(this.#sourceRegistry.get(request.sourceKey), request.kind);
+    const address = Object.freeze({ ...expectedAddress });
+    const ref = await this.#sourceRegistry.resolveAddress(address);
+    if ((await this.#resourceIO.stat(ref, context)).exists) throw conflict();
     try {
       const result = request.kind === 'page'
         ? await this.#resourceIO.writeExpectedVersion(ref, '', null, context)
@@ -93,6 +129,18 @@ export class KnowledgeCreateService {
       throw error;
     }
   }
+}
+
+function createAddress(request: KnowledgeCreateRequest): KnowledgeResourceAddress {
+  return {
+    sourceKey: request.sourceKey,
+    relativePath: joinPath(
+      request.directoryPath,
+      request.kind === 'page' && !request.name.toLocaleLowerCase().endsWith('.md')
+        ? `${request.name}.md`
+        : request.name,
+    ),
+  };
 }
 
 function validateCreateRequest(input: KnowledgeCreateRequest): KnowledgeCreateRequest {

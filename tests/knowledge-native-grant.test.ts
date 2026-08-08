@@ -33,26 +33,43 @@ describe('knowledge native grants', () => {
     })).toMatchObject({ windowKey: 'window-a' });
   });
 
-  it('retains an unconsumed system-trash grant for a trusted terminal failure only', () => {
+  it('does not let another window finalize a pending system-trash grant', () => {
     const service = new KnowledgeNativeGrantService({ randomUUID: () => '00000000-0000-4000-8000-000000000054' });
+    const identity = { ownerKey: 'owner', windowKey: 'window-a' };
+    const anotherWindow = { ownerKey: 'owner', windowKey: 'window-b' };
     const systemTrash = service.issue({
       action: 'systemTrash', address: { sourceKey: 'main', relativePath: '.trash/batch/payload/000001.md' },
-      version: { etag: 'v1' }, ownerKey: 'owner', windowKey: 'window-a',
+      version: { etag: 'v1' },
+      ...identity,
     });
-    expect(service.failSystemTrash(systemTrash.grantId)).toMatchObject({
+
+    service.consume({ grantId: systemTrash.grantId, action: 'systemTrash', ...identity });
+    expect(() => service.completeSystemTrash({ grantId: systemTrash.grantId, ...anotherWindow })).toThrow();
+    expect(() => service.discardSystemTrash({ grantId: systemTrash.grantId, ...anotherWindow })).toThrow();
+    expect(() => service.failSystemTrash({ grantId: systemTrash.grantId, ...anotherWindow })).toThrow();
+    expect(service.completeSystemTrash({ grantId: systemTrash.grantId, ...identity })).toMatchObject({
       action: 'systemTrash',
       address: { relativePath: '.trash/batch/payload/000001.md' },
     });
-    expect(() => service.failSystemTrash(systemTrash.grantId)).toThrow();
+  });
 
-    const reveal = service.issue({
-      action: 'reveal', address: { sourceKey: 'main', relativePath: 'other.md' },
-      version: { etag: 'v2' }, ownerKey: 'owner', windowKey: 'window-a',
+  it('does not let another window fail an unconsumed system-trash grant', () => {
+    const service = new KnowledgeNativeGrantService({ randomUUID: () => '00000000-0000-4000-8000-000000000055' });
+    const identity = { ownerKey: 'owner', windowKey: 'window-a' };
+    const anotherWindow = { ownerKey: 'owner', windowKey: 'window-b' };
+    const systemTrash = service.issue({
+      action: 'systemTrash', address: { sourceKey: 'main', relativePath: '.trash/batch/payload/000002.md' },
+      version: { etag: 'v2' },
+      ...identity,
     });
-    expect(() => service.failSystemTrash(reveal.grantId)).toThrow();
-    expect(service.consume({
-      grantId: reveal.grantId, action: 'reveal', ownerKey: 'owner', windowKey: 'window-a',
-    })).toMatchObject({ action: 'reveal' });
+
+    expect(() => service.failSystemTrash({ grantId: systemTrash.grantId, ...anotherWindow })).toThrow();
+    expect(service.consume({ grantId: systemTrash.grantId, action: 'systemTrash', ...identity })).toMatchObject({
+      action: 'systemTrash',
+    });
+    expect(service.failSystemTrash({ grantId: systemTrash.grantId, ...identity })).toMatchObject({
+      address: { relativePath: '.trash/batch/payload/000002.md' },
+    });
   });
 
   it('compares only fixed-length native credentials', () => {

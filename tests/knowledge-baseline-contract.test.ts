@@ -246,12 +246,12 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(appFixture).toContain('if (workerInfo.project.name === "desktop-full")');
     expect(appFixture).toContain("const ELECTRON_QUIT_REQUEST_TIMEOUT_MS = 5_000;");
     expect(appFixture).toContain("const WINDOWS_TASKKILL_TIMEOUT_MS = 5_000;");
-    expect(appFixture).toContain("async function requestElectronQuit(application: ElectronApplication)");
+    expect(appFixture).toContain("async function requestElectronQuit(application: ElectronMainProcessApplication)");
     expect(appFixture).toContain("await requestElectronQuit(application);");
     expect(appFixture).toContain('if (process.platform === "win32")');
     expect(appFixture).toContain("Desktop fixture could not terminate its owned application");
     expect(appFixture).toContain("Desktop fixture could not terminate its owned server");
-    expect(appFixture).toContain("Desktop fixture taskkill did not complete");
+    expect(appFixture).toContain("Desktop fixture taskkill did not terminate its target");
     expect(appFixture).toContain("ELECTRON_QUIT_REQUEST_TIMEOUT_MS");
     expect(appFixture).toContain("await terminateProcessTree(child.pid);");
     expect(appFixture).not.toContain("vite.cmd");
@@ -266,6 +266,40 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     );
     expect(nativeFixture).toContain('if (process.platform === "win32")');
     expect(nativeFixture).toContain("the owning fixture");
+  });
+
+  it("keeps the Windows Electron fallback on a loopback-only, context-aware CDP bridge", () => {
+    const appFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/app-fixture.ts",
+      ),
+      "utf8",
+    );
+    const cdpFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/windows-electron-cdp.ts",
+      ),
+      "utf8",
+    );
+
+    expect(appFixture).toContain("HANA_FORCE_WINDOWS_ELECTRON_CDP");
+    expect(appFixture).toContain("launchWindowsElectronOverCdp");
+    expect(cdpFixture).toContain("--remote-debugging-address=127.0.0.1");
+    expect(cdpFixture).toContain('http://127.0.0.1:${port}${route}');
+    expect(cdpFixture).toContain("includeCommandLineAPI: true");
+    expect(cdpFixture).toContain("contextId,");
+    expect(cdpFixture).toContain("response.result?.exceptionDetails");
+    expect(cdpFixture).toContain('context.waitForEvent("page")');
+    expect(cdpFixture).toContain("const INSPECTOR_EVALUATE_TIMEOUT_MS = 90_000;");
+    expect(cdpFixture).toContain("--disable-background-timer-throttling");
+    expect(cdpFixture).toContain("--disable-backgrounding-occluded-windows");
+    expect(cdpFixture).toContain("--disable-renderer-backgrounding");
+    expect(cdpFixture).toContain("Windows Electron child did not exit after taskkill");
+    expect(cdpFixture).toContain("Windows Electron child did not exit after SIGKILL");
+    expect(appFixture).toContain("Knowledge fixture could not terminate its owned child");
+    expect(appFixture).toContain("Desktop fixture taskkill did not terminate its target");
   });
 
   it("runs the Windows junction TOCTOU scenario in an independent, non-retried worker", () => {
@@ -298,7 +332,6 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
         first,
         inheritedEnvironment,
         repositoryRoot,
-        "darwin",
       );
       const secondLaunch = createKnowledgeLaunchConfig(second, {});
       const parsedUserHome = path.parse(first.userHome);
@@ -318,7 +351,6 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
         requestedPort: 0,
         workspaceRoot: first.mainSource,
         electronArgs: [`--user-data-dir=${first.electronUserData}`],
-        electronLoader: null,
         env: {
           PATH: "/test/bin",
           HOME: first.userHome,
@@ -336,23 +368,6 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
           HANA_PORT: "0",
         },
       });
-      const windowsLaunch = createKnowledgeLaunchConfig(
-        first,
-        inheritedEnvironment,
-        repositoryRoot,
-        "win32",
-      );
-      expect(windowsLaunch.electronArgs).toEqual([
-        `--user-data-dir=${first.electronUserData}`,
-      ]);
-      expect(windowsLaunch.electronLoader).toBe(path.join(
-        repositoryRoot,
-        "tests",
-        "knowledge-workspace-e2e",
-        "fixtures",
-        "windows-electron-loader.cjs",
-      ));
-      expect(windowsLaunch.env.ELECTRON_NO_ATTACH_CONSOLE).toBe("1");
       expect(firstLaunch.env).not.toHaveProperty("HANA_TOKEN");
       expect(firstLaunch.env).not.toHaveProperty("SECRET_UNRELATED");
       expect(secondLaunch.env.HANA_PORT).toBe("0");

@@ -897,7 +897,7 @@ test('E2E-KW-024 isolates two Renderer contexts across open, save, conflict and 
   const sharedFile = path.join(workspaceSandbox.mainSource, 'TwoWindows.md');
   await fs.writeFile(sharedFile, '# Shared baseline\n', 'utf8');
   const secondPagePromise = app.waitForEvent('window');
-  await app.evaluate(async ({ BrowserWindow }, preloadPath) => {
+  const secondWindowId = await app.evaluate(async ({ BrowserWindow }, preloadPath) => {
     const first = BrowserWindow.getAllWindows().find(window => /index\.html/u.test(window.webContents.getURL()));
     if (!first) throw new Error('main renderer unavailable');
     const second = new BrowserWindow({ show: false, webPreferences: {
@@ -907,6 +907,7 @@ test('E2E-KW-024 isolates two Renderer contexts across open, save, conflict and 
       sandbox: false,
     } });
     await second.loadURL(first.webContents.getURL());
+    return second.id;
   }, path.resolve('desktop/preload.bundle.cjs'));
   const secondPage = await secondPagePromise;
   const [firstWorkspace, secondWorkspace] = await Promise.all([
@@ -956,6 +957,10 @@ test('E2E-KW-024 isolates two Renderer contexts across open, save, conflict and 
       if (scope.__knowledgeRevealOriginal) shell.showItemInFolder = scope.__knowledgeRevealOriginal;
       delete scope.__knowledgeRevealOriginal;
     });
-    await secondPage.close();
+    const secondPageClosed = secondPage.waitForEvent('close');
+    await app.evaluate(({ BrowserWindow }, windowId) => {
+      BrowserWindow.fromId(windowId)?.close();
+    }, secondWindowId);
+    await secondPageClosed;
   }
 });

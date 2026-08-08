@@ -16,6 +16,8 @@ import {
   createKnowledgeWorkspaceRoute,
 } from "../server/routes/knowledge-workspace.ts";
 import { SourceRegistry } from "../core/knowledge-workspace/source-registry.ts";
+import { DurableKnowledgeOperationJournal } from "../core/knowledge-workspace/durable-operation-journal.ts";
+import { DurableKnowledgeAtomicOperationJournal } from "../core/knowledge-workspace/durable-atomic-operation-journal.ts";
 import { createResourceIoRoute } from "../server/routes/resource-io.ts";
 
 describe("knowledge workspace source route", () => {
@@ -60,6 +62,31 @@ describe("knowledge workspace source route", () => {
     const app = new Hono();
     app.route("/api", createKnowledgeWorkspaceRoute(engine));
     return { app, engine, main, research };
+  }
+
+  function passthroughAtomicCoordinator() {
+    return {
+      recover: vi.fn(async () => ({
+        scanned: 0,
+        finalized: 0,
+        rolledBack: 0,
+        recoveryRequired: 0,
+      })),
+      isSourceRecovering: () => false,
+      run: vi.fn(async (request, executor, context) => {
+        const execution = await executor(request.items[0], 0, {
+          ...context,
+          operationId: "123e4567-e89b-42d3-a456-426614174038",
+        });
+        return {
+          items: [{
+            ...request.items[0],
+            state: "applied",
+            bytesTransferred: execution.bytesTransferred,
+          }],
+        };
+      }),
+    };
   }
 
   it("lists main, mounts and removes a session-only source through the public API", async () => {
@@ -246,10 +273,13 @@ describe("knowledge workspace source route", () => {
     await engine.disposeKnowledgeIndexRuntime();
   });
 
-  it("projects a recovering operation source as degraded without exposing journal identity", async () => {
+  it("projects a source recovering in either operation coordinator without exposing journal identity", async () => {
     const { engine } = setup();
     Object.assign(engine, {
       knowledgeOperationCoordinator: {
+        isSourceRecovering: () => false,
+      },
+      knowledgeTrashOperationCoordinator: {
         isSourceRecovering: (sourceKey: string) => sourceKey === "main",
       },
     });
@@ -272,7 +302,7 @@ describe("knowledge workspace source route", () => {
 
   it("copies an editor resource through the scoped domain route without path DTOs", async () => {
     const { engine, main } = setup();
-    const copyForEditor = vi.fn(async () => ({
+    const result = {
       copied: true,
       targetAddress: {
         sourceKey: "main",
@@ -281,12 +311,40 @@ describe("knowledge workspace source route", () => {
       bytesTransferred: 5,
       embed: true,
       originalName: "photo.png",
+    };
+    const copyForEditor = vi.fn(async (request) => ({
+      plan: {
+        disposition: "copy",
+        prepared: {
+          source: { kind: "mount", mountId: "mount_research", path: "Media/photo.png" },
+          sourceAddress: request.sourceAddress,
+          expectedSourceVersion: { size: 5, etag: "source-v1" },
+          pageAddress: request.pageAddress,
+          expectedPageVersion: { size: 4, etag: "page-v1" },
+          targetDirectoryAddress: { sourceKey: "main", relativePath: "Notes/assets" },
+          targetAddress: result.targetAddress,
+          kind: request.kind,
+          originalName: result.originalName,
+          embed: true,
+        },
+      },
+      execute: vi.fn(async () => result),
     }));
     Object.assign(engine, {
-      copyKnowledgeResourceForEditor: copyForEditor,
+      prepareKnowledgeResourceCopyForEditor: copyForEditor,
+      knowledgeAtomicOperationCoordinator: passthroughAtomicCoordinator(),
     });
     const app = new Hono();
     app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    expect((await app.request("/api/knowledge-workspace/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceKey: "research",
+        displayName: "Research",
+        mountId: "mount_research",
+      }),
+    })).status).toBe(201);
     const request = {
       sourceAddress: {
         sourceKey: "research",
@@ -336,7 +394,7 @@ describe("knowledge workspace source route", () => {
 
   it("accepts an external file stream through opaque metadata without path DTOs", async () => {
     const { engine, main } = setup();
-    const copyExternalForEditor = vi.fn(async () => ({
+    const result = {
       copied: true,
       targetAddress: {
         sourceKey: "main",
@@ -345,9 +403,27 @@ describe("knowledge workspace source route", () => {
       bytesTransferred: 5,
       embed: true,
       originalName: "photo.png",
+    };
+    const copyExternalForEditor = vi.fn(async (request) => ({
+      plan: {
+        disposition: "copy",
+        prepared: {
+          source: { kind: "session-file", fileId: "opaque-upload" },
+          expectedSourceVersion: { size: request.sizeBytes },
+          pageAddress: request.pageAddress,
+          expectedPageVersion: { size: 4, etag: "page-v1" },
+          targetDirectoryAddress: { sourceKey: "main", relativePath: "Notes/assets" },
+          targetAddress: result.targetAddress,
+          kind: "attachment",
+          originalName: result.originalName,
+          embed: true,
+        },
+      },
+      execute: vi.fn(async () => result),
     }));
     Object.assign(engine, {
-      copyExternalKnowledgeResourceForEditor: copyExternalForEditor,
+      prepareExternalKnowledgeResourceCopyForEditor: copyExternalForEditor,
+      knowledgeAtomicOperationCoordinator: passthroughAtomicCoordinator(),
     });
     const app = new Hono();
     app.route("/api", createKnowledgeWorkspaceRoute(engine));
@@ -403,7 +479,7 @@ describe("knowledge workspace source route", () => {
     const { engine } = setup();
     const copyExternalForEditor = vi.fn();
     Object.assign(engine, {
-      copyExternalKnowledgeResourceForEditor: copyExternalForEditor,
+      prepareExternalKnowledgeResourceCopyForEditor: copyExternalForEditor,
     });
     const app = new Hono();
     app.route("/api", createKnowledgeWorkspaceRoute(engine));
@@ -431,6 +507,131 @@ describe("knowledge workspace source route", () => {
 
     expect(response.status).toBe(412);
     expect(copyExternalForEditor).not.toHaveBeenCalled();
+  });
+
+  it("durably journals real internal and streamed editor copies before publishing their targets", async () => {
+    const { engine, main, research } = setup();
+    const resourceIO = createSandboxResourceIO({
+      cwd: main,
+      agentDir: main,
+      workspace: main,
+      workspaceFolders: [main],
+      authorizedFolders: [main, research],
+      hanakoHome: engine.hanakoHome,
+      getSandboxEnabled: () => false,
+      studioId: "studio_1",
+    });
+    Object.assign(engine, {
+      resourceIO,
+      getResourceIO: () => resourceIO,
+      prepareKnowledgeResourceCopyForEditor:
+        HanaEngine.prototype.prepareKnowledgeResourceCopyForEditor,
+      prepareExternalKnowledgeResourceCopyForEditor:
+        HanaEngine.prototype.prepareExternalKnowledgeResourceCopyForEditor,
+    });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "authPrincipal",
+        normalizePrincipal({
+          kind: "local_user",
+          userId: "user_1",
+          studioId: "studio_1",
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+          scopes: ["studio.owner", "files.read", "files.write"],
+        }),
+      );
+      await next();
+    });
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    expect((await app.request("/api/knowledge-workspace/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceKey: "research",
+        displayName: "Research",
+        mountId: "mount_research",
+      }),
+    })).status).toBe(201);
+    fs.mkdirSync(path.join(main, "Notes"), { recursive: true });
+    fs.mkdirSync(path.join(research, "Media"), { recursive: true });
+    fs.writeFileSync(path.join(main, "Notes", "Host.md"), "# host", "utf8");
+    fs.writeFileSync(path.join(research, "Media", "photo.png"), "photo", "utf8");
+    expect(fs.existsSync(path.join(main, "Notes", "assets"))).toBe(false);
+
+    const internal = await app.request("/api/knowledge-workspace/copy-for-editor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceAddress: { sourceKey: "research", relativePath: "Media/photo.png" },
+        pageAddress: { sourceKey: "main", relativePath: "Notes/Host.md" },
+        kind: "attachment",
+        localDate: "2026-07-30",
+      }),
+    });
+    expect(internal.status).toBe(201);
+    expect(fs.readFileSync(
+      path.join(main, "Notes", "assets", "2026-07-30-photo.png"),
+      "utf8",
+    )).toBe("photo");
+
+    const metadata = Buffer.from(JSON.stringify({
+      fileName: "capture.webp",
+      fileSize: 8,
+      mimeType: "image/webp",
+      pageAddress: { sourceKey: "main", relativePath: "Notes/Host.md" },
+      localDate: "2026-07-30",
+    }), "utf8").toString("base64url");
+    const external = await app.request(
+      "/api/knowledge-workspace/copy-external-for-editor",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Hanako-Knowledge-Copy": metadata,
+        },
+        body: "private!",
+      },
+    );
+    expect(external.status).toBe(201);
+    expect(fs.readFileSync(
+      path.join(main, "Notes", "assets", "2026-07-30-capture.webp"),
+      "utf8",
+    )).toBe("private!");
+
+    const records = new DurableKnowledgeAtomicOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    }).list();
+    expect(records.map(record => record.kind).sort()).toEqual(["copy", "import"]);
+    expect(records.find(record => record.kind === "copy")).toMatchObject({
+      state: "FINALIZED",
+      request: {
+        items: [{
+          sourceAddress: { sourceKey: "research", relativePath: "Media/photo.png" },
+          targetAddress: { sourceKey: "main", relativePath: "Notes/assets/2026-07-30-photo.png" },
+        }],
+      },
+    });
+    const externalRecord = records.find(record => record.kind === "import");
+    expect(externalRecord).toMatchObject({
+      state: "FINALIZED",
+      request: {
+        items: [{
+          sourceToken: expect.any(String),
+          expectedSourceVersion: { size: 8 },
+          targetAddress: { sourceKey: "main", relativePath: "Notes/assets/2026-07-30-capture.webp" },
+        }],
+      },
+    });
+    expect(externalRecord?.request.items[0]).not.toHaveProperty("sourceAddress");
+    const serialized = JSON.stringify(records);
+    expect(serialized).not.toContain(main);
+    expect(serialized).not.toContain(research);
+    expect(serialized).not.toContain("opaque-upload");
+    expect(serialized).not.toContain("private!");
   });
 
   it("exposes the shared operation plan/commit/status/cancel protocol without path DTOs", async () => {
@@ -552,6 +753,81 @@ describe("knowledge workspace source route", () => {
     });
   });
 
+  it("dispatches atomic operation commit, status and cancel through the shared protocol", async () => {
+    const { engine } = setup();
+    const operationId = "123e4567-e89b-42d3-a456-426614174050";
+    const requestHash = "b".repeat(64);
+    const result = {
+      schemaVersion: 1,
+      operationId,
+      requestHash,
+      kind: "copy",
+      sourceKey: "main",
+      state: "FINALIZED",
+      completedAt: "2026-08-07T00:00:00.000Z",
+      items: [],
+      summary: { succeeded: 1, failed: 0, rolledBack: 0, recoveryRequired: 0 },
+      projections: { session: "applied", event: "applied", index: "applied" },
+    };
+    const commit = vi.fn(async () => result);
+    const cancel = vi.fn(async () => ({ ...result, state: "ROLLED_BACK" }));
+    const get = vi.fn(async () => result);
+    Object.assign(engine, {
+      knowledgeOperationCoordinator: {
+        recover: vi.fn(async () => ({})),
+        isSourceRecovering: () => false,
+      },
+      knowledgeTrashOperationCoordinator: {
+        recover: vi.fn(async () => ({})),
+        isSourceRecovering: () => false,
+        owns: () => false,
+      },
+      knowledgeAtomicOperationCoordinator: {
+        recover: vi.fn(async () => ({})),
+        isSourceRecovering: () => false,
+        owns: (candidate: string) => candidate === operationId,
+        commit,
+        cancel,
+        get,
+      },
+    });
+    const app = new Hono();
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const committed = await app.request(
+      `/api/knowledge-workspace/operations/${operationId}/commit`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestHash }),
+      },
+    );
+    expect(committed.status).toBe(200);
+    expect(await committed.json()).toEqual({ result });
+    expect(commit).toHaveBeenCalledWith(
+      operationId,
+      { requestHash },
+      expect.objectContaining({ reason: "knowledge-operation-commit" }),
+    );
+
+    expect((await app.request(
+      `/api/knowledge-workspace/operations/${operationId}`,
+    )).status).toBe(200);
+    expect(get).toHaveBeenCalledWith(
+      operationId,
+      expect.objectContaining({ reason: "knowledge-operation-status" }),
+    );
+
+    expect((await app.request(
+      `/api/knowledge-workspace/operations/${operationId}/cancel`,
+      { method: "POST" },
+    )).status).toBe(200);
+    expect(cancel).toHaveBeenCalledWith(
+      operationId,
+      expect.objectContaining({ reason: "knowledge-operation-cancel" }),
+    );
+  });
+
   it("commits a real same-source rename through the public operation route", async () => {
     const { engine, main } = setup();
     const oldPath = path.join(main, "old.md");
@@ -630,6 +906,142 @@ describe("knowledge workspace source route", () => {
     expect(fs.readFileSync(newPath, "utf8")).toBe("real route");
   });
 
+  it("plans and commits delete/restore through the public operation protocol and exposes cleanup planning", async () => {
+    const { engine, main } = setup();
+    const resourceIO = new ResourceIO({
+      providers: {
+        local_fs: new LocalFsProvider({ cwd: main }),
+      },
+    });
+    Object.assign(engine, { resourceIO });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "authPrincipal",
+        normalizePrincipal({
+          kind: "local_user",
+          userId: "user_1",
+          studioId: "studio_1",
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+          scopes: ["studio.owner", "files.read", "files.write"],
+        }),
+      );
+      await next();
+    });
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    const notePath = path.join(main, "Planned.md");
+    fs.writeFileSync(notePath, "planned", "utf8");
+
+    const deletePlanResponse = await app.request(
+      "/api/knowledge-workspace/operations/plan",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "delete",
+          addresses: [{ sourceKey: "main", relativePath: "Planned.md" }],
+        }),
+      },
+    );
+    expect(deletePlanResponse.status).toBe(201);
+    const deletePlan = (await deletePlanResponse.json()).plan;
+    expect(deletePlan).toMatchObject({
+      kind: "delete",
+      sourceKey: "main",
+    });
+    expect(fs.existsSync(notePath)).toBe(true);
+
+    const deleteCommit = await app.request(
+      `/api/knowledge-workspace/operations/${deletePlan.operationId}/commit`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestHash: deletePlan.requestHash }),
+      },
+    );
+    expect(deleteCommit.status).toBe(200);
+    expect((await deleteCommit.json()).result).toMatchObject({
+      kind: "delete",
+      state: "FINALIZED",
+      summary: { succeeded: 1, failed: 0 },
+    });
+    expect(fs.existsSync(notePath)).toBe(false);
+
+    const listed = await app.request("/api/knowledge-workspace/trash/main");
+    const batch = (await listed.json()).batches.find(
+      (candidate: { batchId: string }) => candidate.batchId === deletePlan.batchId,
+    );
+    const entry = batch.entries[0];
+    const restorePlanResponse = await app.request(
+      "/api/knowledge-workspace/trash/restore/plan",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceKey: "main",
+          batchId: deletePlan.batchId,
+          entryIds: [entry.entryId],
+        }),
+      },
+    );
+    expect(restorePlanResponse.status).toBe(201);
+    const restorePlan = (await restorePlanResponse.json()).plan;
+    expect(restorePlan).toMatchObject({
+      kind: "restore",
+      batchId: deletePlan.batchId,
+      items: [{ targetAddress: { sourceKey: "main", relativePath: "Planned.md" } }],
+    });
+    expect(fs.existsSync(notePath)).toBe(false);
+
+    const restoreCommit = await app.request(
+      `/api/knowledge-workspace/operations/${restorePlan.operationId}/commit`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestHash: restorePlan.requestHash }),
+      },
+    );
+    expect(restoreCommit.status).toBe(200);
+    expect((await restoreCommit.json()).result).toMatchObject({
+      kind: "restore",
+      state: "FINALIZED",
+    });
+    expect(fs.readFileSync(notePath, "utf8")).toBe("planned");
+
+    const trashedAgain = await app.request("/api/knowledge-workspace/trash", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        addresses: [{ sourceKey: "main", relativePath: "Planned.md" }],
+      }),
+    });
+    const secondBatchId = (await trashedAgain.json()).result.batchId as string;
+    const secondListed = await app.request("/api/knowledge-workspace/trash/main");
+    const secondEntry = (await secondListed.json()).batches.find(
+      (candidate: { batchId: string }) => candidate.batchId === secondBatchId,
+    ).entries[0];
+    const cleanupPlanResponse = await app.request(
+      "/api/knowledge-workspace/trash/cleanup/plan",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: secondEntry.trashAddress }),
+      },
+    );
+    expect(cleanupPlanResponse.status).toBe(201);
+    const cleanupPlan = (await cleanupPlanResponse.json()).plan;
+    expect(cleanupPlan).toMatchObject({ kind: "cleanup", batchId: secondBatchId });
+    const cancelled = await app.request(
+      `/api/knowledge-workspace/operations/${cleanupPlan.operationId}/cancel`,
+      { method: "POST" },
+    );
+    expect(cancelled.status).toBe(200);
+    expect((await cancelled.json()).result).toMatchObject({ state: "ROLLED_BACK" });
+  });
+
   it("records a retained system-trash failure when native consumption rejects a changed grant", async () => {
     const { engine, main } = setup();
     const resourceIO = new ResourceIO({
@@ -701,6 +1113,345 @@ describe("knowledge workspace source route", () => {
         state: "trashed",
         errorCode: "knowledge_resource_unavailable",
       })] }));
+    const journal = new DurableKnowledgeOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    });
+    expect(journal.listTrash()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "delete", state: "FINALIZED" }),
+      expect.objectContaining({
+        kind: "cleanup",
+        state: "ROLLED_BACK",
+        items: [expect.objectContaining({ state: "rolled-back" })],
+      }),
+    ]));
+  });
+
+  it("finalizes the durable cleanup journal after Main confirms system-trash success", async () => {
+    const { engine, main } = setup();
+    const resourceIO = new ResourceIO({
+      providers: {
+        local_fs: new LocalFsProvider({ cwd: main }),
+      },
+    });
+    Object.assign(engine, { resourceIO });
+    configureKnowledgeNativeBridge(engine, "b".repeat(43));
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "transportConnectionKind",
+        "local",
+      );
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "authPrincipal",
+        normalizePrincipal({
+          kind: "local_user",
+          userId: "user_1",
+          studioId: "studio_1",
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+          scopes: ["studio.owner", "files.read", "files.write"],
+        }),
+      );
+      await next();
+    });
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    fs.writeFileSync(path.join(main, "Cleanup.md"), "cleanup", "utf8");
+
+    const trashed = await app.request("/api/knowledge-workspace/trash", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        addresses: [{ sourceKey: "main", relativePath: "Cleanup.md" }],
+      }),
+    });
+    const batchId = (await trashed.json()).result.batchId as string;
+    const listed = await app.request("/api/knowledge-workspace/trash/main");
+    const entry = (await listed.json()).batches
+      .find((batch: { batchId: string }) => batch.batchId === batchId)
+      .entries[0];
+    const planned = await app.request(
+      "/api/knowledge-workspace/trash/cleanup/plan",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: entry.trashAddress }),
+      },
+    );
+    expect(planned.status).toBe(201);
+    const cleanupPlan = (await planned.json()).plan;
+    const issued = await app.request("/api/knowledge-workspace/native/grants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "systemTrash",
+        address: entry.trashAddress,
+        operationId: cleanupPlan.operationId,
+      }),
+    });
+    const issuedBody = await issued.json();
+    expect(issuedBody).not.toHaveProperty("operationId");
+    const plannedJournals = new DurableKnowledgeOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    }).listTrash().filter(candidate => candidate.kind === "cleanup");
+    expect(plannedJournals).toHaveLength(1);
+    expect(plannedJournals[0].operationId).toBe(cleanupPlan.operationId);
+    const grantId = issuedBody.grant.grantId as string;
+    const consumed = await app.request("/api/knowledge-workspace/native/consume", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Hana-Native-Bridge": "b".repeat(43),
+      },
+      body: JSON.stringify({ action: "systemTrash", grantId }),
+    });
+    expect(consumed.status).toBe(200);
+    const filePath = (await consumed.json()).filePath as string;
+    fs.rmSync(filePath, { recursive: true, force: true });
+
+    const completed = await app.request("/api/knowledge-workspace/native/complete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Hana-Native-Bridge": "b".repeat(43),
+      },
+      body: JSON.stringify({ grantId, ok: true }),
+    });
+    expect(completed.status).toBe(200);
+    expect(await completed.json()).toEqual({ ok: true });
+
+    const manifest = JSON.parse(fs.readFileSync(
+      path.join(main, ".trash", batchId, "manifest.json"),
+      "utf8",
+    ));
+    expect(manifest.entries[0]).toMatchObject({ state: "cleaned" });
+    const journal = new DurableKnowledgeOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    });
+    expect(journal.listTrash().find(candidate => candidate.kind === "cleanup"))
+      .toMatchObject({ state: "FINALIZED", items: [{ state: "applied" }] });
+  });
+
+  it("journals native import replacement through the trash coordinator and rejects injected identity fields", async () => {
+    const { engine, main, research } = setup();
+    const resourceIO = new ResourceIO({
+      providers: {
+        local_fs: new LocalFsProvider({ cwd: main }),
+      },
+    });
+    Object.assign(engine, { resourceIO });
+    configureKnowledgeNativeBridge(engine, "c".repeat(43));
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "transportConnectionKind",
+        "local",
+      );
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "authPrincipal",
+        normalizePrincipal({
+          kind: "local_user",
+          userId: "user_1",
+          studioId: "studio_1",
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+          scopes: ["studio.owner", "files.read", "files.write"],
+        }),
+      );
+      await next();
+    });
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    const targetPath = path.join(main, "Replace.md");
+    const externalPath = path.join(research, "Replace.md");
+    fs.writeFileSync(targetPath, "old", "utf8");
+    fs.writeFileSync(externalPath, "new", "utf8");
+    const requestBody = {
+      filePaths: [externalPath],
+      target: { sourceKey: "main", directoryPath: "" },
+      conflictPolicy: "replace",
+    };
+
+    const injected = await app.request("/api/knowledge-workspace/native/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Hana-Native-Bridge": "c".repeat(43),
+      },
+      body: JSON.stringify({ ...requestBody, principal: { userId: "attacker" } }),
+    });
+    expect(injected.status).toBe(412);
+    expect(fs.readFileSync(targetPath, "utf8")).toBe("old");
+
+    const imported = await app.request("/api/knowledge-workspace/native/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Hana-Native-Bridge": "c".repeat(43),
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    expect(imported.status).toBe(200);
+    const responseText = await imported.text();
+    expect(JSON.parse(responseText)).toEqual({
+      results: [expect.objectContaining({
+        ok: true,
+        targetAddress: { sourceKey: "main", relativePath: "Replace.md" },
+      })],
+    });
+    expect(responseText).not.toContain(externalPath);
+    expect(responseText).not.toContain(main);
+    expect(fs.readFileSync(targetPath, "utf8")).toBe("new");
+    const journal = new DurableKnowledgeOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    });
+    expect(journal.listTrash()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "delete",
+        state: "FINALIZED",
+        items: [expect.objectContaining({ state: "applied" })],
+      }),
+    ]));
+    const atomicJournal = new DurableKnowledgeAtomicOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    });
+    const importRecord = atomicJournal.list().find(candidate => candidate.kind === "import");
+    expect(importRecord).toMatchObject({
+      state: "FINALIZED",
+      items: [{
+        targetAddress: { sourceKey: "main", relativePath: "Replace.md" },
+        disposition: "replace",
+        state: "applied",
+        steps: [{ kind: "resource-replace", state: "applied" }],
+      }],
+    });
+    expect(JSON.stringify(importRecord)).not.toContain(externalPath);
+    expect(JSON.stringify(importRecord)).not.toContain(main);
+  });
+
+  it("journals paste copies atomically and routes cuts through durable refactor moves", async () => {
+    const { engine, main, research } = setup();
+    const resourceIO = createSandboxResourceIO({
+      cwd: main,
+      agentDir: main,
+      workspace: main,
+      workspaceFolders: [main],
+      authorizedFolders: [main, research],
+      hanakoHome: engine.hanakoHome,
+      getSandboxEnabled: () => false,
+      studioId: "studio_1",
+    });
+    Object.assign(engine, {
+      resourceIO,
+      createUserEditCheckpoint: vi.fn(async () => ({ id: "checkpoint-paste" })),
+    });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "authPrincipal",
+        normalizePrincipal({
+          kind: "local_user",
+          userId: "user_1",
+          studioId: "studio_1",
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          connectionKind: "local",
+          credentialKind: "loopback_token",
+          scopes: ["studio.owner", "files.read", "files.write"],
+        }),
+      );
+      await next();
+    });
+    app.route("/api", createKnowledgeWorkspaceRoute(engine));
+    const registered = await app.request("/api/knowledge-workspace/sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourceKey: "research",
+        displayName: "Research",
+        mountId: "mount_research",
+      }),
+    });
+    expect(registered.status).toBe(201);
+    fs.mkdirSync(path.join(main, "Folder"), { recursive: true });
+    fs.writeFileSync(path.join(research, "Copied.md"), "copy bytes", "utf8");
+    fs.writeFileSync(path.join(main, "Moved.md"), "move bytes", "utf8");
+
+    const copied = await app.request("/api/knowledge-workspace/resources/paste", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        intent: "copy",
+        items: [{ sourceKey: "research", relativePath: "Copied.md" }],
+        target: { sourceKey: "main", directoryPath: "Folder" },
+      }),
+    });
+    expect(copied.status).toBe(200);
+    const copiedText = await copied.text();
+    expect(JSON.parse(copiedText)).toEqual({
+      results: [expect.objectContaining({
+        ok: true,
+        effect: "copy",
+        targetAddress: { sourceKey: "main", relativePath: "Folder/Copied.md" },
+      })],
+    });
+    expect(fs.readFileSync(path.join(main, "Folder", "Copied.md"), "utf8"))
+      .toBe("copy bytes");
+
+    const moved = await app.request("/api/knowledge-workspace/resources/paste", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        intent: "cut",
+        items: [{ sourceKey: "main", relativePath: "Moved.md" }],
+        target: { sourceKey: "main", directoryPath: "Folder" },
+      }),
+    });
+    expect(moved.status).toBe(200);
+    const movedText = await moved.text();
+    expect(JSON.parse(movedText)).toEqual({
+      results: [expect.objectContaining({
+        ok: true,
+        effect: "move",
+        targetAddress: { sourceKey: "main", relativePath: "Folder/Moved.md" },
+      })],
+    });
+    expect(fs.existsSync(path.join(main, "Moved.md"))).toBe(false);
+    expect(fs.readFileSync(path.join(main, "Folder", "Moved.md"), "utf8"))
+      .toBe("move bytes");
+
+    const atomicRecord = new DurableKnowledgeAtomicOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    }).list().find(candidate => candidate.kind === "copy");
+    expect(atomicRecord).toMatchObject({
+      state: "FINALIZED",
+      request: {
+        sourceKey: "main",
+        items: [{
+          sourceAddress: { sourceKey: "research", relativePath: "Copied.md" },
+          targetAddress: { sourceKey: "main", relativePath: "Folder/Copied.md" },
+        }],
+      },
+      items: [{ state: "applied", steps: [{ kind: "resource-transfer", state: "applied" }] }],
+    });
+    const moveRecord = new DurableKnowledgeOperationJournal({
+      hanakoHome: engine.hanakoHome,
+    }).list().find(candidate => candidate.kind === "move");
+    expect(moveRecord).toMatchObject({
+      state: "FINALIZED",
+      request: {
+        from: { sourceKey: "main", relativePath: "Moved.md" },
+        to: { sourceKey: "main", relativePath: "Folder/Moved.md" },
+      },
+      items: [{ state: "applied", checkpointId: "checkpoint-paste" }],
+    });
+    for (const serialized of [copiedText, movedText, JSON.stringify(atomicRecord), JSON.stringify(moveRecord)]) {
+      expect(serialized).not.toContain(main);
+      expect(serialized).not.toContain(research);
+    }
   });
 
   it("resolves public KnowledgeResourceAddress values before ResourceIO access", async () => {

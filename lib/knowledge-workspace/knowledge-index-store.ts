@@ -11,10 +11,9 @@ export const KNOWLEDGE_INDEX_ROOT = path.join(
   "index",
   "v1",
 );
-// Keep the original root as a read-compatible legacy location.  Two 64-byte
-// hex directory names below it can cross Windows' conservative path limit
-// once a normal user profile and a generation filename are included.
-const KNOWLEDGE_INDEX_COMPACT_ROOT = path.join("kw", "i", "v1");
+// `kw/i/v1` was briefly used as a Windows path-length workaround. It remains
+// read-compatible only; all new generations stay below the frozen v1 root.
+const KNOWLEDGE_INDEX_LEGACY_COMPACT_ROOT = path.join("kw", "i", "v1");
 export const KNOWLEDGE_INDEX_BUILD_RETENTION_MS = 24 * 60 * 60 * 1_000;
 export const KNOWLEDGE_INDEX_WRITER_HEARTBEAT_MS = 10_000;
 export const KNOWLEDGE_INDEX_SAME_HOST_STALE_MS = 60_000;
@@ -39,13 +38,26 @@ export function knowledgeIndexCompactPartitionPath(
 ): string {
   return path.join(
     hanakoHome,
-    KNOWLEDGE_INDEX_COMPACT_ROOT,
+    KNOWLEDGE_INDEX_ROOT,
     fingerprintPathSegment(workspaceFingerprint),
     fingerprintPathSegment(sourceFingerprint),
   );
 }
 
-function knowledgeIndexLegacyPartitionPath(
+function knowledgeIndexLegacyCompactPartitionPath(
+  hanakoHome: string,
+  workspaceFingerprint: string,
+  sourceFingerprint: string,
+): string {
+  return path.join(
+    hanakoHome,
+    KNOWLEDGE_INDEX_LEGACY_COMPACT_ROOT,
+    fingerprintPathSegment(workspaceFingerprint),
+    fingerprintPathSegment(sourceFingerprint),
+  );
+}
+
+function knowledgeIndexLegacyHexPartitionPath(
   hanakoHome: string,
   workspaceFingerprint: string,
   sourceFingerprint: string,
@@ -63,11 +75,11 @@ function fingerprintPathSegment(fingerprint: string): string {
 }
 
 /**
- * Legacy v1 partitions include two full fingerprints. Under a normal Windows
- * profile their database filename can cross the conservative Win32 path
- * limit, even though Node can copy and inspect the files. SQLite accepts the
- * namespaced form, which keeps those existing partitions readable while new
- * partitions continue to use the compact layout.
+ * Legacy v1 partitions can include two full fingerprints. Under a normal
+ * Windows profile their database filename can cross the conservative Win32
+ * path limit, even though Node can copy and inspect the files. SQLite accepts
+ * the namespaced form, which keeps those existing partitions readable while
+ * new partitions use compact Base64URL fingerprints below the contract root.
  */
 function sqliteDatabasePath(filePath: string): string {
   return process.platform === "win32" ? path.toNamespacedPath(filePath) : filePath;
@@ -420,8 +432,16 @@ type StoreOptions = {
   checkpointBusyTimeoutMs?: number;
 };
 
+type CurrentIndexState = Readonly<{
+  partitionPath: string;
+  manifest: KnowledgeIndexManifest | null;
+  databaseReadable: boolean;
+  health: KnowledgeIndexHealth;
+}>;
+
 export class KnowledgeIndexStore {
   readonly #partitionPath: string;
+  readonly #legacyPartitionPaths: readonly string[];
   readonly #sourceFingerprint: string;
   readonly #extractorContractVersion: string;
   readonly #hostId: string;
@@ -435,7 +455,11 @@ export class KnowledgeIndexStore {
     frontmatterJson: string | null;
     bodyText: string | null;
   }>>();
-  #queryManifestCache: { manifest: KnowledgeIndexManifest; cachedAtMs: number } | null = null;
+  #queryManifestCache: {
+    manifest: KnowledgeIndexManifest;
+    partitionPath: string;
+    cachedAtMs: number;
+  } | null = null;
   readonly #leaseCounts = new Map<string, number>();
   #activeRebuild: KnowledgeIndexRebuild | null = null;
   #lockedOwnerHint: string | null = null;
@@ -482,21 +506,36 @@ export class KnowledgeIndexStore {
       throw new TypeError("knowledge index checkpoint busy timeout is invalid");
     }
     this.#checkpointBusyTimeoutMs = checkpointBusyTimeoutMs;
-    const legacyPartitionPath = knowledgeIndexLegacyPartitionPath(
+    // Fresh generations always use the frozen `knowledge-workspace/index/v1`
+    // root. Base64URL segments retain the full 256-bit identities without the
+    // Windows path-length risk of the original hexadecimal partition names.
+    this.#partitionPath = knowledgeIndexCompactPartitionPath(
       options.hanakoHome,
       workspaceFingerprint,
       this.#sourceFingerprint,
     );
-    // Existing indexes remain usable without a migration.  Fresh partitions
-    // use base64url fingerprints and a compact root, preserving the complete
-    // 256-bit identities while leaving room for Windows profile paths.
-    this.#partitionPath = this.#fileSystem.exists(legacyPartitionPath)
-      ? legacyPartitionPath
-      : knowledgeIndexCompactPartitionPath(
+    // Do not discard partitions produced by released builds. They remain
+    // readable until a rebuild publishes a canonical generation, but no new
+    // writes are ever sent back to either legacy layout.
+    this.#legacyPartitionPaths = Object.freeze([
+      knowledgeIndexLegacyCompactPartitionPath(
         options.hanakoHome,
         workspaceFingerprint,
         this.#sourceFingerprint,
+      ),
+      knowledgeIndexLegacyHexPartitionPath(
+        options.hanakoHome,
+        workspaceFingerprint,
+        this.#sourceFingerprint,
+      ),
+    ]);
+    for (const legacyPartitionPath of this.#legacyPartitionPaths) {
+      assertExistingManagedDirectory(
+        options.hanakoHome,
+        path.relative(options.hanakoHome, legacyPartitionPath),
+        this.#fileSystem,
       );
+    }
     ensureManagedDirectory(
       options.hanakoHome,
       path.relative(options.hanakoHome, this.#partitionPath),
@@ -621,17 +660,25 @@ export class KnowledgeIndexStore {
   acquireQueryLease(): KnowledgeIndexQueryLease {
     const cached = this.#queryManifestCache;
     const current = cached && this.#now() - cached.cachedAtMs < 1_000
-      ? { manifest: cached.manifest, databaseReadable: true }
+      ? {
+        manifest: cached.manifest,
+        partitionPath: cached.partitionPath,
+        databaseReadable: true,
+      }
       : this.#readCurrent();
     if (!current.manifest || !current.databaseReadable) {
       throw indexUnavailable("knowledge index generation is unavailable");
     }
     this.#queryManifestCache = {
       manifest: current.manifest,
+      partitionPath: current.partitionPath,
       cachedAtMs: this.#now(),
     };
     const generationId = current.manifest.generationId;
-    const generationPath = this.#generationPath(generationId);
+    const generationPath = this.#generationPath(
+      generationId,
+      current.partitionPath,
+    );
     let database: DatabaseLike;
     try {
       database = new Database(sqliteDatabasePath(generationPath), {
@@ -642,19 +689,17 @@ export class KnowledgeIndexStore {
     } catch {
       throw indexUnavailable("knowledge index generation is unavailable");
     }
-    this.#leaseCounts.set(
-      generationId,
-      (this.#leaseCounts.get(generationId) ?? 0) + 1,
-    );
+    const leaseKey = this.#leaseKey(current.partitionPath, generationId);
+    this.#leaseCounts.set(leaseKey, (this.#leaseCounts.get(leaseKey) ?? 0) + 1);
     return new KnowledgeIndexQueryLease({
       database,
       manifest: current.manifest,
       searchCandidateCache: this.#searchCandidateCache,
       searchDisplayCache: this.#searchDisplayCache,
       release: () => {
-        const remaining = (this.#leaseCounts.get(generationId) ?? 1) - 1;
-        if (remaining > 0) this.#leaseCounts.set(generationId, remaining);
-        else this.#leaseCounts.delete(generationId);
+        const remaining = (this.#leaseCounts.get(leaseKey) ?? 1) - 1;
+        if (remaining > 0) this.#leaseCounts.set(leaseKey, remaining);
+        else this.#leaseCounts.delete(leaseKey);
       },
     });
   }
@@ -682,6 +727,9 @@ export class KnowledgeIndexStore {
     if (!beforeLock.manifest || !beforeLock.databaseReadable) {
       throw indexUnavailable("knowledge index generation is unavailable");
     }
+    if (beforeLock.partitionPath !== this.#partitionPath) {
+      throw indexUnavailable("knowledge index legacy partition requires rebuild");
+    }
     if (
       beforeLock.health.state !== "ready"
       && beforeLock.health.state !== "degraded"
@@ -698,6 +746,7 @@ export class KnowledgeIndexStore {
       if (
         !current.manifest
         || !current.databaseReadable
+        || current.partitionPath !== this.#partitionPath
         || current.manifest.generationId
           !== beforeLock.manifest.generationId
       ) {
@@ -786,7 +835,10 @@ export class KnowledgeIndexStore {
   }
 
   cleanupObsoleteGenerations(): readonly string[] {
-    const current = this.#readCurrent().manifest?.generationId;
+    const currentState = this.#readCurrent();
+    const current = currentState.partitionPath === this.#partitionPath
+      ? currentState.manifest?.generationId
+      : undefined;
     const candidates = this.#generationArtifacts()
       .filter((artifact) => artifact.generationId !== current)
       .sort((left, right) => right.mtimeMs - left.mtimeMs);
@@ -795,7 +847,9 @@ export class KnowledgeIndexStore {
       if (
         index === 0
         || this.#now() - artifact.mtimeMs < KNOWLEDGE_INDEX_BUILD_RETENTION_MS
-        || (this.#leaseCounts.get(artifact.generationId) ?? 0) > 0
+        || (this.#leaseCounts.get(
+          this.#leaseKey(this.#partitionPath, artifact.generationId),
+        ) ?? 0) > 0
       ) {
         continue;
       }
@@ -928,21 +982,44 @@ export class KnowledgeIndexStore {
     }
   }
 
-  #readCurrent(): {
-    manifest: KnowledgeIndexManifest | null;
-    databaseReadable: boolean;
-    health: KnowledgeIndexHealth;
-  } {
-    const manifestPath = path.join(this.#partitionPath, MANIFEST_FILE);
+  #readCurrent(): CurrentIndexState {
+    const canonical = this.#readCurrentAt(this.#partitionPath);
+    // A canonical manifest, including an invalid or unreadable one, is
+    // authoritative. Falling through in that case would hide corruption and
+    // make an old cache unexpectedly mask a failed current generation.
+    if (canonical.manifest || canonical.health.state !== "unavailable") {
+      return canonical;
+    }
+    for (const partitionPath of this.#legacyPartitionPaths) {
+      const legacy = this.#readCurrentAt(partitionPath);
+      if (!legacy.manifest && legacy.health.state === "unavailable") continue;
+      if (legacy.health.state !== "ready") return legacy;
+      // Keep a valid legacy cache queryable while ensuring the next indexing
+      // action performs a source-of-truth rebuild into the canonical layout.
+      return Object.freeze({
+        ...legacy,
+        health: Object.freeze({
+          state: "stale" as const,
+          generationId: legacy.health.generationId,
+          reason: "legacy_partition",
+        }),
+      });
+    }
+    return canonical;
+  }
+
+  #readCurrentAt(partitionPath: string): CurrentIndexState {
+    const manifestPath = path.join(partitionPath, MANIFEST_FILE);
     if (!this.#fileSystem.exists(manifestPath)) {
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest: null,
         databaseReadable: false,
         health: Object.freeze({
           state: "unavailable",
           reason: "no_ready_generation",
         }),
-      };
+      });
     }
     let manifest: KnowledgeIndexManifest;
     try {
@@ -955,16 +1032,20 @@ export class KnowledgeIndexStore {
         this.#sourceFingerprint,
       );
     } catch {
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest: null,
         databaseReadable: false,
         health: Object.freeze({
           state: "corrupt",
           reason: "manifest_invalid",
         }),
-      };
+      });
     }
-    const generationPath = this.#generationPath(manifest.generationId);
+    const generationPath = this.#generationPath(
+      manifest.generationId,
+      partitionPath,
+    );
     let database: DatabaseLike | null = null;
     try {
       const generationStat = this.#fileSystem.lstat(generationPath);
@@ -996,7 +1077,8 @@ export class KnowledgeIndexStore {
         schemaVersion !== KNOWLEDGE_INDEX_SCHEMA_VERSION
         || manifest.schemaVersion !== KNOWLEDGE_INDEX_SCHEMA_VERSION
       ) {
-        return {
+        return Object.freeze({
+          partitionPath,
           manifest,
           databaseReadable: true,
           health: Object.freeze({
@@ -1004,12 +1086,13 @@ export class KnowledgeIndexStore {
             generationId: manifest.generationId,
             reason: "schema_version_mismatch",
           }),
-        };
+        });
       }
       try {
         validateSchema(database);
       } catch {
-        return {
+        return Object.freeze({
+          partitionPath,
           manifest,
           databaseReadable: true,
           health: Object.freeze({
@@ -1017,13 +1100,14 @@ export class KnowledgeIndexStore {
             generationId: manifest.generationId,
             reason: "schema_contract_mismatch",
           }),
-        };
+        });
       }
       if (
         meta.extractor_contract_version !== this.#extractorContractVersion
         || manifest.extractorContractVersion !== this.#extractorContractVersion
       ) {
-        return {
+        return Object.freeze({
+          partitionPath,
           manifest,
           databaseReadable: true,
           health: Object.freeze({
@@ -1031,9 +1115,10 @@ export class KnowledgeIndexStore {
             generationId: manifest.generationId,
             reason: "extractor_contract_mismatch",
           }),
-        };
+        });
       }
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest,
         databaseReadable: true,
         health: Object.freeze({
@@ -1041,9 +1126,10 @@ export class KnowledgeIndexStore {
           generationId: manifest.generationId,
           sequence: Number(meta.last_complete_sequence),
         }),
-      };
+      });
     } catch {
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest,
         databaseReadable: false,
         health: Object.freeze({
@@ -1051,7 +1137,7 @@ export class KnowledgeIndexStore {
           generationId: manifest.generationId,
           reason: "generation_integrity_failed",
         }),
-      };
+      });
     } finally {
       try {
         database?.close();
@@ -1252,11 +1338,15 @@ export class KnowledgeIndexStore {
     return path.join(this.#partitionPath, `build-${rebuildId}.sqlite`);
   }
 
-  #generationPath(generationId: string): string {
+  #generationPath(generationId: string, partitionPath = this.#partitionPath): string {
     return path.join(
-      this.#partitionPath,
+      partitionPath,
       `generation-${validArtifactId(generationId, "generationId")}.sqlite`,
     );
+  }
+
+  #leaseKey(partitionPath: string, generationId: string): string {
+    return `${partitionPath}\u0000${generationId}`;
   }
 
   #safeRemove(target: string, recursive = false): void {
@@ -2668,6 +2758,37 @@ function readLockOwner(
     });
   } catch {
     return null;
+  }
+}
+
+function assertExistingManagedDirectory(
+  hanakoHome: string,
+  relativeDirectory: string,
+  fileSystem: KnowledgeIndexFileSystem,
+): void {
+  const segments = relativeDirectory.split(path.sep).filter(Boolean);
+  let current = hanakoHome;
+  for (const segment of segments) {
+    if (
+      segment === "."
+      || segment === ".."
+      || segment.includes("/")
+      || segment.includes("\\")
+    ) {
+      throw new TypeError("knowledge index managed directory is invalid");
+    }
+    current = path.join(current, segment);
+    try {
+      const entry = fileSystem.lstat(current);
+      if (!entry.isDirectory() || entry.isSymbolicLink()) {
+        throw indexUnavailable(
+          "knowledge index managed directory is unavailable",
+        );
+      }
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") return;
+      throw error;
+    }
   }
 }
 

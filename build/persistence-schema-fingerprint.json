@@ -629,7 +629,7 @@
     ],
     "version": 2
   },
-  "payloadFingerprint": "sha256:446c76f9524cf1281d60a628041db187d49004bd802575a4a1bcae8ddcb8321e",
+  "payloadFingerprint": "sha256:2e510152673cec7efbb7c8d4e3ba329e8bfdec807f81dbd8ab99113ea12488c7",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -1505,7 +1505,7 @@
       "firstPossibleWritePhase": "runtime_ready",
       "format": "mixed-directory",
       "id": "knowledge-index-generations",
-      "identityContract": "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation.",
+      "identityContract": "workspace/source ProviderRootIdentity fingerprints select one isolated canonical Base64URL partition below knowledge-workspace/index/v1; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation. Legacy kw/i/v1 and hexadecimal partitions remain read-compatible until rebuild.",
       "migrationEntry": [],
       "openEntry": [
         "KnowledgeIndexCoordinator",
@@ -1515,9 +1515,11 @@
       "ownerModule": "lib/knowledge-workspace/knowledge-index-store.ts",
       "pathExclusions": [],
       "pathKind": "tree",
-      "pathPattern": "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+      "pathPattern": "knowledge-workspace/index/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
       "pathPatterns": [
-        "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**"
+        "knowledge-workspace/index/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+        "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+        "knowledge-workspace/index/v1/{workspaceFingerprintHex}/{sourceFingerprintHex}/**"
       ],
       "preCoordinatorReadProjection": null,
       "protocolModules": [
@@ -1525,7 +1527,7 @@
         "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
         "lib/knowledge-workspace/knowledge-query.ts"
       ],
-      "restorePolicy": "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition.",
+      "restorePolicy": "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition. Legacy kw/i/v1 and hexadecimal v1 partitions are read-only compatibility sources and are never write targets.",
       "schemaContract": {
         "compatibility": "The named runtime reader is canonical; this inventory does not imply stricter validation than runtime currently performs.",
         "kind": "protocol",
@@ -1551,7 +1553,9 @@
       "migrationEntry": [],
       "openEntry": [
         "KnowledgeOperationCoordinator.recover",
-        "KnowledgeOperationCoordinator.plan"
+        "KnowledgeOperationCoordinator.plan",
+        "KnowledgeAtomicOperationCoordinator.recover",
+        "KnowledgeAtomicOperationCoordinator.plan"
       ],
       "ownerModule": "core/knowledge-workspace/durable-operation-journal.ts",
       "pathExclusions": [],
@@ -1563,7 +1567,9 @@
       "preCoordinatorReadProjection": null,
       "protocolModules": [
         "lib/knowledge-workspace/knowledge-operation-plan.ts",
-        "core/knowledge-workspace/knowledge-operation-coordinator.ts"
+        "core/knowledge-workspace/knowledge-operation-coordinator.ts",
+        "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+        "core/knowledge-workspace/knowledge-atomic-operation-coordinator.ts"
       ],
       "restorePolicy": "Restore the complete tree before registering Knowledge mutation routes, then run the coordinator recovery barrier before accepting writes.",
       "schemaContract": {
@@ -1572,7 +1578,7 @@
         "source": "core/knowledge-workspace/durable-operation-journal.ts"
       },
       "schemaSource": {
-        "contract": "schemaVersion 1 journal/result validators, atomic current/previous publication, and operation directory retention protocol",
+        "contract": "schemaVersion 1 refactor/trash and atomic journal/result validators, atomic current/previous publication, and shared operation directory retention protocol",
         "kind": "directory-contract",
         "module": "core/knowledge-workspace/durable-operation-journal.ts"
       }
@@ -2998,8 +3004,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Refreshes deterministic receipts after Knowledge Workspace performance hardening shifted registered Knowledge index source lines; store schemas, registered write ownership, recovery journal semantics, persisted bytes, and DATA_EPOCH remain unchanged.",
-    "payloadFingerprint": "sha256:446c76f9524cf1281d60a628041db187d49004bd802575a4a1bcae8ddcb8321e"
+    "compatibilityReason": "Refreshes deterministic persistence receipts after the Open composition seam removed an unclassified static route import; persisted schemas, write ownership, recovery semantics, and DATA_EPOCH remain unchanged.",
+    "payloadFingerprint": "sha256:2e510152673cec7efbb7c8d4e3ba329e8bfdec807f81dbd8ab99113ea12488c7"
   },
   "schemas": [
     {
@@ -3224,14 +3230,22 @@
           "sourceHash": "sha256:10844a5e4f8868145a872d20ba471f3c359aaba2aa6ae8c441f2a8f91d54e3c6"
         }
       ],
-      "sourceHash": "sha256:c6ef397f647262885282c72784f7b0986d1b6d963593e7df6d33a82e96ca4041",
+      "sourceHash": "sha256:34a461b85d30e3f3fb513a6d2290785a9570940a1cdd99dad2f173f0f627a184",
       "storeId": "knowledge-index-generations"
     },
     {
-      "contract": "schemaVersion 1 journal/result validators, atomic current/previous publication, and operation directory retention protocol",
+      "contract": "schemaVersion 1 refactor/trash and atomic journal/result validators, atomic current/previous publication, and shared operation directory retention protocol",
       "kind": "directory-contract",
       "module": "core/knowledge-workspace/durable-operation-journal.ts",
       "protocolModules": [
+        {
+          "module": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+          "sourceHash": "sha256:98888459305b52e7bdea7be5a6b90f0fbe98af65d2146ca4777924fae424e802"
+        },
+        {
+          "module": "core/knowledge-workspace/knowledge-atomic-operation-coordinator.ts",
+          "sourceHash": "sha256:d9334186003f9aad6279863eca7b1513df553b2d74fdc2d1991d684981ef5ddb"
+        },
         {
           "module": "core/knowledge-workspace/knowledge-operation-coordinator.ts",
           "sourceHash": "sha256:5c0df3c05cb5242c1275cc2f8ccff27511bc8ff6337952906efc2a0ad1c54c38"
@@ -3241,7 +3255,7 @@
           "sourceHash": "sha256:8cd79c4f50791840e80ec7d803f74037971b54794890057a18739e4535619a58"
         }
       ],
-      "sourceHash": "sha256:c6987bb06c7318279e4a731fdd17e584bd5897ae79eac0a5a1c33c02992a058f",
+      "sourceHash": "sha256:78c064f9d0998a469c60340d4f09e84552618e2784fbb649da6bf79d9c731c74",
       "storeId": "knowledge-operation-journal"
     },
     {
@@ -3373,7 +3387,7 @@
       "contract": "server-info writer and desktop bootstrap reader",
       "kind": "runtime-contract",
       "module": "server/index.ts",
-      "sourceHash": "sha256:24aa1d7ec795bb031f42f5a3581c1d22e00d21b3444445d05d70a691dc2a9739",
+      "sourceHash": "sha256:f897311c2e369a983c19cf6624b369841613ad56bf26454ed916f490d24ddd0d",
       "storeId": "server-runtime-info"
     },
     {
@@ -4017,7 +4031,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 372,
+      "line": 373,
       "reason": "Creates the channel root.",
       "sourceFile": "core/engine.ts",
       "storeId": "channels"
@@ -4025,7 +4039,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 418,
+      "line": 419,
       "reason": "Constructs the preferences owner.",
       "sourceFile": "core/engine.ts",
       "storeId": "user-preferences"
@@ -4033,7 +4047,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 419,
+      "line": 420,
       "reason": "Constructs draft/project stores.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-drafts-and-projects"
@@ -4041,7 +4055,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 437,
+      "line": 438,
       "reason": "Constructs draft/project stores.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-drafts-and-projects"
@@ -4049,7 +4063,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 670,
+      "line": 671,
       "reason": "Constructs the plugin task registry.",
       "sourceFile": "core/engine.ts",
       "storeId": "plugin-task-registry"
@@ -4057,7 +4071,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 1411,
+      "line": 1483,
       "reason": "Constructs the manifest store during engine construction.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-manifest-sqlite"
@@ -4065,7 +4079,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 1432,
+      "line": 1504,
       "reason": "Constructs the manifest store during engine construction.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-manifest-sqlite"
@@ -4073,7 +4087,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 2376,
+      "line": 2448,
       "reason": "Creates the user skill root.",
       "sourceFile": "core/engine.ts",
       "storeId": "skill-state"
@@ -4081,7 +4095,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 2558,
+      "line": 2630,
       "reason": "Deletes an expired legacy ephemeral session JSONL locator.",
       "sourceFile": "core/engine.ts",
       "storeId": "session-jsonl"
@@ -4089,7 +4103,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 2616,
+      "line": 2688,
       "reason": "Creates the plugin development source root.",
       "sourceFile": "core/engine.ts",
       "storeId": "plugin-development-state"
@@ -4345,112 +4359,256 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 293,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 197,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 199,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "line": 211,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 241,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 285,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "copy-file",
+      "line": 640,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "line": 643,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "line": 645,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "line": 648,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "line": 648,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "line": 657,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "line": 660,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "write-file",
+      "line": 667,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 497,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 295,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 499,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 306,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 510,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 345,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 595,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 384,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 597,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 422,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 608,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 630,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 647,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 682,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "line": 714,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "storeId": "knowledge-operation-journal"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "line": 729,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "copy-file",
-      "line": 451,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 830,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "rename",
-      "line": 454,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 833,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "rename",
-      "line": 456,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 835,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 460,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 839,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 461,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 840,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "rename",
-      "line": 473,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 852,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 477,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 856,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 494,
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "line": 873,
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
       "storeId": "knowledge-operation-journal"
     },
@@ -7289,7 +7447,7 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
-      "line": 280,
+      "line": 292,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7297,7 +7455,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 304,
+      "line": 316,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7305,7 +7463,7 @@
     {
       "exemptionId": null,
       "kind": "rename",
-      "line": 311,
+      "line": 323,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7313,7 +7471,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 314,
+      "line": 326,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7321,7 +7479,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 575,
+      "line": 614,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7329,7 +7487,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 637,
+      "line": 684,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7337,7 +7495,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 710,
+      "line": 759,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7345,7 +7503,7 @@
     {
       "exemptionId": null,
       "kind": "database-open",
-      "line": 976,
+      "line": 1057,
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
       "storeId": "knowledge-index-generations"
@@ -7857,7 +8015,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 296,
+      "line": 310,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7865,7 +8023,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 297,
+      "line": 311,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7873,7 +8031,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 316,
+      "line": 330,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7881,7 +8039,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 318,
+      "line": 332,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7889,14 +8047,6 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 360,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "mkdir",
       "line": 374,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
@@ -7904,8 +8054,16 @@
     },
     {
       "exemptionId": "external-resource-io",
+      "kind": "mkdir",
+      "line": 388,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 386,
+      "line": 400,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7913,7 +8071,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 403,
+      "line": 417,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7921,7 +8079,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "copy-file",
-      "line": 406,
+      "line": 420,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7929,7 +8087,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "copy-file",
-      "line": 408,
+      "line": 422,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7937,7 +8095,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 441,
+      "line": 455,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7945,7 +8103,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 442,
+      "line": 456,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7953,7 +8111,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 459,
+      "line": 473,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7961,7 +8119,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 461,
+      "line": 475,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7969,7 +8127,15 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 462,
+      "line": 476,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "copy-file",
+      "line": 619,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7977,7 +8143,95 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 609,
+      "line": 664,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 761,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 825,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 827,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 828,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 835,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 836,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 849,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 850,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 859,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 866,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 1686,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7985,7 +8239,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 1446,
+      "line": 1772,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -7993,7 +8247,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "write-file",
-      "line": 1447,
+      "line": 1773,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8001,7 +8255,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "mkdir",
-      "line": 1479,
+      "line": 1805,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8009,7 +8263,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1510,
+      "line": 1836,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8017,7 +8271,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 1524,
+      "line": 1850,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8025,7 +8279,39 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "rename",
-      "line": 1546,
+      "line": 1872,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "write-file",
+      "line": 1911,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 1973,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 1976,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "rename",
+      "line": 1979,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8033,7 +8319,7 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1632,
+      "line": 1980,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8041,7 +8327,31 @@
     {
       "exemptionId": "external-resource-io",
       "kind": "remove-path",
-      "line": 1649,
+      "line": 1987,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 1992,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 2071,
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "external-resource-io",
+      "kind": "remove-path",
+      "line": 2088,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
@@ -8897,7 +9207,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 288,
+      "line": 287,
       "reason": "Writes or deletes live server discovery state.",
       "sourceFile": "server/index.ts",
       "storeId": "server-runtime-info"
@@ -8905,7 +9215,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 482,
+      "line": 481,
       "reason": "Constructs the deferred result store.",
       "sourceFile": "server/index.ts",
       "storeId": "deferred-result-state"
@@ -8913,7 +9223,7 @@
     {
       "exemptionId": "in-memory-confirm-registry",
       "kind": "persistent-store-constructor",
-      "line": 685,
+      "line": 684,
       "reason": "ConfirmStore is deliberately process-memory-only: pending approvals time out or abort with their session and have no restart replay contract.",
       "sourceFile": "server/index.ts",
       "storeId": null
@@ -8921,7 +9231,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 690,
+      "line": 689,
       "reason": "Constructs subagent stores.",
       "sourceFile": "server/index.ts",
       "storeId": "subagent-state"
@@ -8929,7 +9239,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 696,
+      "line": 695,
       "reason": "Constructs subagent stores.",
       "sourceFile": "server/index.ts",
       "storeId": "subagent-state"
@@ -8937,7 +9247,7 @@
     {
       "exemptionId": null,
       "kind": "persistent-store-constructor",
-      "line": 707,
+      "line": 706,
       "reason": "Constructs the workflow activity store.",
       "sourceFile": "server/index.ts",
       "storeId": "workflow-state"
@@ -8945,7 +9255,7 @@
     {
       "exemptionId": null,
       "kind": "append-file",
-      "line": 1126,
+      "line": 1129,
       "reason": "Appends the browser worker log.",
       "sourceFile": "server/index.ts",
       "storeId": "runtime-diagnostics"
@@ -8953,7 +9263,7 @@
     {
       "exemptionId": null,
       "kind": "write-file",
-      "line": 1185,
+      "line": 1188,
       "reason": "Writes or deletes live server discovery state.",
       "sourceFile": "server/index.ts",
       "storeId": "server-runtime-info"
@@ -8961,7 +9271,7 @@
     {
       "exemptionId": null,
       "kind": "remove-path",
-      "line": 1287,
+      "line": 1290,
       "reason": "Writes or deletes live server discovery state.",
       "sourceFile": "server/index.ts",
       "storeId": "server-runtime-info"

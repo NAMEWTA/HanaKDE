@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { ResourceIOError, resourceAccessDenied, resourceNotFound, targetAlreadyExists } from "../errors.ts";
 import { normalizeResourceRef, resourceKeyForRef } from "../resource-refs.ts";
 import { resolveLocalFsRootIdentity } from "../root-identity.ts";
+import { isOperationCorrelationId } from "../../../shared/knowledge-diagnostics.ts";
 import {
   RESOURCE_LIST_BLOCKED_ENTRIES,
   RESOURCE_READ_PROOF,
@@ -28,6 +29,8 @@ import type {
   ResourceExportEntry,
   ResourceExportTreeOptions,
   ResourceImportTreeOptions,
+  ResourceImportTreeRecoveryOptions,
+  ResourceImportTreeRecoveryResult,
   ResourceImportTreeResult,
   ResourceListResult,
   ResourceMutationResult,
@@ -63,6 +66,10 @@ type LocalFsProviderOptions = {
   cwd: string;
   guard?: Guard;
   trashRoot?: string | null;
+  transferFaultInjector?: (
+    point: "after_merge_backup_rename",
+    details: Readonly<{ operationId: string }>,
+  ) => void;
 };
 
 const SEARCH_SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage"]);
@@ -88,11 +95,18 @@ export class LocalFsProvider {
   declare cwd: string;
   declare guard: Guard | null;
   declare trashRoot: string | null;
+  declare transferFaultInjector: NonNullable<LocalFsProviderOptions["transferFaultInjector"]>;
 
-  constructor({ cwd, guard = null, trashRoot = null }: LocalFsProviderOptions) {
+  constructor({
+    cwd,
+    guard = null,
+    trashRoot = null,
+    transferFaultInjector = () => {},
+  }: LocalFsProviderOptions) {
     this.cwd = cwd || process.cwd();
     this.guard = guard;
     this.trashRoot = trashRoot || null;
+    this.transferFaultInjector = transferFaultInjector;
   }
 
   capabilities() {
@@ -577,20 +591,43 @@ export class LocalFsProvider {
     const targetDirectoryIdentity = directoryIdentity(dirPath, dirStat);
     const finalPath = path.join(dirPath, targetName);
     this.assertAllowed(finalPath, "write");
-    const expected = options.replaceExisting === true
+    const mergePolicy = options.mergeExisting;
+    const expected = mergePolicy !== undefined
+      ? options.expectedTargetVersion === undefined
+        ? encodedCurrentTargetVersion(finalPath)
+        : normalizeExpectedTargetVersion(options.expectedTargetVersion)
+      : options.replaceExisting === true
       ? encodedCurrentTargetVersion(finalPath)
       : normalizeExpectedTargetVersion(options.expectedTargetVersion);
     assertExpectedTargetState(finalPath, expected);
+    if (mergePolicy !== undefined && !fs.lstatSync(finalPath).isDirectory()) {
+      throw transferEntryUnsupported("merge_target_not_directory");
+    }
 
-    const stagingPath = path.join(
-      dirPath,
-      `.hana-transfer-${crypto.randomBytes(8).toString("hex")}`,
-    );
+    const artifacts = transferPublicationArtifacts(dirPath, options.operationId);
+    const stagingPath = artifacts.stagingPath;
+    if (lstatOrNull(stagingPath) || lstatOrNull(artifacts.backupPath) || lstatOrNull(artifacts.receiptPath)) {
+      throw transferVersionConflict("transfer_publication_recovery_required");
+    }
     const stagingName = path.basename(stagingPath);
+    const mergeTargetFingerprint = mergePolicy === undefined
+      ? null
+      : directoryTreeFingerprint(finalPath);
     let bytesTransferred = 0;
     try {
+      if (mergePolicy !== undefined) {
+        fs.cpSync(finalPath, stagingPath, {
+          recursive: true,
+          dereference: false,
+          errorOnExist: true,
+          force: false,
+          verbatimSymlinks: true,
+        });
+      }
       const gate = new TransferStreamGate();
       const tasks: Promise<void>[] = [];
+      const mergePaths = new Map<string, string[]>();
+      if (mergePolicy !== undefined) mergePaths.set("", []);
       let failure: unknown = null;
       const recordFailure = (error: unknown) => {
         if (failure === null) {
@@ -603,17 +640,38 @@ export class LocalFsProvider {
         for await (const entry of entries) {
           throwIfTransferAborted(options.signal);
           if (failure !== null) break;
-          const entryPath = stagingEntryPath(stagingPath, entry.path);
-          if (entry.path.length === 0) sawRoot = true;
+          let entryPath = stagingEntryPath(stagingPath, entry.path);
+          let skipEntry = false;
+          if (entry.path.length === 0) {
+            sawRoot = true;
+            if (mergePolicy !== undefined) {
+              if (entry.kind !== "directory") {
+                throw transferEntryUnsupported("merge_source_not_directory");
+              }
+              continue;
+            }
+          } else if (mergePolicy !== undefined) {
+            const allocation = allocateStagedMergeEntry(
+              stagingPath,
+              entry,
+              mergePaths,
+              mergePolicy,
+            );
+            entryPath = allocation.path;
+            skipEntry = allocation.skip;
+          }
           if (entry.kind === "directory") {
-            fs.mkdirSync(entryPath);
+            if (!fs.existsSync(entryPath)) fs.mkdirSync(entryPath);
             continue;
           }
+          if (skipEntry) continue;
           if (entry.kind === "symbolic_link") {
+            removeStagedMergeReplacement(entryPath, mergePolicy);
             createStagedSymbolicLink(entry.linkTarget, entryPath);
             continue;
           }
           if (entry.kind === "file") {
+            removeStagedMergeReplacement(entryPath, mergePolicy);
             const release = await gate.acquire(options.signal);
             const task = writeStagedFile(entryPath, entry.body, entry.sizeBytes, options.signal)
               .then((written) => {
@@ -638,6 +696,12 @@ export class LocalFsProvider {
       throwIfTransferAborted(options.signal);
       await options.revalidateSourceScope?.();
       throwIfTransferAborted(options.signal);
+      if (
+        mergeTargetFingerprint !== null
+        && directoryTreeFingerprint(finalPath) !== mergeTargetFingerprint
+      ) {
+        throw transferVersionConflict("merge_target_changed_during_staging");
+      }
 
       // scope 复验：staged 树完成后目标目录身份必须保持不变，且 guard 仍允许写入。
       this.assertAllowed(finalPath, "write");
@@ -647,14 +711,32 @@ export class LocalFsProvider {
         });
       }
       assertExpectedTargetState(finalPath, expected);
-      publishStagedTree(stagingPath, finalPath, expected, () => {
+      const revalidateTarget = () => {
         this.assertAllowed(finalPath, "write");
         if (!sameDirectoryIdentity(targetDirectoryIdentity, dirPath)) {
           throw resourceAccessDenied("write", dirPath, "transfer_target_directory_changed", {
             safeMessage: "Resource transfer target directory changed before publish",
           });
         }
-      });
+        if (
+          mergeTargetFingerprint !== null
+          && directoryTreeFingerprint(finalPath) !== mergeTargetFingerprint
+        ) {
+          throw transferVersionConflict("merge_target_changed_before_publish");
+        }
+      };
+      if (mergePolicy === undefined) {
+        publishStagedTree(stagingPath, finalPath, expected, revalidateTarget);
+      } else {
+        publishStagedMergedDirectory(
+          stagingPath,
+          finalPath,
+          expected,
+          options.operationId,
+          revalidateTarget,
+          this.transferFaultInjector,
+        );
+      }
       fsyncDirectoryBestEffort(dirPath);
       return {
         changeType: expected === null ? "created" : "modified",
@@ -665,20 +747,127 @@ export class LocalFsProvider {
         filePath: finalPath,
       };
     } catch (err) {
-      try {
-        cleanupStagingTree(
-          targetDirectoryIdentity,
-          dirPath,
-          stagingName,
-          cleanupSearchRoot(this.cwd),
-        );
-      } catch {
-        // Cleanup is only permitted under the captured directory identity and
-        // must never replace the operation's already-classified outcome with
-        // a platform-specific path error.
+      if (
+        (err as Error)?.name !== "SimulatedKnowledgeOperationCrash"
+        && !lstatOrNull(artifacts.backupPath)
+      ) {
+        try {
+          cleanupStagingTree(
+            targetDirectoryIdentity,
+            dirPath,
+            stagingName,
+            cleanupSearchRoot(this.cwd),
+          );
+          fs.rmSync(artifacts.receiptPath, { force: true });
+        } catch {
+          // Cleanup is only permitted under the captured directory identity and
+          // must never replace the operation's already-classified outcome with
+          // a platform-specific path error.
+        }
       }
       throw err;
     }
+  }
+
+  async recoverImportTreePublication(
+    target: ResourceRef | unknown,
+    options: ResourceImportTreeRecoveryOptions,
+  ): Promise<ResourceImportTreeRecoveryResult> {
+    if (!isOperationCorrelationId(options.operationId)) {
+      throw transferEntryUnsupported("invalid_transfer_recovery_operation");
+    }
+    const finalPath = this.resolveNoFollowPath(target);
+    const directoryPath = path.dirname(finalPath);
+    this.assertAllowed(finalPath, "write");
+    const directoryStat = fs.statSync(directoryPath);
+    if (!directoryStat.isDirectory()) throw resourceNotFound(directoryPath);
+    const artifacts = transferPublicationArtifacts(directoryPath, options.operationId);
+    const finalStat = lstatOrNull(finalPath);
+    const stagingStat = lstatOrNull(artifacts.stagingPath);
+    const backupStat = lstatOrNull(artifacts.backupPath);
+    const receiptStat = lstatOrNull(artifacts.receiptPath);
+    if (!stagingStat && !backupStat && !receiptStat) return { outcome: "none" };
+    if (!receiptStat || !receiptStat.isFile()) {
+      throw transferVersionConflict("merge_recovery_receipt_unavailable");
+    }
+    const receipt = readTransferPublicationReceipt(artifacts.receiptPath);
+    if (
+      receipt.operationId !== options.operationId
+      || receipt.expectedTargetVersion !== options.expectedTargetVersion
+    ) {
+      throw transferVersionConflict("merge_recovery_receipt_mismatch");
+    }
+    if (stagingStat) {
+      if (
+        !stagingStat.isDirectory()
+        || directoryTreePublicationFingerprint(artifacts.stagingPath) !== receipt.stagedFingerprint
+      ) {
+        throw transferVersionConflict("merge_recovery_staging_changed");
+      }
+    }
+    if (backupStat) {
+      if (!backupStat.isDirectory()) {
+        throw transferVersionConflict("merge_recovery_backup_changed");
+      }
+      assertExpectedTargetState(
+        artifacts.backupPath,
+        options.expectedTargetVersion,
+      );
+      if (finalStat) {
+        if (
+          stagingStat
+          || !finalStat.isDirectory()
+          || directoryTreePublicationFingerprint(finalPath) !== receipt.stagedFingerprint
+        ) {
+          throw transferVersionConflict("merge_recovery_final_ambiguous");
+        }
+      } else if (stagingStat) {
+        fs.renameSync(artifacts.stagingPath, finalPath);
+      } else {
+        fs.renameSync(artifacts.backupPath, finalPath);
+        fs.rmSync(artifacts.receiptPath, { force: true });
+        fsyncDirectoryBestEffort(directoryPath);
+        return {
+          outcome: "rolled-back",
+          version: versionFromLstatOrUndefined(finalPath),
+        };
+      }
+      fs.rmSync(artifacts.backupPath, { recursive: true, force: false });
+      fs.rmSync(artifacts.receiptPath, { force: true });
+      fsyncDirectoryBestEffort(directoryPath);
+      return {
+        outcome: "committed",
+        version: versionFromLstatOrUndefined(finalPath),
+      };
+    }
+
+    if (!finalStat || !finalStat.isDirectory()) {
+      throw transferVersionConflict("merge_recovery_target_ambiguous");
+    }
+    if (stagingStat) {
+      assertExpectedTargetState(finalPath, options.expectedTargetVersion);
+      fs.rmSync(artifacts.stagingPath, { recursive: true, force: false });
+      fs.rmSync(artifacts.receiptPath, { force: true });
+      fsyncDirectoryBestEffort(directoryPath);
+      return {
+        outcome: "rolled-back",
+        version: versionFromLstatOrUndefined(finalPath),
+      };
+    }
+    const finalFingerprint = directoryTreePublicationFingerprint(finalPath);
+    if (finalFingerprint === receipt.stagedFingerprint) {
+      fs.rmSync(artifacts.receiptPath, { force: true });
+      return {
+        outcome: "committed",
+        version: versionFromLstatOrUndefined(finalPath),
+      };
+    }
+    assertExpectedTargetState(finalPath, options.expectedTargetVersion);
+    fs.rmSync(artifacts.receiptPath, { force: true });
+    return {
+      outcome: "rolled-back",
+      version: versionFromLstatOrUndefined(finalPath),
+    };
   }
 
   resolveNoFollowPath(ref: ResourceRef | unknown): string {
@@ -1437,6 +1626,143 @@ function stagingEntryPath(stagingRoot: string, segments: string[]): string {
   return candidate;
 }
 
+type StagedMergePolicy = NonNullable<ResourceImportTreeOptions["mergeExisting"]>;
+
+function allocateStagedMergeEntry(
+  stagingRoot: string,
+  entry: ResourceExportEntry,
+  mappedPaths: Map<string, string[]>,
+  policy: StagedMergePolicy,
+): { path: string; skip: boolean } {
+  const sourceParent = entry.path.slice(0, -1);
+  const mappedParent = mappedPaths.get(transferPathKey(sourceParent));
+  if (!mappedParent) throw transferEntryUnsupported("merge_entry_parent_missing");
+  const originalName = entry.path[entry.path.length - 1];
+  const incomingDirectory = entry.kind === "directory";
+  for (let attempt = 1; attempt <= 10_000; attempt += 1) {
+    const name = mergeKeepBothName(originalName, attempt, incomingDirectory);
+    const targetSegments = [...mappedParent, name];
+    const targetPath = stagingEntryPath(stagingRoot, targetSegments);
+    const current = lstatOrNull(targetPath);
+    if (!current) {
+      if (incomingDirectory) {
+        mappedPaths.set(transferPathKey(entry.path), targetSegments);
+      }
+      return { path: targetPath, skip: false };
+    }
+    if (incomingDirectory && current.isDirectory()) {
+      mappedPaths.set(transferPathKey(entry.path), targetSegments);
+      return { path: targetPath, skip: false };
+    }
+    if (incomingDirectory !== current.isDirectory()) continue;
+    if (policy === "skip") return { path: targetPath, skip: true };
+    if (policy === "replace") return { path: targetPath, skip: false };
+  }
+  throw transferTargetConflict();
+}
+
+function transferPathKey(segments: readonly string[]): string {
+  return segments.join("\0");
+}
+
+function mergeKeepBothName(
+  originalName: string,
+  attempt: number,
+  directory: boolean,
+): string {
+  if (attempt === 1) return originalName;
+  if (directory) return `${originalName}_${attempt}`;
+  const dot = originalName.lastIndexOf(".");
+  return dot > 0
+    ? `${originalName.slice(0, dot)}_${attempt}${originalName.slice(dot)}`
+    : `${originalName}_${attempt}`;
+}
+
+function removeStagedMergeReplacement(
+  targetPath: string,
+  policy: StagedMergePolicy | undefined,
+): void {
+  if (policy !== "replace" || !lstatOrNull(targetPath)) return;
+  fs.rmSync(targetPath, { recursive: true, force: false });
+}
+
+function lstatOrNull(filePath: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function directoryTreeFingerprint(rootPath: string): string {
+  const hash = crypto.createHash("sha256");
+  const visit = (currentPath: string, relativePath: string) => {
+    const stat = fs.lstatSync(currentPath, { bigint: true });
+    const kind = stat.isDirectory()
+      ? "directory"
+      : stat.isFile()
+      ? "file"
+      : stat.isSymbolicLink()
+      ? "symbolic_link"
+      : "unsupported";
+    hash.update(JSON.stringify([
+      relativePath,
+      kind,
+      stat.dev.toString(),
+      stat.ino.toString(),
+      stat.mode.toString(),
+      stat.size.toString(),
+      stat.mtimeNs.toString(),
+      stat.ctimeNs.toString(),
+      stat.birthtimeNs.toString(),
+      stat.isSymbolicLink() ? fs.readlinkSync(currentPath) : null,
+    ]));
+    hash.update("\n");
+    if (!stat.isDirectory()) return;
+    for (const name of fs.readdirSync(currentPath).sort()) {
+      visit(path.join(currentPath, name), relativePath ? `${relativePath}/${name}` : name);
+    }
+  };
+  visit(rootPath, "");
+  return hash.digest("hex");
+}
+
+function directoryTreePublicationFingerprint(rootPath: string): string {
+  const hash = crypto.createHash("sha256");
+  const visit = (currentPath: string, relativePath: string) => {
+    const stat = fs.lstatSync(currentPath, { bigint: true });
+    const kind = stat.isDirectory()
+      ? "directory"
+      : stat.isFile()
+      ? "file"
+      : stat.isSymbolicLink()
+      ? "symbolic_link"
+      : "unsupported";
+    hash.update(JSON.stringify([
+      relativePath,
+      kind,
+      stat.dev.toString(),
+      stat.ino.toString(),
+      stat.mode.toString(),
+      stat.size.toString(),
+      stat.mtimeNs.toString(),
+      stat.birthtimeNs.toString(),
+      stat.isSymbolicLink() ? fs.readlinkSync(currentPath) : null,
+    ]));
+    hash.update("\n");
+    if (!stat.isDirectory()) return;
+    for (const name of fs.readdirSync(currentPath).sort()) {
+      visit(
+        path.join(currentPath, name),
+        relativePath ? `${relativePath}/${name}` : name,
+      );
+    }
+  };
+  visit(rootPath, "");
+  return hash.digest("hex");
+}
+
 async function writeStagedFile(
   filePath: string,
   body: AsyncIterable<Uint8Array>,
@@ -1551,6 +1877,119 @@ function publishStagedTree(
     }
     throw error;
   }
+}
+
+type TransferPublicationReceipt = Readonly<{
+  schemaVersion: 1;
+  operationId: string;
+  expectedTargetVersion: string;
+  stagedFingerprint: string;
+}>;
+
+function transferPublicationArtifacts(directoryPath: string, operationId: string) {
+  if (!isOperationCorrelationId(operationId)) {
+    throw transferEntryUnsupported("invalid_transfer_operation_id");
+  }
+  return Object.freeze({
+    stagingPath: path.join(directoryPath, `.hana-transfer-staging-${operationId}`),
+    backupPath: path.join(directoryPath, `.hana-transfer-backup-${operationId}`),
+    receiptPath: path.join(directoryPath, `.hana-transfer-receipt-${operationId}.json`),
+  });
+}
+
+function writeTransferPublicationReceipt(
+  receiptPath: string,
+  receipt: TransferPublicationReceipt,
+): void {
+  let descriptor: number | null = null;
+  try {
+    descriptor = fs.openSync(
+      receiptPath,
+      fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY,
+      0o600,
+    );
+    fs.writeFileSync(descriptor, `${JSON.stringify(receipt)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== null) fs.closeSync(descriptor);
+  }
+}
+
+function readTransferPublicationReceipt(
+  receiptPath: string,
+): TransferPublicationReceipt {
+  let value: unknown;
+  try {
+    value = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+  } catch {
+    throw transferVersionConflict("merge_recovery_receipt_unreadable");
+  }
+  if (
+    typeof value !== "object"
+    || value === null
+    || Array.isArray(value)
+    || Object.keys(value).some((field) => ![
+      "schemaVersion",
+      "operationId",
+      "expectedTargetVersion",
+      "stagedFingerprint",
+    ].includes(field))
+    || (value as { schemaVersion?: unknown }).schemaVersion !== 1
+    || !isOperationCorrelationId((value as { operationId?: unknown }).operationId)
+    || typeof (value as { expectedTargetVersion?: unknown }).expectedTargetVersion !== "string"
+    || !/^[a-f0-9]{64}$/u.test(String(
+      (value as { stagedFingerprint?: unknown }).stagedFingerprint,
+    ))
+  ) {
+    throw transferVersionConflict("merge_recovery_receipt_invalid");
+  }
+  return Object.freeze(value as TransferPublicationReceipt);
+}
+
+function publishStagedMergedDirectory(
+  stagingPath: string,
+  finalPath: string,
+  expected: string,
+  operationId: string,
+  revalidateScope: () => void,
+  faultInjector: NonNullable<LocalFsProviderOptions["transferFaultInjector"]>,
+): void {
+  revalidateScope();
+  assertExpectedTargetState(finalPath, expected);
+  if (!fs.lstatSync(stagingPath).isDirectory() || !fs.lstatSync(finalPath).isDirectory()) {
+    throw transferEntryUnsupported("merge_requires_directories");
+  }
+  const artifacts = transferPublicationArtifacts(path.dirname(finalPath), operationId);
+  const { backupPath, receiptPath } = artifacts;
+  if (lstatOrNull(backupPath)) {
+    throw transferVersionConflict("merge_backup_already_exists");
+  }
+  writeTransferPublicationReceipt(receiptPath, {
+    schemaVersion: 1,
+    operationId,
+    expectedTargetVersion: expected,
+    stagedFingerprint: directoryTreePublicationFingerprint(stagingPath),
+  });
+  fs.renameSync(finalPath, backupPath);
+  faultInjector("after_merge_backup_rename", { operationId });
+  try {
+    fs.renameSync(stagingPath, finalPath);
+  } catch (error) {
+    try {
+      fs.renameSync(backupPath, finalPath);
+      fs.rmSync(receiptPath, { force: true });
+    } catch {
+      throw transferVersionConflict("merge_publish_rollback_failed");
+    }
+    throw error;
+  }
+  try {
+    fs.rmSync(backupPath, { recursive: true, force: false });
+  } catch {
+    // The merged tree is already published. A durable operation journal can
+    // retry cleanup without changing the user-visible target.
+  }
+  if (!lstatOrNull(backupPath)) fs.rmSync(receiptPath, { force: true });
 }
 
 function versionFromLstatOrUndefined(filePath: string): ResourceVersion | undefined {

@@ -178,34 +178,116 @@ describe("knowledge index store", () => {
     oldLease.release();
   });
 
-  it("continues to read a valid legacy partition while fresh partitions use the compact path", () => {
-    const hanakoHome = temporaryHome("legacy-path");
+  it("writes compact fingerprints below the contract root and upgrades legacy partitions by rebuild", () => {
+    const workspaceSegment = Buffer.from(WORKSPACE_FINGERPRINT, "hex").toString("base64url");
+    const sourceSegment = Buffer.from(SOURCE_FINGERPRINT, "hex").toString("base64url");
+    const legacyPaths = [
+      (hanakoHome: string) => path.join(
+        hanakoHome,
+        "kw",
+        "i",
+        "v1",
+        workspaceSegment,
+        sourceSegment,
+      ),
+      (hanakoHome: string) => path.join(
+        hanakoHome,
+        "knowledge-workspace",
+        "index",
+        "v1",
+        WORKSPACE_FINGERPRINT,
+        SOURCE_FINGERPRINT,
+      ),
+    ];
+
+    for (const legacyPathFor of legacyPaths) {
+      const hanakoHome = temporaryHome("legacy-path");
+      const created = createStore(hanakoHome);
+      created.beginRebuild({
+        rebuildId: "canonical",
+        generationId: "generation-1",
+        startedSequence: 0,
+      }).publish({ lastCompleteSequence: 1 });
+      const canonicalPath = partitionPath(hanakoHome, SOURCE_FINGERPRINT);
+      expect(path.relative(hanakoHome, canonicalPath)).toBe(path.join(
+        "knowledge-workspace",
+        "index",
+        "v1",
+        workspaceSegment,
+        sourceSegment,
+      ));
+
+      const legacyPath = legacyPathFor(hanakoHome);
+      fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+      fs.cpSync(canonicalPath, legacyPath, { recursive: true });
+      const legacyGeneration = path.join(
+        legacyPath,
+        "generation-generation-1.sqlite",
+      );
+      const legacyBytes = fs.readFileSync(legacyGeneration);
+      fs.rmSync(canonicalPath, { recursive: true, force: true });
+      // A legacy partition may have kept a reader's SHM sidecar. It has no
+      // published WAL frames and must not make the immutable generation corrupt.
+      fs.writeFileSync(`${legacyGeneration}-shm`, Buffer.alloc(32));
+
+      const legacy = createStore(hanakoHome);
+      expect(legacy.health()).toEqual({
+        state: "stale",
+        generationId: "generation-1",
+        reason: "legacy_partition",
+      });
+      const lease = legacy.acquireQueryLease();
+      expect(lease.inspect().generationId).toBe("generation-1");
+      lease.release();
+      expect(() => legacy.applyIncremental({
+        lastCompleteSequence: 2,
+        changes: [{ kind: "delete", relativePath: "obsolete.md" }],
+      })).toThrow(expect.objectContaining({
+        code: "knowledge_index_unavailable",
+      }));
+
+      legacy.beginRebuild({
+        rebuildId: "upgrade",
+        generationId: "generation-2",
+        startedSequence: 1,
+      }).publish({ lastCompleteSequence: 2 });
+      expect(legacy.health()).toEqual({
+        state: "ready",
+        generationId: "generation-2",
+        sequence: 2,
+      });
+      expect(fs.existsSync(path.join(
+        canonicalPath,
+        "generation-generation-2.sqlite",
+      ))).toBe(true);
+      expect(fs.readFileSync(legacyGeneration)).toEqual(legacyBytes);
+    }
+  });
+
+  it("does not let a legacy partition mask a corrupt canonical manifest", () => {
+    const hanakoHome = temporaryHome("canonical-priority");
     const created = createStore(hanakoHome);
     created.beginRebuild({
-      rebuildId: "compact",
+      rebuildId: "canonical",
       generationId: "generation-1",
       startedSequence: 0,
     }).publish({ lastCompleteSequence: 1 });
-    const compactPath = partitionPath(hanakoHome, SOURCE_FINGERPRINT);
+    const canonicalPath = partitionPath(hanakoHome, SOURCE_FINGERPRINT);
     const legacyPath = path.join(
       hanakoHome,
-      "knowledge-workspace",
-      "index",
+      "kw",
+      "i",
       "v1",
-      WORKSPACE_FINGERPRINT,
-      SOURCE_FINGERPRINT,
+      Buffer.from(WORKSPACE_FINGERPRINT, "hex").toString("base64url"),
+      Buffer.from(SOURCE_FINGERPRINT, "hex").toString("base64url"),
     );
     fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
-    fs.cpSync(compactPath, legacyPath, { recursive: true });
-    fs.rmSync(compactPath, { recursive: true, force: true });
-    // A legacy partition may have kept a reader's SHM sidecar. It has no
-    // published WAL frames and must not make the immutable generation corrupt.
-    fs.writeFileSync(path.join(legacyPath, "generation-generation-1.sqlite-shm"), Buffer.alloc(32));
+    fs.cpSync(canonicalPath, legacyPath, { recursive: true });
+    fs.writeFileSync(path.join(canonicalPath, "current.json"), "not-json");
 
     expect(createStore(hanakoHome).health()).toEqual({
-      state: "ready",
-      generationId: "generation-1",
-      sequence: 1,
+      state: "corrupt",
+      reason: "manifest_invalid",
     });
   });
 
@@ -454,21 +536,27 @@ describe("knowledge index store", () => {
     () => {
       const hanakoHome = temporaryHome("symlink");
       const outside = temporaryHome("symlink-outside");
-      fs.mkdirSync(path.join(hanakoHome, "kw", "i"), {
+      fs.mkdirSync(path.join(hanakoHome, "knowledge-workspace", "index"), {
         recursive: true,
       });
       fs.symlinkSync(
         outside,
-        path.join(hanakoHome, "kw", "i", "v1"),
+        path.join(hanakoHome, "knowledge-workspace", "index", "v1"),
         "dir",
       );
       expect(() => createStore(hanakoHome)).toThrow(
         expect.objectContaining({ code: "knowledge_index_unavailable" }),
       );
 
-      fs.rmSync(path.join(hanakoHome, "kw", "i", "v1"), {
+      fs.rmSync(path.join(hanakoHome, "knowledge-workspace", "index", "v1"), {
         force: true,
       });
+      fs.mkdirSync(path.join(hanakoHome, "kw", "i"), { recursive: true });
+      fs.symlinkSync(outside, path.join(hanakoHome, "kw", "i", "v1"), "dir");
+      expect(() => createStore(hanakoHome)).toThrow(
+        expect.objectContaining({ code: "knowledge_index_unavailable" }),
+      );
+      fs.rmSync(path.join(hanakoHome, "kw", "i", "v1"), { force: true });
       const store = createStore(hanakoHome);
       fs.writeFileSync(path.join(outside, "manifest.json"), "{}");
       fs.symlinkSync(

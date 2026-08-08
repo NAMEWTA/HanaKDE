@@ -14,6 +14,11 @@ import {
 } from "../lib/knowledge-workspace/knowledge-operation-plan.ts";
 
 const OPERATION_ID = "123e4567-e89b-42d3-a456-426614174000";
+const TRASH_OPERATION_ID = "223e4567-e89b-42d3-a456-426614174001";
+const RESTORE_OPERATION_ID = "323e4567-e89b-42d3-a456-426614174002";
+const CLEANUP_OPERATION_ID = "423e4567-e89b-42d3-a456-426614174003";
+const TRASH_BATCH_ID = "523e4567-e89b-42d3-a456-426614174004";
+const TRASH_ENTRY_ID = "623e4567-e89b-42d3-a456-426614174005";
 const OWNER = {
   principal: {
     kind: "api" as const,
@@ -25,6 +30,24 @@ const OWNER = {
 const FROM = { sourceKey: "main", relativePath: "a.md" };
 const TO = { sourceKey: "main", relativePath: "b.md" };
 const VERSION = { mtimeMs: 1, size: 1 };
+const TRASH_ORIGINAL = { sourceKey: "main", relativePath: "Notes/a.md" };
+const TRASH_ADDRESS = {
+  sourceKey: "main",
+  relativePath: `.trash/${TRASH_BATCH_ID}/payload/000001-a.md`,
+};
+const JOURNAL_OWNER = {
+  principalId: "owner-1",
+  userId: "user-1",
+  studioId: "studio-1",
+  sessionId: null,
+};
+const SOURCE_IDENTITY = {
+  providerId: "local_fs" as const,
+  identityNamespace: "local_fs",
+  opaqueRootId: "root-1",
+  scopeToken: "scope-1",
+  caseMode: "sensitive" as const,
+};
 
 describe("durable knowledge operation journal", () => {
   let tempRoot: string | null = null;
@@ -232,6 +255,178 @@ describe("durable knowledge operation journal", () => {
     expect(journal.readResult(OPERATION_ID, "b".repeat(64))).toBeNull();
   });
 
+  it("stores delete, restore, and cleanup records beside rename/move records without cross-dispatch", () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-trash-operation-journal-"));
+    const journal = new DurableKnowledgeOperationJournal({
+      hanakoHome: tempRoot,
+    });
+    const renameRequest = {
+      kind: "rename" as const,
+      from: FROM,
+      to: TO,
+      expectedVersion: VERSION,
+    };
+    journal.createPlanned({
+      operationId: OPERATION_ID,
+      requestHash: hashKnowledgeOperationRequest(renameRequest),
+      request: renameRequest,
+      owner: JOURNAL_OWNER,
+      sourceIdentity: SOURCE_IDENTITY,
+      createdAt: "2026-07-28T00:00:00.000Z",
+      expiresAt: "2026-07-28T00:15:00.000Z",
+    });
+    const deleted = createTrashPrepared(journal, {
+      operationId: TRASH_OPERATION_ID,
+      kind: "delete",
+    });
+    const restored = createTrashPrepared(journal, {
+      operationId: RESTORE_OPERATION_ID,
+      kind: "restore",
+      targetAddress: { sourceKey: "main", relativePath: "Notes/a_2.md" },
+    });
+    const cleaned = createTrashPrepared(journal, {
+      operationId: CLEANUP_OPERATION_ID,
+      kind: "cleanup",
+    });
+
+    expect(deleted.request.items[0].targetAddress).toEqual(TRASH_ADDRESS);
+    expect(restored.request.items[0].targetAddress).toEqual({
+      sourceKey: "main",
+      relativePath: "Notes/a_2.md",
+    });
+    expect(cleaned.request.items[0]).not.toHaveProperty("targetAddress");
+    expect(journal.read(TRASH_OPERATION_ID)).toBeNull();
+    expect(journal.readTrash(OPERATION_ID)).toBeNull();
+    expect(journal.list().map((record) => record.operationId)).toEqual([
+      OPERATION_ID,
+    ]);
+    expect(journal.listTrash().map((record) => record.operationId)).toEqual([
+      TRASH_OPERATION_ID,
+      RESTORE_OPERATION_ID,
+      CLEANUP_OPERATION_ID,
+    ].sort());
+  });
+
+  it("atomically advances and repairs a trash journal without making generic recovery consume it", () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-trash-operation-repair-"));
+    const journal = new DurableKnowledgeOperationJournal({
+      hanakoHome: tempRoot,
+    });
+    const prepared = createTrashPrepared(journal, {
+      operationId: TRASH_OPERATION_ID,
+      kind: "delete",
+    });
+    journal.writeTrash({
+      ...prepared,
+      updatedAt: "2026-07-28T00:00:01.000Z",
+      state: "COMMITTING",
+      items: prepared.items.map((item) => ({
+        ...item,
+        state: "applying" as const,
+        steps: [{
+          stepId: "move",
+          kind: "resource-move" as const,
+          state: "intent" as const,
+          intentAt: "2026-07-28T00:00:01.000Z",
+        }],
+      })),
+    });
+    const operationDir = path.join(
+      tempRoot,
+      "knowledge-workspace",
+      "operations",
+      "v1",
+      TRASH_OPERATION_ID,
+    );
+    expect(JSON.parse(fs.readFileSync(
+      path.join(operationDir, "journal.json.prev"),
+      "utf8",
+    )).state).toBe("PREPARED");
+    fs.writeFileSync(path.join(operationDir, "journal.json"), "{broken", "utf8");
+
+    // The rename/move coordinator must not repair or consume a trash record.
+    expect(journal.list()).toEqual([]);
+    expect(fs.readFileSync(path.join(operationDir, "journal.json"), "utf8"))
+      .toBe("{broken");
+    expect(journal.readTrash(TRASH_OPERATION_ID)).toMatchObject({
+      state: "RECOVERY_REQUIRED",
+      recoveryReason: "journal_current_unreadable",
+      items: [{ state: "recovery-required" }],
+    });
+    expect(journal.listTrash()).toEqual([
+      expect.objectContaining({ operationId: TRASH_OPERATION_ID }),
+    ]);
+  });
+
+  it("writes strict terminal trash results and rejects content, absolute paths, and invalid targets", () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-trash-operation-strict-"));
+    const journal = new DurableKnowledgeOperationJournal({
+      hanakoHome: tempRoot,
+    });
+    const prepared = createTrashPrepared(journal, {
+      operationId: TRASH_OPERATION_ID,
+      kind: "delete",
+    });
+    journal.writeTrashResult({
+      schemaVersion: 1,
+      operationId: prepared.operationId,
+      requestHash: prepared.requestHash,
+      kind: "delete",
+      sourceKey: "main",
+      batchId: TRASH_BATCH_ID,
+      state: "FINALIZED",
+      completedAt: "2026-07-28T00:00:02.000Z",
+      items: [{
+        entryId: TRASH_ENTRY_ID,
+        originalAddress: TRASH_ORIGINAL,
+        trashAddress: TRASH_ADDRESS,
+        targetAddress: TRASH_ADDRESS,
+        resourceKind: "file",
+        state: "applied",
+      }],
+      summary: {
+        succeeded: 1,
+        failed: 0,
+        rolledBack: 0,
+        recoveryRequired: 0,
+      },
+      projections: {
+        session: "applied",
+        event: "applied",
+        index: "applied",
+      },
+    });
+    expect(journal.readTrashResult(TRASH_OPERATION_ID, prepared.requestHash))
+      .toMatchObject({ state: "FINALIZED", summary: { succeeded: 1 } });
+    expect(journal.readResult(TRASH_OPERATION_ID)).toBeNull();
+    const serialized = fs.readFileSync(path.join(
+      tempRoot,
+      "knowledge-workspace",
+      "operations",
+      "v1",
+      TRASH_OPERATION_ID,
+      "journal.json",
+    ), "utf8");
+    expect(serialized).not.toContain(tempRoot);
+    expect(serialized).not.toContain("content");
+    expect(serialized).not.toContain("filePath");
+
+    const withContent = structuredClone(prepared);
+    (withContent.request.items as unknown as Array<Record<string, unknown>>)[0].content = "secret";
+    expect(() => journal.writeTrash(withContent)).toThrow();
+
+    const withAbsolutePath = structuredClone(prepared);
+    ((withAbsolutePath.request.items as unknown as Array<Record<string, unknown>>)[0]
+      .originalAddress as { relativePath: string }).relativePath = "/private/secret.md";
+    expect(() => journal.writeTrash(withAbsolutePath)).toThrow();
+
+    expect(() => createTrashPrepared(journal, {
+      operationId: RESTORE_OPERATION_ID,
+      kind: "cleanup",
+      targetAddress: TRASH_ADDRESS,
+    })).toThrow();
+  });
+
   it("acquires address locks in stable byte order and serializes overlapping operations", async () => {
     const manager = new KnowledgeAddressLockManager();
     const first = await manager.acquire([
@@ -332,6 +527,36 @@ describe("durable knowledge operation journal", () => {
     ))).toBe(true);
   });
 });
+
+function createTrashPrepared(
+  journal: DurableKnowledgeOperationJournal,
+  input: {
+    operationId: string;
+    kind: "delete" | "restore" | "cleanup";
+    targetAddress?: { sourceKey: string; relativePath: string };
+  },
+) {
+  return journal.createTrashPrepared({
+    operationId: input.operationId,
+    kind: input.kind,
+    sourceKey: "main",
+    batchId: TRASH_BATCH_ID,
+    items: [{
+      entryId: TRASH_ENTRY_ID,
+      originalAddress: TRASH_ORIGINAL,
+      trashAddress: TRASH_ADDRESS,
+      ...(input.targetAddress === undefined
+        ? {}
+        : { targetAddress: input.targetAddress }),
+      resourceKind: "file",
+      expectedVersion: VERSION,
+    }],
+    owner: JOURNAL_OWNER,
+    sourceIdentity: SOURCE_IDENTITY,
+    createdAt: "2026-07-28T00:00:00.000Z",
+    expiresAt: "2026-07-28T00:15:00.000Z",
+  });
+}
 
 function createRollbackFixture(hanakoHome: string, failRollback: boolean) {
   let sourceExists = true;

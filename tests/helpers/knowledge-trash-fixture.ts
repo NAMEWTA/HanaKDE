@@ -4,7 +4,10 @@ import type { KnowledgeSourceDto } from '../../shared/knowledge-workspace-contra
 
 type Node = { directory: boolean; content: Buffer; version: number };
 
-export function createKnowledgeTrashFixture(initial: Record<string, { directory?: boolean; content?: string }> = {}) {
+export function createKnowledgeTrashFixture(
+  initial: Record<string, { directory?: boolean; content?: string }> = {},
+  options: Readonly<{ rootId?: string }> = {},
+) {
   const nodes = new Map<string, Node>();
   let sequence = 1;
   for (const [path, value] of Object.entries(initial)) {
@@ -75,6 +78,13 @@ export function createKnowledgeTrashFixture(initial: Record<string, { directory?
   const sourceRegistry = {
     get: (): KnowledgeSourceDto => ({ sourceKey: 'main', displayName: 'Main', role: 'main', availability: 'available', capabilities: ['stat', 'read', 'write', 'list', 'mkdir', 'move', 'trash'] }),
     revalidate: vi.fn(async () => {}),
+    rootIdentity: () => ({
+      providerId: 'local_fs',
+      identityNamespace: 'local_fs',
+      opaqueRootId: options.rootId ?? 'root-main',
+      scopeToken: `scope:${options.rootId ?? 'root-main'}`,
+      caseMode: 'sensitive' as const,
+    }),
     resolveAddress: vi.fn(async (address: { relativePath: string }) => ref(address.relativePath)),
   };
   const service = new KnowledgeTrashService({

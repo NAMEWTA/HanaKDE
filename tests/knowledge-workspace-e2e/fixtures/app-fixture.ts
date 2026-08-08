@@ -4,7 +4,6 @@ import {
   test as base,
   type Browser,
   type BrowserContext,
-  type ElectronApplication,
   type Page,
 } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -25,18 +24,20 @@ import {
   createKnowledgeWorkspaceSandbox,
   type KnowledgeWorkspaceSandbox,
 } from "./workspace-fixture.ts";
+import { launchWindowsElectronOverCdp } from "./windows-electron-cdp.ts";
+import type { ElectronMainProcessApplication } from "./electron-main-process-application.ts";
 
 type KnowledgeFixtures = {
   workspaceSandbox: KnowledgeWorkspaceSandbox;
   launchConfig: KnowledgeLaunchConfig;
   installDialogStub(
-    electronApplication: ElectronApplication,
+    electronApplication: ElectronMainProcessApplication,
     stub: NativeDialogStub,
   ): Promise<NativeDialogStubDisposer>;
   knowledgeApp: {
     page: Page;
     runtime: "desktop-full" | "web-open" | "web-full";
-    electronApplication: ElectronApplication | null;
+    electronApplication: ElectronMainProcessApplication | null;
     apiFetch(pathname: string, init?: RequestInit): Promise<Response>;
   };
 };
@@ -164,7 +165,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
     }
   },
   knowledgeApp: async (
-    { knowledgeBrowser, launchConfig, workspaceSandbox },
+    { knowledgeBrowser, launchConfig, playwright, workspaceSandbox },
     use,
     testInfo,
   ) => {
@@ -176,13 +177,23 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
       testInfo.skip(true, `not applicable to ${runtime}`);
     }
     if (runtime === "desktop-full") {
-      const remoteDebuggingPort = launchConfig.electronLoader
-        ? await reserveLoopbackPort()
+      const useDirectElectronCdp = process.platform === "win32"
+        || process.env.HANA_FORCE_WINDOWS_ELECTRON_CDP === "1";
+      const desktopLaunch = useDirectElectronCdp
+        ? await launchWindowsElectronOverCdp(playwright, {
+            executablePath: resolveElectronExecutable(),
+            bootstrapPath: path.resolve("desktop/bootstrap.cjs"),
+            electronArgs: launchConfig.electronArgs,
+            cwd: process.cwd(),
+            env: {
+              ...launchConfig.env,
+              HANA_DEV_NODE_BIN: process.execPath,
+            },
+            reserveLoopbackPort,
+          })
         : null;
-      const electronApplication = await _electron.launch({
+      const electronApplication = desktopLaunch?.application ?? await _electron.launch({
         args: [
-          ...(launchConfig.electronLoader ? ["-r", launchConfig.electronLoader] : []),
-          ...(remoteDebuggingPort ? [`--hana-playwright-cdp-port=${remoteDebuggingPort}`] : []),
           path.resolve("desktop/bootstrap.cjs"),
           ...launchConfig.electronArgs,
         ],
@@ -191,14 +202,13 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
           ...launchConfig.env,
           HANA_DEV_NODE_BIN: process.execPath,
         },
-        ...(launchConfig.electronLoader
-          ? { executablePath: resolveElectronExecutable() }
-          : {}),
         timeout: 90_000,
       });
       let serverPid: number | null = null;
       try {
-        const appPage = await waitForDesktopMainWindow(electronApplication);
+        const appPage = desktopLaunch
+          ? await desktopLaunch.page()
+          : await waitForDesktopMainWindow(electronApplication);
         const serverInfo = await waitForServerInfo(
           workspaceSandbox.hanaHome,
           electronApplication.process(),
@@ -211,11 +221,19 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
           apiFetch: createAuthenticatedApiFetch(serverInfo),
         });
       } finally {
-        await closeElectronApplication(
-          electronApplication,
-          workspaceSandbox.hanaHome,
-          serverPid,
-        );
+        try {
+          await closeElectronApplication(
+            electronApplication,
+            workspaceSandbox.hanaHome,
+            serverPid,
+          );
+        } finally {
+          desktopLaunch?.dispose();
+          // The owned Electron tree has already exited above. A direct-CDP
+          // Browser close is only transport cleanup and must not replace an
+          // earlier app/server teardown failure with a target-closed error.
+          await desktopLaunch?.browser.close().catch(() => {});
+        }
       }
       return;
     }
@@ -318,7 +336,7 @@ function createAuthenticatedApiFetch(
 }
 
 async function waitForDesktopMainWindow(
-  application: ElectronApplication,
+  application: ElectronMainProcessApplication,
 ): Promise<Page> {
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
@@ -411,7 +429,9 @@ async function stopChild(child: ChildProcess): Promise<void> {
     // and Vite can own descendants, so wait for taskkill's complete process
     // tree before the next isolated fixture removes its workspace.
     await terminateProcessTree(child.pid);
-    await waitForProcessExit(child, 5_000);
+    if (!await waitForProcessExit(child, 5_000)) {
+      throw new Error("Knowledge fixture could not terminate its owned child");
+    }
     return;
   }
   child.kill("SIGTERM");
@@ -425,7 +445,7 @@ async function stopChild(child: ChildProcess): Promise<void> {
 }
 
 async function closeElectronApplication(
-  application: ElectronApplication,
+  application: ElectronMainProcessApplication,
   hanaHome: string,
   knownServerPid: number | null,
 ): Promise<void> {
@@ -469,7 +489,7 @@ async function closeElectronApplication(
   }
 }
 
-async function requestElectronQuit(application: ElectronApplication): Promise<void> {
+async function requestElectronQuit(application: ElectronMainProcessApplication): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -507,11 +527,20 @@ async function waitForProcessExit(
 ): Promise<boolean> {
   if (child.exitCode !== null || child.signalCode !== null) return true;
   return new Promise<boolean>((resolve) => {
-    const timer = setTimeout(() => resolve(false), timeoutMs);
-    child.once("exit", () => {
+    let settled = false;
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    function finish(result: boolean): void {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      resolve(true);
-    });
+      child.off("exit", onExit);
+      child.off("error", onError);
+      resolve(result);
+    }
+    const onExit = () => finish(true);
+    const onError = () => finish(false);
+    child.once("exit", onExit);
+    child.once("error", onError);
   });
 }
 
@@ -546,7 +575,13 @@ async function terminateProcessTree(pid: number | undefined): Promise<void> {
     ], { stdio: "ignore", windowsHide: true });
     if (!await waitForProcessExit(taskkill, WINDOWS_TASKKILL_TIMEOUT_MS)) {
       taskkill.kill();
-      throw new Error("Desktop fixture taskkill did not complete");
+      if (!await waitForPidExit(Number(pid), WINDOWS_TASKKILL_TIMEOUT_MS)) {
+        throw new Error("Desktop fixture taskkill did not terminate its target");
+      }
+      return;
+    }
+    if (!await waitForPidExit(Number(pid), WINDOWS_TASKKILL_TIMEOUT_MS)) {
+      throw new Error("Desktop fixture taskkill did not terminate its target");
     }
     return;
   }

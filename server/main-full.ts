@@ -16,10 +16,15 @@
  */
 import { startServer } from "./index.ts";
 import { registerClosedRoutes, builtinMediaAdapters } from "./composition/full-root.ts";
+import { createMobileWorkbenchRoute } from "./routes/mobile-workbench.ts";
 import { runPackagedStandaloneRuntimeSmoke } from "./standalone-runtime-smoke.ts";
 
 if (process.env.HANA_INTERNAL_STANDALONE_RUNTIME_SMOKE === "1") {
   await runPackagedStandaloneRuntimeSmoke();
 } else {
-  await startServer({ registerClosedRoutes, builtinMediaAdapters });
+  await startServer({
+    registerClosedRoutes,
+    builtinMediaAdapters,
+    createMobileWorkbenchRoute,
+  });
 }

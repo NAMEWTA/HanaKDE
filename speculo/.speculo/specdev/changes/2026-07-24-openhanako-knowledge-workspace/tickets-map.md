@@ -73,7 +73,7 @@
 | 54 | 4 资源操作 | [交付同源原子重命名与移动](./ticket/54-deliver-atomic-rename-move.md) | 10, 18, 21, 23, 43, 48 | KW-US-026, KW-US-027, KW-US-186, KW-RULE-OP, KW-RULE-SEC, KW-RULE-REFACTOR, KW-RULE-RECOVERY | P1 | 已完成 |
 | 55 | 4 资源操作 | [交付删除确认与来源级回收站](./ticket/55-deliver-workspace-trash-delete.md) | 10, 18, 22, 43, 47 | KW-US-144, KW-US-145, KW-US-146, KW-US-147, KW-US-148, KW-RULE-OP, KW-RULE-SEC, KW-RULE-RECOVERY | P1 | 已完成 |
 | 56 | 4 资源操作 | [交付回收站恢复、清理与系统废纸篓](./ticket/56-deliver-trash-restore-cleanup.md) | 04, 10, 14, 23, 44, 51, 55 | KW-US-149, KW-US-150, KW-US-151, KW-US-152, KW-US-153, KW-US-154, KW-US-155, KW-RULE-OP, KW-RULE-SEC, KW-RULE-NATIVE, KW-RULE-RECOVERY | P1 | 已完成 |
-| 57 | 5 发布 | [执行集成、迁移与发布 Gate](./ticket/57-release-knowledge-workspace.md) | 09, 13, 14, 22, 33, 34, 35, 36, 39, 45, 46, 53, 54, 56 | KW-RULE-RELEASE, KW-RULE-TEST | P2 | implemented_waiting_gate |
+| 57 | 5 发布 | [执行集成、迁移与发布 Gate](./ticket/57-release-knowledge-workspace.md) | 09, 13, 14, 22, 33, 34, 35, 36, 39, 45, 46, 53, 54, 56 | KW-RULE-RELEASE, KW-RULE-TEST | P2 | 已完成 |
 
 ## 依赖关系
 

@@ -148,6 +148,7 @@ import {
 } from "../lib/resource-io/providers/request-body-provider.ts";
 import {
   KnowledgeCopyService,
+  type KnowledgeEditorCopyOperation,
   type KnowledgeEditorCopyRequest,
   type KnowledgeEditorCopyResult,
 } from "./knowledge-workspace/knowledge-copy-service.ts";
@@ -1153,6 +1154,76 @@ export class HanaEngine {
     this._knowledgeIndexRuntime = null;
     await runtime?.dispose();
   }
+  async prepareKnowledgeResourceCopyForEditor(
+    input: KnowledgeEditorCopyRequest,
+    options: KnowledgeEngineCopyOptions,
+  ): Promise<KnowledgeEditorCopyOperation> {
+    const { sourceRegistry, signal, ...context } = options;
+    if (!sourceRegistry) {
+      throw new Error("knowledge copy source registry is unavailable");
+    }
+    const service = new KnowledgeCopyService({
+      sourceRegistry,
+      resourceIO: this.getResourceIO(),
+    });
+    const plan = await service.planCopyForEditor(input, { ...context, signal });
+    return Object.freeze({
+      plan,
+      execute: async (operationContext) => plan.disposition === "reference"
+        ? plan.result
+        : service.copyPreparedForEditor(plan.prepared, {
+            ...context,
+            ...operationContext,
+            signal: operationContext.signal ?? signal,
+          }),
+    });
+  }
+  async prepareExternalKnowledgeResourceCopyForEditor(
+    input: KnowledgeExternalEngineCopyInput,
+    options: KnowledgeEngineCopyOptions,
+  ): Promise<KnowledgeEditorCopyOperation> {
+    const { sourceRegistry, signal, ...context } = options;
+    if (!sourceRegistry) {
+      throw new Error("knowledge external copy source registry is unavailable");
+    }
+    const fileId = randomUUID();
+    const baseResourceIO = this.getResourceIO();
+    const requestResourceIO = new ResourceIO({
+      providers: {
+        ...baseResourceIO.providers,
+        session_file: new RequestBodyResourceProvider({
+          fileId,
+          body: input?.body ?? null,
+          sizeBytes: input?.sizeBytes,
+        }),
+      },
+      eventBus: baseResourceIO.eventBus,
+      audit: baseResourceIO.audit,
+    });
+    const service = new KnowledgeCopyService({
+      sourceRegistry,
+      resourceIO: requestResourceIO,
+    });
+    const plan = await service.planExternalCopyForEditor({
+      source: { kind: "session-file", fileId },
+      sourceSizeBytes: input?.sizeBytes,
+      originalName: input?.originalName,
+      mimeType: input?.mimeType,
+      pageAddress: input?.pageAddress,
+      localDate: input?.localDate,
+    }, { ...context, signal });
+    return Object.freeze({
+      plan,
+      execute: async (operationContext) => service.copyPreparedForEditor(
+        plan.prepared,
+        {
+          ...context,
+          ...operationContext,
+          signal: operationContext.signal ?? signal,
+        },
+      ),
+    });
+  }
   async copyKnowledgeResourceForEditor(
     input: KnowledgeEditorCopyRequest,
     options: KnowledgeEngineCopyOptions,
@@ -1198,6 +1269,7 @@ export class HanaEngine {
     });
     return service.copyExternalForEditor({
       source: { kind: "session-file", fileId },
+      sourceSizeBytes: input?.sizeBytes,
       originalName: input?.originalName,
       mimeType: input?.mimeType,
       pageAddress: input?.pageAddress,

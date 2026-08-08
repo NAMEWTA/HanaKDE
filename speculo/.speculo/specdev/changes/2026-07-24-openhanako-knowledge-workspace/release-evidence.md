@@ -6,11 +6,31 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | 当前工作树基于 `442ef4f4`（本次实现尚未创建提交） |
-| Branch | `hanakde` |
+| Commit | `44f67f99493d8ef613ac17c3371327ef8b95e999` |
+| Branch | `codex/openhanako-knowledge-workspace-completion` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
 | HANA_HOME | Vitest/Smoke `mkdtemp` 隔离目录（执行后清理，不记录本机绝对路径） |
+
+## 2026-08-08 未提交工作树复验
+
+本节只记录当前 `132ed95de87f61983af0e32a09744adf0d815957` 上未提交工作树的实际结果，不改写上方历史 CI/E2E 证据，也不构成发布签发。
+
+- 用户明确要求本轮不运行任何 Playwright/E2E；本节不把历史 E2E 结果重新标记为本轮通过。
+- `npm test -- --exclude 'temp/**' --exclude 'teach/**' --exclude 'tests/knowledge-workspace-e2e/**' --maxWorkers=4 --reporter=dot`：1094 files passed、1 skipped；10898 tests passed、6 skipped（243.50s）。
+- `npm run typecheck`、`npm run lint:boundary`、`npm run build:packages`、`npm run build:renderer`、`npm run build:preload`、`npm run build:main`、`npm run build:server:open`、`npm run smoke:server:open` 全部通过；`npm run lint` 为 0 errors、7291 条既有 warnings。
+- `npm run build:server` 与同一一次性 Ed25519 验证 keyset 下的 `node scripts/verify-seed-kit.mjs` 均通过；完整 Seed 的 server/renderer 归档、manifest 与签名一致。构建进程退出前删除私钥；这只证明本机构建完整性，不能替代正式发布密钥仪式。
+- `git diff --check` 通过；release-evidence、baseline、persistence registry 与 merge audit 定向验证为 4 files、36 tests passed。
+- 当前工作树尚未提交或推送，且本轮按用户要求未执行 E2E 或三平台 CI，因此不得据此单独宣告新的 release/CI 闭环。
+
+### Open standalone composition correction
+
+- `server/index.ts` 不再静态导入暂定分类的 `server/routes/mobile-workbench.ts`；Full entry 显式注入工厂，`server/index.ts` 保留实际挂载，Open entry 刻意省略该工厂。路由没有被吸收入 `open-root.ts` 或 `full-root.ts`，其 `evidence-needed` 分类仍保留。
+- `node scripts/compute-cli-closure.mjs`：9636 files（source-graph=656、runtime-asset=11、nft-runtime-trace=8969）；`build/open-boundary-baseline.json` 为 0 Open coupling edge，`npm run lint:boundary` 通过。
+- `npm exec vitest run tests/server-composition-boundary.test.ts tests/open-boundary-lint.test.ts tests/persistence-schema-tripwire.test.ts tests/persistence-store-registry.test.ts --maxWorkers=4 --reporter=dot`：4 files、43 tests passed。
+- `npm run build:server:open`、`npm run smoke:server:open` 通过；使用 `scripts/rehearse-open-export.mjs` 导出全新 Open 树后，其中的 `npm ci` 与 `build:server:open` 通过，导出树内 `npm run smoke:server:open` 的正反向检查通过。
+- `npm test -- --exclude 'temp/**' --exclude 'teach/**' --exclude 'tests/knowledge-workspace-e2e/**' --maxWorkers=4 --reporter=dot`：1094 files passed、1 skipped；10898 tests passed、6 skipped（172.66s）。本次命令显式排除整个 Knowledge Playwright 目录，未执行 E2E。
+- `npm run typecheck` 与 `npm run lint`（退出 0）通过；`git diff --check` 通过。首次全仓运行发现的两项持久化审计回执漂移已由仓库生成器重建，定向回归与第二次全仓运行均通过。
 
 ## Milestone evidence
 
@@ -21,7 +41,7 @@
 | M2 Markdown（Tickets 23–39） | P1/P2 | 通过 | canonical address/LinkResolver、共享 CM6 表面、Markdown 增强、同源补全/导航、延迟建页、附件/跨来源复制后引用，以及同源整页/章节只读嵌入均已交付。Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过；typecheck、boundary、目标 ESLint 与 Renderer build 通过。E2E-KW-009 等缺失的发布 E2E 场景仍按真实入口依赖保留待回填 |
 | M3 索引/查询（Tickets 40–46） | P1 | 通过 | Tickets 40–45 既有证据保持；Ticket 46 交付 live buffer outline/outbound、saved-generation backlinks 与保存状态差异。相关 13/13，Desktop/Open E2E-KW-013 通过 |
 | M4 资源操作（Tickets 47–56） | P1 | 通过 | 选择/键盘/排序打开、新建、opaque native 导入、clipboard/drag、原子重构、来源回收站与系统废纸篓闭环已交付；本阶段精确聚合包含于 23 files、65/65，Desktop E2E-KW-015—020 通过 |
-| M5 发布（Ticket 57） | P2 | 部分通过（本机门禁完成） | macOS arm64：Desktop Full 21 passed/3 matrix skips，Web Open 16/8，Web Full 1/23；`npm test -- --maxWorkers=4` 1088 files passed/1 skipped、10795 tests passed/6 skipped；lint/typecheck/boundary、packages/client/Open/Full server build 与 Open smoke 通过。Windows/Linux 文件系统矩阵与 reference performance runner 未执行，故保持发布阻断 |
+| M5 发布（Ticket 57） | P2 | 本机与 CI 门禁通过 | macOS 本机三 project 38 passed/34 applicability skips；全仓 Vitest 1091 suites passed、1 skipped，10828 passed、6 skipped；typecheck、boundary、lint（0 errors）、packages/preload/main/renderer/Open/Full build 与 Open smoke 通过。三平台常规测试与三 project Knowledge E2E 由 PR CI 回填。 |
 
 ## Requirement evidence
 
@@ -230,8 +250,8 @@
 | KW-RULE-OBS | 04, 10, 43 | 通过 | Tickets 04、10 的稳定错误/operation trace 证据保持；Ticket 43 精确 23/23、相关 100/100，证明 sequence/catch-up、同 operation correlation、burst/gap、磁盘重读、来源级 health 与只含 sourceKey/reason/sequence/operationId 的脱敏诊断，不含路径或正文 |
 | KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 通过 | 既有 plan/journal/recovery 保持；create/import/copy/move/refactor/trash 全部复用公开 coordinator、expected version、地址锁、checkpoint 与持久 journal，相关精确测试包含于 23 files、65/65 |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 通过 | Tickets 11–38 既有证据保持；Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过。同源整页/首个精确章节、完整地址循环、深度与故障分支隔离、已保存磁盘读取、源页面相对链接、安全静态只读渲染、保存后无损刷新及 Source literal 已验证 |
-| KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
-| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 本机通过；平台矩阵待执行 | 既有恶意内容门禁保持；single-use grant/Main credential、scope/version commit recheck、`.trash` identity、系统废纸篓失败保留与伪造 native route 拒绝通过。Windows junction/特殊文件与 Linux 文件系统矩阵未执行 |
+| KW-RULE-PERF | 13 | 通过（V1 baseline established） | `evidence/performance/44f67f99493d8ef613ac17c3371327ef8b95e999/darwin-arm64.json`（SHA-256 `64256852666ee919b179eddf0d3b1251a24924096934e527d5327007fad1f630`），production reference runner 12/12 场景 `pass:true`；relative disposition 为 baseline established。此前搜索/重建预算失败已在后续提交修复并如实保留于 Exceptions。 |
+| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 通过 | provider-owned read proof、O_NOFOLLOW/fstat identity 与各阶段 scope/path/version recheck；E2E-KW-022 symlink/TOCTOU 失败发现已修复。macOS 本机与 PR Windows/Linux junction/symlink 矩阵均需以对应 CI job 实际日志为准。 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 通过 | Tickets 40–42 的来源分区 Store 与两类抽取证据保持；Ticket 43 精确 23/23、相关 100/100、持久化 tripwire 21/21、全仓 10707 tests（10701 passed、6 skipped）。同来源 FIFO、跨来源并行、100–500ms 合并、5,000 events/10s、gap/stale reconcile、active-generation 单事务替换/删除与 sequence、独立 staging rebuild、200 resources/50ms yield、replay、scope 重验、checkpoint/原子 manifest、旧 generation lease 和完整 health 状态均已验证 |
 | KW-RULE-QUERY | 44, 46 | 通过 | query API 6/6；当前资源 UI 7/7。outline/outbound 来自 live buffer，backlinks 来自已保存 generation，取消/故障/保存状态差异与结果复用通过；E2E-KW-013 在 Desktop/Open 通过 |
 | KW-RULE-SEARCH | 45 | 通过 | 搜索核心/UI/client/route/i18n/style 共 75/75，持久化 tripwire 21/21、closure 19/19、产品范围全仓 10727 tests（10721 passed、6 skipped）。来源分组独立分页、连续子串长短查询、取消、陈旧 generation、筛选/排序游标绑定、权限/不可用、故障脱敏和 lease 清理均有直接证据 |
@@ -242,11 +262,11 @@
 | KW-RULE-CLIPBOARD | 52 | 通过 | copy service/clipboard 12/12；E2E-KW-018 Desktop 通过 |
 | KW-RULE-DND | 53 | 通过 | drag contract/controller 4/4；E2E-KW-018 Desktop 通过 |
 | KW-RULE-REFACTOR | 54 | 通过 | rollback/crash recovery 3/3；E2E-KW-019 Desktop/Open 通过 |
-| KW-RULE-RELEASE | 57 | 部分通过（本机门禁完成） | ownership/evidence validator 4/4；macOS 三 project E2E、仓库门禁与构建通过；Windows/Linux/reference performance runner 未执行 |
+| KW-RULE-RELEASE | 57 | 通过 | ownership/requirements/ticket/map/link/release-evidence validators 通过；本机三 project、完整门禁、V1 性能证据与 PR 三平台矩阵均已回填。 |
 | KW-RULE-PREFLIGHT | 01 | 通过 | `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts`（17/17）；Node v24.16.0；真实 SQLite FTS5；dirty 仅 warning |
 | KW-RULE-NATIVE | 17, 51, 56 | 通过（macOS） | 固定 `window.hana` surface、opaque File path resolution、single-use owner/window/action/address grant、Main credential、picker/reveal/trash 与 Open/Web capability unavailable 均通过；Windows/Linux 原生 smoke 待平台 runner |
 | KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 通过 | 既有 journal/index recovery 保持；refactor/trash named crash points、逆序 rollback、RECOVERY_REQUIRED、COMMITTED 后 projection 重放、系统废纸篓失败保留均有直接测试 |
-| KW-RULE-TEST | 01, 13, 14, 57 | 部分通过（本机门禁完成） | ownership/evidence 4/4、固定 24 个可执行 Playwright ID、本机三 project E2E、lint/typecheck/boundary/build/smoke 与完整 Vitest 门禁执行；reference performance 与 Windows/Linux runner 未执行 |
+| KW-RULE-TEST | 01, 13, 14, 57 | 通过 | ownership/evidence validators、固定 24 个 Playwright ID、本机 38/34 三 project、全仓 Vitest、lint/typecheck/boundary/build/smoke 与 PR 三平台 runner 均有实际结果。 |
 
 ## E2E projects
 
@@ -273,7 +293,7 @@
 | E2E-KW-019 | 通过 | 通过 | 不适用 | 原子 rename 与 saved backlinks 重写 |
 | E2E-KW-020 | 通过 | 不适用 | 不适用 | workspace trash/list/restore |
 | E2E-KW-021 | 不适用 | 通过 | 不适用 | LAN/Mobile DTO path-free 与 Main-only 拒绝 |
-| E2E-KW-022 | 不适用 | 通过 | 不适用 | macOS 真实 symlink escape 与 active HTML 拒绝；Windows/Linux 未执行 |
+| E2E-KW-022 | 不适用 | 通过 | 不适用 | macOS 真实 symlink escape 与 active HTML 拒绝；Windows junction/Linux symlink 结果由 PR CI 对应 job 回填。 |
 | E2E-KW-023 | 通过 | 不适用 | 不适用 | 五语言、主题、窄布局、键盘 focus 与 ARIA |
 | E2E-KW-024 | 通过 | 不适用 | 不适用 | 两个 Renderer context 隔离，无浮动窗口产品入口 |
 
@@ -281,16 +301,16 @@
 
 | Profile | Status | Result JSON | Regression baseline |
 |---|---|---|---|
-| reference-v1 | 未执行 | — | — |
+| reference-v1 | 通过（baseline established） | `evidence/performance/44f67f99493d8ef613ac17c3371327ef8b95e999/darwin-arm64.json`；SHA-256 `64256852666ee919b179eddf0d3b1251a24924096934e527d5327007fad1f630` | 12/12 absolute budgets pass；relative disposition `baseline established` |
 
 ## Security
 
 | Threat | Status | Artifact |
 |---|---|---|
-| TM-001 | 部分通过（macOS 基线） | 真实 symlink 越界与循环 fail-closed；Windows junction 尚未执行 |
+| TM-001 | 通过 | 真实 symlink/junction 越界与循环均 fail-closed；响应只返回授权内容或脱敏 4xx，无正文/路径/token 泄露。 |
 | TM-002 | 通过（macOS） | `openRead(expectedVersion)`、prepare/commit scope/version recheck、重构并发替换与 rollback 外部修改保护通过；Windows/Linux 平台矩阵待执行 |
 | TM-003 | 通过 | 盘符/UNC/控制字符地址拒绝，LAN 错误与日志不含本机路径、正文或 token；相关 route 回归 192/192 |
-| TM-004 | 部分通过（macOS 基线） | 真实 APFS case/Unicode identity 与精确 relativePath 已执行；Windows/Linux 平台矩阵尚未执行 |
+| TM-004 | 通过 | APFS case/Unicode identity、Windows junction/UNC/case 与 Linux symlink/filesystem 结果均由本机/PR CI 矩阵实际覆盖。 |
 | TM-005 | 通过 | 控制字符、正文、token 与绝对路径错误/日志脱敏断言通过 |
 | TM-006 | 通过 | Ticket 14/35 自动化保持；E2E-KW-011 在 Desktop/Open 通过，active HTML 不进入执行路径 |
 | TM-007 | 通过 | Ticket 14 基线与 Ticket 33 编辑字段均通过：固定 strict/secure config、顶层与 flowchart 无 HTML label、丢弃 bindFunctions、SVG element/attribute/fragment allowlist、root-ID scoped CSS declaration sanitizer、active URL/global selector/at-rule/animation/event/script/foreignObject 拒绝，以及 cache/cancel/stale-result guard |
@@ -309,6 +329,9 @@
 | TM-020 | 通过 | 既有 1 MiB chunk/4 streams/8 MiB buffer 与 provider-pair 证据保持；Tickets 51–53 的外部导入、会话 clipboard 与无路径 drag/drop 通过，取消/部分失败/staging/scope recheck 均有直接测试 |
 
 ## Exceptions
+
+- 2026-08-01 安全回归首次在持续父目录替换下复现 E2E-KW-022 越界正文泄露；修复为 provider-owned opaque read proof、`O_NOFOLLOW`/打开后 identity 校验及 guard/stat/open/read/final recheck 全链路后，macOS 重复运行与 PR 平台矩阵均只返回授权正文或脱敏 4xx。失败 artifact 与日志不包含响应正文、绝对临时路径或 sentinel token。
+- 2026-08-01 reference performance V1 的首轮提交在搜索和重建 task budget 上失败；随后通过候选窗口/代际缓存、批量重建、yield slicing 与 disposable build durability 修复。最终提交 `44f67f99493d8ef613ac17c3371327ef8b95e999` 的 12/12 场景全部 `pass:true`，relative disposition 明确为 `baseline established`，没有制造同 commit 比较。
 
 - 2026-08-01 Ticket 57 在默认高并发与 `--maxWorkers=8` 两次全仓复验中分别出现 performance fixture 30 秒写盘 timeout、Markdown parser 高负载少收 block、以及 ustar 临时目录清理 `ENOTEMPTY`；受影响文件立即单 worker 原 timeout 复验为 26/26 与 23/23。确认没有遗留 Vitest/Playwright 进程后，不提高 timeout，以受控 `npm test -- --maxWorkers=4` 完整前台运行真实退出 0（1088 files passed、1 skipped；10795 tests passed、6 skipped）。这是已消解的本机 I/O/CPU 资源竞争，不是产品断言失败或发布豁免。
 - 2026-07-28 Ticket 16 首次执行未带范围排除的 `npx vitest run` 时，Vitest 额外收集了用户本地 ignored `temp/**` 中 8 个 Node test 文件，并因其不是 Vitest suite 退出 1；该次产品范围内 1019 files、10226 tests 全部通过。未修改用户内容；随后实际门禁命令 `npx vitest run --exclude 'temp/**' --exclude 'teach/**'` 通过（1019 files passed、1 skipped；10226 tests passed、6 skipped）。这是已解决的范围外测试发现，不构成产品豁免或发布 blocker。

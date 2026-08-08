@@ -117,6 +117,139 @@ describe("ResourceIO transfer", () => {
     expect(fs.readFileSync(targetFile, "utf-8")).toBe("new body");
   });
 
+  it("merges a directory in sibling staging before publishing the complete tree", async () => {
+    const { sandbox, sourceRoot, targetRoot } = makeSandbox();
+    const { resourceIO } = makeLocalResourceIO(sandbox);
+    const sourceDirectory = path.join(sourceRoot, "Folder");
+    const targetDirectory = path.join(targetRoot, "Folder");
+    fs.mkdirSync(path.join(sourceDirectory, "nested"), { recursive: true });
+    fs.mkdirSync(targetDirectory, { recursive: true });
+    fs.writeFileSync(path.join(sourceDirectory, "common.md"), "incoming");
+    fs.writeFileSync(path.join(sourceDirectory, "nested", "new.md"), "new");
+    fs.writeFileSync(path.join(targetDirectory, "common.md"), "existing");
+    fs.writeFileSync(path.join(targetDirectory, "kept.md"), "kept");
+
+    await resourceIO.transfer({
+      source: { kind: "local-file", path: sourceDirectory },
+      targetDirectory: { kind: "local-file", path: targetRoot },
+      targetName: "Folder",
+      mergeExisting: "keep-both",
+      operationId: OPERATION_ID,
+    }, { source: "api" });
+
+    expect(fs.readFileSync(path.join(targetDirectory, "common.md"), "utf-8"))
+      .toBe("existing");
+    expect(fs.readFileSync(path.join(targetDirectory, "common_2.md"), "utf-8"))
+      .toBe("incoming");
+    expect(fs.readFileSync(path.join(targetDirectory, "nested", "new.md"), "utf-8"))
+      .toBe("new");
+    expect(fs.readFileSync(path.join(targetDirectory, "kept.md"), "utf-8"))
+      .toBe("kept");
+    expect(listStagingArtifacts(targetRoot)).toEqual([]);
+  });
+
+  it("recovers a merged directory after process death between backup and publication", async () => {
+    const { sandbox, sourceRoot, targetRoot } = makeSandbox();
+    const sourceDirectory = path.join(sourceRoot, "Folder");
+    const targetDirectory = path.join(targetRoot, "Folder");
+    fs.mkdirSync(sourceDirectory, { recursive: true });
+    fs.mkdirSync(targetDirectory, { recursive: true });
+    fs.writeFileSync(path.join(sourceDirectory, "incoming.md"), "incoming");
+    fs.writeFileSync(path.join(targetDirectory, "existing.md"), "existing");
+    const crashing = new ResourceIO({
+      providers: {
+        local_fs: new LocalFsProvider({
+          cwd: sandbox,
+          transferFaultInjector(point) {
+            if (point === "after_merge_backup_rename") {
+              throw Object.assign(new Error("simulated process death"), {
+                name: "SimulatedKnowledgeOperationCrash",
+              });
+            }
+          },
+        }),
+      },
+    });
+    const expectedTargetVersion = (await crashing.stat({
+      kind: "local-file",
+      path: targetDirectory,
+    })).version!;
+
+    await expect(crashing.transfer({
+      source: { kind: "local-file", path: sourceDirectory },
+      targetDirectory: { kind: "local-file", path: targetRoot },
+      targetName: "Folder",
+      mergeExisting: "replace",
+      operationId: OPERATION_ID,
+    })).rejects.toMatchObject({ name: "SimulatedKnowledgeOperationCrash" });
+
+    expect(fs.existsSync(targetDirectory)).toBe(false);
+    expect(listStagingArtifacts(targetRoot).sort()).toEqual([
+      `.hana-transfer-backup-${OPERATION_ID}`,
+      `.hana-transfer-receipt-${OPERATION_ID}.json`,
+      `.hana-transfer-staging-${OPERATION_ID}`,
+    ]);
+
+    const restarted = new ResourceIO({
+      providers: {
+        local_fs: new LocalFsProvider({ cwd: sandbox }),
+      },
+    });
+    await expect(restarted.recoverTransferPublication({
+      target: { kind: "local-file", path: targetDirectory },
+      operationId: OPERATION_ID,
+      expectedTargetVersion,
+    })).resolves.toMatchObject({ outcome: "committed" });
+    expect(fs.readFileSync(path.join(targetDirectory, "existing.md"), "utf8"))
+      .toBe("existing");
+    expect(fs.readFileSync(path.join(targetDirectory, "incoming.md"), "utf8"))
+      .toBe("incoming");
+    expect(listStagingArtifacts(targetRoot)).toEqual([]);
+  });
+
+  it("preserves the formal directory when a merged source stream fails", async () => {
+    const { sandbox, targetRoot } = makeSandbox();
+    const targetDirectory = path.join(targetRoot, "Folder");
+    fs.mkdirSync(targetDirectory, { recursive: true });
+    fs.writeFileSync(path.join(targetDirectory, "existing.md"), "existing");
+    const sourceProvider = {
+      id: "resource",
+      capabilities: () => ({ exportTree: true }),
+      async *exportTree() {
+        yield { kind: "directory", path: [] } satisfies ResourceExportEntry;
+        yield {
+          kind: "file",
+          path: ["new.md"],
+          sizeBytes: 4,
+          version: { size: 4 },
+          body: (async function* () {
+            yield Buffer.from("part");
+            throw new Error("simulated source failure");
+          })(),
+        } satisfies ResourceExportEntry;
+      },
+    } satisfies Partial<ResourceProvider>;
+    const resourceIO = new ResourceIO({
+      providers: {
+        resource: sourceProvider as ResourceProvider,
+        local_fs: new LocalFsProvider({ cwd: sandbox }),
+      },
+    });
+
+    await expect(resourceIO.transfer({
+      source: { kind: "resource", resourceId: "source" },
+      targetDirectory: { kind: "local-file", path: targetRoot },
+      targetName: "Folder",
+      mergeExisting: "replace",
+      operationId: OPERATION_ID,
+    }, { source: "api" })).rejects.toThrow("simulated source failure");
+
+    expect(fs.readFileSync(path.join(targetDirectory, "existing.md"), "utf-8"))
+      .toBe("existing");
+    expect(fs.existsSync(path.join(targetDirectory, "new.md"))).toBe(false);
+    expect(listStagingArtifacts(targetRoot)).toEqual([]);
+  });
+
   it("does not write native paths or local resource keys into transfer audit records", async () => {
     const { sandbox, sourceRoot, targetRoot } = makeSandbox();
     const records: Array<Record<string, unknown>> = [];

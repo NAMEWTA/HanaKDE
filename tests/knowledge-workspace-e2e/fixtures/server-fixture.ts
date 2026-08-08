@@ -7,7 +7,6 @@ export type KnowledgeLaunchConfig = {
   requestedPort: 0;
   workspaceRoot: string;
   electronArgs: string[];
-  electronLoader: string | null;
 };
 
 const PASSTHROUGH_ENV_KEYS = [
@@ -39,7 +38,6 @@ export function createKnowledgeLaunchConfig(
   workspace: KnowledgeWorkspaceSandbox,
   sourceEnv: NodeJS.ProcessEnv = process.env,
   productRoot: string = process.cwd(),
-  platform: NodeJS.Platform = process.platform,
 ): KnowledgeLaunchConfig {
   const parsedHome = path.parse(workspace.userHome);
   const relativeHome = workspace.userHome.slice(parsedHome.root.length);
@@ -53,9 +51,6 @@ export function createKnowledgeLaunchConfig(
     electronArgs: [
       `--user-data-dir=${workspace.electronUserData}`,
     ],
-    electronLoader: platform === "win32"
-      ? path.join(productRoot, "tests", "knowledge-workspace-e2e", "fixtures", "windows-electron-loader.cjs")
-      : null,
     env: {
       ...selectedProcessEnvironment(sourceEnv),
       HOME: workspace.userHome,
@@ -75,11 +70,6 @@ export function createKnowledgeLaunchConfig(
       HANA_PORT: "0",
       HANA_CREATE_STARTUP_SESSION: "0",
       HANA_KNOWLEDGE_E2E: "1",
-      // Playwright discovers Electron's Chromium endpoint from its process
-      // streams. Keep the real desktop process and stdio intact, while this
-      // early Windows-only Electron setting prevents an inherited console
-      // attachment from interfering with that endpoint handshake.
-      ...(platform === "win32" ? { ELECTRON_NO_ATTACH_CONSOLE: "1" } : {}),
     },
   };
 }

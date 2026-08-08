@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ElectronApplication } from "@playwright/test";
+import type { ElectronMainProcessApplication } from "./electron-main-process-application.ts";
 
 export type NativeDialogStub = {
   openPaths?: string[];
@@ -10,7 +10,7 @@ export type NativeDialogStub = {
 export type NativeDialogStubDisposer = () => Promise<void>;
 
 export async function installNativeDialogStub(
-  electronApplication: ElectronApplication,
+  electronApplication: ElectronMainProcessApplication,
   stub: NativeDialogStub,
 ): Promise<NativeDialogStubDisposer> {
   const restoreKey = `__hanaKnowledgeDialogRestore_${randomUUID()}`;

@@ -38,7 +38,9 @@ import type {
   ResourceStat,
   ResourceTrashOptions,
   ResourceTrashResult,
+  ResourceImportTreeRecoveryResult,
   ResourceTransferRequest,
+  ResourceTransferRecoveryRequest,
   ResourceTransferResult,
   ResourceVersion,
   ResourceWriteConflictResult,
@@ -265,6 +267,7 @@ export class ResourceIO {
           signal: transferAbort.signal,
           expectedTargetVersion: request.expectedTargetVersion,
           replaceExisting: request.replaceExisting,
+          mergeExisting: request.mergeExisting,
           operationId: request.operationId,
           abortTransfer: transferAbort.abort,
           revalidateSourceScope: async () => {
@@ -298,6 +301,50 @@ export class ResourceIO {
       throw safeError;
     } finally {
       transferAbort.dispose();
+    }
+  }
+
+  async recoverTransferPublication(
+    input: ResourceTransferRecoveryRequest,
+    options: ResourceOperationContext = {},
+  ): Promise<ResourceImportTreeRecoveryResult> {
+    if (
+      !input
+      || typeof input !== "object"
+      || Array.isArray(input)
+      || Object.keys(input).some((field) => ![
+        "target",
+        "operationId",
+        "expectedTargetVersion",
+      ].includes(field))
+      || !isOperationCorrelationId(input.operationId)
+    ) {
+      throw transferEntryUnsupported("invalid_transfer_recovery_request");
+    }
+    const target = normalizeResourceRef(input.target);
+    const providerId = providerIdForResourceRef(target);
+    const provider = this.providerFor(target);
+    if (typeof provider.recoverImportTreePublication !== "function") {
+      return { outcome: "none" };
+    }
+    try {
+      return await provider.recoverImportTreePublication(target, {
+        operationId: input.operationId,
+        expectedTargetVersion: encodeResourceTransferVersion(
+          input.expectedTargetVersion,
+        ),
+      });
+    } catch (error) {
+      const safeError = normalizeTransferError(error);
+      this.recordAudit({
+        outcome: transferErrorOutcome(safeError),
+        operation: "transfer",
+        providerId,
+        code: errorCode(safeError),
+        safeMessage: "Resource transfer recovery failed",
+        ...transferAuditContext({ ...options, operationId: input.operationId }),
+      });
+      throw safeError;
     }
   }
 
@@ -500,8 +547,17 @@ function normalizeTransferRequest(input: ResourceTransferRequest | unknown): Res
   if (value.replaceExisting !== undefined && typeof value.replaceExisting !== "boolean") {
     throw transferEntryUnsupported("invalid_replace_existing");
   }
+  if (
+    value.mergeExisting !== undefined
+    && !["skip", "keep-both", "replace"].includes(value.mergeExisting)
+  ) {
+    throw transferEntryUnsupported("invalid_merge_existing");
+  }
   if (value.replaceExisting === true && value.expectedTargetVersion !== undefined) {
     throw transferEntryUnsupported("ambiguous_target_precondition");
+  }
+  if (value.replaceExisting === true && value.mergeExisting !== undefined) {
+    throw transferEntryUnsupported("ambiguous_target_mode");
   }
   return {
     source,
@@ -509,6 +565,7 @@ function normalizeTransferRequest(input: ResourceTransferRequest | unknown): Res
     targetName: value.targetName,
     expectedTargetVersion: value.expectedTargetVersion,
     replaceExisting: value.replaceExisting,
+    mergeExisting: value.mergeExisting,
     signal: value.signal,
     operationId: value.operationId,
   };

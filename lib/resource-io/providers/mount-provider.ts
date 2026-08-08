@@ -12,6 +12,8 @@ import type {
   ResourceExportEntry,
   ResourceExportTreeOptions,
   ResourceImportTreeOptions,
+  ResourceImportTreeRecoveryOptions,
+  ResourceImportTreeRecoveryResult,
   ResourceImportTreeResult,
   ResourceListResult,
   ResourceMutationResult,
@@ -211,6 +213,20 @@ export class MountProvider {
         path: targetPath,
       },
       result,
+    );
+  }
+
+  async recoverImportTreePublication(
+    target: ResourceRef,
+    options: ResourceImportTreeRecoveryOptions,
+  ): Promise<ResourceImportTreeRecoveryResult> {
+    const resolved = this.resolveLocalMount(target, "write");
+    if (typeof resolved.provider.recoverImportTreePublication !== "function") {
+      return { outcome: "none" };
+    }
+    return resolved.provider.recoverImportTreePublication(
+      { kind: "local-file", path: resolved.path },
+      options,
     );
   }
 

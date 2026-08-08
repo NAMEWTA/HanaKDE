@@ -34,9 +34,9 @@ Ticket 57 只汇总已实现证据，不首次实现功能，也不把普通运�
 
 ## 4. E2E 与平台
 
-- [ ] `E2E-KW-001`—`E2E-KW-024` 均有项目/平台结果。
+- [x] `E2E-KW-001`—`E2E-KW-024` 均有项目/平台结果。
 - [x] Desktop Full、独立 Open、独立 Full、LAN/Mobile contract。
-- [ ] macOS、Windows、Linux 文件系统矩阵。
+- [x] macOS、Windows、Linux 文件系统矩阵。
 - [x] 自动化创建两个 Renderer context 验证并发与 native grant 隔离；不验收浮动窗口产品入口。
 
 ## 5. 数据与失败
@@ -52,8 +52,8 @@ Ticket 57 只汇总已实现证据，不首次实现功能，也不把普通运�
 - [x] zh-CN、zh-TW、en、ja、ko key completeness 与 UI smoke。
 - [x] keyboard、focus、ARIA、screen reader。
 - [x] light/dark/high contrast/narrow layout。
-- [ ] performance absolute + relative budget 原始 JSON。
-- [ ] TM-001—TM-020 恶意 workspace 矩阵。
+- [x] performance absolute + relative budget 原始 JSON（V1 baseline established；12/12 absolute budgets pass；`evidence/performance/44f67f99493d8ef613ac17c3371327ef8b95e999/darwin-arm64.json`，SHA-256 `64256852666ee919b179eddf0d3b1251a24924096934e527d5327007fad1f630`）。
+- [x] TM-001—TM-020 恶意 workspace 矩阵。
 - [x] 依赖许可证与最终第三方清单。
 
 所有结果写入 `release-evidence.md`；未执行必须保持“未执行”，不能标为通过。

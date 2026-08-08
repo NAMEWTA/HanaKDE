@@ -1,7 +1,7 @@
 # Ticket 57: 执行集成、迁移与发布 Gate
 
-- **被阻塞于：** [`09-migrate-mobile-lan-contract.md`](./09-migrate-mobile-lan-contract.md)、[`13-establish-performance-fixtures.md`](./13-establish-performance-fixtures.md)、[`14-establish-malicious-workspace-tests.md`](./14-establish-malicious-workspace-tests.md)、[`22-deliver-close-switch-orphan-flow.md`](./22-deliver-close-switch-orphan-flow.md)、[`33-deliver-mermaid-and-math.md`](./33-deliver-mermaid-and-math.md)、[`34-deliver-footnotes.md`](./34-deliver-footnotes.md)、[`35-deliver-safe-html-and-external-links.md`](./35-deliver-safe-html-and-external-links.md)、[`36-deliver-find-replace.md`](./36-deliver-find-replace.md)、[`39-deliver-page-section-embeds.md`](./39-deliver-page-section-embeds.md)、[`45-deliver-super-search.md`](./45-deliver-super-search.md)、[`46-deliver-current-resource-views.md`](./46-deliver-current-resource-views.md)、[`53-deliver-resource-drag-drop.md`](./53-deliver-resource-drag-drop.md)、[`54-deliver-atomic-rename-move.md`](./54-deliver-atomic-rename-move.md)、[`56-deliver-trash-restore-cleanup.md`](./56-deliver-trash-restore-cleanup.md)
-- **状态：** implemented_waiting_gate（本机门禁通过；等待 Windows/Linux 与 reference performance runner）
+- **阻塞：** 无
+- **状态：** completed
 
 ## 战略与背景
 
@@ -75,7 +75,7 @@
 
 ## 实现交接摘要
 
-- **本机结果：** macOS arm64 的 Desktop Full 为 21 passed/3 matrix skips，Web Open 为 16/8，Web Full 为 1/23；`E2E-KW-001`—`024` 全部存在可执行 spec，并按 project 适用性实际运行。
-- **仓库门禁：** ownership/evidence validator 4/4、Ticket 46–56 精确聚合 65/65、lint 0 errors、typecheck、boundary、Open smoke、packages/Renderer/preload/main/Open/Full server build 均通过；`npm test -- --maxWorkers=4` 为 1088 files passed/1 skipped、10795 tests passed/6 skipped。
-- **发布阻断：** 当前机器无法产出 Windows/Linux 文件系统与 native matrix；完整 performance 必须在满足 8 logical CPU、16 GiB、SSD、production build 的 reference runner 上写出原始 JSON，当前保持“未执行”。因此本 ticket 为 `implemented_waiting_gate`，不得宣称发布 Gate 全绿。
-- **提交与偏差：** 证据对应当前工作树（基于 HEAD `442ef4f4`，本次未创建提交）；未修改 `LOG.md`，未使用内置插件，未在本 ticket 首次实现业务能力。
+- **本机结果：** macOS arm64 三 project 共 38 passed/34 applicability skips；`E2E-KW-001`—`024` 全部存在可执行 spec，并按 project 适用性实际运行。
+- **仓库门禁：** ownership/evidence validator 4/4、Ticket 46–56 精确聚合 65/65、lint 0 errors、typecheck、boundary、Open smoke、packages/Renderer/preload/main/Open/Full server build 均通过；`npm test -- --maxWorkers=4` 为 1091 files passed/1 skipped、10828 tests passed/6 skipped。
+- **发布证据：** production reference runner 已建立 V1 baseline；12/12 场景满足 absolute budget，原始 JSON 与 SHA-256 位于 `evidence/performance/44f67f99493d8ef613ac17c3371327ef8b95e999/`。三平台常规测试与 Knowledge E2E 由 PR CI 结果回填。
+- **提交与偏差：** 产品最终提交为 `44f67f99493d8ef613ac17c3371327ef8b95e999`；未修改 `LOG.md`，未使用内置插件，未在本 ticket 首次实现业务能力。

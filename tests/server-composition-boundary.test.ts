@@ -109,9 +109,16 @@ describe("composition boundary behavior lock: sorted mount-call inventory", () =
   it("mobile-workbench (evidence-needed) is mounted directly by server/index.ts itself, not absorbed into open-root.ts or full-root.ts", () => {
     const indexPairs = extractMountCalls(path.join(root, "server", "index.ts"));
     const openRootPairs = extractMountCalls(path.join(root, "server", "composition", "open-root.ts"));
+    const indexSource = fs.readFileSync(path.join(root, "server", "index.ts"), "utf-8");
+    const openEntrySource = fs.readFileSync(path.join(root, "server", "main-open.ts"), "utf-8");
+    const fullEntrySource = fs.readFileSync(path.join(root, "server", "main-full.ts"), "utf-8");
 
     expect(indexPairs).toContain('"/api" :: createMobileWorkbenchRoute');
     expect(openRootPairs).not.toContain('"/api" :: createMobileWorkbenchRoute');
+    expect(indexSource).not.toContain('from "./routes/mobile-workbench.ts"');
+    expect(openEntrySource).not.toContain("mobile-workbench.ts");
+    expect(fullEntrySource).toContain('import { createMobileWorkbenchRoute } from "./routes/mobile-workbench.ts";');
+    expect(fullEntrySource).toContain("createMobileWorkbenchRoute,");
   });
 
   it("server/index.ts imports composition/open-root.ts unconditionally and imports no closed-product route file directly", () => {
@@ -148,12 +155,13 @@ describe("composition boundary behavior lock: builtin media adapter injection", 
     expect(indexSource).not.toContain("core/media-adapters/");
   });
 
-  it("main-full.ts forwards full-root's builtinMediaAdapters into startServer alongside registerClosedRoutes", () => {
+  it("main-full.ts forwards full-root's builtinMediaAdapters and the evidence-needed mobile factory into startServer", () => {
     const mainFullSource = fs.readFileSync(path.join(root, "server", "main-full.ts"), "utf-8");
 
     expect(mainFullSource).toContain('from "./composition/full-root.ts"');
     expect(mainFullSource).toMatch(/registerClosedRoutes,\s*builtinMediaAdapters/);
-    expect(mainFullSource).toMatch(/startServer\(\{\s*registerClosedRoutes,\s*builtinMediaAdapters\s*\}\)/);
+    expect(mainFullSource).toContain('from "./routes/mobile-workbench.ts"');
+    expect(mainFullSource).toMatch(/startServer\(\{[\s\S]*?registerClosedRoutes,[\s\S]*?builtinMediaAdapters,[\s\S]*?createMobileWorkbenchRoute,[\s\S]*?\}\)/);
     expect(mainFullSource).toContain('from "./standalone-runtime-smoke.ts"');
     expect(mainFullSource).toContain('process.env.HANA_INTERNAL_STANDALONE_RUNTIME_SMOKE === "1"');
     expect(mainFullSource).toContain("await runPackagedStandaloneRuntimeSmoke();");

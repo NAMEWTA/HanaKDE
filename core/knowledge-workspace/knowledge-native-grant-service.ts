@@ -15,6 +15,15 @@ export type KnowledgeNativeResourceGrant = Readonly<{
   expiresAt: number;
 }>;
 
+export type KnowledgeNativeGrantIdentity = Readonly<{
+  ownerKey: string;
+  windowKey: string;
+}>;
+
+export type KnowledgeNativeSystemTrashFinalization = Readonly<{
+  grantId: string;
+}> & KnowledgeNativeGrantIdentity;
+
 export class KnowledgeNativeGrantService {
   readonly #grants = new Map<string, KnowledgeNativeResourceGrant>();
   readonly #pendingSystemTrash = new Map<string, KnowledgeNativeResourceGrant>();
@@ -44,36 +53,48 @@ export class KnowledgeNativeGrantService {
     if (grant.action === 'systemTrash') this.#pendingSystemTrash.set(grant.grantId, grant);
     return grant;
   }
-  completeSystemTrash(grantId: string): KnowledgeNativeResourceGrant {
-    const grant = this.#pendingSystemTrash.get(grantId);
-    this.#pendingSystemTrash.delete(grantId);
-    if (!grant) throw createKnowledgeWorkspaceError('knowledge_operation_precondition_failed', 'knowledge native trash completion is invalid');
-    return grant;
-  }
-  discardSystemTrash(grantId: string): KnowledgeNativeResourceGrant {
-    const grant = this.#pendingSystemTrash.get(grantId);
-    if (!grant) {
-      throw createKnowledgeWorkspaceError('knowledge_operation_precondition_failed', 'knowledge native trash completion is invalid');
-    }
-    this.#pendingSystemTrash.delete(grantId);
-    return grant;
-  }
-  failSystemTrash(grantId: string): KnowledgeNativeResourceGrant {
+  verifySystemTrash(
+    input: KnowledgeNativeSystemTrashFinalization,
+    options: Readonly<{ allowUnconsumed?: boolean }> = {},
+  ): KnowledgeNativeResourceGrant {
     this.#sweep();
-    const pending = this.#pendingSystemTrash.get(grantId);
-    if (pending) {
-      this.#pendingSystemTrash.delete(grantId);
-      return pending;
+    const pending = this.#pendingSystemTrash.get(input.grantId);
+    if (pending && this.#matchesIdentity(pending, input)) return pending;
+    if (options.allowUnconsumed === true) {
+      const issued = this.#grants.get(input.grantId);
+      if (
+        issued?.action === 'systemTrash'
+        && this.#matchesIdentity(issued, input)
+      ) {
+        return issued;
+      }
     }
-    const grant = this.#grants.get(grantId);
-    if (!grant || grant.action !== 'systemTrash') {
-      throw createKnowledgeWorkspaceError('knowledge_operation_precondition_failed', 'knowledge native trash completion is invalid');
-    }
-    // The native bridge may receive a terminal system-trash failure after a
-    // renderer session is rekeyed between grant issue and consume. This path
-    // exposes no resource path and accepts only system-trash grants.
-    this.#grants.delete(grantId);
+    throw createKnowledgeWorkspaceError('knowledge_operation_precondition_failed', 'knowledge native trash completion is invalid');
+  }
+  completeSystemTrash(input: KnowledgeNativeSystemTrashFinalization): KnowledgeNativeResourceGrant {
+    const grant = this.verifySystemTrash(input);
+    this.#pendingSystemTrash.delete(input.grantId);
     return grant;
+  }
+  discardSystemTrash(input: KnowledgeNativeSystemTrashFinalization): KnowledgeNativeResourceGrant {
+    const grant = this.verifySystemTrash(input);
+    this.#pendingSystemTrash.delete(input.grantId);
+    return grant;
+  }
+  failSystemTrash(input: KnowledgeNativeSystemTrashFinalization): KnowledgeNativeResourceGrant {
+    const grant = this.verifySystemTrash(input, { allowUnconsumed: true });
+    if (this.#pendingSystemTrash.has(input.grantId)) {
+      this.#pendingSystemTrash.delete(input.grantId);
+      return grant;
+    }
+    // A trusted bridge can report terminal system-trash failure before the
+    // matching renderer consumes the grant. It remains bound to its original
+    // owner/window and exposes no resource path.
+    this.#grants.delete(input.grantId);
+    return grant;
+  }
+  #matchesIdentity(grant: KnowledgeNativeResourceGrant, identity: KnowledgeNativeGrantIdentity): boolean {
+    return grant.ownerKey === identity.ownerKey && grant.windowKey === identity.windowKey;
   }
   #sweep(): void {
     const now = this.#now();
