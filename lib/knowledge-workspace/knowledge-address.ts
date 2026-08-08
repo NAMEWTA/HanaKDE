@@ -65,18 +65,21 @@ export function canonicalKnowledgeAddress(
           : "invalid_address",
     };
   }
-  const relativePath = canonicalKnowledgeRelativePath(
-    parsed.value.relativePath,
-    options,
-  );
-  if (relativePath.ok === false) {
-    return { ok: false, reason: relativePath.reason };
+  // `parseKnowledgeResourceAddress` above has already validated this exact
+  // relative-path spelling.  Avoid reparsing every path when materializing a
+  // large resource tree; only the provider-owned literal-backslash policy
+  // remains to be applied here.
+  if (
+    parsed.value.relativePath.includes("\\")
+    && options.literalBackslash !== "provider-validated"
+  ) {
+    return { ok: false, reason: "provider_validation_required" };
   }
   return {
     ok: true,
     value: {
       sourceKey: parsed.value.sourceKey,
-      relativePath: relativePath.value,
+      relativePath: parsed.value.relativePath,
     },
   };
 }

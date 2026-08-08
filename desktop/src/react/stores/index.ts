@@ -28,6 +28,10 @@ import {
   createKnowledgeWorkspaceSlice,
   type KnowledgeWorkspaceSlice,
 } from './knowledge-workspace-slice';
+import {
+  createKnowledgeClipboardSlice,
+  type KnowledgeClipboardSlice,
+} from './knowledge-clipboard-slice';
 import { configureMessageLiveVersionSessionKeyResolver } from './message-live-version';
 
 export type StoreState = ConnectionSlice &
@@ -55,6 +59,7 @@ export type StoreState = ConnectionSlice &
   SubagentPreviewSlice &
   ComputerOverlaySlice &
   ScreenshotSlice &
+  KnowledgeClipboardSlice &
   KnowledgeWorkspaceSlice;
 
 export const useStore = create<StoreState>()((set, _get, _api) => ({
@@ -83,6 +88,7 @@ export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createSubagentPreviewSlice(set),
   ...createComputerOverlaySlice(set),
   ...createScreenshotSlice(set),
+  ...createKnowledgeClipboardSlice(set),
   ...createKnowledgeWorkspaceSlice(set, _get),
 }));
 
@@ -117,5 +123,6 @@ export type {
   SubagentPreviewSlice,
   ComputerOverlaySlice,
   ScreenshotSlice,
+  KnowledgeClipboardSlice,
   KnowledgeWorkspaceSlice,
 };

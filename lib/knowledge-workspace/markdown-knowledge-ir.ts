@@ -170,27 +170,35 @@ function lineEndingOf(
   source: string,
   signal?: AbortSignal,
 ): MarkdownKnowledgeIr["lineEnding"] {
-  let crlf = 0;
-  let lf = 0;
-  let cr = 0;
-  for (let index = 0; index < source.length; index += 1) {
-    if ((index & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
-    if (source[index] === "\r") {
-      if (source[index + 1] === "\n") {
-        crlf += 1;
-        index += 1;
-      } else {
-        cr += 1;
-      }
-    } else if (source[index] === "\n") {
-      lf += 1;
-    }
+  let hasCrlf = false;
+  let hasLf = false;
+  let hasCr = false;
+  let work = 0;
+  for (
+    let index = source.indexOf("\r");
+    index >= 0;
+    index = source.indexOf("\r", index + 1)
+  ) {
+    if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    work += 1;
+    if (source[index + 1] === "\n") hasCrlf = true;
+    else hasCr = true;
   }
-  const kinds = Number(crlf > 0) + Number(lf > 0) + Number(cr > 0);
+  for (
+    let index = source.indexOf("\n");
+    index >= 0;
+    index = source.indexOf("\n", index + 1)
+  ) {
+    if ((work & PERIODIC_ABORT_MASK) === 0) throwIfMarkdownIrAborted(signal);
+    work += 1;
+    if (source[index - 1] !== "\r") hasLf = true;
+  }
+  throwIfMarkdownIrAborted(signal);
+  const kinds = Number(hasCrlf) + Number(hasLf) + Number(hasCr);
   if (kinds > 1) return "mixed";
-  if (crlf > 0) return "crlf";
-  if (lf > 0) return "lf";
-  if (cr > 0) return "cr";
+  if (hasCrlf) return "crlf";
+  if (hasLf) return "lf";
+  if (hasCr) return "cr";
   return "none";
 }
 

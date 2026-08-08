@@ -1,4 +1,4 @@
-import { syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import {
   StateField,
   type EditorState,
@@ -163,7 +163,13 @@ export function buildKnowledgeTableDecorations(
   state: EditorState,
 ): DecorationSet {
   const ranges: ReturnType<Decoration['range']>[] = [];
-  syntaxTree(state).iterate({
+  // A freshly-created StateField can run before CodeMirror's background
+  // Markdown parser reaches a table near the start of the document. Ensure
+  // the current document is parsed before deriving its display projection;
+  // otherwise a slow renderer can initially expose raw table source until an
+  // unrelated transaction happens to rebuild this field.
+  const tree = ensureSyntaxTree(state, state.doc.length) ?? syntaxTree(state);
+  tree.iterate({
     enter(node) {
       if (node.name !== 'Table' || selectionTouchesRange(state, node.from, node.to)) {
         return;

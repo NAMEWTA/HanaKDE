@@ -4,6 +4,12 @@ import crypto from "crypto";
 import { ResourceIOError, resourceAccessDenied, resourceNotFound, targetAlreadyExists } from "../errors.ts";
 import { normalizeResourceRef, resourceKeyForRef } from "../resource-refs.ts";
 import { resolveLocalFsRootIdentity } from "../root-identity.ts";
+import { isOperationCorrelationId } from "../../../shared/knowledge-diagnostics.ts";
+import {
+  RESOURCE_LIST_BLOCKED_ENTRIES,
+  RESOURCE_READ_PROOF,
+  RESOURCE_SCOPE_ROOT,
+} from "../types.ts";
 import {
   TRANSFER_MAX_CHUNK_BYTES,
   TRANSFER_MAX_DEPTH,
@@ -23,6 +29,8 @@ import type {
   ResourceExportEntry,
   ResourceExportTreeOptions,
   ResourceImportTreeOptions,
+  ResourceImportTreeRecoveryOptions,
+  ResourceImportTreeRecoveryResult,
   ResourceImportTreeResult,
   ResourceListResult,
   ResourceMutationResult,
@@ -30,6 +38,7 @@ import type {
   ResourceMovePreconditions,
   ResourceOpenReadOptions,
   ResourceOpenReadResult,
+  ResourceReadProof,
   ResourceReadResult,
   ResourceRef,
   ResourceSearchResult,
@@ -57,9 +66,28 @@ type LocalFsProviderOptions = {
   cwd: string;
   guard?: Guard;
   trashRoot?: string | null;
+  transferFaultInjector?: (
+    point: "after_merge_backup_rename",
+    details: Readonly<{ operationId: string }>,
+  ) => void;
 };
 
 const SEARCH_SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage"]);
+const LOCAL_READ_PROOFS = new WeakSet<object>();
+
+type LocalPathIdentityEntry = Readonly<{
+  filePath: string;
+  identity: FileIdentity;
+  kind: "directory" | "file";
+  changeToken: string;
+}>;
+
+type LocalPathIdentityProof = Readonly<{
+  filePath: string;
+  entries: readonly LocalPathIdentityEntry[];
+  targetIdentity: FileIdentity;
+  targetStat: fs.Stats;
+}>;
 
 export class LocalFsProvider {
   readonly id = "local_fs" as const;
@@ -67,11 +95,18 @@ export class LocalFsProvider {
   declare cwd: string;
   declare guard: Guard | null;
   declare trashRoot: string | null;
+  declare transferFaultInjector: NonNullable<LocalFsProviderOptions["transferFaultInjector"]>;
 
-  constructor({ cwd, guard = null, trashRoot = null }: LocalFsProviderOptions) {
+  constructor({
+    cwd,
+    guard = null,
+    trashRoot = null,
+    transferFaultInjector = () => {},
+  }: LocalFsProviderOptions) {
     this.cwd = cwd || process.cwd();
     this.guard = guard;
     this.trashRoot = trashRoot || null;
+    this.transferFaultInjector = transferFaultInjector;
   }
 
   capabilities() {
@@ -105,8 +140,13 @@ export class LocalFsProvider {
 
   async stat(ref: ResourceRef | unknown): Promise<ResourceStat> {
     const filePath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, filePath, this.cwd);
     this.assertAllowed(filePath, "read");
-    if (!fs.existsSync(filePath)) {
+    let pathProof: LocalPathIdentityProof;
+    try {
+      pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
       return {
         resourceKey: localResourceKey(filePath),
         resource: this.resourceForPath(filePath),
@@ -115,28 +155,39 @@ export class LocalFsProvider {
         filePath,
       };
     }
-    const stat = fs.statSync(filePath);
-    return {
+    this.revalidateReadProof(filePath, pathProof);
+    const stat = pathProof.targetStat;
+    return attachResourceReadProof({
       resourceKey: localResourceKey(filePath),
       resource: this.resourceForPath(filePath),
       exists: true,
       isDirectory: stat.isDirectory(),
       version: versionFromStat(stat),
       filePath,
-    };
+    }, localResourceReadProof(pathProof));
   }
 
   async read(ref: ResourceRef | unknown): Promise<ResourceReadResult> {
-    const filePath = this.resolvePath(ref);
-    this.assertAllowed(filePath, "read");
-    const stat = fs.statSync(filePath);
-    if (!stat.isFile()) throw new Error(`resource is not a file: ${filePath}`);
+    const stat = await this.stat(ref);
+    if (!stat.exists) throw resourceNotFound(stat.filePath || "resource");
+    if (stat.isDirectory) throw safeOpenReadError("not_a_file", 400);
+    const opened = await this.openRead(ref, {
+      expectedVersion: stat.version,
+      [RESOURCE_READ_PROOF]: stat[RESOURCE_READ_PROOF],
+    });
+    const chunks: Buffer[] = [];
+    let byteLength = 0;
+    for await (const chunk of opened.body) {
+      const copy = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+      chunks.push(copy);
+      byteLength += copy.byteLength;
+    }
     return {
-      resourceKey: localResourceKey(filePath),
-      resource: this.resourceForPath(filePath),
-      content: fs.readFileSync(filePath),
-      version: versionFromStat(stat),
-      filePath,
+      resourceKey: opened.resourceKey,
+      resource: opened.resource,
+      content: Buffer.concat(chunks, byteLength),
+      version: opened.version,
+      ...(opened.filePath ? { filePath: opened.filePath } : {}),
     };
   }
 
@@ -146,6 +197,36 @@ export class LocalFsProvider {
   ): Promise<ResourceOpenReadResult> {
     const filePath = this.resolvePath(ref);
     this.assertAllowed(filePath, "read");
+    const suppliedProof = localPathProofFromResourceReadProof(
+      options[RESOURCE_READ_PROOF],
+      filePath,
+    );
+    const proofRoot = suppliedProof?.entries[0]?.filePath
+      || localReadProofRoot(ref, filePath, this.cwd);
+    let pathProof: LocalPathIdentityProof;
+    try {
+      pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    } catch (error) {
+      // The address was resolved before this proof capture. A parent swap can
+      // therefore remove it (or make it non-directory) in the narrow gap;
+      // classify that as a stale proof, never as an unhandled filesystem
+      // exception that becomes a 500 at the route boundary.
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        throw safeOpenReadError("resource_version_conflict", 409);
+      }
+      if (code === "ELOOP") {
+        throw safeOpenReadError("symbolic_link_not_allowed", 400);
+      }
+      if (code === "EACCES" || code === "EPERM") {
+        throw safeOpenReadError("resource_access_denied", 403);
+      }
+      throw error;
+    }
+    if (suppliedProof && !sameLocalPathIdentityProof(suppliedProof, pathProof)) {
+      throw safeOpenReadError("resource_version_conflict", 409);
+    }
+    const expectedPathProof = suppliedProof || pathProof;
     const noFollow = typeof fs.constants.O_NOFOLLOW === "number"
       ? fs.constants.O_NOFOLLOW
       : 0;
@@ -154,8 +235,7 @@ export class LocalFsProvider {
       descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
       const opened = fs.fstatSync(descriptor);
       if (!opened.isFile()) throw safeOpenReadError("not_a_file", 400);
-      const current = fs.statSync(filePath);
-      if (!sameFileIdentity(fileIdentity(opened), current)) {
+      if (!sameFileIdentity(expectedPathProof.targetIdentity, opened)) {
         throw safeOpenReadError("resource_version_conflict", 409);
       }
       const version = versionFromStat(opened);
@@ -173,7 +253,7 @@ export class LocalFsProvider {
       ) {
         throw safeOpenReadError("invalid_read_range", 416);
       }
-      this.assertAllowed(filePath, "read");
+      this.revalidateReadProof(filePath, expectedPathProof);
       const body = openedLocalFileBody({
         descriptor,
         filePath,
@@ -181,7 +261,7 @@ export class LocalFsProvider {
         end,
         expectedIdentity: fileIdentity(opened),
         expectedVersion: version,
-        revalidateScope: () => this.assertAllowed(filePath, "read"),
+        revalidateScope: () => this.revalidateReadProof(filePath, expectedPathProof),
       });
       descriptor = null;
       return {
@@ -204,6 +284,22 @@ export class LocalFsProvider {
         throw safeOpenReadError("resource_access_denied", 403);
       }
       throw error;
+    }
+  }
+
+  revalidateReadProof(filePath: string, proof: LocalPathIdentityProof): void {
+    this.assertAllowed(filePath, "read");
+    let current: LocalPathIdentityProof;
+    try {
+      current = captureLocalPathIdentityProof(
+        filePath,
+        proof.entries[0]?.filePath || this.cwd,
+      );
+    } catch {
+      throw safeOpenReadError("resource_version_conflict", 409);
+    }
+    if (!sameLocalPathIdentityProof(proof, current)) {
+      throw safeOpenReadError("resource_version_conflict", 409);
     }
   }
 
@@ -397,8 +493,11 @@ export class LocalFsProvider {
 
   async materialize(ref: ResourceRef | unknown): Promise<MaterializeResult> {
     const filePath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, filePath, this.cwd);
     this.assertAllowed(filePath, "read");
-    const stat = fs.statSync(filePath);
+    const pathProof = captureLocalPathIdentityProof(filePath, proofRoot);
+    this.revalidateReadProof(filePath, pathProof);
+    const stat = pathProof.targetStat;
     return {
       resourceKey: localResourceKey(filePath),
       resource: this.resourceForPath(filePath),
@@ -492,20 +591,43 @@ export class LocalFsProvider {
     const targetDirectoryIdentity = directoryIdentity(dirPath, dirStat);
     const finalPath = path.join(dirPath, targetName);
     this.assertAllowed(finalPath, "write");
-    const expected = options.replaceExisting === true
+    const mergePolicy = options.mergeExisting;
+    const expected = mergePolicy !== undefined
+      ? options.expectedTargetVersion === undefined
+        ? encodedCurrentTargetVersion(finalPath)
+        : normalizeExpectedTargetVersion(options.expectedTargetVersion)
+      : options.replaceExisting === true
       ? encodedCurrentTargetVersion(finalPath)
       : normalizeExpectedTargetVersion(options.expectedTargetVersion);
     assertExpectedTargetState(finalPath, expected);
+    if (mergePolicy !== undefined && !fs.lstatSync(finalPath).isDirectory()) {
+      throw transferEntryUnsupported("merge_target_not_directory");
+    }
 
-    const stagingPath = path.join(
-      dirPath,
-      `.hana-transfer-${crypto.randomBytes(8).toString("hex")}`,
-    );
+    const artifacts = transferPublicationArtifacts(dirPath, options.operationId);
+    const stagingPath = artifacts.stagingPath;
+    if (lstatOrNull(stagingPath) || lstatOrNull(artifacts.backupPath) || lstatOrNull(artifacts.receiptPath)) {
+      throw transferVersionConflict("transfer_publication_recovery_required");
+    }
     const stagingName = path.basename(stagingPath);
+    const mergeTargetFingerprint = mergePolicy === undefined
+      ? null
+      : directoryTreeFingerprint(finalPath);
     let bytesTransferred = 0;
     try {
+      if (mergePolicy !== undefined) {
+        fs.cpSync(finalPath, stagingPath, {
+          recursive: true,
+          dereference: false,
+          errorOnExist: true,
+          force: false,
+          verbatimSymlinks: true,
+        });
+      }
       const gate = new TransferStreamGate();
       const tasks: Promise<void>[] = [];
+      const mergePaths = new Map<string, string[]>();
+      if (mergePolicy !== undefined) mergePaths.set("", []);
       let failure: unknown = null;
       const recordFailure = (error: unknown) => {
         if (failure === null) {
@@ -518,17 +640,38 @@ export class LocalFsProvider {
         for await (const entry of entries) {
           throwIfTransferAborted(options.signal);
           if (failure !== null) break;
-          const entryPath = stagingEntryPath(stagingPath, entry.path);
-          if (entry.path.length === 0) sawRoot = true;
+          let entryPath = stagingEntryPath(stagingPath, entry.path);
+          let skipEntry = false;
+          if (entry.path.length === 0) {
+            sawRoot = true;
+            if (mergePolicy !== undefined) {
+              if (entry.kind !== "directory") {
+                throw transferEntryUnsupported("merge_source_not_directory");
+              }
+              continue;
+            }
+          } else if (mergePolicy !== undefined) {
+            const allocation = allocateStagedMergeEntry(
+              stagingPath,
+              entry,
+              mergePaths,
+              mergePolicy,
+            );
+            entryPath = allocation.path;
+            skipEntry = allocation.skip;
+          }
           if (entry.kind === "directory") {
-            fs.mkdirSync(entryPath);
+            if (!fs.existsSync(entryPath)) fs.mkdirSync(entryPath);
             continue;
           }
+          if (skipEntry) continue;
           if (entry.kind === "symbolic_link") {
+            removeStagedMergeReplacement(entryPath, mergePolicy);
             createStagedSymbolicLink(entry.linkTarget, entryPath);
             continue;
           }
           if (entry.kind === "file") {
+            removeStagedMergeReplacement(entryPath, mergePolicy);
             const release = await gate.acquire(options.signal);
             const task = writeStagedFile(entryPath, entry.body, entry.sizeBytes, options.signal)
               .then((written) => {
@@ -553,6 +696,12 @@ export class LocalFsProvider {
       throwIfTransferAborted(options.signal);
       await options.revalidateSourceScope?.();
       throwIfTransferAborted(options.signal);
+      if (
+        mergeTargetFingerprint !== null
+        && directoryTreeFingerprint(finalPath) !== mergeTargetFingerprint
+      ) {
+        throw transferVersionConflict("merge_target_changed_during_staging");
+      }
 
       // scope 复验：staged 树完成后目标目录身份必须保持不变，且 guard 仍允许写入。
       this.assertAllowed(finalPath, "write");
@@ -562,14 +711,32 @@ export class LocalFsProvider {
         });
       }
       assertExpectedTargetState(finalPath, expected);
-      publishStagedTree(stagingPath, finalPath, expected, () => {
+      const revalidateTarget = () => {
         this.assertAllowed(finalPath, "write");
         if (!sameDirectoryIdentity(targetDirectoryIdentity, dirPath)) {
           throw resourceAccessDenied("write", dirPath, "transfer_target_directory_changed", {
             safeMessage: "Resource transfer target directory changed before publish",
           });
         }
-      });
+        if (
+          mergeTargetFingerprint !== null
+          && directoryTreeFingerprint(finalPath) !== mergeTargetFingerprint
+        ) {
+          throw transferVersionConflict("merge_target_changed_before_publish");
+        }
+      };
+      if (mergePolicy === undefined) {
+        publishStagedTree(stagingPath, finalPath, expected, revalidateTarget);
+      } else {
+        publishStagedMergedDirectory(
+          stagingPath,
+          finalPath,
+          expected,
+          options.operationId,
+          revalidateTarget,
+          this.transferFaultInjector,
+        );
+      }
       fsyncDirectoryBestEffort(dirPath);
       return {
         changeType: expected === null ? "created" : "modified",
@@ -580,14 +747,127 @@ export class LocalFsProvider {
         filePath: finalPath,
       };
     } catch (err) {
-      cleanupStagingTree(
-        targetDirectoryIdentity,
-        dirPath,
-        stagingName,
-        cleanupSearchRoot(this.cwd),
-      );
+      if (
+        (err as Error)?.name !== "SimulatedKnowledgeOperationCrash"
+        && !lstatOrNull(artifacts.backupPath)
+      ) {
+        try {
+          cleanupStagingTree(
+            targetDirectoryIdentity,
+            dirPath,
+            stagingName,
+            cleanupSearchRoot(this.cwd),
+          );
+          fs.rmSync(artifacts.receiptPath, { force: true });
+        } catch {
+          // Cleanup is only permitted under the captured directory identity and
+          // must never replace the operation's already-classified outcome with
+          // a platform-specific path error.
+        }
+      }
       throw err;
     }
+  }
+
+  async recoverImportTreePublication(
+    target: ResourceRef | unknown,
+    options: ResourceImportTreeRecoveryOptions,
+  ): Promise<ResourceImportTreeRecoveryResult> {
+    if (!isOperationCorrelationId(options.operationId)) {
+      throw transferEntryUnsupported("invalid_transfer_recovery_operation");
+    }
+    const finalPath = this.resolveNoFollowPath(target);
+    const directoryPath = path.dirname(finalPath);
+    this.assertAllowed(finalPath, "write");
+    const directoryStat = fs.statSync(directoryPath);
+    if (!directoryStat.isDirectory()) throw resourceNotFound(directoryPath);
+    const artifacts = transferPublicationArtifacts(directoryPath, options.operationId);
+    const finalStat = lstatOrNull(finalPath);
+    const stagingStat = lstatOrNull(artifacts.stagingPath);
+    const backupStat = lstatOrNull(artifacts.backupPath);
+    const receiptStat = lstatOrNull(artifacts.receiptPath);
+    if (!stagingStat && !backupStat && !receiptStat) return { outcome: "none" };
+    if (!receiptStat || !receiptStat.isFile()) {
+      throw transferVersionConflict("merge_recovery_receipt_unavailable");
+    }
+    const receipt = readTransferPublicationReceipt(artifacts.receiptPath);
+    if (
+      receipt.operationId !== options.operationId
+      || receipt.expectedTargetVersion !== options.expectedTargetVersion
+    ) {
+      throw transferVersionConflict("merge_recovery_receipt_mismatch");
+    }
+    if (stagingStat) {
+      if (
+        !stagingStat.isDirectory()
+        || directoryTreePublicationFingerprint(artifacts.stagingPath) !== receipt.stagedFingerprint
+      ) {
+        throw transferVersionConflict("merge_recovery_staging_changed");
+      }
+    }
+    if (backupStat) {
+      if (!backupStat.isDirectory()) {
+        throw transferVersionConflict("merge_recovery_backup_changed");
+      }
+      assertExpectedTargetState(
+        artifacts.backupPath,
+        options.expectedTargetVersion,
+      );
+      if (finalStat) {
+        if (
+          stagingStat
+          || !finalStat.isDirectory()
+          || directoryTreePublicationFingerprint(finalPath) !== receipt.stagedFingerprint
+        ) {
+          throw transferVersionConflict("merge_recovery_final_ambiguous");
+        }
+      } else if (stagingStat) {
+        fs.renameSync(artifacts.stagingPath, finalPath);
+      } else {
+        fs.renameSync(artifacts.backupPath, finalPath);
+        fs.rmSync(artifacts.receiptPath, { force: true });
+        fsyncDirectoryBestEffort(directoryPath);
+        return {
+          outcome: "rolled-back",
+          version: versionFromLstatOrUndefined(finalPath),
+        };
+      }
+      fs.rmSync(artifacts.backupPath, { recursive: true, force: false });
+      fs.rmSync(artifacts.receiptPath, { force: true });
+      fsyncDirectoryBestEffort(directoryPath);
+      return {
+        outcome: "committed",
+        version: versionFromLstatOrUndefined(finalPath),
+      };
+    }
+
+    if (!finalStat || !finalStat.isDirectory()) {
+      throw transferVersionConflict("merge_recovery_target_ambiguous");
+    }
+    if (stagingStat) {
+      assertExpectedTargetState(finalPath, options.expectedTargetVersion);
+      fs.rmSync(artifacts.stagingPath, { recursive: true, force: false });
+      fs.rmSync(artifacts.receiptPath, { force: true });
+      fsyncDirectoryBestEffort(directoryPath);
+      return {
+        outcome: "rolled-back",
+        version: versionFromLstatOrUndefined(finalPath),
+      };
+    }
+    const finalFingerprint = directoryTreePublicationFingerprint(finalPath);
+    if (finalFingerprint === receipt.stagedFingerprint) {
+      fs.rmSync(artifacts.receiptPath, { force: true });
+      return {
+        outcome: "committed",
+        version: versionFromLstatOrUndefined(finalPath),
+      };
+    }
+    assertExpectedTargetState(finalPath, options.expectedTargetVersion);
+    fs.rmSync(artifacts.receiptPath, { force: true });
+    return {
+      outcome: "rolled-back",
+      version: versionFromLstatOrUndefined(finalPath),
+    };
   }
 
   resolveNoFollowPath(ref: ResourceRef | unknown): string {
@@ -625,25 +905,60 @@ export class LocalFsProvider {
 
   async list(ref: ResourceRef | unknown): Promise<ResourceListResult> {
     const dirPath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, dirPath, this.cwd);
     this.assertAllowed(dirPath, "read");
     try {
+      const pathProof = captureLocalPathIdentityProof(dirPath, proofRoot);
+      if (!pathProof.targetStat.isDirectory()) {
+        throw safeOpenReadError("not_a_directory", 400);
+      }
+      this.revalidateReadProof(dirPath, pathProof);
+      const blockedEntries: string[] = [];
       const items = fs.readdirSync(dirPath, { withFileTypes: true })
-        .map((entry) => {
+        .flatMap((entry) => {
           const fullPath = path.join(dirPath, entry.name);
-          const stat = fs.statSync(fullPath);
-          return {
+          let stat: fs.Stats;
+          try {
+            // Never follow a symlink/junction merely to render a directory
+            // row: its metadata could belong to a source-external target.
+            stat = fs.lstatSync(fullPath);
+          } catch (error) {
+            const code = (error as NodeJS.ErrnoException)?.code;
+            if (["ENOENT", "ENOTDIR", "EACCES", "EPERM"].includes(code ?? "")) {
+              return [];
+            }
+            throw error;
+          }
+          if (stat.isSymbolicLink()) {
+            blockedEntries.push(entry.name);
+            return [];
+          }
+          if (!stat.isDirectory() && !stat.isFile()) {
+            return [];
+          }
+          return [{
             name: entry.name,
-            isDirectory: entry.isDirectory(),
-            size: entry.isDirectory() ? null : stat.size,
+            isDirectory: stat.isDirectory(),
+            size: stat.isDirectory() ? null : stat.size,
             mtimeMs: stat.mtimeMs,
-          };
+          }];
         })
         .sort((a, b) => a.name.localeCompare(b.name));
-      return {
+      this.revalidateReadProof(dirPath, pathProof);
+      const result: ResourceListResult = {
         resourceKey: localResourceKey(dirPath),
         resource: this.resourceForPath(dirPath),
         items,
       };
+      if (blockedEntries.length > 0) {
+        Object.defineProperty(result, RESOURCE_LIST_BLOCKED_ENTRIES, {
+          value: Object.freeze(blockedEntries.sort()),
+          enumerable: false,
+          configurable: false,
+          writable: false,
+        });
+      }
+      return result;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException)?.code;
       if (code === "ENOENT" || code === "ENOTDIR") throw resourceNotFound(dirPath);
@@ -658,13 +973,20 @@ export class LocalFsProvider {
 
   async search(ref: ResourceRef | unknown, { query, mode, limit }: { query?: string; mode?: string; limit?: number } = {}): Promise<ResourceSearchResult> {
     const rootPath = this.resolvePath(ref);
+    const proofRoot = localReadProofRoot(ref, rootPath, this.cwd);
     this.assertAllowed(rootPath, "read");
+    const pathProof = captureLocalPathIdentityProof(rootPath, proofRoot);
+    if (!pathProof.targetStat.isDirectory()) {
+      throw safeOpenReadError("not_a_directory", 400);
+    }
+    this.revalidateReadProof(rootPath, pathProof);
     const needle = String(query || "");
     const matches = needle
       ? mode === "name"
         ? searchNames(rootPath, needle, this.guard, limit)
         : searchText(rootPath, needle, this.guard)
       : [];
+    this.revalidateReadProof(rootPath, pathProof);
     return {
       resourceKey: localResourceKey(rootPath),
       resource: this.resourceForPath(rootPath),
@@ -680,7 +1002,9 @@ export class LocalFsProvider {
     const rawPath = path.isAbsolute(normalized.path)
       ? path.normalize(normalized.path)
       : path.resolve(this.cwd, normalized.path);
-    return realOrResolved(rawPath);
+    const resolved = realOrResolved(rawPath);
+    assertTrustedScopeContains(normalized, resolved);
+    return resolved;
   }
 
   resourceForPath(filePath: string): ResourceDescriptor {
@@ -727,6 +1051,150 @@ export class LocalFsProvider {
 
 function localResourceKey(filePath: string): string {
   return resourceKeyForRef({ kind: "local-file", path: filePath });
+}
+
+function captureLocalPathIdentityProof(
+  filePath: string,
+  proofRoot: string,
+): LocalPathIdentityProof {
+  const normalized = path.resolve(filePath);
+  const normalizedRoot = realOrResolved(proofRoot);
+  const relativeToRoot = path.relative(normalizedRoot, normalized);
+  const anchoredInsideRoot = relativeToRoot === ""
+    || (!relativeToRoot.startsWith("..") && !path.isAbsolute(relativeToRoot));
+  const anchor = anchoredInsideRoot ? normalizedRoot : path.dirname(normalized);
+  const segments = path.relative(anchor, normalized).split(path.sep).filter(Boolean);
+  const candidates = [anchor, ...segments.map((_, index) => (
+    path.join(anchor, ...segments.slice(0, index + 1))
+  ))];
+  const entries: LocalPathIdentityEntry[] = [];
+  let targetStat: fs.Stats | null = null;
+  for (const [index, candidate] of candidates.entries()) {
+    const stat = fs.lstatSync(candidate, { bigint: true });
+    if (stat.isSymbolicLink()) {
+      throw safeOpenReadError("symbolic_link_not_allowed", 400);
+    }
+    const isTarget = index === candidates.length - 1;
+    if (!isTarget && !stat.isDirectory()) {
+      const error = new Error("Resource path parent is not a directory") as NodeJS.ErrnoException;
+      error.code = "ENOTDIR";
+      throw error;
+    }
+    if (!stat.isDirectory() && !stat.isFile()) {
+      throw safeOpenReadError("unsupported_file_kind", 400);
+    }
+    entries.push(Object.freeze({
+      filePath: path.normalize(candidate),
+      identity: Object.freeze({
+        device: Number(stat.dev),
+        inode: Number(stat.ino),
+        birthtimeMs: Number(stat.birthtimeNs) / 1_000_000,
+      }),
+      kind: stat.isDirectory() ? "directory" : "file",
+      changeToken: [stat.ctimeNs, stat.mtimeNs, stat.size, stat.mode]
+        .map(value => value.toString())
+        .join(":"),
+    }));
+    if (isTarget) targetStat = fs.lstatSync(candidate);
+  }
+  if (!targetStat || entries.length === 0) {
+    throw safeOpenReadError("resource_not_found", 404);
+  }
+  return Object.freeze({
+    filePath: path.normalize(normalized),
+    entries: Object.freeze(entries),
+    targetIdentity: fileIdentity(targetStat),
+    targetStat,
+  });
+}
+
+function localReadProofRoot(
+  ref: ResourceRef | unknown,
+  filePath: string,
+  providerCwd: string,
+): string {
+  const normalized = normalizeResourceRef(ref);
+  const scopeRoot = normalized[RESOURCE_SCOPE_ROOT];
+  if (typeof scopeRoot === "string" && scopeRoot.length > 0) {
+    const root = realOrResolved(scopeRoot);
+    const relative = path.relative(root, path.resolve(filePath));
+    if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
+      return root;
+    }
+    throw safeOpenReadError("resource_access_denied", 403);
+  }
+  return providerCwd;
+}
+
+function assertTrustedScopeContains(ref: ResourceRef, filePath: string): void {
+  const scopeRoot = ref[RESOURCE_SCOPE_ROOT];
+  if (typeof scopeRoot !== "string" || scopeRoot.length === 0) return;
+  const root = realOrResolved(scopeRoot);
+  const relative = path.relative(root, path.resolve(filePath));
+  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) return;
+  throw resourceAccessDenied("scope", filePath, "trusted_scope_escape", {
+    safeMessage: "Resource is outside authorized roots",
+  });
+}
+
+function sameLocalPathIdentityProof(
+  expected: LocalPathIdentityProof,
+  current: LocalPathIdentityProof,
+): boolean {
+  return expected.filePath === current.filePath
+    && expected.entries.length === current.entries.length
+    && expected.entries.every((entry, index) => {
+      const candidate = current.entries[index];
+      return Boolean(
+        candidate
+        && entry.filePath === candidate.filePath
+        && entry.kind === candidate.kind
+        && entry.changeToken === candidate.changeToken
+        && sameIdentity(entry.identity, candidate.identity),
+      );
+    });
+}
+
+function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
+  return left.device === right.device
+    && left.inode === right.inode
+    && left.birthtimeMs === right.birthtimeMs;
+}
+
+function localResourceReadProof(pathProof: LocalPathIdentityProof): ResourceReadProof {
+  LOCAL_READ_PROOFS.add(pathProof);
+  return Object.freeze({ providerId: "local_fs", value: pathProof });
+}
+
+function localPathProofFromResourceReadProof(
+  proof: ResourceReadProof | undefined,
+  filePath: string,
+): LocalPathIdentityProof | null {
+  if (proof === undefined) return null;
+  const value = proof?.value;
+  if (
+    proof.providerId !== "local_fs"
+    || !value
+    || typeof value !== "object"
+    || !LOCAL_READ_PROOFS.has(value)
+    || (value as LocalPathIdentityProof).filePath !== path.normalize(path.resolve(filePath))
+  ) {
+    throw safeOpenReadError("resource_version_conflict", 409);
+  }
+  return value as LocalPathIdentityProof;
+}
+
+function attachResourceReadProof<T extends object>(
+  result: T,
+  proof: ResourceReadProof,
+): T {
+  Object.defineProperty(result, RESOURCE_READ_PROOF, {
+    value: proof,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return result;
 }
 
 function versionFromStat(stat: fs.Stats): ResourceVersion {
@@ -822,10 +1290,22 @@ function realOrResolved(filePath: string): string {
 function searchText(rootPath: string, query: string, guard: Guard | null) {
   const matches: { filePath: string; line: number; text: string }[] = [];
   const visit = (current: string) => {
-    const stat = fs.statSync(current);
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch {
+      return;
+    }
+    if (stat.isSymbolicLink()) return;
     if (stat.isDirectory()) {
       if (SEARCH_SKIP_DIRS.has(path.basename(current))) return;
-      for (const entry of fs.readdirSync(current)) visit(path.join(current, entry));
+      let entries: string[] = [];
+      try {
+        entries = fs.readdirSync(current);
+      } catch {
+        return;
+      }
+      for (const entry of entries) visit(path.join(current, entry));
       return;
     }
     if (!stat.isFile()) return;
@@ -833,7 +1313,8 @@ function searchText(rootPath: string, query: string, guard: Guard | null) {
       const allowed = guard.check(current, "read");
       if (!allowed.allowed) return;
     }
-    const text = fs.readFileSync(current, "utf-8");
+    const text = readSearchableLocalText(current, rootPath);
+    if (text === null) return;
     text.split(/\r?\n/).forEach((line, index) => {
       if (line.includes(query)) matches.push({ filePath: current, line: index + 1, text: line });
     });
@@ -868,33 +1349,77 @@ function searchNames(rootPath: string, query: string, guard: Guard | null, limit
     for (const entry of entries) {
       if (matches.length >= max) break;
       if (entry.name.startsWith(".")) continue;
-      if (entry.isDirectory() && SEARCH_SKIP_DIRS.has(entry.name)) continue;
       const fullPath = path.join(current, entry.name);
+      let stat: fs.Stats;
+      try {
+        stat = fs.lstatSync(fullPath);
+      } catch {
+        continue;
+      }
+      if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) continue;
+      if (stat.isDirectory() && SEARCH_SKIP_DIRS.has(entry.name)) continue;
       if (guard) {
         const allowed = guard.check(fullPath, "read");
         if (!allowed.allowed) continue;
       }
       if (entry.name.toLowerCase().includes(needle)) {
-        try {
-          const stat = fs.statSync(fullPath);
-          matches.push({
-            filePath: fullPath,
-            line: 0,
-            text: entry.name,
-            name: entry.name,
-            relativePath: toSlashRelative(rootPath, fullPath),
-            parentSubdir: toSlashRelative(rootPath, path.dirname(fullPath)),
-            isDirectory: entry.isDirectory(),
-            size: entry.isDirectory() ? null : stat.size,
-            mtimeMs: stat.mtimeMs,
-          });
-        } catch {}
+        matches.push({
+          filePath: fullPath,
+          line: 0,
+          text: entry.name,
+          name: entry.name,
+          relativePath: toSlashRelative(rootPath, fullPath),
+          parentSubdir: toSlashRelative(rootPath, path.dirname(fullPath)),
+          isDirectory: stat.isDirectory(),
+          size: stat.isDirectory() ? null : stat.size,
+          mtimeMs: stat.mtimeMs,
+        });
       }
-      if (entry.isDirectory()) visit(fullPath);
+      if (stat.isDirectory()) visit(fullPath);
     }
   };
   visit(rootPath);
   return matches.slice(0, max);
+}
+
+/**
+ * Search has to inspect text without retaining the old stat+readFileSync
+ * escape hatch. Bind every candidate to its in-root ancestry, use no-follow
+ * open, and prove that the path still names that same file after reading.
+ */
+function readSearchableLocalText(filePath: string, rootPath: string): string | null {
+  let pathProof: LocalPathIdentityProof;
+  try {
+    pathProof = captureLocalPathIdentityProof(filePath, rootPath);
+  } catch {
+    return null;
+  }
+  if (!pathProof.targetStat.isFile()) return null;
+  const noFollow = typeof fs.constants.O_NOFOLLOW === "number"
+    ? fs.constants.O_NOFOLLOW
+    : 0;
+  let descriptor: number | null = null;
+  try {
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isFile() || !sameFileIdentity(pathProof.targetIdentity, opened)) {
+      return null;
+    }
+    const text = fs.readFileSync(descriptor, "utf-8");
+    const completed = fs.fstatSync(descriptor);
+    const current = captureLocalPathIdentityProof(filePath, rootPath);
+    if (
+      !sameFileIdentity(pathProof.targetIdentity, completed)
+      || !sameLocalPathIdentityProof(pathProof, current)
+    ) {
+      return null;
+    }
+    return text;
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== null) fs.closeSync(descriptor);
+  }
 }
 
 function toSlashRelative(rootPath: string, filePath: string): string {
@@ -1101,6 +1626,143 @@ function stagingEntryPath(stagingRoot: string, segments: string[]): string {
   return candidate;
 }
 
+type StagedMergePolicy = NonNullable<ResourceImportTreeOptions["mergeExisting"]>;
+
+function allocateStagedMergeEntry(
+  stagingRoot: string,
+  entry: ResourceExportEntry,
+  mappedPaths: Map<string, string[]>,
+  policy: StagedMergePolicy,
+): { path: string; skip: boolean } {
+  const sourceParent = entry.path.slice(0, -1);
+  const mappedParent = mappedPaths.get(transferPathKey(sourceParent));
+  if (!mappedParent) throw transferEntryUnsupported("merge_entry_parent_missing");
+  const originalName = entry.path[entry.path.length - 1];
+  const incomingDirectory = entry.kind === "directory";
+  for (let attempt = 1; attempt <= 10_000; attempt += 1) {
+    const name = mergeKeepBothName(originalName, attempt, incomingDirectory);
+    const targetSegments = [...mappedParent, name];
+    const targetPath = stagingEntryPath(stagingRoot, targetSegments);
+    const current = lstatOrNull(targetPath);
+    if (!current) {
+      if (incomingDirectory) {
+        mappedPaths.set(transferPathKey(entry.path), targetSegments);
+      }
+      return { path: targetPath, skip: false };
+    }
+    if (incomingDirectory && current.isDirectory()) {
+      mappedPaths.set(transferPathKey(entry.path), targetSegments);
+      return { path: targetPath, skip: false };
+    }
+    if (incomingDirectory !== current.isDirectory()) continue;
+    if (policy === "skip") return { path: targetPath, skip: true };
+    if (policy === "replace") return { path: targetPath, skip: false };
+  }
+  throw transferTargetConflict();
+}
+
+function transferPathKey(segments: readonly string[]): string {
+  return segments.join("\0");
+}
+
+function mergeKeepBothName(
+  originalName: string,
+  attempt: number,
+  directory: boolean,
+): string {
+  if (attempt === 1) return originalName;
+  if (directory) return `${originalName}_${attempt}`;
+  const dot = originalName.lastIndexOf(".");
+  return dot > 0
+    ? `${originalName.slice(0, dot)}_${attempt}${originalName.slice(dot)}`
+    : `${originalName}_${attempt}`;
+}
+
+function removeStagedMergeReplacement(
+  targetPath: string,
+  policy: StagedMergePolicy | undefined,
+): void {
+  if (policy !== "replace" || !lstatOrNull(targetPath)) return;
+  fs.rmSync(targetPath, { recursive: true, force: false });
+}
+
+function lstatOrNull(filePath: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function directoryTreeFingerprint(rootPath: string): string {
+  const hash = crypto.createHash("sha256");
+  const visit = (currentPath: string, relativePath: string) => {
+    const stat = fs.lstatSync(currentPath, { bigint: true });
+    const kind = stat.isDirectory()
+      ? "directory"
+      : stat.isFile()
+      ? "file"
+      : stat.isSymbolicLink()
+      ? "symbolic_link"
+      : "unsupported";
+    hash.update(JSON.stringify([
+      relativePath,
+      kind,
+      stat.dev.toString(),
+      stat.ino.toString(),
+      stat.mode.toString(),
+      stat.size.toString(),
+      stat.mtimeNs.toString(),
+      stat.ctimeNs.toString(),
+      stat.birthtimeNs.toString(),
+      stat.isSymbolicLink() ? fs.readlinkSync(currentPath) : null,
+    ]));
+    hash.update("\n");
+    if (!stat.isDirectory()) return;
+    for (const name of fs.readdirSync(currentPath).sort()) {
+      visit(path.join(currentPath, name), relativePath ? `${relativePath}/${name}` : name);
+    }
+  };
+  visit(rootPath, "");
+  return hash.digest("hex");
+}
+
+function directoryTreePublicationFingerprint(rootPath: string): string {
+  const hash = crypto.createHash("sha256");
+  const visit = (currentPath: string, relativePath: string) => {
+    const stat = fs.lstatSync(currentPath, { bigint: true });
+    const kind = stat.isDirectory()
+      ? "directory"
+      : stat.isFile()
+      ? "file"
+      : stat.isSymbolicLink()
+      ? "symbolic_link"
+      : "unsupported";
+    hash.update(JSON.stringify([
+      relativePath,
+      kind,
+      stat.dev.toString(),
+      stat.ino.toString(),
+      stat.mode.toString(),
+      stat.size.toString(),
+      stat.mtimeNs.toString(),
+      stat.birthtimeNs.toString(),
+      stat.isSymbolicLink() ? fs.readlinkSync(currentPath) : null,
+    ]));
+    hash.update("\n");
+    if (!stat.isDirectory()) return;
+    for (const name of fs.readdirSync(currentPath).sort()) {
+      visit(
+        path.join(currentPath, name),
+        relativePath ? `${relativePath}/${name}` : name,
+      );
+    }
+  };
+  visit(rootPath, "");
+  return hash.digest("hex");
+}
+
 async function writeStagedFile(
   filePath: string,
   body: AsyncIterable<Uint8Array>,
@@ -1111,27 +1773,26 @@ async function writeStagedFile(
   const handle = await fs.promises.open(filePath, "wx", 0o600);
   let written = 0;
   try {
-    for await (const chunk of body) {
-      throwIfTransferAborted(signal);
-      if (!(chunk instanceof Uint8Array) || chunk.byteLength > TRANSFER_MAX_CHUNK_BYTES) {
-        throw transferEntryUnsupported("invalid_file_chunk");
-      }
-      let offset = 0;
-      while (offset < chunk.byteLength) {
-        const result = await handle.write(
-          chunk,
-          offset,
-          chunk.byteLength - offset,
-          written + offset,
-        );
-        if (result.bytesWritten <= 0) {
-          throw transferVersionConflict("target_write_stalled");
+    // FileHandle.writeFile consumes AsyncIterable input incrementally. Keeping
+    // the stream in this form avoids materialising an upload in the main
+    // process and lets Node use its native sequential-write path instead of a
+    // JS-level positioned write for every chunk (notably expensive on Windows).
+    const streamWriter = handle as unknown as {
+      writeFile(input: AsyncIterable<Uint8Array>): Promise<void>;
+    };
+    await streamWriter.writeFile((async function* checkedChunks() {
+      for await (const chunk of body) {
+        throwIfTransferAborted(signal);
+        if (!(chunk instanceof Uint8Array) || chunk.byteLength > TRANSFER_MAX_CHUNK_BYTES) {
+          throw transferEntryUnsupported("invalid_file_chunk");
         }
-        offset += result.bytesWritten;
+        written += chunk.byteLength;
+        if (written > expectedSize) {
+          throw transferVersionConflict("source_size_increased");
+        }
+        yield chunk;
       }
-      written += chunk.byteLength;
-      if (written > expectedSize) throw transferVersionConflict("source_size_increased");
-    }
+    })());
     if (written !== expectedSize) throw transferVersionConflict("source_size_changed");
     await handle.sync();
     return written;
@@ -1218,6 +1879,119 @@ function publishStagedTree(
   }
 }
 
+type TransferPublicationReceipt = Readonly<{
+  schemaVersion: 1;
+  operationId: string;
+  expectedTargetVersion: string;
+  stagedFingerprint: string;
+}>;
+
+function transferPublicationArtifacts(directoryPath: string, operationId: string) {
+  if (!isOperationCorrelationId(operationId)) {
+    throw transferEntryUnsupported("invalid_transfer_operation_id");
+  }
+  return Object.freeze({
+    stagingPath: path.join(directoryPath, `.hana-transfer-staging-${operationId}`),
+    backupPath: path.join(directoryPath, `.hana-transfer-backup-${operationId}`),
+    receiptPath: path.join(directoryPath, `.hana-transfer-receipt-${operationId}.json`),
+  });
+}
+
+function writeTransferPublicationReceipt(
+  receiptPath: string,
+  receipt: TransferPublicationReceipt,
+): void {
+  let descriptor: number | null = null;
+  try {
+    descriptor = fs.openSync(
+      receiptPath,
+      fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY,
+      0o600,
+    );
+    fs.writeFileSync(descriptor, `${JSON.stringify(receipt)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== null) fs.closeSync(descriptor);
+  }
+}
+
+function readTransferPublicationReceipt(
+  receiptPath: string,
+): TransferPublicationReceipt {
+  let value: unknown;
+  try {
+    value = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+  } catch {
+    throw transferVersionConflict("merge_recovery_receipt_unreadable");
+  }
+  if (
+    typeof value !== "object"
+    || value === null
+    || Array.isArray(value)
+    || Object.keys(value).some((field) => ![
+      "schemaVersion",
+      "operationId",
+      "expectedTargetVersion",
+      "stagedFingerprint",
+    ].includes(field))
+    || (value as { schemaVersion?: unknown }).schemaVersion !== 1
+    || !isOperationCorrelationId((value as { operationId?: unknown }).operationId)
+    || typeof (value as { expectedTargetVersion?: unknown }).expectedTargetVersion !== "string"
+    || !/^[a-f0-9]{64}$/u.test(String(
+      (value as { stagedFingerprint?: unknown }).stagedFingerprint,
+    ))
+  ) {
+    throw transferVersionConflict("merge_recovery_receipt_invalid");
+  }
+  return Object.freeze(value as TransferPublicationReceipt);
+}
+
+function publishStagedMergedDirectory(
+  stagingPath: string,
+  finalPath: string,
+  expected: string,
+  operationId: string,
+  revalidateScope: () => void,
+  faultInjector: NonNullable<LocalFsProviderOptions["transferFaultInjector"]>,
+): void {
+  revalidateScope();
+  assertExpectedTargetState(finalPath, expected);
+  if (!fs.lstatSync(stagingPath).isDirectory() || !fs.lstatSync(finalPath).isDirectory()) {
+    throw transferEntryUnsupported("merge_requires_directories");
+  }
+  const artifacts = transferPublicationArtifacts(path.dirname(finalPath), operationId);
+  const { backupPath, receiptPath } = artifacts;
+  if (lstatOrNull(backupPath)) {
+    throw transferVersionConflict("merge_backup_already_exists");
+  }
+  writeTransferPublicationReceipt(receiptPath, {
+    schemaVersion: 1,
+    operationId,
+    expectedTargetVersion: expected,
+    stagedFingerprint: directoryTreePublicationFingerprint(stagingPath),
+  });
+  fs.renameSync(finalPath, backupPath);
+  faultInjector("after_merge_backup_rename", { operationId });
+  try {
+    fs.renameSync(stagingPath, finalPath);
+  } catch (error) {
+    try {
+      fs.renameSync(backupPath, finalPath);
+      fs.rmSync(receiptPath, { force: true });
+    } catch {
+      throw transferVersionConflict("merge_publish_rollback_failed");
+    }
+    throw error;
+  }
+  try {
+    fs.rmSync(backupPath, { recursive: true, force: false });
+  } catch {
+    // The merged tree is already published. A durable operation journal can
+    // retry cleanup without changing the user-visible target.
+  }
+  if (!lstatOrNull(backupPath)) fs.rmSync(receiptPath, { force: true });
+}
+
 function versionFromLstatOrUndefined(filePath: string): ResourceVersion | undefined {
   try {
     return versionFromStat(fs.lstatSync(filePath));
@@ -1297,6 +2071,8 @@ function cleanupStagingTree(
     fs.rmSync(path.join(originalDirectoryPath, stagingName), {
       recursive: true,
       force: true,
+      maxRetries: 3,
+      retryDelay: 25,
     });
     return;
   }
@@ -1312,6 +2088,8 @@ function cleanupStagingTree(
   fs.rmSync(path.join(movedDirectory, stagingName), {
     recursive: true,
     force: true,
+    maxRetries: 3,
+    retryDelay: 25,
   });
 }
 

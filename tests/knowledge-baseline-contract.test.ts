@@ -217,14 +217,103 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(config).toMatchObject({
       testDir: "./specs",
       outputDir: "./artifacts",
-      retries: process.env.CI ? 1 : 0,
+      retries: 0,
+      preserveOutput: "never",
       workers: 1,
       use: {
-        trace: "retain-on-failure",
-        screenshot: "only-on-failure",
-        video: "retain-on-failure",
+        trace: "off",
+        screenshot: "off",
+        video: "off",
       },
     });
+  });
+
+  it("launches the web E2E Vite process through Node instead of a Windows command shell", () => {
+    const appFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/app-fixture.ts",
+      ),
+      "utf8",
+    );
+
+    expect(appFixture).toContain(
+      'path.resolve("node_modules", "vite", "bin", "vite.js")',
+    );
+    expect(appFixture).toContain("windowsHide: true");
+    expect(appFixture).toContain("knowledgeBrowser: [async ({ playwright }, use, workerInfo) =>");
+    expect(appFixture).toContain('{ scope: "worker" }');
+    expect(appFixture).toContain('if (workerInfo.project.name === "desktop-full")');
+    expect(appFixture).toContain("const ELECTRON_QUIT_REQUEST_TIMEOUT_MS = 5_000;");
+    expect(appFixture).toContain("const WINDOWS_TASKKILL_TIMEOUT_MS = 5_000;");
+    expect(appFixture).toContain("async function requestElectronQuit(application: ElectronMainProcessApplication)");
+    expect(appFixture).toContain("await requestElectronQuit(application);");
+    expect(appFixture).toContain('if (process.platform === "win32")');
+    expect(appFixture).toContain("Desktop fixture could not terminate its owned application");
+    expect(appFixture).toContain("Desktop fixture could not terminate its owned server");
+    expect(appFixture).toContain("Desktop fixture taskkill did not terminate its target");
+    expect(appFixture).toContain("ELECTRON_QUIT_REQUEST_TIMEOUT_MS");
+    expect(appFixture).toContain("await terminateProcessTree(child.pid);");
+    expect(appFixture).not.toContain("vite.cmd");
+    expect(appFixture).not.toContain("shell: process.platform === \"win32\"");
+
+    const nativeFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/native-fixture.ts",
+      ),
+      "utf8",
+    );
+    expect(nativeFixture).toContain('if (process.platform === "win32")');
+    expect(nativeFixture).toContain("the owning fixture");
+  });
+
+  it("keeps the Windows Electron fallback on a loopback-only, context-aware CDP bridge", () => {
+    const appFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/app-fixture.ts",
+      ),
+      "utf8",
+    );
+    const cdpFixture = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/windows-electron-cdp.ts",
+      ),
+      "utf8",
+    );
+
+    expect(appFixture).toContain("HANA_FORCE_WINDOWS_ELECTRON_CDP");
+    expect(appFixture).toContain("launchWindowsElectronOverCdp");
+    expect(cdpFixture).toContain("--remote-debugging-address=127.0.0.1");
+    expect(cdpFixture).toContain('http://127.0.0.1:${port}${route}');
+    expect(cdpFixture).toContain("includeCommandLineAPI: true");
+    expect(cdpFixture).toContain("contextId,");
+    expect(cdpFixture).toContain("response.result?.exceptionDetails");
+    expect(cdpFixture).toContain('context.waitForEvent("page")');
+    expect(cdpFixture).toContain("const INSPECTOR_EVALUATE_TIMEOUT_MS = 90_000;");
+    expect(cdpFixture).toContain("--disable-background-timer-throttling");
+    expect(cdpFixture).toContain("--disable-backgrounding-occluded-windows");
+    expect(cdpFixture).toContain("--disable-renderer-backgrounding");
+    expect(cdpFixture).toContain("Windows Electron child did not exit after taskkill");
+    expect(cdpFixture).toContain("Windows Electron child did not exit after SIGKILL");
+    expect(appFixture).toContain("Knowledge fixture could not terminate its owned child");
+    expect(appFixture).toContain("Desktop fixture taskkill did not terminate its target");
+  });
+
+  it("runs the Windows junction TOCTOU scenario in an independent, non-retried worker", () => {
+    const ci = fs.readFileSync(
+      path.join(repositoryRoot, ".github/workflows/ci.yml"),
+      "utf8",
+    );
+
+    expect(ci).toContain(
+      'if [ "$RUNNER_OS" = "Windows" ] && [ "${{ matrix.project }}" = "web-open" ]; then',
+    );
+    expect(ci).toContain("run_project --grep 'E2E-KW-022'");
+    expect(ci).toContain("run_project --grep-invert 'E2E-KW-022'");
+    expect(ci).toContain("This is process isolation, not a retry");
   });
 
   it("builds isolated launch configs without inheriting user or Hana environment", async () => {
@@ -242,6 +331,7 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       const firstLaunch = createKnowledgeLaunchConfig(
         first,
         inheritedEnvironment,
+        repositoryRoot,
       );
       const secondLaunch = createKnowledgeLaunchConfig(second, {});
       const parsedUserHome = path.parse(first.userHome);
@@ -286,7 +376,7 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     }
   });
 
-  it("restores Electron dialog methods through an idempotent disposer", async () => {
+  it("cleans up Electron dialog stubs according to the fixture lifetime", async () => {
     const originalOpen = async () => ({ canceled: true, filePaths: [] });
     const originalSave = async () => ({ canceled: true, filePath: "" });
     const dialog = {
@@ -319,8 +409,25 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
 
     await dispose();
     await dispose();
-    expect(dialog.showOpenDialog).toBe(originalOpen);
-    expect(dialog.showSaveDialog).toBe(originalSave);
+    if (process.platform === "win32") {
+      // The Windows fixture ends the complete app process tree after each
+      // scenario, so restoring a method through a potentially closing IPC
+      // channel is deliberately skipped. The stub must remain in place until
+      // that process is terminated.
+      expect(dialog.showOpenDialog).not.toBe(originalOpen);
+      expect(dialog.showSaveDialog).not.toBe(originalSave);
+      expect(await dialog.showOpenDialog()).toEqual({
+        canceled: false,
+        filePaths: ["/isolated/import.md"],
+      });
+      expect(await dialog.showSaveDialog()).toEqual({
+        canceled: false,
+        filePath: "/isolated/save.md",
+      });
+    } else {
+      expect(dialog.showOpenDialog).toBe(originalOpen);
+      expect(dialog.showSaveDialog).toBe(originalSave);
+    }
   });
 
   it("keeps all 193 user stories singly owned and release evidence fail-closed", () => {

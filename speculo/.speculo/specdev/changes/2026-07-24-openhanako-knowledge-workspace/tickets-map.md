@@ -62,18 +62,18 @@
 | 43 | 3 索引/查询 | [交付 watcher 增量协调与 rebuild](./ticket/43-deliver-watcher-index-rebuild.md) | 06, 10, 40, 41, 42 | KW-US-193, KW-RULE-OBS, KW-RULE-INDEX, KW-RULE-RECOVERY | P1 | 已完成 |
 | 44 | 3 索引/查询 | [交付标签与引用查询 API](./ticket/44-deliver-knowledge-query-apis.md) | 23, 41, 43 | KW-RULE-QUERY | P1 | 已完成 |
 | 45 | 3 索引/查询 | [交付超级搜索](./ticket/45-deliver-super-search.md) | 20, 40, 43, 44 | KW-US-188, KW-US-189, KW-US-190, KW-RULE-SEARCH | P1 | 已完成 |
-| 46 | 3 索引/查询 | [交付当前大纲与引用视图](./ticket/46-deliver-current-resource-views.md) | 20, 24, 44 | KW-US-191, KW-US-192, KW-RULE-QUERY, KW-RULE-VIEW | P1 | 未开始 |
-| 47 | 4 资源操作 | [建立资源树选择状态机](./ticket/47-define-resource-tree-selection-reducer.md) | 16 | KW-US-019, KW-US-020, KW-US-021, KW-US-022, KW-US-028 | P1 | 未开始 |
-| 48 | 4 资源操作 | [交付资源树键盘导航与范围选择](./ticket/48-deliver-tree-keyboard-range-selection.md) | 47 | KW-US-015, KW-US-016, KW-US-017, KW-US-018 | P1 | 未开始 |
-| 49 | 4 资源操作 | [交付排序、打开、临时预览与标签复用](./ticket/49-deliver-tree-sort-open-preview.md) | 20, 48 | KW-US-014, KW-US-023, KW-US-024, KW-US-025, KW-US-029, KW-US-031, KW-US-032, KW-US-033, KW-US-034 | P1 | 未开始 |
-| 50 | 4 资源操作 | [交付新建 Page 与文件夹](./ticket/50-deliver-create-page-folder.md) | 06, 10, 16, 48 | KW-US-178, KW-US-179, KW-RULE-OP, KW-RULE-CREATE | P1 | 未开始 |
-| 51 | 4 资源操作 | [交付外部导入与原生 Picker](./ticket/51-deliver-import-native-picker.md) | 01, 03, 04, 06, 10, 14, 48 | KW-US-165, KW-US-180, KW-US-181, KW-RULE-OP, KW-RULE-SEC, KW-RULE-IMPORT, KW-RULE-NATIVE | P1 | 未开始 |
-| 52 | 4 资源操作 | [交付会话内复制、剪切与粘贴](./ticket/52-deliver-internal-clipboard.md) | 10, 14, 38, 48 | KW-US-182, KW-US-183, KW-RULE-OP, KW-RULE-CLIPBOARD | P1 | 未开始 |
-| 53 | 4 资源操作 | [交付资源树与编辑器拖拽协议](./ticket/53-deliver-resource-drag-drop.md) | 38, 48, 50, 51, 52 | KW-US-184, KW-US-185, KW-RULE-OP, KW-RULE-DND | P1 | 未开始 |
-| 54 | 4 资源操作 | [交付同源原子重命名与移动](./ticket/54-deliver-atomic-rename-move.md) | 10, 18, 21, 23, 43, 48 | KW-US-026, KW-US-027, KW-US-186, KW-RULE-OP, KW-RULE-SEC, KW-RULE-REFACTOR, KW-RULE-RECOVERY | P1 | 未开始 |
-| 55 | 4 资源操作 | [交付删除确认与来源级回收站](./ticket/55-deliver-workspace-trash-delete.md) | 10, 18, 22, 43, 47 | KW-US-144, KW-US-145, KW-US-146, KW-US-147, KW-US-148, KW-RULE-OP, KW-RULE-SEC, KW-RULE-RECOVERY | P1 | 未开始 |
-| 56 | 4 资源操作 | [交付回收站恢复、清理与系统废纸篓](./ticket/56-deliver-trash-restore-cleanup.md) | 04, 10, 14, 23, 44, 51, 55 | KW-US-149, KW-US-150, KW-US-151, KW-US-152, KW-US-153, KW-US-154, KW-US-155, KW-RULE-OP, KW-RULE-SEC, KW-RULE-NATIVE, KW-RULE-RECOVERY | P1 | 未开始 |
-| 57 | 5 发布 | [执行集成、迁移与发布 Gate](./ticket/57-release-knowledge-workspace.md) | 09, 13, 14, 22, 33, 34, 35, 36, 39, 45, 46, 53, 54, 56 | KW-RULE-RELEASE, KW-RULE-TEST | P2 | 未开始 |
+| 46 | 3 索引/查询 | [交付当前大纲与引用视图](./ticket/46-deliver-current-resource-views.md) | 20, 24, 44 | KW-US-191, KW-US-192, KW-RULE-QUERY, KW-RULE-VIEW | P1 | 已完成 |
+| 47 | 4 资源操作 | [建立资源树选择状态机](./ticket/47-define-resource-tree-selection-reducer.md) | 16 | KW-US-019, KW-US-020, KW-US-021, KW-US-022, KW-US-028 | P1 | 已完成 |
+| 48 | 4 资源操作 | [交付资源树键盘导航与范围选择](./ticket/48-deliver-tree-keyboard-range-selection.md) | 47 | KW-US-015, KW-US-016, KW-US-017, KW-US-018 | P1 | 已完成 |
+| 49 | 4 资源操作 | [交付排序、打开、临时预览与标签复用](./ticket/49-deliver-tree-sort-open-preview.md) | 20, 48 | KW-US-014, KW-US-023, KW-US-024, KW-US-025, KW-US-029, KW-US-031, KW-US-032, KW-US-033, KW-US-034 | P1 | 已完成 |
+| 50 | 4 资源操作 | [交付新建 Page 与文件夹](./ticket/50-deliver-create-page-folder.md) | 06, 10, 16, 48 | KW-US-178, KW-US-179, KW-RULE-OP, KW-RULE-CREATE | P1 | 已完成 |
+| 51 | 4 资源操作 | [交付外部导入与原生 Picker](./ticket/51-deliver-import-native-picker.md) | 01, 03, 04, 06, 10, 14, 48 | KW-US-165, KW-US-180, KW-US-181, KW-RULE-OP, KW-RULE-SEC, KW-RULE-IMPORT, KW-RULE-NATIVE | P1 | 已完成 |
+| 52 | 4 资源操作 | [交付会话内复制、剪切与粘贴](./ticket/52-deliver-internal-clipboard.md) | 10, 14, 38, 48 | KW-US-182, KW-US-183, KW-RULE-OP, KW-RULE-CLIPBOARD | P1 | 已完成 |
+| 53 | 4 资源操作 | [交付资源树与编辑器拖拽协议](./ticket/53-deliver-resource-drag-drop.md) | 38, 48, 50, 51, 52 | KW-US-184, KW-US-185, KW-RULE-OP, KW-RULE-DND | P1 | 已完成 |
+| 54 | 4 资源操作 | [交付同源原子重命名与移动](./ticket/54-deliver-atomic-rename-move.md) | 10, 18, 21, 23, 43, 48 | KW-US-026, KW-US-027, KW-US-186, KW-RULE-OP, KW-RULE-SEC, KW-RULE-REFACTOR, KW-RULE-RECOVERY | P1 | 已完成 |
+| 55 | 4 资源操作 | [交付删除确认与来源级回收站](./ticket/55-deliver-workspace-trash-delete.md) | 10, 18, 22, 43, 47 | KW-US-144, KW-US-145, KW-US-146, KW-US-147, KW-US-148, KW-RULE-OP, KW-RULE-SEC, KW-RULE-RECOVERY | P1 | 已完成 |
+| 56 | 4 资源操作 | [交付回收站恢复、清理与系统废纸篓](./ticket/56-deliver-trash-restore-cleanup.md) | 04, 10, 14, 23, 44, 51, 55 | KW-US-149, KW-US-150, KW-US-151, KW-US-152, KW-US-153, KW-US-154, KW-US-155, KW-RULE-OP, KW-RULE-SEC, KW-RULE-NATIVE, KW-RULE-RECOVERY | P1 | 已完成 |
+| 57 | 5 发布 | [执行集成、迁移与发布 Gate](./ticket/57-release-knowledge-workspace.md) | 09, 13, 14, 22, 33, 34, 35, 36, 39, 45, 46, 53, 54, 56 | KW-RULE-RELEASE, KW-RULE-TEST | P2 | 已完成 |
 
 ## 依赖关系
 

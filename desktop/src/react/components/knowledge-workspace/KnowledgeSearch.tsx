@@ -190,7 +190,20 @@ export function KnowledgeSearch({
             value={query}
             placeholder={tr('knowledge.search.placeholder')}
             aria-describedby={scope ? 'knowledge-search-scope' : undefined}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              // A replacement query is a new user intent. Abort the previous
+              // request whenever one exists. The ref is authoritative here:
+              // a browser input event can arrive before React has committed
+              // the loading state, and a stale controller must not keep the
+              // public submit control disabled while the user refines search.
+              if (controllerRef.current) {
+                controllerRef.current?.abort();
+                controllerRef.current = null;
+                requestRevisionRef.current += 1;
+                setStatus('idle');
+              }
+              setQuery(event.target.value);
+            }}
           />
         </label>
         {scope && (

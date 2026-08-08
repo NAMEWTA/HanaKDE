@@ -43,6 +43,10 @@
     },
     "source": { "main": "메인" },
     "retry": "다시 시도",
+    "actions": { "label": "리소스 작업" },
+    "action": { "newPage": "새 페이지", "newFolder": "새 폴더", "import": "가져오기", "copy": "복사", "cut": "잘라내기", "paste": "붙여넣기", "delete": "삭제", "cancel": "취소", "create": "만들기", "close": "닫기", "restore": "복원", "systemTrash": "시스템 휴지통" },
+    "create": { "pageTitle": "페이지 만들기", "folderTitle": "폴더 만들기", "name": "이름", "error": "리소스를 만들 수 없습니다." },
+    "trash": { "title": "작업 공간 휴지통", "loading": "휴지통 불러오는 중…", "empty": "휴지통이 비어 있습니다.", "deleteConfirm": "선택한 리소스를 작업 공간 휴지통으로 이동할까요?", "cleanupConfirm": "이 리소스를 시스템 휴지통으로 이동할까요?", "cleanupTitle": "시스템 휴지통으로 이동", "cleanupDescription": "운영 체제가 항목을 받은 뒤에는 OpenHanako에서 복원할 수 없습니다.", "cleanupExpired": "30일 지난 항목 정리", "cleanupSelected": "선택 항목을 시스템 휴지통으로 이동", "cleanupBatch": "전체 배치를 시스템 휴지통으로 이동", "retryFailed": "실패 항목만 다시 시도", "select": "선택", "operationError": "휴지통 작업을 완료하지 못했습니다." },
     "search": {
       "label": "지식 검색",
       "input": "검색어",
@@ -57,6 +61,22 @@
       "tag": "{source}에서 #{tag} 태그 검색",
       "more": "{source}에서 더 보기"
     },
+    "currentViews": {
+      "heading": "현재 리소스",
+      "empty": "Markdown 페이지를 열면 개요와 참조를 볼 수 있습니다.",
+      "outline": "개요",
+      "outbound": "나가는 참조",
+      "backlinks": "백링크",
+      "liveBuffer": "실시간 버퍼",
+      "savedIndex": "저장된 인덱스",
+      "unsavedDifference": "저장하지 않은 편집은 개요와 나가는 참조에 반영됩니다. 백링크는 마지막으로 저장된 인덱스를 유지합니다.",
+      "noOutline": "제목 없음",
+      "noOutbound": "같은 소스의 나가는 참조 없음",
+      "noBacklinks": "저장된 백링크 없음",
+      "loadingBacklinks": "저장된 백링크 불러오는 중…",
+      "backlinksError": "저장된 백링크를 사용할 수 없습니다",
+      "moreBacklinks": "저장된 백링크가 더 있습니다"
+    },
     "tree": {
       "heading": "리소스 트리",
       "empty": "펼쳐진 리소스가 없습니다",
@@ -66,7 +86,14 @@
       "loadError": "{name}을(를) 불러올 수 없습니다",
       "retry": "{name} 다시 시도",
       "unavailable": "{name}을(를) 사용할 수 없습니다",
-      "emptyDirectory": "{name}이(가) 비어 있습니다"
+      "emptyDirectory": "{name}이(가) 비어 있습니다",
+      "sort": "{name} 정렬",
+      "sortNameAscending": "이름 (오름차순)",
+      "sortNameDescending": "이름 (내림차순)",
+      "sortModifiedAscending": "수정일 (오래된 순)",
+      "sortModifiedDescending": "수정일 (최신 순)",
+      "sortExtensionAscending": "확장자 (오름차순)",
+      "sortExtensionDescending": "확장자 (내림차순)"
     },
     "editor": {
       "groupLabel": "편집기 그룹 {number}",

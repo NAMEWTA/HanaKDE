@@ -553,6 +553,207 @@ describe('knowledge workspace client', () => {
     );
   });
 
+  it('uses the shared plan/commit protocol for delete and restore and parses cleanup plans', async () => {
+    const deleteId = '10000000-0000-4000-8000-000000000001';
+    const restoreId = '10000000-0000-4000-8000-000000000002';
+    const cleanupId = '10000000-0000-4000-8000-000000000003';
+    const entryId = '10000000-0000-4000-8000-000000000004';
+    const requestHash = 'b'.repeat(64);
+    const originalAddress = { sourceKey: 'main', relativePath: 'notes/page.md' };
+    const trashAddress = {
+      sourceKey: 'main',
+      relativePath: `.trash/${deleteId}/payload/000001-page.md`,
+    };
+    const timestamps = {
+      createdAt: '2026-08-07T00:00:00.000Z',
+      expiresAt: '2026-08-07T00:15:00.000Z',
+    };
+    const planItem = {
+      entryId,
+      originalAddress,
+      trashAddress,
+      resourceKind: 'file',
+      expectedVersion: { etag: 'v1' },
+    };
+    const projections = { session: 'applied', event: 'applied', index: 'applied' };
+    const summary = {
+      succeeded: 1,
+      failed: 0,
+      rolledBack: 0,
+      recoveryRequired: 0,
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        plan: {
+          schemaVersion: 1,
+          operationId: deleteId,
+          requestHash,
+          kind: 'delete',
+          sourceKey: 'main',
+          batchId: deleteId,
+          ...timestamps,
+          items: [planItem],
+        },
+      }, 201))
+      .mockResolvedValueOnce(jsonResponse({
+        result: {
+          schemaVersion: 1,
+          operationId: deleteId,
+          requestHash,
+          kind: 'delete',
+          sourceKey: 'main',
+          batchId: deleteId,
+          state: 'FINALIZED',
+          completedAt: '2026-08-07T00:00:01.000Z',
+          items: [{ ...planItem, expectedVersion: undefined, state: 'applied' }],
+          summary,
+          projections,
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        plan: {
+          schemaVersion: 1,
+          operationId: restoreId,
+          requestHash,
+          kind: 'restore',
+          sourceKey: 'main',
+          batchId: deleteId,
+          ...timestamps,
+          items: [{ ...planItem, targetAddress: originalAddress }],
+        },
+      }, 201))
+      .mockResolvedValueOnce(jsonResponse({
+        result: {
+          schemaVersion: 1,
+          operationId: restoreId,
+          requestHash,
+          kind: 'restore',
+          sourceKey: 'main',
+          batchId: deleteId,
+          state: 'FINALIZED',
+          completedAt: '2026-08-07T00:00:02.000Z',
+          items: [{
+            entryId,
+            originalAddress,
+            trashAddress,
+            targetAddress: originalAddress,
+            resourceKind: 'file',
+            state: 'applied',
+          }],
+          summary,
+          projections,
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        plan: {
+          schemaVersion: 1,
+          operationId: cleanupId,
+          requestHash,
+          kind: 'cleanup',
+          sourceKey: 'main',
+          batchId: deleteId,
+          ...timestamps,
+          items: [planItem],
+        },
+      }, 201));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.trashResources([originalAddress])).resolves.toEqual({
+      batchId: deleteId,
+      sourceKey: 'main',
+      items: [{ entryId, originalAddress, ok: true }],
+    });
+    await expect(client.restoreTrash('main', deleteId, [entryId])).resolves.toEqual([
+      { entryId, ok: true, restoredAddress: originalAddress },
+    ]);
+    await expect(client.planTrashCleanup(trashAddress)).resolves.toMatchObject({
+      operationId: cleanupId,
+      kind: 'cleanup',
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      '/api/knowledge-workspace/operations/plan',
+      expect.objectContaining({
+        body: JSON.stringify({ kind: 'delete', addresses: [originalAddress] }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      '/api/knowledge-workspace/trash/restore/plan',
+      expect.objectContaining({
+        body: JSON.stringify({ sourceKey: 'main', batchId: deleteId, entryIds: [entryId] }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      5,
+      '/api/knowledge-workspace/trash/cleanup/plan',
+      expect.objectContaining({ body: JSON.stringify({ address: trashAddress }) }),
+    );
+  });
+
+  it('creates one cleanup plan before requesting a system-trash native grant', async () => {
+    const operationId = '20000000-0000-4000-8000-000000000001';
+    const batchId = '20000000-0000-4000-8000-000000000002';
+    const entryId = '20000000-0000-4000-8000-000000000003';
+    const address = {
+      sourceKey: 'main',
+      relativePath: `.trash/${batchId}/payload/000001-page.md`,
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        plan: {
+          schemaVersion: 1,
+          operationId,
+          requestHash: 'c'.repeat(64),
+          kind: 'cleanup',
+          sourceKey: 'main',
+          batchId,
+          createdAt: '2026-08-07T00:00:00.000Z',
+          expiresAt: '2026-08-07T00:15:00.000Z',
+          items: [{
+            entryId,
+            originalAddress: { sourceKey: 'main', relativePath: 'page.md' },
+            trashAddress: address,
+            resourceKind: 'file',
+            expectedVersion: { etag: 'trash-v1' },
+          }],
+        },
+      }, 201))
+      .mockResolvedValueOnce(jsonResponse({
+        grant: {
+          grantId: 'grant-system-trash',
+          expiresAt: Date.now() + 60_000,
+        },
+      }, 201));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.createNativeGrant('systemTrash', address)).resolves.toMatchObject({
+      grantId: 'grant-system-trash',
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      '/api/knowledge-workspace/trash/cleanup/plan',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ address }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      '/api/knowledge-workspace/native/grants',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'systemTrash',
+          address,
+          operationId,
+        }),
+      }),
+    );
+  });
+
   it('rejects operation responses carrying native authority fields instead of projecting them into UI state', async () => {
     const client = createKnowledgeWorkspaceClient({
       fetchImpl: vi.fn(async () => jsonResponse({
@@ -1149,5 +1350,103 @@ describe('knowledge workspace client', () => {
         code: 'knowledge_operation_precondition_failed',
         details: { field: 'search.address' },
       });
+  });
+
+  it('queries saved backlinks and validates the source-relative response', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      result: {
+        kind: 'backlinks',
+        sourceKey: 'main',
+        generationId: 'generation-2',
+        items: [{
+          sourceAddress: {
+            sourceKey: 'main',
+            relativePath: 'Notes/Referrer.md',
+          },
+          ordinal: 0,
+          linkKind: 'wikilink',
+          fragment: 'Section',
+          fromOffset: 10,
+          toOffset: 31,
+        }],
+        hasMore: false,
+      },
+    }));
+    const client = createKnowledgeWorkspaceClient({ fetchImpl });
+
+    await expect(client.querySavedBacklinks({
+      address: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Target.md',
+      },
+      generationId: 'generation-2',
+      limit: 50,
+    })).resolves.toEqual({
+      kind: 'backlinks',
+      sourceKey: 'main',
+      generationId: 'generation-2',
+      items: [{
+        sourceAddress: {
+          sourceKey: 'main',
+          relativePath: 'Notes/Referrer.md',
+        },
+        ordinal: 0,
+        linkKind: 'wikilink',
+        fragment: 'Section',
+        fromOffset: 10,
+        toOffset: 31,
+      }],
+      hasMore: false,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/knowledge-workspace/query',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          kind: 'backlinks',
+          address: {
+            sourceKey: 'main',
+            relativePath: 'Notes/Target.md',
+          },
+          generationId: 'generation-2',
+          limit: 50,
+        }),
+      }),
+    );
+  });
+
+  it('rejects cross-source and unknown backlink fields before exposing them', async () => {
+    const client = createKnowledgeWorkspaceClient({
+      fetchImpl: vi.fn(async () => jsonResponse({
+        result: {
+          kind: 'backlinks',
+          sourceKey: 'main',
+          generationId: 'generation-2',
+          items: [{
+            sourceAddress: {
+              sourceKey: 'research',
+              relativePath: 'Notes/Referrer.md',
+            },
+            ordinal: 0,
+            linkKind: 'wikilink',
+            fragment: null,
+            fromOffset: 10,
+            toOffset: 20,
+            absolutePath: '/private/referrer.md',
+          }],
+          hasMore: false,
+        },
+      })),
+    });
+
+    await expect(client.querySavedBacklinks({
+      address: {
+        sourceKey: 'main',
+        relativePath: 'Notes/Target.md',
+      },
+    })).rejects.toMatchObject({
+      code: 'knowledge_operation_precondition_failed',
+      details: { field: 'query.items.0' },
+    });
   });
 });

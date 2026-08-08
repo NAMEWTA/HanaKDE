@@ -163,13 +163,14 @@ describe("lint-open-boundary: ratchet check", () => {
 });
 
 describe("lint-open-boundary: real repo state (smoke)", () => {
-  it("the committed export-manifest.json + baseline pass cleanly against real source", () => {
+  it("the committed export-manifest.json has no remaining Open-to-unclassified boundary debt", () => {
     const manifest = readExportManifest({ rootDir: REPOSITORY_ROOT });
     const violations = findBoundaryViolations({ rootDir: REPOSITORY_ROOT, manifest });
     const baseline = readBaseline({ rootDir: REPOSITORY_ROOT });
     const result = checkRatchet({ violations, baseline });
     expect(result.ok).toBe(true);
-    expect(result.totalViolations).toBeGreaterThan(0); // known debt is expected to be non-zero right now
+    expect(result.totalViolations).toBe(0);
+    expect(baseline.edges).toEqual([]);
   }, 30_000);
 
   it("the CLI subprocess exits 0 against the real repo and reports the known-debt count", () => {

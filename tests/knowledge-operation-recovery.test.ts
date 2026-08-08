@@ -74,6 +74,170 @@ describe("knowledge operation recovery", () => {
     );
   });
 
+  it("keeps a crash after PREPARED re-committable and applies it exactly once after restart", async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-operation-prepared-crash-"));
+    const state = { sourceExists: true, targetExists: false };
+    const first = createFixture(tempRoot, state, {
+      inject: (point) => {
+        if (point === "after_prepare") throw new SimulatedKnowledgeOperationCrash(point);
+      },
+    });
+    const plan = await first.coordinator.plan({
+      kind: "rename", from: FROM, to: TO, expectedVersion: VERSION,
+    }, OWNER);
+    await expect(first.coordinator.commit(
+      plan.operationId,
+      { requestHash: plan.requestHash },
+      OWNER,
+    )).rejects.toBeInstanceOf(SimulatedKnowledgeOperationCrash);
+    expect(state).toEqual({ sourceExists: true, targetExists: false });
+
+    const restarted = createFixture(tempRoot, state);
+    expect(await restarted.coordinator.recover()).toMatchObject({
+      scanned: 1,
+      finalized: 0,
+      rolledBack: 0,
+      recoveryRequired: 0,
+    });
+    await expect(restarted.coordinator.commit(
+      plan.operationId,
+      { requestHash: plan.requestHash },
+      OWNER,
+    )).resolves.toMatchObject({ state: "FINALIZED" });
+    expect(restarted.rename).toHaveBeenCalledOnce();
+  });
+
+  it("recovers a crash after COMMITTED by retrying projections without moving disk facts again", async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-operation-committed-crash-"));
+    const state = { sourceExists: true, targetExists: false };
+    const first = createFixture(tempRoot, state, {
+      inject: (point) => {
+        if (point === "after_committed") throw new SimulatedKnowledgeOperationCrash(point);
+      },
+    });
+    const plan = await first.coordinator.plan({
+      kind: "rename", from: FROM, to: TO, expectedVersion: VERSION,
+    }, OWNER);
+    await expect(first.coordinator.commit(
+      plan.operationId,
+      { requestHash: plan.requestHash },
+      OWNER,
+    )).rejects.toBeInstanceOf(SimulatedKnowledgeOperationCrash);
+    expect(state).toEqual({ sourceExists: false, targetExists: true });
+
+    const restarted = createFixture(tempRoot, state);
+    expect(await restarted.coordinator.recover()).toMatchObject({ finalized: 1 });
+    expect(restarted.rename).not.toHaveBeenCalled();
+    await expect(restarted.coordinator.get(plan.operationId, OWNER)).resolves
+      .toMatchObject({ state: "FINALIZED" });
+  });
+
+  it.each([
+    ["session_update_failure", "session"],
+    ["event_publish_failure", "event"],
+    ["index_convergence_timeout", "index"],
+  ] as const)("keeps committed disk facts for %s and converges that projection after restart", async (failurePoint, projection) => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), `hana-operation-${projection}-retry-`));
+    const state = { sourceExists: true, targetExists: false };
+    const first = createFixture(tempRoot, state, {
+      inject: (point) => {
+        if (point === failurePoint) throw new Error(failurePoint);
+      },
+    });
+    const plan = await first.coordinator.plan({
+      kind: "rename", from: FROM, to: TO, expectedVersion: VERSION,
+    }, OWNER);
+    const result = await first.coordinator.commit(
+      plan.operationId,
+      { requestHash: plan.requestHash },
+      OWNER,
+    );
+    expect(result).toMatchObject({
+      state: "FINALIZED",
+      projections: { [projection]: "retrying" },
+    });
+    expect(state).toEqual({ sourceExists: false, targetExists: true });
+
+    const restarted = createFixture(tempRoot, state);
+    expect(await restarted.coordinator.recover()).toMatchObject({ finalized: 1 });
+    expect(restarted.rename).not.toHaveBeenCalled();
+    await expect(restarted.coordinator.get(plan.operationId, OWNER)).resolves
+      .toMatchObject({ projections: { [projection]: "applied" } });
+  });
+
+  it.each(["disk_full", "permission_change"] as const)(
+    "rolls back before any disk fact is applied when %s is injected",
+    async (failurePoint) => {
+      tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), `hana-operation-${failurePoint}-`));
+      const state = { sourceExists: true, targetExists: false };
+      const fixture = createFixture(tempRoot, state, {
+        inject: (point) => {
+          if (point === failurePoint) throw new Error(failurePoint);
+        },
+      });
+      const plan = await fixture.coordinator.plan({
+        kind: "rename", from: FROM, to: TO, expectedVersion: VERSION,
+      }, OWNER);
+      await expect(fixture.coordinator.commit(
+        plan.operationId,
+        { requestHash: plan.requestHash },
+        OWNER,
+      )).resolves.toMatchObject({ state: "ROLLED_BACK" });
+      expect(state).toEqual({ sourceExists: true, targetExists: false });
+      expect(fixture.rename).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rolls the primary move back when the injected link write fails", async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-operation-link-failure-"));
+    const state = { sourceExists: true, targetExists: false };
+    const fixture = createFixture(tempRoot, state, {
+      inject: (point) => {
+        if (point === "link_write_n") throw new Error("link write failed");
+      },
+    });
+    const plan = await fixture.coordinator.plan({
+      kind: "rename", from: FROM, to: TO, expectedVersion: VERSION,
+    }, OWNER);
+    await expect(fixture.coordinator.commit(
+      plan.operationId,
+      { requestHash: plan.requestHash },
+      OWNER,
+    )).resolves.toMatchObject({ state: "ROLLED_BACK" });
+    expect(state).toEqual({ sourceExists: true, targetExists: false });
+    expect(fixture.rename).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains journal evidence when the injected rollback step also fails", async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-operation-rollback-failure-"));
+    const state = { sourceExists: true, targetExists: false };
+    const fixture = createFixture(tempRoot, state, {
+      inject: (point) => {
+        if (point === "link_write_n" || point === "rollback_step_n") {
+          throw new Error(point);
+        }
+      },
+    });
+    const plan = await fixture.coordinator.plan({
+      kind: "rename", from: FROM, to: TO, expectedVersion: VERSION,
+    }, OWNER);
+    await expect(fixture.coordinator.commit(
+      plan.operationId,
+      { requestHash: plan.requestHash },
+      OWNER,
+    )).resolves.toMatchObject({ state: "RECOVERY_REQUIRED" });
+    expect(state).toEqual({ sourceExists: false, targetExists: true });
+    expect(fixture.rename).toHaveBeenCalledOnce();
+    expect(fs.existsSync(path.join(
+      tempRoot,
+      "knowledge-workspace",
+      "operations",
+      "v1",
+      plan.operationId,
+      "journal.json",
+    ))).toBe(true);
+  });
+
   it("does not roll back committed disk facts when a post-commit projection fails", async () => {
     tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-operation-post-commit-"));
     const state = { sourceExists: true, targetExists: false };
@@ -267,9 +431,29 @@ describe("knowledge operation recovery", () => {
       recoveryRequired: 0,
       expired: 0,
     }));
+    const trashRecover = vi.fn(async () => ({
+      scanned: 0,
+      finalized: 0,
+      rolledBack: 0,
+      recoveryRequired: 0,
+    }));
+    const atomicRecover = vi.fn(async () => ({
+      scanned: 0,
+      finalized: 0,
+      rolledBack: 0,
+      recoveryRequired: 0,
+    }));
     const coordinator = { recover };
     await expect(prepareKnowledgeOperationRecovery({
       knowledgeOperationCoordinator: coordinator,
+      knowledgeTrashOperationCoordinator: {
+        recover: trashRecover,
+        isSourceRecovering: () => false,
+      },
+      knowledgeAtomicOperationCoordinator: {
+        recover: atomicRecover,
+        isSourceRecovering: () => false,
+      },
       getRuntimeContext: () => ({
         userId: "user-1",
         studioId: "studio-1",
@@ -280,6 +464,8 @@ describe("knowledge operation recovery", () => {
       hanakoHome: "/hana",
     })).resolves.toBe(coordinator);
     expect(recover).toHaveBeenCalledOnce();
+    expect(trashRecover).toHaveBeenCalledOnce();
+    expect(atomicRecover).toHaveBeenCalledOnce();
 
     const openRootSource = fs.readFileSync(
       path.join(process.cwd(), "server/composition/open-root.ts"),

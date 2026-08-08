@@ -179,7 +179,15 @@ export function KnowledgeAssetViewer({
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setNativeError(null);
-    setState({ status: "loading" });
+    // An external event can arrive while a different resource is settling.
+    // Keep the already policy-checked view in place until its replacement has
+    // passed stat/read validation; replacing it with a transient loading
+    // screen lets unrelated watch traffic leave the viewer visibly stuck.
+    setState((current) => (
+      preserveViewContext && current.status !== "loading"
+        ? current
+        : { status: "loading" }
+    ));
 
     try {
       const stat = await client.resources.stat(requestAddress, {
@@ -357,6 +365,8 @@ export function KnowledgeAssetViewer({
     <section
       aria-label={tr("knowledge.asset.label")}
       className={styles.assetViewer}
+      data-knowledge-asset-error={state.status === "error" ? state.code : undefined}
+      data-knowledge-asset-status={state.status}
       data-knowledge-asset-viewer=""
       role="region"
       tabIndex={0}

@@ -46,6 +46,8 @@ describe('KnowledgeWorkspace', () => {
       'knowledge.source.main': 'Main',
       'knowledge.tree.heading': 'Resource tree',
       'knowledge.tree.empty': 'No resources opened',
+      'knowledge.actions.label': 'Resource actions',
+      'knowledge.action.paste': 'Paste',
       'knowledge.editor.groupLabel': 'Editor group',
       'knowledge.editor.emptyTitle': 'Open a resource',
       'knowledge.editor.emptyDescription': 'Choose a resource from the tree.',
@@ -136,6 +138,41 @@ describe('KnowledgeWorkspace', () => {
       knowledgeOpenResourceKeys: [],
       knowledgeActiveResourceKey: null,
       knowledgeSourcesStatus: 'ready',
+    });
+  });
+
+  it('uses the native file clipboard when no internal Knowledge clipboard exists', async () => {
+    const knowledgeNativeInvoke = vi.fn(async () => ({ ok: true, cancelled: false }));
+    vi.stubGlobal('hana', {
+      knowledgeNativeCapabilities: vi.fn(async () => ({
+        directoryPicker: true,
+        filePicker: true,
+        fileClipboard: true,
+        openDefault: true,
+        reveal: true,
+        systemTrash: true,
+      })),
+      knowledgeNativeInvoke,
+    });
+    useStore.setState({ knowledgeClipboard: null } as never);
+    render(
+      <KnowledgeWorkspace
+        client={clientWithListSources(vi.fn(async () => [mainSource]))}
+        treeServices={testTreeServices}
+        workspaceKey="workspace-system-clipboard"
+      />,
+    );
+
+    const paste = await screen.findByRole('button', { name: 'Paste' });
+    await waitFor(() => expect(paste).toBeEnabled());
+    fireEvent.click(paste);
+
+    await waitFor(() => {
+      expect(knowledgeNativeInvoke).toHaveBeenCalledWith({
+        action: 'importClipboardFiles',
+        target: { sourceKey: 'main', directoryPath: '' },
+        conflictPolicy: 'keep-both',
+      });
     });
   });
 

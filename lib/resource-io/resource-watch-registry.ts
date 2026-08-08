@@ -227,7 +227,12 @@ export class ResourceWatchRegistry {
       entry.pendingRescan = true;
       entry.pendingPath = null;
     } else if (!entry.pendingRescan) {
-      entry.pendingPath = change.path;
+      if (entry.pendingPath && entry.pendingPath !== change.path) {
+        entry.pendingRescan = true;
+        entry.pendingPath = null;
+      } else {
+        entry.pendingPath = change.path;
+      }
     }
     if (entry.timer) clearTimeout(entry.timer);
     entry.timer = setTimeout(() => {
@@ -258,7 +263,7 @@ export class ResourceWatchRegistry {
     const { resourceKey } = snapshot;
     const resource = {
       ...snapshot.resource,
-      isDirectory: stat.isDirectory,
+      ...(stat.exists ? { isDirectory: stat.isDirectory } : {}),
     };
     if (!stat.exists) {
       this.eventBus.deleted({
@@ -361,7 +366,10 @@ function localWatchSnapshot(filePath: string): WatchResourceSnapshot {
 function defaultWatchPath(targetPath: string, handler: (changedPath?: WatchChangeInput) => void): WatchHandle {
   const rootPath = path.normalize(targetPath);
   const rootIsDirectory = safeIsDirectory(rootPath);
-  const watcher = fs.watch(rootPath, { persistent: false }, (_eventType, filename) => {
+  const watcher = fs.watch(rootPath, {
+    persistent: false,
+    recursive: rootIsDirectory,
+  }, (_eventType, filename) => {
     if (rootIsDirectory) {
       if (!filename) {
         handler({ kind: "rescan", path: rootPath, reason: "filename_unavailable" });

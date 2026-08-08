@@ -192,6 +192,10 @@ export class CoordinatedKnowledgeIndexRebuild {
     this.#rebuild.replaceResource(document);
   }
 
+  replaceResources(documents: readonly KnowledgeIndexResourceDocument[]): void {
+    this.#rebuild.replaceResources(documents);
+  }
+
   deleteResource(relativePath: string): void {
     this.#rebuild.deleteResource(relativePath);
   }

@@ -43,6 +43,10 @@
     },
     "source": { "main": "主来源" },
     "retry": "重试",
+    "actions": { "label": "资源操作" },
+    "action": { "newPage": "新建页面", "newFolder": "新建文件夹", "import": "导入", "copy": "复制", "cut": "剪切", "paste": "粘贴", "delete": "删除", "cancel": "取消", "create": "创建", "close": "关闭", "restore": "恢复", "systemTrash": "系统废纸篓" },
+    "create": { "pageTitle": "新建页面", "folderTitle": "新建文件夹", "name": "名称", "error": "无法创建资源。" },
+    "trash": { "title": "工作区回收站", "loading": "正在加载回收站…", "empty": "回收站为空。", "deleteConfirm": "将所选资源移入工作区回收站？", "cleanupConfirm": "将此资源移入系统废纸篓？", "cleanupTitle": "移入系统废纸篓", "cleanupDescription": "操作系统接收这些项目后，OpenHanako 将不再能够恢复它们。", "cleanupExpired": "清理 30 天以上项目", "cleanupSelected": "将所选项移入系统废纸篓", "cleanupBatch": "将整个批次移入系统废纸篓", "retryFailed": "仅重试失败项", "select": "选择", "operationError": "回收站操作未能完成。" },
     "search": {
       "label": "搜索知识",
       "input": "搜索内容",
@@ -57,6 +61,22 @@
       "tag": "在{source}中搜索标签 #{tag}",
       "more": "加载{source}的更多结果"
     },
+    "currentViews": {
+      "heading": "当前资源",
+      "empty": "打开 Markdown 页面后可查看大纲与引用。",
+      "outline": "大纲",
+      "outbound": "出站引用",
+      "backlinks": "反向引用",
+      "liveBuffer": "实时缓冲区",
+      "savedIndex": "已保存索引",
+      "unsavedDifference": "未保存编辑会更新大纲和出站引用；反向引用仍以最后一次保存的索引为准。",
+      "noOutline": "没有标题",
+      "noOutbound": "没有同来源出站引用",
+      "noBacklinks": "没有已保存反向引用",
+      "loadingBacklinks": "正在加载已保存反向引用…",
+      "backlinksError": "已保存反向引用暂不可用",
+      "moreBacklinks": "还有更多已保存反向引用"
+    },
     "tree": {
       "heading": "资源树",
       "empty": "暂无已展开资源",
@@ -66,7 +86,14 @@
       "loadError": "无法加载{name}",
       "retry": "重试{name}",
       "unavailable": "{name}不可用",
-      "emptyDirectory": "{name}为空"
+      "emptyDirectory": "{name}为空",
+      "sort": "排序{name}",
+      "sortNameAscending": "名称（升序）",
+      "sortNameDescending": "名称（降序）",
+      "sortModifiedAscending": "修改时间（最早）",
+      "sortModifiedDescending": "修改时间（最新）",
+      "sortExtensionAscending": "扩展名（升序）",
+      "sortExtensionDescending": "扩展名（降序）"
     },
     "editor": {
       "groupLabel": "编辑组 {number}",

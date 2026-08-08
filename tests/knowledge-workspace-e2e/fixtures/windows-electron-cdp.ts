@@ -1,0 +1,671 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import type {
+  Browser,
+  BrowserContext,
+  Page,
+} from "@playwright/test";
+import type { ElectronMainProcessApplication } from "./electron-main-process-application.ts";
+
+const STARTUP_TIMEOUT_MS = 90_000;
+const ENDPOINT_REQUEST_TIMEOUT_MS = 1_000;
+const INSPECTOR_CONNECT_TIMEOUT_MS = 5_000;
+const INSPECTOR_REQUEST_TIMEOUT_MS = 5_000;
+const INSPECTOR_EVALUATE_TIMEOUT_MS = 90_000;
+const CHILD_TERMINATION_TIMEOUT_MS = 5_000;
+const RENDERER_SENTINEL_KEY = "__hanaWindowsCdpRendererSentinel";
+
+// The direct-CDP path replaces Playwright's Electron loader. Keep the loader's
+// backgrounding guarantees so hidden/secondary Windows stay responsive during
+// the same real user-flow tests.
+const DIRECT_ELECTRON_CHROMIUM_SWITCHES = [
+  "--disable-background-timer-throttling",
+  "--disable-backgrounding-occluded-windows",
+  "--disable-renderer-backgrounding",
+] as const;
+
+type LaunchOptions = {
+  executablePath: string;
+  bootstrapPath: string;
+  electronArgs: readonly string[];
+  env: NodeJS.ProcessEnv;
+  cwd: string;
+  reserveLoopbackPort(): Promise<number>;
+};
+
+export type InspectorIdentity = {
+  pid: number;
+  token: string;
+};
+
+export type ElectronCdpPortPair = {
+  nodeInspectorPort: number;
+  chromiumPort: number;
+};
+
+type ElectronCdpLaunchArguments = ElectronCdpPortPair & {
+  bootstrapPath: string;
+  launchToken: string;
+  electronArgs: readonly string[];
+};
+
+type ChromiumCdpConnector = {
+  chromium: {
+    connectOverCDP(endpointURL: string): Promise<Browser>;
+  };
+};
+
+type NodeInspectorResponse = {
+  id?: number;
+  result?: {
+    result?: { value?: unknown };
+    exceptionDetails?: unknown;
+  };
+  error?: unknown;
+};
+
+type NodeInspectorEvent = {
+  method?: string;
+  params?: {
+    context?: {
+      id?: unknown;
+      auxData?: { isDefault?: unknown };
+    };
+  };
+};
+
+type NodeInspectorMessage = NodeInspectorResponse & NodeInspectorEvent;
+
+type ChildFailureMonitor = {
+  assertReady(kind: "node" | "chromium"): void;
+};
+
+export type WindowsElectronCdpLaunch = {
+  application: ElectronMainProcessApplication;
+  browser: Browser;
+  page(): Promise<Page>;
+  dispose(): void;
+};
+
+export function buildWindowsElectronCdpArgs({
+  nodeInspectorPort,
+  chromiumPort,
+  bootstrapPath,
+  launchToken,
+  electronArgs,
+}: ElectronCdpLaunchArguments): string[] {
+  if (nodeInspectorPort === chromiumPort) {
+    throw new Error("Windows Electron requires distinct node inspector and Chromium CDP ports");
+  }
+  return [
+    `--inspect=127.0.0.1:${nodeInspectorPort}`,
+    `--remote-debugging-port=${chromiumPort}`,
+    "--remote-debugging-address=127.0.0.1",
+    ...DIRECT_ELECTRON_CHROMIUM_SWITCHES,
+    bootstrapPath,
+    `--hana-windows-cdp-token=${launchToken}`,
+    ...electronArgs,
+  ];
+}
+
+export async function reserveDistinctLoopbackPorts(
+  reserveLoopbackPort: () => Promise<number>,
+): Promise<ElectronCdpPortPair> {
+  const nodeInspectorPort = await reserveLoopbackPort();
+  if (!Number.isInteger(nodeInspectorPort) || nodeInspectorPort < 1 || nodeInspectorPort > 65_535) {
+    throw new Error("Windows Electron received an invalid node inspector port");
+  }
+  for (let attempts = 0; attempts < 8; attempts += 1) {
+    const chromiumPort = await reserveLoopbackPort();
+    if (!Number.isInteger(chromiumPort) || chromiumPort < 1 || chromiumPort > 65_535) {
+      throw new Error("Windows Electron received an invalid Chromium CDP port");
+    }
+    if (chromiumPort !== nodeInspectorPort) {
+      return { nodeInspectorPort, chromiumPort };
+    }
+  }
+  throw new Error("Windows Electron could not reserve distinct CDP ports");
+}
+
+/**
+ * Electron GUI children on hosted Windows do not relay Chromium's DevTools
+ * banner through stdio, so Playwright's Electron launcher cannot complete its
+ * otherwise normal two-CDP-endpoint handshake. Keep both endpoints strictly
+ * loopback-only and connect to them directly instead.
+ */
+export async function launchWindowsElectronOverCdp(
+  playwright: ChromiumCdpConnector,
+  options: LaunchOptions,
+): Promise<WindowsElectronCdpLaunch> {
+  const { nodeInspectorPort, chromiumPort } = await reserveDistinctLoopbackPorts(
+    options.reserveLoopbackPort,
+  );
+  const launchToken = randomUUID();
+  const rendererToken = randomUUID();
+  const child = spawn(options.executablePath, buildWindowsElectronCdpArgs({
+    nodeInspectorPort,
+    chromiumPort,
+    bootstrapPath: options.bootstrapPath,
+    launchToken,
+    electronArgs: options.electronArgs,
+  }), {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  const childFailure = monitorChildFailure(child);
+  if (!child.pid) {
+    await terminateChild(child);
+    throw new Error("Windows Electron process did not expose a pid");
+  }
+
+  let browser: Browser | null = null;
+  let inspector: NodeInspectorClient | null = null;
+  try {
+    const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+    const nodeEndpoint = await waitForEndpoint(
+      nodeInspectorPort,
+      child,
+      childFailure,
+      "node",
+      deadline,
+    );
+    const connectedInspector = await NodeInspectorClient.connect(nodeEndpoint);
+    inspector = connectedInspector;
+    await connectedInspector.assertIdentity({ pid: child.pid, token: launchToken });
+    await plantRendererSentinel(connectedInspector, child, rendererToken, deadline);
+    const chromiumEndpoint = await waitForEndpoint(
+      chromiumPort,
+      child,
+      childFailure,
+      "chromium",
+      deadline,
+    );
+    const connectedBrowser = await playwright.chromium.connectOverCDP(chromiumEndpoint);
+    browser = connectedBrowser;
+    const context = connectedBrowser.contexts()[0];
+    if (!context) throw new Error("Windows Electron Chromium context did not open");
+    const application = createElectronApplication(child, context, connectedInspector);
+    const page = await waitForDesktopPage(
+      context,
+      child,
+      connectedBrowser,
+      connectedInspector,
+      rendererToken,
+      Math.min(deadline, Date.now() + INSPECTOR_CONNECT_TIMEOUT_MS),
+    );
+    return {
+      application,
+      browser: connectedBrowser,
+      page: () => Promise.resolve(page),
+      dispose: () => connectedInspector.close(),
+    };
+  } catch (error) {
+    inspector?.close();
+    await browser?.close().catch(() => {});
+    await terminateChild(child);
+    throw error;
+  }
+}
+
+function createElectronApplication(
+  child: ChildProcess,
+  context: BrowserContext,
+  inspector: NodeInspectorClient,
+): ElectronMainProcessApplication {
+  return {
+    process: () => child,
+    evaluate: inspector.evaluate.bind(inspector),
+    windows: () => context.pages(),
+    waitForEvent: (event: string) => {
+      if (event !== "window") {
+        return Promise.reject(new Error(`Unsupported Windows Electron event: ${event}`));
+      }
+      return context.waitForEvent("page");
+    },
+  } as ElectronMainProcessApplication;
+}
+
+async function waitForDesktopPage(
+  context: BrowserContext,
+  child: ChildProcess,
+  browser: Browser,
+  inspector: NodeInspectorClient,
+  rendererToken: string,
+  deadline: number,
+): Promise<Page> {
+  while (Date.now() < deadline) {
+    assertDesktopLaunchAlive(child, browser, inspector);
+    const page = context.pages().find((candidate) => (
+      /(?:^|\/)index\.html(?:[?#]|$)/.test(candidate.url())
+    ));
+    if (page) {
+      await page.waitForLoadState("domcontentloaded");
+      const sentinel = await page.evaluate((key) => (
+        (globalThis as typeof globalThis & Record<string, unknown>)[key]
+      ), RENDERER_SENTINEL_KEY).catch(() => undefined);
+      if (!rendererSentinelMatches(sentinel, rendererToken)) {
+        throw new Error("Windows Electron Chromium CDP did not connect to the verified renderer");
+      }
+      await page.evaluate((key) => {
+        delete (globalThis as typeof globalThis & Record<string, unknown>)[key];
+      }, RENDERER_SENTINEL_KEY).catch(() => {});
+      return page;
+    }
+    await delay(100);
+  }
+  throw new Error("Windows Electron main window did not open");
+}
+
+async function plantRendererSentinel(
+  inspector: NodeInspectorClient,
+  child: ChildProcess,
+  rendererToken: string,
+  deadline: number,
+): Promise<void> {
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error("Windows Electron exited before its renderer sentinel was ready");
+    }
+    if (!inspector.isConnected()) {
+      throw new Error("Windows Electron node inspector disconnected before its renderer sentinel was ready");
+    }
+    const planted = await inspector.evaluate<boolean, { key: string; token: string }>(
+      async ({ BrowserWindow }, { key, token }) => {
+        const window = BrowserWindow.getAllWindows().find((candidate) => {
+          const contents = candidate.webContents;
+          return !contents.isDestroyed()
+            && !contents.isLoadingMainFrame()
+            && /(?:^|\/)index\.html(?:[?#]|$)/.test(contents.getURL());
+        });
+        if (!window) return false;
+        try {
+          await window.webContents.executeJavaScript(
+            `globalThis[${JSON.stringify(key)}] = ${JSON.stringify(token)};`,
+            true,
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { key: RENDERER_SENTINEL_KEY, token: rendererToken },
+    );
+    if (planted) return;
+    await delay(100);
+  }
+  throw new Error("Windows Electron renderer sentinel did not become ready");
+}
+
+export function rendererSentinelMatches(
+  value: unknown,
+  expectedToken: string,
+): boolean {
+  return value === expectedToken;
+}
+
+export function assertDesktopLaunchAlive(
+  child: Pick<ChildProcess, "exitCode" | "signalCode">,
+  browser: Pick<Browser, "isConnected">,
+  inspector: { isConnected(): boolean },
+): void {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    throw new Error("Windows Electron exited before its main window opened");
+  }
+  if (!browser.isConnected()) {
+    throw new Error("Windows Electron Chromium CDP disconnected before its main window opened");
+  }
+  if (!inspector.isConnected()) {
+    throw new Error("Windows Electron node inspector disconnected before its main window opened");
+  }
+}
+
+async function waitForEndpoint(
+  port: number,
+  child: ChildProcess,
+  childFailure: ChildFailureMonitor,
+  kind: "node" | "chromium",
+  deadline: number = Date.now() + STARTUP_TIMEOUT_MS,
+): Promise<string> {
+  const route = kind === "node" ? "/json/list" : "/json/version";
+  while (Date.now() < deadline) {
+    childFailure.assertReady(kind);
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Windows Electron exited before ${kind} CDP was ready`);
+    }
+    try {
+      const remainingMs = deadline - Date.now();
+      const response = await fetch(`http://127.0.0.1:${port}${route}`, {
+        signal: AbortSignal.timeout(Math.max(
+          1,
+          Math.min(ENDPOINT_REQUEST_TIMEOUT_MS, remainingMs),
+        )),
+      });
+      if (!response.ok) throw new Error("CDP endpoint did not return HTTP 200");
+      const payload = await response.json() as unknown;
+      const endpoint = endpointFromPayload(payload, kind, port);
+      if (endpoint) return endpoint;
+    } catch {
+      // Electron has not bound its loopback debugger yet.
+    }
+    await delay(Math.min(100, Math.max(1, deadline - Date.now())));
+  }
+  throw new Error(`Windows Electron ${kind} CDP did not become ready`);
+}
+
+export function endpointFromPayload(
+  payload: unknown,
+  kind: "node" | "chromium",
+  port: number,
+): string | null {
+  const candidates = Array.isArray(payload) ? payload : [payload];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const endpoint = (candidate as { webSocketDebuggerUrl?: unknown }).webSocketDebuggerUrl;
+    if (typeof endpoint !== "string") continue;
+    try {
+      const parsed = new URL(endpoint);
+      if (
+        parsed.protocol !== "ws:"
+        || parsed.hostname !== "127.0.0.1"
+        || parsed.port !== String(port)
+      ) {
+        continue;
+      }
+      if (kind === "node" && parsed.pathname === "/") continue;
+      return endpoint;
+    } catch {
+      // Only a well-formed loopback WebSocket URL may control Electron.
+    }
+  }
+  return null;
+}
+
+class NodeInspectorClient {
+  private readonly pending = new Map<number, {
+    resolve(response: NodeInspectorResponse): void;
+    reject(error: Error): void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+  private readonly defaultContext: Promise<number>;
+  private defaultContextId: number | null = null;
+  private nextId = 0;
+  private rejectDefaultContext!: (error: Error) => void;
+  private resolveDefaultContext!: (contextId: number) => void;
+
+  private constructor(private readonly socket: WebSocket) {
+    this.defaultContext = new Promise<number>((resolve, reject) => {
+      this.resolveDefaultContext = resolve;
+      this.rejectDefaultContext = reject;
+    });
+    socket.addEventListener("message", (event) => {
+      const message = parseInspectorMessage(event.data);
+      if (!message) return;
+      const contextId = defaultExecutionContextId(message);
+      if (contextId !== null) this.setDefaultContext(contextId);
+      if (typeof message.id !== "number") return;
+      const pending = this.pending.get(message.id);
+      if (!pending) return;
+      this.pending.delete(message.id);
+      clearTimeout(pending.timer);
+      pending.resolve(message);
+    });
+    socket.addEventListener("close", () => this.rejectPending());
+    socket.addEventListener("error", () => this.rejectPending());
+  }
+
+  static async connect(endpoint: string): Promise<NodeInspectorClient> {
+    const socket = new WebSocket(endpoint);
+    await waitForWebSocketOpen(socket);
+    const client = new NodeInspectorClient(socket);
+    try {
+      await client.send("Runtime.enable");
+      await withTimeout(
+        client.defaultContext,
+        INSPECTOR_CONNECT_TIMEOUT_MS,
+        "Windows Electron node inspector did not publish a default context",
+      );
+      return client;
+    } catch (error) {
+      client.close();
+      throw error;
+    }
+  }
+
+  async evaluate<R, Arg>(pageFunction: unknown, arg?: Arg): Promise<R> {
+    const argument = serializeEvaluationArgument(arg);
+    const contextId = await this.defaultContext;
+    const response = await this.send("Runtime.evaluate", {
+      expression: `(async () => (${String(pageFunction)})(require('electron'), ${argument}))()`,
+      awaitPromise: true,
+      contextId,
+      includeCommandLineAPI: true,
+      returnByValue: true,
+      userGesture: true,
+    }, INSPECTOR_EVALUATE_TIMEOUT_MS);
+    if (response.error || response.result?.exceptionDetails) {
+      throw new Error("Windows Electron main-process evaluation failed");
+    }
+    return response.result?.result?.value as R;
+  }
+
+  async assertIdentity(expected: InspectorIdentity): Promise<void> {
+    const contextId = await this.defaultContext;
+    const tokenArgument = `--hana-windows-cdp-token=${expected.token}`;
+    const response = await this.send("Runtime.evaluate", {
+      expression: `({ pid: process.pid, token: process.argv.includes(${JSON.stringify(tokenArgument)}) ? ${JSON.stringify(expected.token)} : null })`,
+      contextId,
+      includeCommandLineAPI: true,
+      returnByValue: true,
+    });
+    if (response.error || response.result?.exceptionDetails) {
+      throw new Error("Windows Electron could not verify its node inspector identity");
+    }
+    assertInspectorIdentity(response.result?.result?.value, expected);
+  }
+
+  isConnected(): boolean {
+    return this.socket.readyState === WebSocket.OPEN;
+  }
+
+  close(): void {
+    this.socket.close();
+    this.rejectPending();
+  }
+
+  private send(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs: number = INSPECTOR_REQUEST_TIMEOUT_MS,
+  ): Promise<NodeInspectorResponse> {
+    const id = ++this.nextId;
+    return new Promise<NodeInspectorResponse>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.pending.delete(id)) return;
+        reject(new Error(`Windows Electron node inspector ${method} timed out`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }));
+      } catch {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(new Error(`Windows Electron node inspector could not send ${method}`));
+      }
+    });
+  }
+
+  private rejectPending(): void {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Windows Electron node inspector disconnected"));
+    }
+    this.pending.clear();
+    if (this.defaultContextId === null) {
+      this.rejectDefaultContext(new Error("Windows Electron node inspector disconnected"));
+    }
+  }
+
+  private setDefaultContext(contextId: number): void {
+    if (this.defaultContextId !== null) return;
+    this.defaultContextId = contextId;
+    this.resolveDefaultContext(contextId);
+  }
+}
+
+export function assertInspectorIdentity(
+  actual: unknown,
+  expected: InspectorIdentity,
+): void {
+  const candidate = actual as Partial<InspectorIdentity> | null;
+  if (
+    !candidate
+    || !Number.isInteger(candidate.pid)
+    || candidate.pid !== expected.pid
+    || candidate.token !== expected.token
+  ) {
+    throw new Error("Windows Electron inspector endpoint did not belong to the spawned application");
+  }
+}
+
+function defaultExecutionContextId(message: NodeInspectorMessage): number | null {
+  const context = message.method === "Runtime.executionContextCreated"
+    ? message.params?.context
+    : undefined;
+  return Number.isInteger(context?.id) && context.auxData?.isDefault === true
+    ? Number(context.id)
+    : null;
+}
+
+function serializeEvaluationArgument(arg: unknown): string {
+  if (arg === undefined) return "undefined";
+  try {
+    const serialized = JSON.stringify(arg);
+    if (serialized !== undefined) return serialized;
+  } catch {
+    // The caller receives the same generic contract failure for non-JSON input.
+  }
+  throw new Error("Windows Electron evaluation argument is not serializable");
+}
+
+function parseInspectorMessage(data: unknown): NodeInspectorMessage | null {
+  try {
+    const text = typeof data === "string"
+      ? data
+      : Buffer.from(data as ArrayBuffer).toString("utf8");
+    return JSON.parse(text) as NodeInspectorMessage;
+  } catch {
+    return null;
+  }
+}
+
+function monitorChildFailure(child: ChildProcess): ChildFailureMonitor {
+  let failure = false;
+  child.once("error", () => {
+    failure = true;
+  });
+  return {
+    assertReady(kind) {
+      if (failure) {
+        throw new Error(`Windows Electron could not start its ${kind} CDP endpoint`);
+      }
+    },
+  };
+}
+
+async function waitForWebSocketOpen(socket: WebSocket): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      callback();
+    };
+    const timer = setTimeout(() => {
+      socket.close();
+      finish(() => reject(new Error("Windows Electron node inspector connection timed out")));
+    }, INSPECTOR_CONNECT_TIMEOUT_MS);
+    socket.addEventListener("open", () => finish(resolve), { once: true });
+    socket.addEventListener("close", () => finish(() => reject(
+      new Error("Windows Electron node inspector closed before connection"),
+    )), { once: true });
+    socket.addEventListener("error", () => finish(() => reject(
+      new Error("Windows Electron node inspector connection failed"),
+    )), { once: true });
+  });
+}
+
+async function terminateChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
+  if (process.platform === "win32") {
+    const taskkill = spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    if (!await waitForProcessExit(taskkill, CHILD_TERMINATION_TIMEOUT_MS)) {
+      taskkill.kill();
+      if (!await waitForProcessExit(child, CHILD_TERMINATION_TIMEOUT_MS)) {
+        throw new Error("Windows Electron taskkill did not complete");
+      }
+      return;
+    }
+    if (!await waitForProcessExit(child, CHILD_TERMINATION_TIMEOUT_MS)) {
+      throw new Error("Windows Electron child did not exit after taskkill");
+    }
+    return;
+  }
+  child.kill("SIGTERM");
+  if (!await waitForProcessExit(child, CHILD_TERMINATION_TIMEOUT_MS)) {
+    child.kill("SIGKILL");
+    if (!await waitForProcessExit(child, CHILD_TERMINATION_TIMEOUT_MS)) {
+      throw new Error("Windows Electron child did not exit after SIGKILL");
+    }
+  }
+}
+
+async function waitForProcessExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    function finish(result: boolean): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      child.off("error", onError);
+      resolve(result);
+    }
+    const onExit = () => finish(true);
+    const onError = () => finish(false);
+    child.once("exit", onExit);
+    child.once("error", onError);
+  });
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}

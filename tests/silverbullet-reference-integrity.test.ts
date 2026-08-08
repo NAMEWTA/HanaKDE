@@ -66,6 +66,7 @@ const excludedRuntimeDirectories = new Set([
   "dist",
   "node_modules",
 ]);
+const ephemeralClosureScratchName = /^\.cli-closure-nft-scratch-[a-z0-9_-]+\.mjs$/i;
 const silverBulletRuntimeReference =
   /@silverbulletmd\/silverbullet|(?:^|[^A-Za-z0-9_-])silverbullet[\\/]/i;
 
@@ -181,6 +182,13 @@ function collectProductionTextFiles(
 
   for (const entry of readdirSync(absoluteDirectory, { withFileTypes: true })) {
     if (entry.isDirectory() && excludedRuntimeDirectories.has(entry.name)) {
+      continue;
+    }
+    // `compute-cli-closure` creates this esbuild/NFT input only while its
+    // dedicated audit is running, then removes it in finally. It is neither
+    // a runtime manifest nor distributable source, so racing a simultaneous
+    // integrity scan must not turn that temporary path into a required file.
+    if (relativeDirectory === "build" && ephemeralClosureScratchName.test(entry.name)) {
       continue;
     }
     const relativePath = path.posix.join(relativeDirectory, entry.name);
@@ -302,7 +310,10 @@ describe("SilverBullet reference integrity", () => {
       expect(license).toContain("Permission is hereby granted, free of charge");
       expect(license).toContain('THE SOFTWARE IS PROVIDED "AS IS"');
       expect(parseTableBelow(matrix, "## Snapshot")).toEqual([
-        ["仓库内位置", "silverbullet/（被 .gitignore 排除，不作为运行依赖）"],
+        [
+          "仓库内位置",
+          "silverbullet/（仅纳入本矩阵引用的 8 个文件与 3 个目录的受控审计快照；不作为运行依赖）",
+        ],
         ["package", "@silverbulletmd/silverbullet"],
         ["版本", "2.9.0"],
         ["Node 要求", ">=24.13.0"],
@@ -356,12 +367,24 @@ describe("SilverBullet reference integrity", () => {
   });
 
   it("keeps SilverBullet out of production sources and runtime manifests", async () => {
-    for (const relativePath of productionRuntimeFiles()) {
+    const runtimeFiles = productionRuntimeFiles();
+    expect(runtimeFiles.some((relativePath) => relativePath.startsWith("build/.cli-closure-nft-scratch-"))).toBe(false);
+    for (const relativePath of runtimeFiles) {
       let content = readFileSync(path.join(repoRoot, relativePath), "utf8");
       if (relativePath === "vitest.config.js") {
         const allowedDiscoveryExclude = '"silverbullet/**"';
         expect(content.split(allowedDiscoveryExclude)).toHaveLength(2);
         content = content.replace(allowedDiscoveryExclude, '""');
+      }
+      if (relativePath === "eslint.config.js") {
+        // A local checkout may explicitly ignore the audited snapshot while
+        // the committed config relies on the repository ignore rule. Either
+        // form is non-runtime; permit only this exact ignore entry.
+        const allowedLintExclude = "'silverbullet/**'";
+        if (content.includes(allowedLintExclude)) {
+          expect(content.split(allowedLintExclude)).toHaveLength(2);
+          content = content.replace(allowedLintExclude, "''");
+        }
       }
       expect(content, relativePath).not.toMatch(silverBulletRuntimeReference);
     }

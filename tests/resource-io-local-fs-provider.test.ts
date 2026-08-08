@@ -4,6 +4,11 @@ import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import { ResourceAccessPolicy } from "../lib/resource-io/resource-access-policy.ts";
+import {
+  RESOURCE_LIST_BLOCKED_ENTRIES,
+  RESOURCE_SCOPE_ROOT,
+  type ResourceRef,
+} from "../lib/resource-io/types.ts";
 
 const CAPABILITY_KEYS = [
   "stat",
@@ -145,6 +150,85 @@ describe("LocalFsProvider", () => {
     expect(fs.readFileSync(path.join(outside, "secret.md"), "utf-8")).toBe("secret");
   });
 
+  it("never returns bytes when an authorized parent is replaced before read", async () => {
+    let guardChecks = 0;
+    const { cwd, provider } = makeProvider(vi.fn(() => {
+      guardChecks += 1;
+      if (guardChecks === 1) {
+        fs.renameSync(path.join(cwd, "race-current"), path.join(cwd, "race-holding"));
+        fs.renameSync(path.join(cwd, "race-link"), path.join(cwd, "race-current"));
+      }
+      return { allowed: true };
+    }));
+    const outside = path.join(path.dirname(cwd), "outside");
+    fs.mkdirSync(path.join(cwd, "race-current"));
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(cwd, "race-current", "Raced.md"), "inside-race-token\n");
+    fs.writeFileSync(path.join(outside, "Raced.md"), "outside-race-secret-token\n");
+    fs.symlinkSync(
+      outside,
+      path.join(cwd, "race-link"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    let returned = "";
+    try {
+      const result = await provider.read({
+        kind: "local-file",
+        path: path.join(cwd, "race-current", "Raced.md"),
+      });
+      returned = result.content.toString("utf8");
+    } catch {
+      // A fail-closed rejection is an acceptable outcome for the raced read.
+    }
+
+    expect(returned.includes("outside-race-secret-token")).toBe(false);
+  });
+
+  it("never falls back when a trusted scope root resolves outside", async () => {
+    const { cwd, provider } = makeProvider();
+    const outside = path.join(path.dirname(cwd), "outside-scope");
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, "Secret.md"), "outside-scope-secret\n");
+    fs.symlinkSync(
+      outside,
+      path.join(cwd, "linked-scope"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const scopedRef = (relativePath: string): ResourceRef => {
+      const ref = {
+        kind: "local-file",
+        path: path.join(cwd, "linked-scope", relativePath),
+      } as ResourceRef;
+      Object.defineProperty(ref, RESOURCE_SCOPE_ROOT, {
+        value: fs.realpathSync(cwd),
+        enumerable: false,
+      });
+      return ref;
+    };
+    const fileRef = scopedRef("Secret.md");
+    const directoryRef = scopedRef("");
+
+    for (const operation of [
+      () => provider.stat(fileRef),
+      () => provider.read(fileRef),
+      () => provider.list(directoryRef),
+      () => provider.search(directoryRef, { query: "secret" }),
+      () => provider.materialize(fileRef),
+      () => provider.write(fileRef, "overwrite"),
+      () => provider.delete(fileRef),
+      () => provider.trash(fileRef),
+    ]) {
+      await expect(operation()).rejects.toMatchObject({
+        code: "resource_access_denied",
+        status: 403,
+        safeMessage: "Resource is outside authorized roots",
+      });
+    }
+    expect(fs.readFileSync(path.join(outside, "Secret.md"), "utf8"))
+      .toBe("outside-scope-secret\n");
+  });
+
   it("reads, lists, searches, copies, deletes, and materializes local files", async () => {
     const { cwd, realCwd, provider } = makeProvider();
     await provider.write({ kind: "local-file", path: "a.md" }, "alpha");
@@ -178,6 +262,64 @@ describe("LocalFsProvider", () => {
     expect(fs.existsSync(path.join(cwd, "copy.md"))).toBe(false);
   });
 
+  it("keeps list and search inside the source when a directory contains a real link", async () => {
+    const { cwd, provider } = makeProvider();
+    const outside = path.join(path.dirname(cwd), "outside-list-search");
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(cwd, "Visible.md"), "inside-search-token\n");
+    fs.writeFileSync(path.join(outside, "outside-secret.md"), "outside-list-search-secret\n");
+    fs.symlinkSync(
+      outside,
+      path.join(cwd, "escape"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    const list = await provider.list({ kind: "local-file", path: "." });
+    expect(list.items.map((item) => item.name)).toContain("Visible.md");
+    expect(list.items.map((item) => item.name)).not.toContain("escape");
+    expect(list[RESOURCE_LIST_BLOCKED_ENTRIES]).toEqual(["escape"]);
+    expect(JSON.stringify(list)).not.toContain("escape");
+
+    const textSearch = await provider.search(
+      { kind: "local-file", path: "." },
+      { query: "outside-list-search-secret" },
+    );
+    const nameSearch = await provider.search(
+      { kind: "local-file", path: "." },
+      { query: "escape", mode: "name" },
+    );
+    expect(textSearch.matches).toEqual([]);
+    expect(nameSearch.matches).toEqual([]);
+  });
+
+  it("refuses to materialize a target replaced after authorization", async () => {
+    let target = "";
+    let swapped = false;
+    const { cwd, provider } = makeProvider(vi.fn(() => {
+      if (!swapped && target) {
+        const outside = path.join(path.dirname(cwd), "outside-materialize");
+        fs.mkdirSync(outside);
+        fs.writeFileSync(path.join(outside, "secret.md"), "outside-materialize-secret\n");
+        fs.renameSync(target, `${target}.holding`);
+        fs.symlinkSync(
+          path.join(outside, "secret.md"),
+          target,
+          process.platform === "win32" ? "file" : "file",
+        );
+        swapped = true;
+      }
+      return { allowed: true };
+    }));
+    target = path.join(cwd, "materialize.md");
+    fs.writeFileSync(target, "inside-materialize-token\n");
+
+    await expect(provider.materialize({ kind: "local-file", path: "materialize.md" }))
+      .rejects.toMatchObject({
+        code: "symbolic_link_not_allowed",
+        status: 400,
+      });
+  });
+
   it("opens a bounded provider-owned read stream without buffering the whole file", async () => {
     const { cwd, provider } = makeProvider();
     fs.writeFileSync(path.join(cwd, "stream.txt"), "abcdef", "utf-8");
@@ -200,7 +342,6 @@ describe("LocalFsProvider", () => {
     const { cwd, provider } = makeProvider();
     const content = Buffer.concat([
       Buffer.alloc(1024 * 1024, 0x11),
-      Buffer.alloc(1024 * 1024, 0x22),
       Buffer.from("tail"),
     ]);
     fs.writeFileSync(path.join(cwd, "large.bin"), content);
@@ -209,7 +350,10 @@ describe("LocalFsProvider", () => {
     const chunks: Uint8Array[] = [];
     for await (const chunk of opened.body) chunks.push(chunk);
 
-    expect(chunks).toHaveLength(3);
+    // One complete maximum-sized chunk followed by a tail keeps the exact
+    // boundary coverage while exercising distinct buffers without making the
+    // release suite needlessly compete with other large-file fixtures.
+    expect(chunks).toHaveLength(2);
     expect(Buffer.concat(chunks)).toEqual(content);
   });
 

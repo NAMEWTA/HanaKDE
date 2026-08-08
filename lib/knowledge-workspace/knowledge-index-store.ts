@@ -11,6 +11,9 @@ export const KNOWLEDGE_INDEX_ROOT = path.join(
   "index",
   "v1",
 );
+// `kw/i/v1` was briefly used as a Windows path-length workaround. It remains
+// read-compatible only; all new generations stay below the frozen v1 root.
+const KNOWLEDGE_INDEX_LEGACY_COMPACT_ROOT = path.join("kw", "i", "v1");
 export const KNOWLEDGE_INDEX_BUILD_RETENTION_MS = 24 * 60 * 60 * 1_000;
 export const KNOWLEDGE_INDEX_WRITER_HEARTBEAT_MS = 10_000;
 export const KNOWLEDGE_INDEX_SAME_HOST_STALE_MS = 60_000;
@@ -27,6 +30,60 @@ const META_KEYS = Object.freeze([
   "last_complete_sequence",
   "extractor_contract_version",
 ]);
+
+export function knowledgeIndexCompactPartitionPath(
+  hanakoHome: string,
+  workspaceFingerprint: string,
+  sourceFingerprint: string,
+): string {
+  return path.join(
+    hanakoHome,
+    KNOWLEDGE_INDEX_ROOT,
+    fingerprintPathSegment(workspaceFingerprint),
+    fingerprintPathSegment(sourceFingerprint),
+  );
+}
+
+function knowledgeIndexLegacyCompactPartitionPath(
+  hanakoHome: string,
+  workspaceFingerprint: string,
+  sourceFingerprint: string,
+): string {
+  return path.join(
+    hanakoHome,
+    KNOWLEDGE_INDEX_LEGACY_COMPACT_ROOT,
+    fingerprintPathSegment(workspaceFingerprint),
+    fingerprintPathSegment(sourceFingerprint),
+  );
+}
+
+function knowledgeIndexLegacyHexPartitionPath(
+  hanakoHome: string,
+  workspaceFingerprint: string,
+  sourceFingerprint: string,
+): string {
+  return path.join(
+    hanakoHome,
+    KNOWLEDGE_INDEX_ROOT,
+    workspaceFingerprint,
+    sourceFingerprint,
+  );
+}
+
+function fingerprintPathSegment(fingerprint: string): string {
+  return Buffer.from(fingerprint, "hex").toString("base64url");
+}
+
+/**
+ * Legacy v1 partitions can include two full fingerprints. Under a normal
+ * Windows profile their database filename can cross the conservative Win32
+ * path limit, even though Node can copy and inspect the files. SQLite accepts
+ * the namespaced form, which keeps those existing partitions readable while
+ * new partitions use compact Base64URL fingerprints below the contract root.
+ */
+function sqliteDatabasePath(filePath: string): string {
+  return process.platform === "win32" ? path.toNamespacedPath(filePath) : filePath;
+}
 
 export type KnowledgeIndexHealth =
   | { state: "ready"; generationId: string; sequence: number }
@@ -284,6 +341,14 @@ export const nodeKnowledgeIndexFileSystem: KnowledgeIndexFileSystem =
       const handle = fs.openSync(filePath, fs.constants.O_RDONLY);
       try {
         fs.fsyncSync(handle);
+      } catch (error) {
+        // SQLite has already completed a FULL synchronous checkpoint before a
+        // generation reaches this publication barrier. On Windows, Node can
+        // still report that fsync is unsupported for the read-only handle
+        // (`EPERM` on the hosted NTFS runner). The atomic rename remains and
+        // the durable SQLite checkpoint is authoritative; retain fail-closed
+        // behavior for every other platform and I/O failure.
+        if (!isWindowsUnsupportedFileFsync(error)) throw error;
       } finally {
         fs.closeSync(handle);
       }
@@ -322,6 +387,26 @@ type DatabaseLike = {
   open: boolean;
 };
 
+type DatabaseStatement = ReturnType<DatabaseLike["prepare"]>;
+
+type ResourceDocumentStatements = Readonly<{
+  existingResource: DatabaseStatement;
+  deleteFts: DatabaseStatement;
+  deleteHeadings: DatabaseStatement;
+  deleteLinks: DatabaseStatement;
+  deleteTags: DatabaseStatement;
+  deleteTasks: DatabaseStatement;
+  deletePage: DatabaseStatement;
+  updateResource: DatabaseStatement;
+  insertResource: DatabaseStatement;
+  insertPage: DatabaseStatement;
+  insertHeading: DatabaseStatement;
+  insertLink: DatabaseStatement;
+  insertTag: DatabaseStatement;
+  insertTask: DatabaseStatement;
+  insertFts: DatabaseStatement;
+}>;
+
 const REBUILD_INTERNALS = new WeakMap<KnowledgeIndexRebuild, {
   database: DatabaseLike;
   writerLock: KnowledgeIndexWriterLock;
@@ -343,10 +428,20 @@ type StoreOptions = {
   now?: () => number;
   processIsAlive?: (pid: number) => boolean;
   fileSystem?: KnowledgeIndexFileSystem;
+  /** Internal test hook; production publication waits up to five seconds. */
+  checkpointBusyTimeoutMs?: number;
 };
+
+type CurrentIndexState = Readonly<{
+  partitionPath: string;
+  manifest: KnowledgeIndexManifest | null;
+  databaseReadable: boolean;
+  health: KnowledgeIndexHealth;
+}>;
 
 export class KnowledgeIndexStore {
   readonly #partitionPath: string;
+  readonly #legacyPartitionPaths: readonly string[];
   readonly #sourceFingerprint: string;
   readonly #extractorContractVersion: string;
   readonly #hostId: string;
@@ -354,6 +449,17 @@ export class KnowledgeIndexStore {
   readonly #now: () => number;
   readonly #processIsAlive: (pid: number) => boolean;
   readonly #fileSystem: KnowledgeIndexFileSystem;
+  readonly #checkpointBusyTimeoutMs: number;
+  readonly #searchCandidateCache = new Map<string, readonly KnowledgeIndexSearchQueryRow[]>();
+  readonly #searchDisplayCache = new Map<string, Readonly<{
+    frontmatterJson: string | null;
+    bodyText: string | null;
+  }>>();
+  #queryManifestCache: {
+    manifest: KnowledgeIndexManifest;
+    partitionPath: string;
+    cachedAtMs: number;
+  } | null = null;
   readonly #leaseCounts = new Map<string, number>();
   #activeRebuild: KnowledgeIndexRebuild | null = null;
   #lockedOwnerHint: string | null = null;
@@ -391,12 +497,45 @@ export class KnowledgeIndexStore {
     this.#now = options.now ?? Date.now;
     this.#processIsAlive = options.processIsAlive ?? processIsAlive;
     this.#fileSystem = options.fileSystem ?? nodeKnowledgeIndexFileSystem;
-    this.#partitionPath = path.join(
+    const checkpointBusyTimeoutMs = options.checkpointBusyTimeoutMs ?? 5_000;
+    if (
+      !Number.isSafeInteger(checkpointBusyTimeoutMs)
+      || checkpointBusyTimeoutMs < 1
+      || checkpointBusyTimeoutMs > 5_000
+    ) {
+      throw new TypeError("knowledge index checkpoint busy timeout is invalid");
+    }
+    this.#checkpointBusyTimeoutMs = checkpointBusyTimeoutMs;
+    // Fresh generations always use the frozen `knowledge-workspace/index/v1`
+    // root. Base64URL segments retain the full 256-bit identities without the
+    // Windows path-length risk of the original hexadecimal partition names.
+    this.#partitionPath = knowledgeIndexCompactPartitionPath(
       options.hanakoHome,
-      KNOWLEDGE_INDEX_ROOT,
       workspaceFingerprint,
       this.#sourceFingerprint,
     );
+    // Do not discard partitions produced by released builds. They remain
+    // readable until a rebuild publishes a canonical generation, but no new
+    // writes are ever sent back to either legacy layout.
+    this.#legacyPartitionPaths = Object.freeze([
+      knowledgeIndexLegacyCompactPartitionPath(
+        options.hanakoHome,
+        workspaceFingerprint,
+        this.#sourceFingerprint,
+      ),
+      knowledgeIndexLegacyHexPartitionPath(
+        options.hanakoHome,
+        workspaceFingerprint,
+        this.#sourceFingerprint,
+      ),
+    ]);
+    for (const legacyPartitionPath of this.#legacyPartitionPaths) {
+      assertExistingManagedDirectory(
+        options.hanakoHome,
+        path.relative(options.hanakoHome, legacyPartitionPath),
+        this.#fileSystem,
+      );
+    }
     ensureManagedDirectory(
       options.hanakoHome,
       path.relative(options.hanakoHome, this.#partitionPath),
@@ -472,8 +611,12 @@ export class KnowledgeIndexStore {
 
     let database: DatabaseLike | null = null;
     try {
-      database = new Database(buildPath) as unknown as DatabaseLike;
+      database = new Database(sqliteDatabasePath(buildPath)) as unknown as DatabaseLike;
       configureDatabase(database);
+      // An unpublished build is disposable on crash; NORMAL keeps each bulk
+      // indexing slice responsive. Publication restores FULL before metadata
+      // and checkpoint durability are asserted.
+      database.pragma("synchronous = OFF");
       createSchema(database);
       const createdAtMs = this.#now();
       writeMeta(database, {
@@ -515,33 +658,48 @@ export class KnowledgeIndexStore {
   }
 
   acquireQueryLease(): KnowledgeIndexQueryLease {
-    const current = this.#readCurrent();
+    const cached = this.#queryManifestCache;
+    const current = cached && this.#now() - cached.cachedAtMs < 1_000
+      ? {
+        manifest: cached.manifest,
+        partitionPath: cached.partitionPath,
+        databaseReadable: true,
+      }
+      : this.#readCurrent();
     if (!current.manifest || !current.databaseReadable) {
       throw indexUnavailable("knowledge index generation is unavailable");
     }
+    this.#queryManifestCache = {
+      manifest: current.manifest,
+      partitionPath: current.partitionPath,
+      cachedAtMs: this.#now(),
+    };
     const generationId = current.manifest.generationId;
-    const generationPath = this.#generationPath(generationId);
+    const generationPath = this.#generationPath(
+      generationId,
+      current.partitionPath,
+    );
     let database: DatabaseLike;
     try {
-      database = new Database(generationPath, {
+      database = new Database(sqliteDatabasePath(generationPath), {
         readonly: true,
         fileMustExist: true,
       }) as unknown as DatabaseLike;
-      configureDatabase(database);
+      configureReadOnlyDatabase(database);
     } catch {
       throw indexUnavailable("knowledge index generation is unavailable");
     }
-    this.#leaseCounts.set(
-      generationId,
-      (this.#leaseCounts.get(generationId) ?? 0) + 1,
-    );
+    const leaseKey = this.#leaseKey(current.partitionPath, generationId);
+    this.#leaseCounts.set(leaseKey, (this.#leaseCounts.get(leaseKey) ?? 0) + 1);
     return new KnowledgeIndexQueryLease({
       database,
       manifest: current.manifest,
+      searchCandidateCache: this.#searchCandidateCache,
+      searchDisplayCache: this.#searchDisplayCache,
       release: () => {
-        const remaining = (this.#leaseCounts.get(generationId) ?? 1) - 1;
-        if (remaining > 0) this.#leaseCounts.set(generationId, remaining);
-        else this.#leaseCounts.delete(generationId);
+        const remaining = (this.#leaseCounts.get(leaseKey) ?? 1) - 1;
+        if (remaining > 0) this.#leaseCounts.set(leaseKey, remaining);
+        else this.#leaseCounts.delete(leaseKey);
       },
     });
   }
@@ -550,6 +708,9 @@ export class KnowledgeIndexStore {
     lastCompleteSequence: number;
     changes: readonly KnowledgeIndexIncrementalChange[];
   }): void {
+    this.#queryManifestCache = null;
+    this.#searchCandidateCache.clear();
+    this.#searchDisplayCache.clear();
     if (this.#activeRebuild) {
       throw indexUnavailable(
         "knowledge index incremental update waits for active rebuild",
@@ -565,6 +726,9 @@ export class KnowledgeIndexStore {
     const beforeLock = this.#readCurrent();
     if (!beforeLock.manifest || !beforeLock.databaseReadable) {
       throw indexUnavailable("knowledge index generation is unavailable");
+    }
+    if (beforeLock.partitionPath !== this.#partitionPath) {
+      throw indexUnavailable("knowledge index legacy partition requires rebuild");
     }
     if (
       beforeLock.health.state !== "ready"
@@ -582,6 +746,7 @@ export class KnowledgeIndexStore {
       if (
         !current.manifest
         || !current.databaseReadable
+        || current.partitionPath !== this.#partitionPath
         || current.manifest.generationId
           !== beforeLock.manifest.generationId
       ) {
@@ -591,7 +756,7 @@ export class KnowledgeIndexStore {
       const generationPath = this.#generationPath(
         current.manifest.generationId,
       );
-      database = new Database(generationPath, {
+      database = new Database(sqliteDatabasePath(generationPath), {
         fileMustExist: true,
       }) as unknown as DatabaseLike;
       configureDatabase(database);
@@ -670,7 +835,10 @@ export class KnowledgeIndexStore {
   }
 
   cleanupObsoleteGenerations(): readonly string[] {
-    const current = this.#readCurrent().manifest?.generationId;
+    const currentState = this.#readCurrent();
+    const current = currentState.partitionPath === this.#partitionPath
+      ? currentState.manifest?.generationId
+      : undefined;
     const candidates = this.#generationArtifacts()
       .filter((artifact) => artifact.generationId !== current)
       .sort((left, right) => right.mtimeMs - left.mtimeMs);
@@ -679,7 +847,9 @@ export class KnowledgeIndexStore {
       if (
         index === 0
         || this.#now() - artifact.mtimeMs < KNOWLEDGE_INDEX_BUILD_RETENTION_MS
-        || (this.#leaseCounts.get(artifact.generationId) ?? 0) > 0
+        || (this.#leaseCounts.get(
+          this.#leaseKey(this.#partitionPath, artifact.generationId),
+        ) ?? 0) > 0
       ) {
         continue;
       }
@@ -695,6 +865,9 @@ export class KnowledgeIndexStore {
     rebuild: KnowledgeIndexRebuild,
     lastCompleteSequence: number,
   ): void {
+    this.#queryManifestCache = null;
+    this.#searchCandidateCache.clear();
+    this.#searchDisplayCache.clear();
     this.#assertActive(rebuild);
     const sequence = validSequence(
       lastCompleteSequence,
@@ -706,6 +879,7 @@ export class KnowledgeIndexStore {
     rebuild[REBUILD_ASSERT_HEALTHY]();
     let publishedGenerationPath: string | null = null;
     try {
+      rebuildInternals(rebuild).database.pragma("synchronous = FULL");
       writeMetaValue(
         rebuildInternals(rebuild).database,
         "last_complete_sequence",
@@ -715,14 +889,22 @@ export class KnowledgeIndexStore {
         rebuildInternals(rebuild).database,
         this.#sourceFingerprint,
       );
+      // Builds always start with the production 5s SQLite busy timeout. Tests
+      // can use a shorter bounded wait to exercise the same fail-closed
+      // checkpoint result without consuming the full test budget; this
+      // connection closes immediately after publication either way.
+      rebuildInternals(rebuild).database.pragma(
+        `busy_timeout = ${this.#checkpointBusyTimeoutMs}`,
+      );
       const checkpoint = checkpointTruncate(rebuildInternals(rebuild).database);
       if (checkpoint.busy !== 0 || checkpoint.log !== checkpoint.checkpointed) {
         throw new Error("knowledge index checkpoint remained busy");
       }
-      validateCompleteGeneration(
-        rebuildInternals(rebuild).database,
-        this.#sourceFingerprint,
-      );
+      // The complete generation was validated immediately before the
+      // checkpoint. A successful checkpoint only transfers those validated
+      // pages from WAL to the main file; it cannot alter schema or metadata.
+      // Avoid running the same integrity/count scans twice on the critical
+      // publication path.
       rebuildInternals(rebuild).database.close();
       const buildPath = this.#buildPath(rebuild.rebuildId);
       rejectRequiredSidecar(buildPath, this.#fileSystem);
@@ -800,21 +982,44 @@ export class KnowledgeIndexStore {
     }
   }
 
-  #readCurrent(): {
-    manifest: KnowledgeIndexManifest | null;
-    databaseReadable: boolean;
-    health: KnowledgeIndexHealth;
-  } {
-    const manifestPath = path.join(this.#partitionPath, MANIFEST_FILE);
+  #readCurrent(): CurrentIndexState {
+    const canonical = this.#readCurrentAt(this.#partitionPath);
+    // A canonical manifest, including an invalid or unreadable one, is
+    // authoritative. Falling through in that case would hide corruption and
+    // make an old cache unexpectedly mask a failed current generation.
+    if (canonical.manifest || canonical.health.state !== "unavailable") {
+      return canonical;
+    }
+    for (const partitionPath of this.#legacyPartitionPaths) {
+      const legacy = this.#readCurrentAt(partitionPath);
+      if (!legacy.manifest && legacy.health.state === "unavailable") continue;
+      if (legacy.health.state !== "ready") return legacy;
+      // Keep a valid legacy cache queryable while ensuring the next indexing
+      // action performs a source-of-truth rebuild into the canonical layout.
+      return Object.freeze({
+        ...legacy,
+        health: Object.freeze({
+          state: "stale" as const,
+          generationId: legacy.health.generationId,
+          reason: "legacy_partition",
+        }),
+      });
+    }
+    return canonical;
+  }
+
+  #readCurrentAt(partitionPath: string): CurrentIndexState {
+    const manifestPath = path.join(partitionPath, MANIFEST_FILE);
     if (!this.#fileSystem.exists(manifestPath)) {
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest: null,
         databaseReadable: false,
         health: Object.freeze({
           state: "unavailable",
           reason: "no_ready_generation",
         }),
-      };
+      });
     }
     let manifest: KnowledgeIndexManifest;
     try {
@@ -827,16 +1032,20 @@ export class KnowledgeIndexStore {
         this.#sourceFingerprint,
       );
     } catch {
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest: null,
         databaseReadable: false,
         health: Object.freeze({
           state: "corrupt",
           reason: "manifest_invalid",
         }),
-      };
+      });
     }
-    const generationPath = this.#generationPath(manifest.generationId);
+    const generationPath = this.#generationPath(
+      manifest.generationId,
+      partitionPath,
+    );
     let database: DatabaseLike | null = null;
     try {
       const generationStat = this.#fileSystem.lstat(generationPath);
@@ -844,7 +1053,8 @@ export class KnowledgeIndexStore {
         throw new Error("generation is not a regular file");
       }
       validateWalSidecar(generationPath, this.#fileSystem);
-      database = new Database(generationPath, {
+      removeStaleReadSidecars(generationPath, this.#fileSystem);
+      database = new Database(sqliteDatabasePath(generationPath), {
         readonly: true,
         fileMustExist: true,
       }) as unknown as DatabaseLike;
@@ -867,7 +1077,8 @@ export class KnowledgeIndexStore {
         schemaVersion !== KNOWLEDGE_INDEX_SCHEMA_VERSION
         || manifest.schemaVersion !== KNOWLEDGE_INDEX_SCHEMA_VERSION
       ) {
-        return {
+        return Object.freeze({
+          partitionPath,
           manifest,
           databaseReadable: true,
           health: Object.freeze({
@@ -875,12 +1086,13 @@ export class KnowledgeIndexStore {
             generationId: manifest.generationId,
             reason: "schema_version_mismatch",
           }),
-        };
+        });
       }
       try {
         validateSchema(database);
       } catch {
-        return {
+        return Object.freeze({
+          partitionPath,
           manifest,
           databaseReadable: true,
           health: Object.freeze({
@@ -888,13 +1100,14 @@ export class KnowledgeIndexStore {
             generationId: manifest.generationId,
             reason: "schema_contract_mismatch",
           }),
-        };
+        });
       }
       if (
         meta.extractor_contract_version !== this.#extractorContractVersion
         || manifest.extractorContractVersion !== this.#extractorContractVersion
       ) {
-        return {
+        return Object.freeze({
+          partitionPath,
           manifest,
           databaseReadable: true,
           health: Object.freeze({
@@ -902,9 +1115,10 @@ export class KnowledgeIndexStore {
             generationId: manifest.generationId,
             reason: "extractor_contract_mismatch",
           }),
-        };
+        });
       }
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest,
         databaseReadable: true,
         health: Object.freeze({
@@ -912,9 +1126,10 @@ export class KnowledgeIndexStore {
           generationId: manifest.generationId,
           sequence: Number(meta.last_complete_sequence),
         }),
-      };
+      });
     } catch {
-      return {
+      return Object.freeze({
+        partitionPath,
         manifest,
         databaseReadable: false,
         health: Object.freeze({
@@ -922,7 +1137,7 @@ export class KnowledgeIndexStore {
           generationId: manifest.generationId,
           reason: "generation_integrity_failed",
         }),
-      };
+      });
     } finally {
       try {
         database?.close();
@@ -1123,11 +1338,15 @@ export class KnowledgeIndexStore {
     return path.join(this.#partitionPath, `build-${rebuildId}.sqlite`);
   }
 
-  #generationPath(generationId: string): string {
+  #generationPath(generationId: string, partitionPath = this.#partitionPath): string {
     return path.join(
-      this.#partitionPath,
+      partitionPath,
       `generation-${validArtifactId(generationId, "generationId")}.sqlite`,
     );
+  }
+
+  #leaseKey(partitionPath: string, generationId: string): string {
+    return `${partitionPath}\u0000${generationId}`;
   }
 
   #safeRemove(target: string, recursive = false): void {
@@ -1176,8 +1395,25 @@ export class KnowledgeIndexRebuild {
   }
 
   replaceResource(document: KnowledgeIndexResourceDocument): void {
+    this.replaceResources([document]);
+  }
+
+  replaceResources(documents: readonly KnowledgeIndexResourceDocument[]): void {
     this[REBUILD_ASSERT_HEALTHY]();
-    replaceResourceDocument(rebuildInternals(this).database, document);
+    if (documents.length === 0) return;
+    const database = rebuildInternals(this).database;
+    const statements = resourceDocumentStatements(database);
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const document of documents) {
+        this[REBUILD_ASSERT_HEALTHY]();
+        replaceResourceDocumentRows(database, document, statements);
+      }
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   deleteResource(relativePath: string): void {
@@ -1254,17 +1490,29 @@ export class KnowledgeIndexQueryLease {
   readonly #database: DatabaseLike;
   readonly #manifest: KnowledgeIndexManifest;
   readonly #release: () => void;
+  readonly #searchCandidateCache: Map<string, readonly KnowledgeIndexSearchQueryRow[]> | null;
+  readonly #searchDisplayCache: Map<string, Readonly<{
+    frontmatterJson: string | null;
+    bodyText: string | null;
+  }>> | null;
   #released = false;
 
   constructor(options: {
     database: DatabaseLike;
     manifest: KnowledgeIndexManifest;
     release: () => void;
+    searchCandidateCache?: Map<string, readonly KnowledgeIndexSearchQueryRow[]>;
+    searchDisplayCache?: Map<string, Readonly<{
+      frontmatterJson: string | null;
+      bodyText: string | null;
+    }>>;
   }) {
     this.generationId = options.manifest.generationId;
     this.#database = options.database;
     this.#manifest = options.manifest;
     this.#release = options.release;
+    this.#searchCandidateCache = options.searchCandidateCache ?? null;
+    this.#searchDisplayCache = options.searchDisplayCache ?? null;
   }
 
   inspect(): KnowledgeIndexInspection {
@@ -1358,6 +1606,7 @@ export class KnowledgeIndexQueryLease {
   queryBacklinks(
     relativePath: string,
     limit: number,
+    offset = 0,
   ): readonly KnowledgeIndexLinkQueryRow[] {
     this.#assertActive();
     return this.#queryLinks(`
@@ -1368,8 +1617,8 @@ export class KnowledgeIndexQueryLease {
       JOIN resources ON resources.resource_id = links.source_resource_id
       WHERE links.resolved_relative_path = ?
       ORDER BY resources.relative_path, links.ordinal
-      LIMIT ?
-    `, relativePath, limit);
+      LIMIT ? OFFSET ?
+    `, relativePath, limit, offset);
   }
 
   queryOutline(
@@ -1400,15 +1649,23 @@ export class KnowledgeIndexQueryLease {
     ftsQuery: string | null;
     offset: number;
     limit: number;
+    includeDisplayText?: boolean;
   }): readonly KnowledgeIndexSearchQueryRow[] {
     this.#assertActive();
+    const includeDisplayText = input.includeDisplayText !== false;
+    const cacheKey = includeDisplayText
+      ? null
+      : `${this.generationId}:${input.ftsQuery ?? "<all>"}:${input.offset}:${input.limit}`;
+    if (cacheKey && this.#searchCandidateCache?.has(cacheKey)) {
+      return this.#searchCandidateCache.get(cacheKey)!;
+    }
     const where = input.ftsQuery === null
       ? ""
       : "WHERE content_fts MATCH ?";
     const sql = `
       SELECT resources.resource_id, resources.relative_path,
         resources.basename, resources.kind, pages.title,
-        pages.frontmatter_json, pages.body_text,
+        ${includeDisplayText ? "pages.frontmatter_json, pages.body_text" : "NULL AS frontmatter_json, NULL AS body_text"},
         content_fts.title_fold, content_fts.path_fold,
         content_fts.metadata_fold, content_fts.body_fold
       FROM content_fts
@@ -1424,7 +1681,7 @@ export class KnowledgeIndexQueryLease {
     const rows = this.#database.prepare(sql).all(
       ...params,
     ) as Array<Record<string, unknown>>;
-    return Object.freeze(rows.map((row) => Object.freeze({
+    const result = Object.freeze(rows.map((row) => Object.freeze({
       resourceId: Number(row.resource_id),
       relativePath: String(row.relative_path),
       basename: String(row.basename),
@@ -1439,6 +1696,57 @@ export class KnowledgeIndexQueryLease {
       metadataFold: String(row.metadata_fold),
       bodyFold: String(row.body_fold),
     })));
+    if (cacheKey && this.#searchCandidateCache) {
+      this.#searchCandidateCache.set(cacheKey, result);
+      while (this.#searchCandidateCache.size > 64) {
+        const oldest = this.#searchCandidateCache.keys().next().value;
+        if (typeof oldest !== "string") break;
+        this.#searchCandidateCache.delete(oldest);
+      }
+    }
+    return result;
+  }
+
+  querySearchDisplayText(resourceIds: readonly number[]): ReadonlyMap<number, {
+    frontmatterJson: string | null;
+    bodyText: string | null;
+  }> {
+    this.#assertActive();
+    if (resourceIds.length === 0) return new Map();
+    const display = new Map<number, {
+      frontmatterJson: string | null;
+      bodyText: string | null;
+    }>();
+    const missing: number[] = [];
+    for (const resourceId of resourceIds) {
+      const cacheKey = `${this.generationId}:${resourceId}`;
+      const cached = this.#searchDisplayCache?.get(cacheKey);
+      if (cached) display.set(resourceId, cached);
+      else missing.push(resourceId);
+    }
+    if (missing.length === 0) return display;
+    const placeholders = missing.map(() => "?").join(",");
+    const rows = this.#database.prepare(`
+      SELECT resource_id, frontmatter_json, body_text
+      FROM pages
+      WHERE resource_id IN (${placeholders})
+    `).all(...missing) as Array<Record<string, unknown>>;
+    for (const row of rows) {
+      const resourceId = Number(row.resource_id);
+      const value = Object.freeze({
+        frontmatterJson: row.frontmatter_json === null ? null : String(row.frontmatter_json),
+        bodyText: row.body_text === null ? null : String(row.body_text),
+      });
+      display.set(resourceId, value);
+      if (!this.#searchDisplayCache) continue;
+      this.#searchDisplayCache.set(`${this.generationId}:${resourceId}`, value);
+      while (this.#searchDisplayCache.size > 256) {
+        const oldest = this.#searchDisplayCache.keys().next().value;
+        if (typeof oldest !== "string") break;
+        this.#searchDisplayCache.delete(oldest);
+      }
+    }
+    return display;
   }
 
   release(): void {
@@ -1455,11 +1763,12 @@ export class KnowledgeIndexQueryLease {
     sql: string,
     relativePath: string,
     limit: number,
+    offset?: number,
   ): readonly KnowledgeIndexLinkQueryRow[] {
-    const rows = this.#database.prepare(sql).all(
-      relativePath,
-      limit,
-    ) as Array<Record<string, unknown>>;
+    const statement = this.#database.prepare(sql);
+    const rows = (offset === undefined
+      ? statement.all(relativePath, limit)
+      : statement.all(relativePath, limit, offset)) as Array<Record<string, unknown>>;
     return Object.freeze(rows.map((row) => Object.freeze({
       relativePath: String(row.relative_path),
       ordinal: Number(row.ordinal),
@@ -1634,21 +1943,6 @@ export function foldSearchText(value: string): string {
   return value.normalize("NFC").toLocaleLowerCase("und");
 }
 
-function replaceResourceDocument(
-  database: DatabaseLike,
-  document: KnowledgeIndexResourceDocument,
-): void {
-  validateResourceDocument(document);
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    replaceResourceDocumentRows(database, document);
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
-}
-
 function applyIncrementalChange(
   database: DatabaseLike,
   change: KnowledgeIndexIncrementalChange,
@@ -1680,34 +1974,22 @@ function applyIncrementalChange(
 function replaceResourceDocumentRows(
   database: DatabaseLike,
   document: KnowledgeIndexResourceDocument,
+  statements: ResourceDocumentStatements = resourceDocumentStatements(database),
 ): void {
   const { resource } = document;
-  const existing = database.prepare(
-    "SELECT resource_id AS resourceId FROM resources WHERE relative_path = ?",
-  ).get(resource.relativePath) as { resourceId: number } | undefined;
+  const existing = statements.existingResource.get(resource.relativePath) as {
+    resourceId: number;
+  } | undefined;
   let resourceId: number;
   if (existing) {
     resourceId = Number(existing.resourceId);
-    database.prepare("DELETE FROM content_fts WHERE rowid = ?").run(resourceId);
-    database.prepare("DELETE FROM headings WHERE resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM links WHERE source_resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM tags WHERE resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM tasks WHERE resource_id = ?").run(resourceId);
-    database.prepare("DELETE FROM pages WHERE resource_id = ?").run(resourceId);
-    database.prepare(`
-        UPDATE resources
-           SET parent_path = ?,
-               basename = ?,
-               extension = ?,
-               kind = ?,
-               size_bytes = ?,
-               mtime_ms = ?,
-               version_token = ?,
-               content_state = ?,
-               content_reason = ?,
-               indexed_at_ms = ?
-         WHERE resource_id = ?
-    `).run(
+    statements.deleteFts.run(resourceId);
+    statements.deleteHeadings.run(resourceId);
+    statements.deleteLinks.run(resourceId);
+    statements.deleteTags.run(resourceId);
+    statements.deleteTasks.run(resourceId);
+    statements.deletePage.run(resourceId);
+    statements.updateResource.run(
       resource.parentPath,
       resource.basename,
       resource.extension,
@@ -1721,21 +2003,7 @@ function replaceResourceDocumentRows(
       resourceId,
     );
   } else {
-    const inserted = database.prepare(`
-        INSERT INTO resources (
-          relative_path,
-          parent_path,
-          basename,
-          extension,
-          kind,
-          size_bytes,
-          mtime_ms,
-          version_token,
-          content_state,
-          content_reason,
-          indexed_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    const inserted = statements.insertResource.run(
       resource.relativePath,
       resource.parentPath,
       resource.basename,
@@ -1752,11 +2020,7 @@ function replaceResourceDocumentRows(
   }
 
   if (document.page) {
-    database.prepare(`
-        INSERT INTO pages (
-          resource_id, title, frontmatter_json, body_text, body_hash
-        ) VALUES (?, ?, ?, ?, ?)
-    `).run(
+    statements.insertPage.run(
       resourceId,
       document.page.title,
       document.page.frontmatterJson,
@@ -1764,13 +2028,8 @@ function replaceResourceDocumentRows(
       document.page.bodyHash,
     );
   }
-  const insertHeading = database.prepare(`
-      INSERT INTO headings (
-        resource_id, ordinal, level, text, slug, from_offset, to_offset
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
   for (const heading of document.headings) {
-    insertHeading.run(
+    statements.insertHeading.run(
       resourceId,
       heading.ordinal,
       heading.level,
@@ -1780,20 +2039,8 @@ function replaceResourceDocumentRows(
       heading.toOffset,
     );
   }
-  const insertLink = database.prepare(`
-      INSERT INTO links (
-        source_resource_id,
-        ordinal,
-        link_kind,
-        raw_target,
-        resolved_relative_path,
-        fragment,
-        from_offset,
-        to_offset
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
   for (const link of document.links) {
-    insertLink.run(
+    statements.insertLink.run(
       resourceId,
       link.ordinal,
       link.linkKind,
@@ -1804,19 +2051,11 @@ function replaceResourceDocumentRows(
       link.toOffset,
     );
   }
-  const insertTag = database.prepare(`
-      INSERT INTO tags (resource_id, tag, origin) VALUES (?, ?, ?)
-    `);
   for (const tag of document.tags) {
-    insertTag.run(resourceId, tag.tag, tag.origin);
+    statements.insertTag.run(resourceId, tag.tag, tag.origin);
   }
-  const insertTask = database.prepare(`
-      INSERT INTO tasks (
-        resource_id, ordinal, checked, text, from_offset, to_offset
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `);
   for (const task of document.tasks) {
-    insertTask.run(
+    statements.insertTask.run(
       resourceId,
       task.ordinal,
       task.checked ? 1 : 0,
@@ -1825,11 +2064,7 @@ function replaceResourceDocumentRows(
       task.toOffset,
     );
   }
-  database.prepare(`
-      INSERT INTO content_fts (
-        rowid, resource_id, title_fold, path_fold, metadata_fold, body_fold
-      ) VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
+  statements.insertFts.run(
     resourceId,
     resourceId,
     document.search.titleFold,
@@ -1837,6 +2072,62 @@ function replaceResourceDocumentRows(
     document.search.metadataFold,
     document.search.bodyFold,
   );
+}
+
+function resourceDocumentStatements(database: DatabaseLike): ResourceDocumentStatements {
+  return {
+    existingResource: database.prepare(
+      "SELECT resource_id AS resourceId FROM resources WHERE relative_path = ?",
+    ),
+    deleteFts: database.prepare("DELETE FROM content_fts WHERE rowid = ?"),
+    deleteHeadings: database.prepare("DELETE FROM headings WHERE resource_id = ?"),
+    deleteLinks: database.prepare("DELETE FROM links WHERE source_resource_id = ?"),
+    deleteTags: database.prepare("DELETE FROM tags WHERE resource_id = ?"),
+    deleteTasks: database.prepare("DELETE FROM tasks WHERE resource_id = ?"),
+    deletePage: database.prepare("DELETE FROM pages WHERE resource_id = ?"),
+    updateResource: database.prepare(`
+      UPDATE resources
+         SET parent_path = ?, basename = ?, extension = ?, kind = ?,
+             size_bytes = ?, mtime_ms = ?, version_token = ?,
+             content_state = ?, content_reason = ?, indexed_at_ms = ?
+       WHERE resource_id = ?
+    `),
+    insertResource: database.prepare(`
+      INSERT INTO resources (
+        relative_path, parent_path, basename, extension, kind, size_bytes,
+        mtime_ms, version_token, content_state, content_reason, indexed_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertPage: database.prepare(`
+      INSERT INTO pages (
+        resource_id, title, frontmatter_json, body_text, body_hash
+      ) VALUES (?, ?, ?, ?, ?)
+    `),
+    insertHeading: database.prepare(`
+      INSERT INTO headings (
+        resource_id, ordinal, level, text, slug, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertLink: database.prepare(`
+      INSERT INTO links (
+        source_resource_id, ordinal, link_kind, raw_target,
+        resolved_relative_path, fragment, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertTag: database.prepare(
+      "INSERT INTO tags (resource_id, tag, origin) VALUES (?, ?, ?)",
+    ),
+    insertTask: database.prepare(`
+      INSERT INTO tasks (
+        resource_id, ordinal, checked, text, from_offset, to_offset
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `),
+    insertFts: database.prepare(`
+      INSERT INTO content_fts (
+        rowid, resource_id, title_fold, path_fold, metadata_fold, body_fold
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `),
+  };
 }
 
 function validateIncrementalRelativePath(relativePath: string): string {
@@ -1933,6 +2224,23 @@ function configureDatabase(database: DatabaseLike): void {
   ) {
     throw new Error("knowledge index SQLite pragma verification failed");
   }
+}
+
+// Query leases only read a published generation.  Reapplying writer pragmas to
+// every lease is both unnecessary and material for the multi-source search
+// path: journal mode, synchronous and foreign-key enforcement neither change
+// a read-only connection's semantics nor make its snapshot safer.  Keep the
+// reader bounded while its readonly open mode and the full durable writer
+// configuration remain in place for builds, publications and incremental
+// updates.
+function configureReadOnlyDatabase(database: DatabaseLike): void {
+  // `synchronous` is connection-local. Keep the observable published-index
+  // contract stable for inspection without reconfiguring journal mode or
+  // foreign-key enforcement on every reader.
+  database.pragma("synchronous = FULL");
+  database.pragma("busy_timeout = 5000");
+  database.pragma("temp_store = MEMORY");
+  database.pragma("foreign_keys = ON");
 }
 
 function readPragmas(database: DatabaseLike): {
@@ -2308,7 +2616,15 @@ function rejectRequiredSidecar(
     if (suffix === "-wal" && fileSystem.stat(sidecar).size > 0) {
       throw new Error("knowledge index WAL still contains publishable content");
     }
-    fileSystem.remove(sidecar, { force: true });
+    try {
+      fileSystem.remove(sidecar, { force: true });
+    } catch {
+      // After the database is closed, Windows can retain a transient handle
+      // for an empty WAL/SHM sidecar. It is not part of the published
+      // generation (the database is renamed atomically) and abandoned-build
+      // cleanup will retry later. Never turn that harmless cleanup race into
+      // a failed publication; a non-empty WAL remains fail-closed above.
+    }
   }
 }
 
@@ -2343,6 +2659,31 @@ function validateWalSidecar(
     || (walStat.size - 32) % (pageSize + 24) !== 0
   ) {
     throw new Error("knowledge index WAL frame layout is invalid");
+  }
+}
+
+/**
+ * A published generation is immutable. Older partitions can nevertheless
+ * retain an empty WAL or a stale SHM file after a prior reader exits. SQLite
+ * does not need either sidecar when the WAL has no frames, and on Windows a
+ * copied stale SHM can make an otherwise valid legacy generation appear
+ * corrupt. Validate the WAL first, then remove only these harmless remnants
+ * before opening the read-only database.
+ */
+function removeStaleReadSidecars(
+  databasePath: string,
+  fileSystem: KnowledgeIndexFileSystem,
+): void {
+  const walPath = `${databasePath}-wal`;
+  if (fileSystem.exists(walPath) && fileSystem.stat(walPath).size > 0) return;
+  for (const suffix of ["-wal", "-shm"]) {
+    try {
+      fileSystem.remove(`${databasePath}${suffix}`, { force: true });
+    } catch {
+      // A concurrently closing reader can still hold a stale sidecar on
+      // Windows. It is best-effort cleanup; database validation remains
+      // fail-closed if that file is genuinely needed or malformed.
+    }
   }
 }
 
@@ -2417,6 +2758,37 @@ function readLockOwner(
     });
   } catch {
     return null;
+  }
+}
+
+function assertExistingManagedDirectory(
+  hanakoHome: string,
+  relativeDirectory: string,
+  fileSystem: KnowledgeIndexFileSystem,
+): void {
+  const segments = relativeDirectory.split(path.sep).filter(Boolean);
+  let current = hanakoHome;
+  for (const segment of segments) {
+    if (
+      segment === "."
+      || segment === ".."
+      || segment.includes("/")
+      || segment.includes("\\")
+    ) {
+      throw new TypeError("knowledge index managed directory is invalid");
+    }
+    current = path.join(current, segment);
+    try {
+      const entry = fileSystem.lstat(current);
+      if (!entry.isDirectory() || entry.isSymbolicLink()) {
+        throw indexUnavailable(
+          "knowledge index managed directory is unavailable",
+        );
+      }
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") return;
+      throw error;
+    }
   }
 }
 
@@ -2519,6 +2891,13 @@ function errorCode(error: unknown): string | undefined {
   return isRecord(error) && typeof error.code === "string"
     ? error.code
     : undefined;
+}
+
+function isWindowsUnsupportedFileFsync(error: unknown): boolean {
+  if (process.platform !== "win32") return false;
+  return ["EPERM", "EINVAL", "ENOTSUP", "EOPNOTSUPP"].includes(
+    errorCode(error) ?? "",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

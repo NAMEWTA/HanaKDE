@@ -7,6 +7,7 @@ import type {
 } from "./types.ts";
 
 type EventEmit = (event: ResourceEvent, sessionPath?: string | null) => void;
+type EventSubscriber = (event: ResourceEvent) => void;
 
 type ResourceEventBusOptions = {
   emit: EventEmit;
@@ -27,6 +28,7 @@ export class ResourceEventBus {
   declare _retentionSize: number;
   declare _recentChangedKeys: Set<string>;
   declare _recentEvents: ResourceEvent[];
+  declare _subscribers: Set<EventSubscriber>;
 
   constructor({ emit, now = () => new Date(), dedupeSize = 512, retentionSize = 1000 }: ResourceEventBusOptions) {
     if (typeof emit !== "function") throw new Error("ResourceEventBus requires emit");
@@ -37,6 +39,19 @@ export class ResourceEventBus {
     this._retentionSize = Math.max(0, Math.floor(Number(retentionSize) || 0));
     this._recentChangedKeys = new Set();
     this._recentEvents = [];
+    this._subscribers = new Set();
+  }
+
+  subscribe(subscriber: EventSubscriber): () => void {
+    if (typeof subscriber !== "function") {
+      throw new TypeError("ResourceEventBus subscriber must be a function");
+    }
+    this._subscribers.add(subscriber);
+    return () => this._subscribers.delete(subscriber);
+  }
+
+  latestSequence(): number {
+    return this._sequence;
   }
 
   changed(input: ChangedInput): ResourceChangedEvent | null {
@@ -51,6 +66,7 @@ export class ResourceEventBus {
       occurredAt: this._now().toISOString(),
     };
     this._rememberEvent(event);
+    this._notifySubscribers(event);
     this._emit(event, input.sessionPath ?? null);
     return event;
   }
@@ -63,6 +79,7 @@ export class ResourceEventBus {
       occurredAt: this._now().toISOString(),
     };
     this._rememberEvent(event);
+    this._notifySubscribers(event);
     this._emit(event, input.sessionPath ?? null);
     return event;
   }
@@ -75,6 +92,7 @@ export class ResourceEventBus {
       occurredAt: this._now().toISOString(),
     };
     this._rememberEvent(event);
+    this._notifySubscribers(event);
     this._emit(event, input.sessionPath ?? null);
     return event;
   }
@@ -119,18 +137,37 @@ export class ResourceEventBus {
       this._recentEvents.shift();
     }
   }
+
+  _notifySubscribers(event: ResourceEvent): void {
+    for (const subscriber of this._subscribers) {
+      try {
+        subscriber(event);
+      } catch {
+        // Runtime projections observe committed resource mutations. Their
+        // failures must not turn the producer operation into a false failure.
+      }
+    }
+  }
 }
 
 function changedDedupeKey(input: ChangedInput): string | null {
   const version = input.version;
   if (!version) return null;
-  return JSON.stringify({
-    resourceKey: input.resourceKey,
-    changeType: input.changeType,
-    mtimeMs: version.mtimeMs,
-    size: version.size,
-    sha256: version.sha256,
-    etag: version.etag,
-    sequence: version.sequence,
-  });
+  // Delimiter-safe, type-tagged fields preserve the prior structural key
+  // semantics without allocating an object and serializing it for every
+  // filesystem notification in a burst.
+  return [
+    input.resourceKey,
+    input.changeType,
+    version.mtimeMs,
+    version.size,
+    version.sha256,
+    version.etag,
+    version.sequence,
+  ].map((value) => {
+    if (value === undefined) return "u";
+    if (value === null) return "n";
+    const text = String(value);
+    return `${typeof value}:${text.length}:${text}`;
+  }).join("|");
 }

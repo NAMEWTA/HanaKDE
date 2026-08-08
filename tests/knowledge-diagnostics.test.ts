@@ -32,7 +32,14 @@ describe("Knowledge stable errors", () => {
   it.each([
     ["resource_not_found", "knowledge_resource_not_found", 404],
     ["target_already_exists", "knowledge_resource_conflict", 409],
+    ["resource_version_conflict", "knowledge_version_conflict", 409],
+    ["resource_changed_during_read", "knowledge_version_conflict", 409],
     ["resource_access_denied", "knowledge_resource_out_of_scope", 403],
+    ["symbolic_link_not_allowed", "knowledge_resource_out_of_scope", 403],
+    ["not_a_file", "knowledge_operation_precondition_failed", 412],
+    ["not_a_directory", "knowledge_operation_precondition_failed", 412],
+    ["invalid_read_range", "knowledge_operation_precondition_failed", 412],
+    ["unsupported_file_kind", "knowledge_operation_precondition_failed", 412],
     ["provider_not_available", "knowledge_resource_unavailable", 503],
   ])("maps Desktop and Server failures to one code", (legacyCode, expectedCode, status) => {
     const desktop = toKnowledgeResourceIOError(new ResourceIOError("desktop path /Users/alice/secret.md", { code: legacyCode }));

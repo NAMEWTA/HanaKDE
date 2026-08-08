@@ -82,6 +82,9 @@ describe('KnowledgeEditorGroups', () => {
       'knowledge.document.loading': 'Loading document…',
       'knowledge.document.editorLabel': `Edit ${vars?.name}`,
       'knowledge.document.noticesLabel': 'Document notices',
+      'knowledge.asset.label': 'Asset viewer',
+      'knowledge.asset.loading': 'Loading asset…',
+      'knowledge.asset.openDefault': 'Open with default application',
       'knowledge.unsaved.description': `Unsaved ${vars?.document}`,
     })[key] ?? key) as typeof window.t;
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -96,13 +99,16 @@ describe('KnowledgeEditorGroups', () => {
     vi.unstubAllGlobals();
   });
 
-  function setup(sources: KnowledgeSourceDto[] = [{
-    sourceKey: 'main',
-    displayName: 'Main workspace',
-    role: 'main',
-    capabilities: ['read', 'write', 'watch'],
-    availability: 'available',
-  }]) {
+  function setup(
+    sources: KnowledgeSourceDto[] = [{
+      sourceKey: 'main',
+      displayName: 'Main workspace',
+      role: 'main',
+      capabilities: ['read', 'write', 'watch'],
+      availability: 'available',
+    }],
+    client = createClient(),
+  ) {
     const registry = createKnowledgeDocumentRegistry({
       ownerId: 'owner',
       windowId: 'groups-test',
@@ -112,7 +118,7 @@ describe('KnowledgeEditorGroups', () => {
       <KnowledgeEditorGroups
         ref={controller}
         registry={registry}
-        client={createClient()}
+        client={client}
         workspaceKey="workspace-a"
         sources={sources}
         onLocateResource={vi.fn()}
@@ -124,6 +130,168 @@ describe('KnowledgeEditorGroups', () => {
     );
     return { registry, controller };
   }
+
+  it('uses normal Wikilink navigation for current-view outbound opens', async () => {
+    const client = createClient();
+    vi.mocked(client.resources.stat).mockImplementation(async (nextAddress) => ({
+      exists: nextAddress.relativePath !== 'notes/New.md',
+      isDirectory: false,
+      version: { etag: `etag:${nextAddress.relativePath}`, size: 0 },
+    }));
+    const { controller, registry } = setup(undefined, client);
+    let opened = { viewId: '', groupId: '', reused: false };
+    act(() => {
+      opened = controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[opened.viewId]).toBeDefined();
+    });
+
+    let result = false;
+    await act(async () => {
+      result = await controller.current!.openCurrentOutbound(
+        {
+          sourceKey: 'main',
+          relativePath: 'notes/New.md',
+        },
+        opened.groupId,
+        null,
+        'wikilink',
+        false,
+      );
+    });
+
+    expect(result).toBe(true);
+    expect(registry.getState().sessions[
+      knowledgeDocumentKey({
+        sourceKey: 'main',
+        relativePath: 'notes/New.md',
+      })
+    ]).toMatchObject({
+      buffer: '',
+      baseline: '',
+      pendingCreate: true,
+    });
+    expect(screen.getByRole('tab', { name: 'Preview New.md' }))
+      .toBeInTheDocument();
+  });
+
+  it('creates and consumes a native grant from the asset default-open action', async () => {
+    const client = createClient();
+    client.createNativeGrant = vi.fn(async () => ({
+      grantId: '00000000-0000-4000-8000-000000000051',
+      expiresAt: Date.now() + 60_000,
+    }));
+    const knowledgeNativeInvoke = vi.fn(async () => ({
+      ok: true as const,
+      cancelled: false as const,
+      result: { action: 'openDefault' },
+    }));
+    vi.stubGlobal('hana', { knowledgeNativeInvoke });
+    const { controller } = setup(undefined, client);
+    act(() => {
+      controller.current!.openResource({
+        address: { sourceKey: 'main', relativePath: 'notes/asset.txt' },
+        sourceName: 'Main workspace',
+        kind: 'asset',
+      }, { mode: 'pinned' });
+    });
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Open with default application',
+    }));
+    await waitFor(() => {
+      expect(client.createNativeGrant).toHaveBeenCalledWith(
+        'openDefault',
+        { sourceKey: 'main', relativePath: 'notes/asset.txt' },
+      );
+      expect(knowledgeNativeInvoke).toHaveBeenCalledWith({
+        action: 'openDefault',
+        grantId: '00000000-0000-4000-8000-000000000051',
+      });
+    });
+  });
+
+  it('reveals live outline offsets and opens saved backlinks with normal preview reuse', async () => {
+    const { controller, registry } = setup();
+    let current = { viewId: '', groupId: '', reused: false };
+    act(() => {
+      current = controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[current.viewId]).toBeDefined();
+      expect(screen.getByLabelText('Edit A.md')).toBeInTheDocument();
+    });
+
+    act(() => {
+      expect(controller.current!.revealOffset(current.viewId, 3)).toBe(true);
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[current.viewId]?.cursor).toBe(3);
+    });
+
+    let openedBacklink = false;
+    act(() => {
+      openedBacklink = controller.current!.openBacklink(
+        resource('notes/B.md'),
+        current.groupId,
+        2,
+      );
+    });
+    expect(openedBacklink).toBe(true);
+    expect(screen.getByRole('tab', { name: 'Preview B.md' }))
+      .toBeInTheDocument();
+    const bKey = knowledgeDocumentKey(resource('notes/B.md').address);
+    await waitFor(() => {
+      expect(Object.values(registry.getState().views).some(
+        view => view.sessionKey === bKey,
+      )).toBe(true);
+    });
+    act(() => {
+      openedBacklink = controller.current!.openBacklink(
+        resource('notes/B.md'),
+        current.groupId,
+        2,
+      );
+    });
+    expect(openedBacklink).toBe(true);
+    await waitFor(() => {
+      expect(Object.values(registry.getState().views).find(
+        view => view.sessionKey === bKey,
+      )?.cursor).toBe(2);
+    });
+
+    const bView = Object.values(registry.getState().views).find(
+      view => view.sessionKey === bKey,
+    )!;
+    act(() => {
+      registry.getState().replaceDocumentBuffer(bView.id, 'prefix # B dirty\n');
+      controller.current!.revealOffset(bView.id, 1);
+      controller.current!.openResource(resource('notes/A.md'), {
+        mode: 'pinned',
+      });
+    });
+    await waitFor(() => {
+      expect(registry.getState().sessions[bKey]?.dirty).toBe(true);
+      expect(registry.getState().views[bView.id]?.cursor).toBe(1);
+    });
+
+    act(() => {
+      openedBacklink = controller.current!.openBacklink(
+        resource('notes/B.md'),
+        current.groupId,
+        6,
+      );
+    });
+    expect(openedBacklink).toBe(true);
+    expect(registry.getState().views[bView.id]?.cursor).toBe(1);
+    expect(registry.getState().sessions[bKey]?.buffer)
+      .toBe('prefix # B dirty\n');
+  });
 
   it('starts with one empty group and keeps multiple complete-filename tabs', async () => {
     const { controller } = setup();
@@ -364,6 +532,40 @@ describe('KnowledgeEditorGroups', () => {
     ]).toMatchObject({ buffer: '# A dirty\n', dirty: true });
     expect(registry.getState().views[first.viewId]).toBeDefined();
     expect(registry.getState().views[second.viewId]).toBeDefined();
+  });
+
+  it('resolves only dirty documents beneath resources selected for removal', async () => {
+    const { controller, registry } = setup();
+    let inside = { viewId: '', groupId: '', reused: false };
+    let outside = { viewId: '', groupId: '', reused: false };
+    act(() => {
+      inside = controller.current!.openResource(resource('notes/A.md'), { mode: 'pinned' });
+      outside = controller.current!.openResource(resource('other/B.md'), { mode: 'pinned' });
+    });
+    await waitFor(() => {
+      expect(registry.getState().views[inside.viewId]).toBeDefined();
+      expect(registry.getState().views[outside.viewId]).toBeDefined();
+    });
+    act(() => {
+      registry.getState().replaceDocumentBuffer(inside.viewId, '# changed inside');
+      registry.getState().replaceDocumentBuffer(outside.viewId, '# changed outside');
+    });
+
+    let result!: Promise<boolean>;
+    act(() => {
+      result = controller.current!.prepareResourceRemoval([
+        { sourceKey: 'main', relativePath: 'notes' },
+      ]);
+    });
+    expect(screen.getByText('Unsaved Main workspace / notes/A.md')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'knowledge.unsaved.discard' }));
+    await act(async () => expect(result).resolves.toBe(true));
+    expect(registry.getState().sessions[knowledgeDocumentKey({
+      sourceKey: 'main', relativePath: 'notes/A.md',
+    })].dirty).toBe(false);
+    expect(registry.getState().sessions[knowledgeDocumentKey({
+      sourceKey: 'main', relativePath: 'other/B.md',
+    })].dirty).toBe(true);
   });
 
   it('rejects a concurrent close request without replacing the active decision', async () => {

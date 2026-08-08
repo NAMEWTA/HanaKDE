@@ -143,8 +143,12 @@ describe("persistent store registry", () => {
     expect(knowledgeIndex.epochPolicy).toBe("regenerable");
     expect(knowledgeIndex.affectedByEpochMigration).toBe(false);
     expect(knowledgeIndex.pathPattern).toBe(
-      "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+      "knowledge-workspace/index/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
     );
+    expect(knowledgeIndex.pathPatterns).toEqual(expect.arrayContaining([
+      "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+      "knowledge-workspace/index/v1/{workspaceFingerprintHex}/{sourceFingerprintHex}/**",
+    ]));
 
     const pluginData = PERSISTENT_STORES.find((store) => store.id === "plugin-runtime-data")!;
     expect(pluginData.pathExclusions).toEqual([

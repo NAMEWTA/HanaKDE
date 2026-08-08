@@ -66,11 +66,31 @@ describe("quality gates", () => {
 
     const lintIndex = runSteps.indexOf("npm run lint");
     const buildIndex = runSteps.indexOf("npm run build:renderer");
-    const testIndex = runSteps.indexOf("npm test");
+    // Knowledge's heavyweight filesystem fixture, the independent
+    // esbuild/NFT closure census, and the jsdom/store workspace panel
+    // regression each run in dedicated single-worker CI steps. The general
+    // suite must still run with the repository's four-worker gate, before
+    // those focused gates.
+    const testIndex = runSteps.findIndex((run) => (
+      typeof run === "string" && run.startsWith("npm test -- --maxWorkers=4")
+    ));
+    const generalTest = runSteps[testIndex];
 
     expect(lintIndex).toBeGreaterThan(-1);
     expect(lintIndex).toBeLessThan(buildIndex);
     expect(lintIndex).toBeLessThan(testIndex);
+    expect(generalTest).toContain("--exclude tests/knowledge-performance-fixtures.test.ts");
+    expect(generalTest).toContain("--exclude tests/cli-closure-census.test.ts");
+    expect(generalTest).toContain("--exclude desktop/src/react/__tests__/components/DeskSection.test.tsx");
+    expect(runSteps).toContain(
+      "npx vitest run desktop/src/react/__tests__/components/DeskSection.test.tsx --maxWorkers=1",
+    );
+    expect(runSteps).toContain(
+      "npx vitest run tests/knowledge-performance-fixtures.test.ts --maxWorkers=1",
+    );
+    expect(runSteps).toContain(
+      "npx vitest run tests/cli-closure-census.test.ts --maxWorkers=1",
+    );
   });
 
   it("keeps build host, bundled server runtime, and bundle targets aligned on Node 24", () => {

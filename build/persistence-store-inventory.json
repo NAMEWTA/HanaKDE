@@ -913,9 +913,11 @@
     {
       "id": "knowledge-index-generations",
       "ownerModule": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "pathPattern": "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+      "pathPattern": "knowledge-workspace/index/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
       "pathPatterns": [
-        "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**"
+        "knowledge-workspace/index/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+        "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+        "knowledge-workspace/index/v1/{workspaceFingerprintHex}/{sourceFingerprintHex}/**"
       ],
       "pathExclusions": [],
       "pathKind": "tree",
@@ -945,11 +947,11 @@
       "firstPossibleWritePhase": "runtime_ready",
       "epochPolicy": "regenerable",
       "checkpointPolicy": "Exclude; every source partition is a discardable cache rebuilt only from revalidated saved disk resources.",
-      "restorePolicy": "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition.",
+      "restorePolicy": "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition. Legacy kw/i/v1 and hexadecimal v1 partitions are read-only compatibility sources and are never write targets.",
       "affectedByEpochMigration": false,
       "bootstrapSafety": null,
       "preCoordinatorReadProjection": null,
-      "identityContract": "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation.",
+      "identityContract": "workspace/source ProviderRootIdentity fingerprints select one isolated canonical Base64URL partition below knowledge-workspace/index/v1; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation. Legacy kw/i/v1 and hexadecimal partitions remain read-compatible until rebuild.",
       "exemption": null
     },
     {
@@ -965,7 +967,7 @@
       "schemaSource": {
         "kind": "directory-contract",
         "module": "core/knowledge-workspace/durable-operation-journal.ts",
-        "contract": "schemaVersion 1 journal/result validators, atomic current/previous publication, and operation directory retention protocol"
+        "contract": "schemaVersion 1 refactor/trash and atomic journal/result validators, atomic current/previous publication, and shared operation directory retention protocol"
       },
       "schemaContract": {
         "kind": "protocol",
@@ -974,12 +976,16 @@
       },
       "openEntry": [
         "KnowledgeOperationCoordinator.recover",
-        "KnowledgeOperationCoordinator.plan"
+        "KnowledgeOperationCoordinator.plan",
+        "KnowledgeAtomicOperationCoordinator.recover",
+        "KnowledgeAtomicOperationCoordinator.plan"
       ],
       "migrationEntry": [],
       "protocolModules": [
         "lib/knowledge-workspace/knowledge-operation-plan.ts",
-        "core/knowledge-workspace/knowledge-operation-coordinator.ts"
+        "core/knowledge-workspace/knowledge-operation-coordinator.ts",
+        "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+        "core/knowledge-workspace/knowledge-atomic-operation-coordinator.ts"
       ],
       "firstPossibleOpenPhase": "runtime_ready",
       "firstPossibleWritePhase": "runtime_ready",
@@ -2900,7 +2906,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 357,
+      "line": 373,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(this.channelsDir, { recursive: true })",
       "reason": "Creates the channel root.",
@@ -2909,7 +2915,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 403,
+      "line": 419,
       "kind": "persistent-store-constructor",
       "excerpt": "new PreferencesManager({ userDir: this.userDir, agentsDir: this.agentsDir })",
       "reason": "Constructs the preferences owner.",
@@ -2918,7 +2924,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 404,
+      "line": 420,
       "kind": "persistent-store-constructor",
       "excerpt": "new InputDraftsStore({ hanakoHome: this.hanakoHome })",
       "reason": "Constructs draft/project stores.",
@@ -2927,7 +2933,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 422,
+      "line": 438,
       "kind": "persistent-store-constructor",
       "excerpt": "new SessionProjectCatalogStore({ userDir: this.userDir })",
       "reason": "Constructs draft/project stores.",
@@ -2936,7 +2942,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 655,
+      "line": 671,
       "kind": "persistent-store-constructor",
       "excerpt": "new TaskRegistry({ persistencePath: path.join(this.hanakoHome, \".ephemeral\", \"plugin-tasks.json\"), getSessionIdForPath: (sessionPath) => this.getSessionIdForPath(sessionPath), })",
       "reason": "Constructs the plugin task registry.",
@@ -2945,7 +2951,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 1332,
+      "line": 1483,
       "kind": "persistent-store-constructor",
       "excerpt": "new SessionManifestStore({ dbPath })",
       "reason": "Constructs the manifest store during engine construction.",
@@ -2954,7 +2960,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 1353,
+      "line": 1504,
       "kind": "persistent-store-constructor",
       "excerpt": "new SessionManifestStore({ dbPath })",
       "reason": "Constructs the manifest store during engine construction.",
@@ -2963,7 +2969,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 2297,
+      "line": 2448,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(skillsDir, { recursive: true })",
       "reason": "Creates the user skill root.",
@@ -2972,7 +2978,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 2479,
+      "line": 2630,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(filePath)",
       "reason": "Deletes an expired legacy ephemeral session JSONL locator.",
@@ -2981,7 +2987,7 @@
     },
     {
       "sourceFile": "core/engine.ts",
-      "line": 2533,
+      "line": 2688,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(pluginDevSourcesDir, { recursive: true })",
       "reason": "Creates the plugin development source root.",
@@ -3268,134 +3274,296 @@
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 293,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 197,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(this.#root, { recursive: true, mode: 0o700 })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 295,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 199,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(operationDir, { mode: 0o700 })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 306,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 211,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(operationDir, { recursive: true, force: true })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 345,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 241,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 384,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 285,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 422,
-      "kind": "remove-path",
-      "excerpt": "fs.rmSync(this.#operationDir(operationId), { recursive: true, force: true, })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
-      "storeId": "knowledge-operation-journal",
-      "exemptionId": null
-    },
-    {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 451,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 640,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(target, previousTemporary)",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 454,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 643,
       "kind": "rename",
       "excerpt": "fs.renameSync(previousTemporary, previous)",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 456,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 645,
       "kind": "rename",
       "excerpt": "fs.renameSync(temporary, target)",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 460,
-      "kind": "remove-path",
-      "excerpt": "fs.rmSync(temporary, { force: true })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
-      "storeId": "knowledge-operation-journal",
-      "exemptionId": null
-    },
-    {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 461,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 648,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(previousTemporary, { force: true })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 473,
-      "kind": "rename",
-      "excerpt": "fs.renameSync(temporary, target)",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
-      "storeId": "knowledge-operation-journal",
-      "exemptionId": null
-    },
-    {
-      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 477,
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 648,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(temporary, { force: true })",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 657,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(temporary, target)",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 660,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(temporary, { force: true })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "line": 667,
+      "kind": "write-file",
+      "excerpt": "fs.writeFileSync(handle, content, \"utf8\")",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
       "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
-      "line": 494,
+      "line": 497,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(this.#root, { recursive: true, mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 499,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(operationDir, { mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 510,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(operationDir, { recursive: true, force: true })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 595,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(this.#root, { recursive: true, mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 597,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(operationDir, { mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 608,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(operationDir, { recursive: true, force: true })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 630,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 647,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 682,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 714,
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 729,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(this.#operationDir(operationId), { recursive: true, force: true, })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 830,
+      "kind": "copy-file",
+      "excerpt": "fs.copyFileSync(target, previousTemporary)",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 833,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(previousTemporary, previous)",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 835,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(temporary, target)",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 839,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(temporary, { force: true })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 840,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(previousTemporary, { force: true })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 852,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(temporary, target)",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 856,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(temporary, { force: true })",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
+      "storeId": "knowledge-operation-journal",
+      "exemptionId": null
+    },
+    {
+      "sourceFile": "core/knowledge-workspace/durable-operation-journal.ts",
+      "line": 873,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(handle, content, \"utf8\")",
-      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      "reason": "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
       "storeId": "knowledge-operation-journal",
       "exemptionId": null
     },
     {
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
-      "line": 590,
+      "line": 608,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
@@ -3404,7 +3572,7 @@
     },
     {
       "sourceFile": "core/knowledge-workspace/source-registry.ts",
-      "line": 591,
+      "line": 609,
       "kind": "atomic-write",
       "excerpt": "atomicWriteSync(filePath, `${JSON.stringify(data, null, 2)}\\n`)",
       "reason": "Reads and atomically writes Knowledge Workspace source binding history.",
@@ -5339,7 +5507,7 @@
     },
     {
       "sourceFile": "desktop/bootstrap.cjs",
-      "line": 32,
+      "line": 39,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(diagnosticsDir, { recursive: true })",
       "reason": "Writes epoch-independent desktop launch diagnostics.",
@@ -5348,7 +5516,7 @@
     },
     {
       "sourceFile": "desktop/bootstrap.cjs",
-      "line": 34,
+      "line": 41,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, JSON.stringify({ event, time: new Date().toISOString(), payload, }, null, 2) + \"\\n\", \"utf-8\")",
       "reason": "Writes epoch-independent desktop launch diagnostics.",
@@ -5357,7 +5525,7 @@
     },
     {
       "sourceFile": "desktop/bootstrap.cjs",
-      "line": 67,
+      "line": 74,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(diagnosticsDir, { recursive: true })",
       "reason": "Writes epoch-independent desktop launch diagnostics.",
@@ -5366,7 +5534,7 @@
     },
     {
       "sourceFile": "desktop/bootstrap.cjs",
-      "line": 69,
+      "line": 76,
       "kind": "append-file",
       "excerpt": "fs.appendFileSync(filePath, JSON.stringify({ event, time: new Date().toISOString(), payload, }) + \"\\n\", \"utf-8\")",
       "reason": "Writes epoch-independent desktop launch diagnostics.",
@@ -5384,7 +5552,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1222,
+      "line": 1233,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5393,7 +5561,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1226,
+      "line": 1237,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5402,7 +5570,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 1741,
+      "line": 1752,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -5411,7 +5579,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2233,
+      "line": 2241,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(hanakoHome, { recursive: true })",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5420,7 +5588,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2234,
+      "line": 2242,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(crashLogPath, content, \"utf-8\")",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5429,7 +5597,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2295,
+      "line": 2303,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(lastSeenVersionPath), { recursive: true })",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5438,7 +5606,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2296,
+      "line": 2304,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(lastSeenVersionPath, JSON.stringify({ version }))",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5447,7 +5615,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2364,
+      "line": 2372,
       "kind": "write-file",
       "excerpt": "fs.promises.writeFile(windowStatePath, JSON.stringify(state, null, 2) + \"\\n\")",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5456,7 +5624,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2463,
+      "line": 2471,
       "kind": "mkdir",
       "excerpt": "fs.promises.mkdir(path.dirname(quickChatWindowStatePath), { recursive: true })",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5465,7 +5633,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 2464,
+      "line": 2472,
       "kind": "write-file",
       "excerpt": "fs.promises.writeFile(quickChatWindowStatePath, JSON.stringify(state, null, 2) + \"\\n\")",
       "reason": "Writes desktop window bounds or the release-announcement version bookmark.",
@@ -5474,7 +5642,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4217,
+      "line": 4225,
       "kind": "append-file",
       "excerpt": "require(\"fs\").appendFileSync(require(\"path\").join(hanakoHome, \"browser-cmd.log\"), `${new Date().toISOString()} ${redactMainLogText(line)}\\n`)",
       "reason": "Writes desktop crash or browser-command diagnostics.",
@@ -5483,7 +5651,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4784,
+      "line": 4792,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(tmpHtml, htmlContent, \"utf-8\")",
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
@@ -5492,7 +5660,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 4838,
+      "line": 4846,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(tmpHtml)",
       "reason": "Writes and removes one request-scoped screenshot HTML file under the operating-system temporary directory.",
@@ -5501,7 +5669,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5403,
+      "line": 5634,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(tmpDir, { recursive: true })",
       "reason": "Creates a request-scoped skill preview directory under Electron's operating-system temp path.",
@@ -5510,7 +5678,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5549,
+      "line": 5780,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content, \"utf-8\")",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5519,7 +5687,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5571,
+      "line": 5802,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(resolved), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5528,7 +5696,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5572,
+      "line": 5803,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(resolved, Buffer.from(base64Data, \"base64\"))",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5537,7 +5705,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5583,
+      "line": 5814,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(destinationPath), { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5546,7 +5714,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5584,
+      "line": 5815,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, destinationPath)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5555,7 +5723,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5617,
+      "line": 5848,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(dir, { recursive: true })",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5564,7 +5732,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 5618,
+      "line": 5849,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, pngBuffer)",
       "reason": "Writes an absolute path selected by the renderer or a screenshot directory selected by the user; no HANA_HOME store is implied.",
@@ -5573,7 +5741,7 @@
     },
     {
       "sourceFile": "desktop/main.cjs",
-      "line": 6142,
+      "line": 6375,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(path.join(hanakoHome, \"server-info.json\"))",
       "reason": "Deletes stale desktop server discovery state before or after a server lifecycle.",
@@ -6581,7 +6749,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 235,
+      "line": 292,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(directory, options)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6590,7 +6758,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 259,
+      "line": 316,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(handle, content, \"utf8\")",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6599,7 +6767,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 266,
+      "line": 323,
       "kind": "rename",
       "excerpt": "fs.renameSync(from, to)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6608,7 +6776,7 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 269,
+      "line": 326,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(target, options)",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
@@ -6617,36 +6785,36 @@
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 475,
+      "line": 614,
       "kind": "database-open",
-      "excerpt": "new Database(buildPath)",
+      "excerpt": "new Database(sqliteDatabasePath(buildPath))",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "storeId": "knowledge-index-generations",
       "exemptionId": null
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 526,
+      "line": 684,
       "kind": "database-open",
-      "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
+      "excerpt": "new Database(sqliteDatabasePath(generationPath), { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "storeId": "knowledge-index-generations",
       "exemptionId": null
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 594,
+      "line": 759,
       "kind": "database-open",
-      "excerpt": "new Database(generationPath, { fileMustExist: true, })",
+      "excerpt": "new Database(sqliteDatabasePath(generationPath), { fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "storeId": "knowledge-index-generations",
       "exemptionId": null
     },
     {
       "sourceFile": "lib/knowledge-workspace/knowledge-index-store.ts",
-      "line": 847,
+      "line": 1057,
       "kind": "database-open",
-      "excerpt": "new Database(generationPath, { readonly: true, fileMustExist: true, })",
+      "excerpt": "new Database(sqliteDatabasePath(generationPath), { readonly: true, fileMustExist: true, })",
       "reason": "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",
       "storeId": "knowledge-index-generations",
       "exemptionId": null
@@ -7220,7 +7388,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 214,
+      "line": 310,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7229,7 +7397,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 215,
+      "line": 311,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7238,7 +7406,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 234,
+      "line": 330,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7247,7 +7415,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 236,
+      "line": 332,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, content, { flag: \"wx\" })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7256,7 +7424,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 278,
+      "line": 374,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, text, \"utf-8\")",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7265,7 +7433,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 292,
+      "line": 388,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(filePath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7274,7 +7442,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 304,
+      "line": 400,
       "kind": "remove-path",
       "excerpt": "fs.rmSync(filePath, { recursive: true, force: false })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7283,7 +7451,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 321,
+      "line": 417,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7292,7 +7460,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 324,
+      "line": 420,
       "kind": "copy-file",
       "excerpt": "fs.cpSync(sourcePath, targetPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7301,7 +7469,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 326,
+      "line": 422,
       "kind": "copy-file",
       "excerpt": "fs.copyFileSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7310,7 +7478,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 359,
+      "line": 455,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7319,7 +7487,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 360,
+      "line": 456,
       "kind": "rename",
       "excerpt": "fs.renameSync(sourcePath, targetPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7328,7 +7496,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 377,
+      "line": 473,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(trashPath, { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7337,7 +7505,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 379,
+      "line": 475,
       "kind": "rename",
       "excerpt": "fs.renameSync(filePath, payloadPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7346,7 +7514,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 380,
+      "line": 476,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(path.join(trashPath, \"metadata.json\"), JSON.stringify({ schemaVersion: 1, trashId, originalPath: filePath, originalName: path.basename(filePath), deletedAt: new Date().toISOString(), ...(options.metadata && typeof options.m",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7355,7 +7523,16 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 524,
+      "line": 619,
+      "kind": "copy-file",
+      "excerpt": "fs.cpSync(finalPath, stagingPath, { recursive: true, dereference: false, errorOnExist: true, force: false, verbatimSymlinks: true, })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 664,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(entryPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7364,7 +7541,106 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1110,
+      "line": 761,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 825,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(artifacts.stagingPath, finalPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 827,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(artifacts.backupPath, finalPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 828,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 835,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.backupPath, { recursive: true, force: false })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 836,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 849,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.stagingPath, { recursive: true, force: false })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 850,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 859,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 866,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(artifacts.receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1686,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(targetPath, { recursive: true, force: false })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1772,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7373,7 +7649,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1111,
+      "line": 1773,
       "kind": "write-file",
       "excerpt": "fs.promises.open(filePath, \"wx\", 0o600)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7382,7 +7658,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1144,
+      "line": 1805,
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7391,7 +7667,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1175,
+      "line": 1836,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(stagingPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7400,7 +7676,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1189,
+      "line": 1850,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7409,7 +7685,7 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1211,
+      "line": 1872,
       "kind": "rename",
       "excerpt": "fs.renameSync(stagingPath, finalPath)",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7418,18 +7694,81 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1297,
-      "kind": "remove-path",
-      "excerpt": "fs.rmSync(path.join(originalDirectoryPath, stagingName), { recursive: true, force: true, })",
+      "line": 1911,
+      "kind": "write-file",
+      "excerpt": "fs.writeFileSync(descriptor, `${JSON.stringify(receipt)}\\n`, \"utf8\")",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "storeId": null,
       "exemptionId": "external-resource-io"
     },
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "line": 1312,
+      "line": 1973,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(finalPath, backupPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1976,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(stagingPath, finalPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1979,
+      "kind": "rename",
+      "excerpt": "fs.renameSync(backupPath, finalPath)",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1980,
       "kind": "remove-path",
-      "excerpt": "fs.rmSync(path.join(movedDirectory, stagingName), { recursive: true, force: true, })",
+      "excerpt": "fs.rmSync(receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1987,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(backupPath, { recursive: true, force: false })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 1992,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(receiptPath, { force: true })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 2071,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(path.join(originalDirectoryPath, stagingName), { recursive: true, force: true, maxRetries: 3, retryDelay: 25, })",
+      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
+      "storeId": null,
+      "exemptionId": "external-resource-io"
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
+      "line": 2088,
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(path.join(movedDirectory, stagingName), { recursive: true, force: true, maxRetries: 3, retryDelay: 25, })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "storeId": null,
       "exemptionId": "external-resource-io"
@@ -8390,7 +8729,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 288,
+      "line": 287,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(serverInfoPath)",
       "reason": "Writes or deletes live server discovery state.",
@@ -8399,7 +8738,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 479,
+      "line": 481,
       "kind": "persistent-store-constructor",
       "excerpt": "new DeferredResultStore( hub.eventBus, path.join(hanakoHome, \".ephemeral\", \"deferred-tasks.json\"), { getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null }, )",
       "reason": "Constructs the deferred result store.",
@@ -8408,7 +8747,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 682,
+      "line": 684,
       "kind": "persistent-store-constructor",
       "excerpt": "new ConfirmStore({ getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null, })",
       "reason": "ConfirmStore is deliberately process-memory-only: pending approvals time out or abort with their session and have no restart replay contract.",
@@ -8417,7 +8756,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 687,
+      "line": 689,
       "kind": "persistent-store-constructor",
       "excerpt": "new SubagentRunStore( path.join(hanakoHome, \"subagent-runs.json\"), { getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null }, )",
       "reason": "Constructs subagent stores.",
@@ -8426,7 +8765,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 693,
+      "line": 695,
       "kind": "persistent-store-constructor",
       "excerpt": "new SubagentThreadStore( path.join(hanakoHome, \"subagent-threads.json\"), { getSessionIdForPath: (sessionPath: string) => engine.getSessionIdForPath?.(sessionPath) || null }, )",
       "reason": "Constructs subagent stores.",
@@ -8435,7 +8774,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 704,
+      "line": 706,
       "kind": "persistent-store-constructor",
       "excerpt": "new WorkflowActivityStore( path.join(hanakoHome, \"workflow-activity.json\"), )",
       "reason": "Constructs the workflow activity store.",
@@ -8444,7 +8783,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 1122,
+      "line": 1129,
       "kind": "append-file",
       "excerpt": "fs.promises.appendFile(_bwsLogPath, chunk)",
       "reason": "Appends the browser worker log.",
@@ -8453,7 +8792,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 1181,
+      "line": 1188,
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(serverInfoPath, JSON.stringify({ pid: process.pid, port: actualPort, host, configuredHost: serverRuntimeState.listenHost, networkMode: serverRuntimeState.mode, configuredMode: serverRuntimeState.configuredMode, configuredLi",
       "reason": "Writes or deletes live server discovery state.",
@@ -8462,7 +8801,7 @@
     },
     {
       "sourceFile": "server/index.ts",
-      "line": 1282,
+      "line": 1290,
       "kind": "remove-path",
       "excerpt": "fs.unlinkSync(path.join(hanakoHome, \"server-info.json\"))",
       "reason": "Writes or deletes live server discovery state.",

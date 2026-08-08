@@ -32,11 +32,14 @@ export function resolveLocalFsRootIdentity(
   const comparisonPath = caseMode === "insensitive"
     ? canonicalPath.normalize("NFC").toLocaleLowerCase("en-US")
     : canonicalPath;
-  const opaqueRootId = digest([
-    "local_fs",
-    String(stat.dev),
-    String(stat.ino),
-  ]);
+  // Windows filesystems can report inode 0 for every directory. Treating
+  // that placeholder as a stable file identity would make unrelated sibling
+  // roots look identical and deny a valid source registration. realpath is a
+  // conservative fallback: aliases resolve to the same canonical path, while
+  // roots without a usable file identity never share an opaque id by accident.
+  const opaqueRootId = hasStableInode(stat)
+    ? digest(["local_fs", "inode", String(stat.dev), String(stat.ino)])
+    : digest(["local_fs", "canonical-path", comparisonPath]);
   const scopeToken = digest([
     opaqueRootId,
     comparisonPath,
@@ -134,6 +137,12 @@ function isStrictAncestor(parent: string, child: string): boolean {
   return relative.length > 0
     && !relative.startsWith("..")
     && !path.isAbsolute(relative);
+}
+
+function hasStableInode(stat: fs.Stats): boolean {
+  return Number.isSafeInteger(stat.dev)
+    && Number.isSafeInteger(stat.ino)
+    && stat.ino > 0;
 }
 
 function digest(parts: readonly string[]): string {

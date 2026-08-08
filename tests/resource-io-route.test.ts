@@ -853,7 +853,7 @@ describe("resource-io route", () => {
         connectionKind: "local",
         credentialKind: "loopback_token",
         scopes: ["chat", "resources", "tools"],
-        sessionId: "must-be-dropped",
+        sessionId: "desktop-window-a",
         sessionPath: "/must-be-dropped.jsonl",
       }));
       setHonoContext(c, "transportConnectionKind", "local");
@@ -879,7 +879,7 @@ describe("resource-io route", () => {
       expect.objectContaining({
         source: "api",
         reason: "route_write",
-        sessionId: null,
+        sessionId: "desktop-window-a",
         sessionPath: null,
         requestId: "request-from-header",
         principal: expect.objectContaining({
@@ -889,7 +889,7 @@ describe("resource-io route", () => {
           scopes: ["chat", "resources", "tools"],
           userId: "user-from-auth",
           studioId: "studio-from-auth",
-          sessionId: null,
+          sessionId: "desktop-window-a",
           sessionPath: null,
           requestId: "request-from-header",
           connectionKind: "local",
@@ -922,14 +922,14 @@ describe("resource-io route", () => {
       expect.objectContaining({
         source: "api",
         reason: "route_test",
-        sessionId: null,
+        sessionId: "desktop-window-a",
         sessionPath: null,
         principal: expect.objectContaining({
           kind: "api",
           principalId:
             "principal_local_user_user_from_auth_studio_from_auth_no_node",
           scopes: ["chat", "resources", "tools"],
-          sessionId: null,
+          sessionId: "desktop-window-a",
         }),
       }),
     );
@@ -948,8 +948,12 @@ describe("resource-io route", () => {
       expect.objectContaining({
         source: "api",
         reason: "resource_io_route",
+        sessionId: "desktop-window-a",
         sessionPath: null,
-        principal: expect.objectContaining({ kind: "api" }),
+        principal: expect.objectContaining({
+          kind: "api",
+          sessionId: "desktop-window-a",
+        }),
       }),
     );
 
@@ -967,8 +971,12 @@ describe("resource-io route", () => {
       expect.objectContaining({
         source: "api",
         reason: "resource_io_route",
+        sessionId: "desktop-window-a",
         sessionPath: null,
-        principal: expect.objectContaining({ kind: "api" }),
+        principal: expect.objectContaining({
+          kind: "api",
+          sessionId: "desktop-window-a",
+        }),
       }),
     );
 
@@ -986,8 +994,12 @@ describe("resource-io route", () => {
       expect.objectContaining({
         source: "api",
         reason: "resource_io_route",
+        sessionId: "desktop-window-a",
         sessionPath: null,
-        principal: expect.objectContaining({ kind: "api" }),
+        principal: expect.objectContaining({
+          kind: "api",
+          sessionId: "desktop-window-a",
+        }),
       }),
     );
   });

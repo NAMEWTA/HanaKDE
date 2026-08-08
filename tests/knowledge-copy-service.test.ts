@@ -169,6 +169,67 @@ describe("KnowledgeCopyService", () => {
     expect(stagingFiles(path.join(roots.main, "Notes", "assets"))).toEqual([]);
   });
 
+  it("plans a fixed editor target without creating assets and rejects a changed page before mkdir", async () => {
+    const { roots, service } = setup();
+    fs.writeFileSync(path.join(roots.research, "Media", "planned.png"), "bytes");
+
+    const plan = await service.planCopyForEditor({
+      sourceAddress: address("research", "Media/planned.png"),
+      pageAddress: address("main", "Notes/Host.md"),
+      kind: "attachment",
+      localDate: "2026-07-30",
+    });
+
+    expect(plan).toMatchObject({
+      disposition: "copy",
+      prepared: {
+        targetDirectoryAddress: address("main", "Notes/assets"),
+        targetAddress: address("main", "Notes/assets/2026-07-30-planned.png"),
+      },
+    });
+    expect(fs.existsSync(path.join(roots.main, "Notes", "assets"))).toBe(false);
+    if (plan.disposition !== "copy") throw new Error("copy plan was not prepared");
+    fs.writeFileSync(path.join(roots.main, "Notes", "Host.md"), "# changed page\n");
+    await expect(service.copyPreparedForEditor(plan.prepared)).rejects.toMatchObject({
+      code: "knowledge_version_conflict",
+    });
+    expect(fs.existsSync(path.join(roots.main, "Notes", "assets"))).toBe(false);
+  });
+
+  it("accepts unchanged source and page versions even when a provider changes version key order", async () => {
+    const { roots, resourceIO, service } = setup();
+    fs.writeFileSync(path.join(roots.research, "Media", "planned.png"), "bytes");
+
+    const plan = await service.planCopyForEditor({
+      sourceAddress: address("research", "Media/planned.png"),
+      pageAddress: address("main", "Notes/Host.md"),
+      kind: "attachment",
+      localDate: "2026-07-30",
+    });
+    if (plan.disposition !== "copy") throw new Error("copy plan was not prepared");
+
+    const stat = resourceIO.stat.bind(resourceIO);
+    vi.spyOn(resourceIO, "stat").mockImplementation(async (resource, context) => {
+      const current = await stat(resource, context);
+      if (!current.version) return current;
+      return {
+        ...current,
+        version: {
+          size: current.version.size,
+          mtimeMs: current.version.mtimeMs,
+          sha256: current.version.sha256,
+          etag: current.version.etag,
+          sequence: current.version.sequence,
+        },
+      };
+    });
+
+    await expect(service.copyPreparedForEditor(plan.prepared)).resolves.toMatchObject({
+      copied: true,
+      targetAddress: address("main", "Notes/assets/2026-07-30-planned.png"),
+    });
+  });
+
   it("allocates distinct keep-both names for concurrent copies", async () => {
     const { roots, service } = setup();
     fs.writeFileSync(path.join(roots.research, "Media", "photo.png"), "bytes");
@@ -248,6 +309,7 @@ describe("KnowledgeCopyService", () => {
 
     const result = await service.copyExternalForEditor({
       source: { kind: "session-file", fileId },
+      sourceSizeBytes: first.byteLength + second.byteLength,
       originalName: "capture.webp",
       mimeType: "image/webp",
       pageAddress: address("main", "Notes/Host.md"),
@@ -298,6 +360,7 @@ describe("KnowledgeCopyService", () => {
 
     await expect(service.copyExternalForEditor({
       source: { kind: "session-file", fileId },
+      sourceSizeBytes: 10,
       originalName: "capture.png",
       mimeType: "image/png",
       pageAddress: address("main", "Notes/Host.md"),
@@ -459,6 +522,7 @@ describe("KnowledgeCopyService", () => {
         fileId: "upload-1",
         absolutePath: "/Users/example/private.bin",
       } as never,
+      sourceSizeBytes: 1,
       originalName: "private.bin",
       mimeType: "application/octet-stream",
       pageAddress: address("main", "Notes/Host.md"),

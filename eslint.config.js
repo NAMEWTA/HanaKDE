@@ -21,6 +21,10 @@ export default [
       '.cache/**',
       // .docs/ 不入版本控制、CI 不可见；lint 覆盖它会造成本地/CI 语义不对称
       '.docs/**',
+      // Audited reference and local ignored work areas are not HanaKDE sources.
+      'silverbullet/**',
+      'teach/**',
+      'temp/**',
       '**/*.cjs',
     ],
   },

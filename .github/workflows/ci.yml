@@ -5,17 +5,25 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      # Each operating system is release evidence. Do not cancel Windows or
+      # Linux merely because another platform fails first.
+      fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: ["24.15.0"]
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # KW-RULE-PREFLIGHT verifies that the audited baseline remains an
+          # ancestor. A depth-one PR checkout cannot prove that invariant.
+          fetch-depth: 0
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
@@ -48,11 +56,12 @@ jobs:
 
       # The tag-only Build workflow verifies the extracted Windows standalone
       # package by launching its real hana-server.cmd and exercising exec_command.
-      # Keep that release boundary covered in ordinary CI too, using a throwaway
-      # signing key/keyset that exists only under RUNNER_TEMP. Production release
-      # jobs still require the repository HANA_SIGN_KEY secret and pinned keyset.
+      # Preserve that main-branch guard with a throwaway keyset, but keep PR's
+      # ten-minute regular-test matrix focused on its three real test runs.
+      # Otherwise Windows spends the whole matrix budget packaging before
+      # `npm test` can establish its own platform result.
       - name: Prepare ephemeral signing key for Windows standalone smoke
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         shell: bash
         run: |
           node scripts/artifact-keygen.mjs \
@@ -67,23 +76,124 @@ jobs:
           echo "HANA_SIGN_KEYSET=$RUNNER_TEMP/hana-ci-keyset.json" >> "$GITHUB_ENV"
 
       - name: Download MinGit for Windows standalone smoke
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/download-mingit.js
 
       - name: Build Windows server bundle for standalone smoke
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/build-server.mjs win32 x64
 
       - name: Build Windows standalone server archive in CI
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/build-standalone-server-artifact.mjs x64
 
       - name: Smoke-test packaged Windows standalone server
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/verify-standalone-server-artifact.mjs x64 --smoke
 
-      - name: Run tests
-        run: npm test
+      - name: Run general tests
+        # The fixed four Vitest workers share libuv's default four I/O threads.
+        # Give the real cross-platform filesystem suite sufficient independent
+        # I/O capacity without changing its worker count or any test timeout.
+        # The 10,000-entry fixture has its own deterministic, single-worker
+        # filesystem gate below. The closure census also has its own real,
+        # single-worker gate: each assertion performs multiple esbuild + nft
+        # scans of the repository. DeskSection and the real 1.6 MiB external
+        # upload stream are likewise independent filesystem regressions with
+        # deterministic single-worker gates below. Keeping these
+        # CPU/metadata-heavy suites out of this four-worker step prevents
+        # Windows I/O contention; no suite is skipped.
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: npm test -- --maxWorkers=4 --exclude tests/knowledge-performance-fixtures.test.ts --exclude tests/cli-closure-census.test.ts --exclude tests/knowledge-copy-service.test.ts --exclude desktop/src/react/__tests__/components/DeskSection.test.tsx
+
+      - name: Run isolated workspace panel regression
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: npx vitest run desktop/src/react/__tests__/components/DeskSection.test.tsx --maxWorkers=1
+
+      - name: Run isolated Knowledge fixture filesystem gate
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: npx vitest run tests/knowledge-performance-fixtures.test.ts --maxWorkers=1
+
+      - name: Run isolated Knowledge copy stream gate
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: npx vitest run tests/knowledge-copy-service.test.ts --maxWorkers=1
+
+      - name: Run isolated CLI runtime-closure audit
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: npx vitest run tests/cli-closure-census.test.ts --maxWorkers=1
+
+  knowledge-workspace-e2e:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        project: [desktop-full, web-open, web-full]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24.15.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium and Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Chromium
+        if: runner.os != 'Linux'
+        run: npx playwright install chromium
+
+      - name: Build desktop test artifacts
+        run: npm run build:preload && npm run build:renderer
+
+      - name: Run Knowledge Workspace project/platform gate
+        shell: bash
+        run: |
+          run_project() {
+            if [ "$RUNNER_OS" = "Linux" ] && [ "${{ matrix.project }}" = "desktop-full" ]; then
+              xvfb-run --auto-servernum npx playwright test \
+                -c tests/knowledge-workspace-e2e/playwright.config.ts \
+                --project=${{ matrix.project }} "$@"
+            else
+              npx playwright test \
+                -c tests/knowledge-workspace-e2e/playwright.config.ts \
+                --project=${{ matrix.project }} "$@"
+            fi
+          }
+
+          # E2E-KW-022 keeps a child process continuously replacing a parent
+          # directory with a junction on Windows. Run that real security gate
+          # in its own one-shot Playwright worker, then run every other Web
+          # Open story once. This is process isolation, not a retry: both
+          # commands are mandatory and retries stay disabled in the config.
+          if [ "$RUNNER_OS" = "Windows" ] && [ "${{ matrix.project }}" = "web-open" ]; then
+            run_project --grep 'E2E-KW-022'
+            run_project --grep-invert 'E2E-KW-022'
+          else
+            run_project
+          fi
+
+      - name: Upload Knowledge Workspace E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: knowledge-e2e-${{ matrix.os }}-${{ matrix.project }}
+          path: tests/knowledge-workspace-e2e/artifacts
+          if-no-files-found: ignore
 
   # 独立于上面 test 矩阵：只跑边界 lint 脚本本身，给"开/闭边界回归"一个比
   # 全量矩阵（typecheck/lint/build/test 跑完才轮到 npm test 里的边界用例）

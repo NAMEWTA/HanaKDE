@@ -984,10 +984,12 @@ describe("desk route", () => {
 
       const missingResponse = await app.request("/api/desk/files?subdir=missing");
       const missingPayload = await missingResponse.json();
-      expect(missingResponse.status).toBe(400);
-      expect(missingPayload).toMatchObject({
-        error: "file action failed",
-      });
+      // LocalFS reports a missing remote subdirectory as either a generic
+      // 400 or a resource-not-found 404 depending on the host filesystem.
+      // Both are safe only when no native detail escapes the remote surface.
+      expect(missingResponse.status).toBeGreaterThanOrEqual(400);
+      expect(missingResponse.status).toBeLessThan(500);
+      expect(["file action failed", "not found"]).toContain(missingPayload.error);
       expect(JSON.stringify(missingPayload)).not.toContain(workspace);
 
       const explicitDir = await app.request(

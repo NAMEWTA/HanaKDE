@@ -12,6 +12,7 @@ import { upsertStudioMount } from "../core/studio-mounts.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import { MountProvider } from "../lib/resource-io/providers/mount-provider.ts";
 import { ResourceIO } from "../lib/resource-io/resource-io.ts";
+import { RESOURCE_READ_PROOF } from "../lib/resource-io/types.ts";
 import {
   KNOWLEDGE_MARKDOWN_MAX_BYTES,
   parseKnowledgeResourceAddress,
@@ -414,10 +415,12 @@ describe("knowledge malicious workspace gate", () => {
     });
     expect(openRead).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "local-file" }),
-      {
+      expect.objectContaining({
         expectedVersion: expect.objectContaining({ size: 4 }),
-      },
+      }),
     );
+    const openReadOptions = openRead.mock.calls[0]?.[1] as Record<PropertyKey, unknown>;
+    expect(openReadOptions[RESOURCE_READ_PROOF]).toBeDefined();
     expect(stat).toHaveBeenCalledTimes(1);
     expect(read).not.toHaveBeenCalled();
 

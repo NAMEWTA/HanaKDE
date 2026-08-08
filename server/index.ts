@@ -55,7 +55,6 @@ import {
 } from "./http/plugin-assets.ts";
 import { resolveHttpRequestPrincipal } from "./http/request-principal.ts";
 import { ensureLocalIdentityRegistries } from "../core/server-identity.ts";
-import { createMobileWorkbenchRoute } from "./routes/mobile-workbench.ts";
 import { registerOpenRoutes } from "./composition/open-root.ts";
 import type { CompositionRoot, CompositionContext } from "./composition/contract.ts";
 import { registerTaskRegistryBusHandlers } from "./task-bus-handlers.ts";
@@ -348,6 +347,9 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
   }
 
   const SERVER_TOKEN = process.env.HANA_TOKEN || crypto.randomBytes(16).toString("hex");
+  const NATIVE_BRIDGE_TOKEN = process.env.HANA_SERVER_OWNER === "desktop"
+    ? crypto.randomBytes(32).toString("base64url")
+    : null;
   const envPort = Number.parseInt(process.env.HANA_PORT || "", 10);
   const envPortPinned = Number.isInteger(envPort) && envPort >= 0;
   if (!envPortPinned) {
@@ -575,7 +577,7 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
       c.header("Access-Control-Allow-Credentials", "true");
     }
     c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Hana-Native-Bridge");
     if (c.req.method === "OPTIONS") return c.text("", 204);
 
     const transport = inferHttpConnectionKind({
@@ -908,10 +910,11 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
   // ── 开放/闭集组合接缝 ──
   // 开放路由/WS 面全部收进 composition/open-root.ts；这里无条件静态 import 并
   // 调用它，维持运行闭包 census 对开放路由的可达性。mobile-workbench 仍是
-  // evidence-needed(未定性),原样留在这里直接挂载，不并入 open-root.ts 以免
-  // 隐式把它计入"已确认开放"。root.registerClosedRoutes 存在时才追加闭集产品
-  // 路由(avatar/character-cards/cards/desk/diary)——这是静态入参，不是运行
-  // 时开关：选哪个组合由"哪个入口文件被 spawn/import"在进程启动前一次性决定。
+  // evidence-needed(未定性)：Full entry 显式注入它的工厂，而 Open entry 不注入。
+  // 因此该挂载仍由本文件拥有，却不会让 Open bundle 静态依赖未分类模块，也不把
+  // 它吸收进 open-root.ts 或 full-root.ts。root.registerClosedRoutes 存在时才追加
+  // 闭集产品路由(avatar/character-cards/cards/desk/diary)——这是静态入参，不是
+  // 运行时开关：选哪个组合由"哪个入口文件被 spawn/import"在进程启动前一次性决定。
   const ctx: CompositionContext = {
     engine,
     hub,
@@ -922,9 +925,13 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     bridgeManagerRef,
     confirmStore,
     appVersion,
+    nativeBridgeToken: NATIVE_BRIDGE_TOKEN,
   };
   await registerOpenRoutes(app, ctx);
-  app.route("/api", createMobileWorkbenchRoute(engine));
+  const createMobileWorkbenchRoute = root.createMobileWorkbenchRoute;
+  if (createMobileWorkbenchRoute) {
+    app.route("/api", createMobileWorkbenchRoute(engine));
+  }
   root.registerClosedRoutes?.(app, ctx);
   // internal-browser WS — see unified upgrade handler in server startup below
 
@@ -1189,6 +1196,7 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
         configuredPort: serverRuntimeState.configuredPort,
         network: createServerRuntimeNetworkSummary(),
         token: SERVER_TOKEN,
+        ...(NATIVE_BRIDGE_TOKEN ? { nativeBridgeToken: NATIVE_BRIDGE_TOKEN } : {}),
         version: appVersion,
         ownerKind: process.env.HANA_SERVER_OWNER === "desktop" ? "desktop" : "standalone",
         ownerPid: Number.parseInt(process.env.HANA_SERVER_OWNER_PID || "", 10) || null,

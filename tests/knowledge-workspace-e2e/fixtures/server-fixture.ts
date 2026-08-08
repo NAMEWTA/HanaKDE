@@ -6,7 +6,7 @@ export type KnowledgeLaunchConfig = {
   host: "127.0.0.1";
   requestedPort: 0;
   workspaceRoot: string;
-  electronArgs: [string];
+  electronArgs: string[];
 };
 
 const PASSTHROUGH_ENV_KEYS = [
@@ -48,7 +48,9 @@ export function createKnowledgeLaunchConfig(
     host: "127.0.0.1",
     requestedPort: 0,
     workspaceRoot: workspace.mainSource,
-    electronArgs: [`--user-data-dir=${workspace.electronUserData}`],
+    electronArgs: [
+      `--user-data-dir=${workspace.electronUserData}`,
+    ],
     env: {
       ...selectedProcessEnvironment(sourceEnv),
       HOME: workspace.userHome,
@@ -67,6 +69,7 @@ export function createKnowledgeLaunchConfig(
       HANA_ROOT: path.resolve(productRoot),
       HANA_PORT: "0",
       HANA_CREATE_STARTUP_SESSION: "0",
+      HANA_KNOWLEDGE_E2E: "1",
     },
   };
 }

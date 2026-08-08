@@ -1,4 +1,5 @@
 import path from "path";
+import { RESOURCE_SCOPE_ROOT } from "./types.ts";
 import type { ResourceProviderId, ResourceRef } from "./types.ts";
 
 function nonEmptyString(value: unknown): string | null {
@@ -37,7 +38,7 @@ export function normalizeResourceRef(input: unknown): ResourceRef {
 
   if (kind === "local-file" || kind === "local-path" || kind === "path") {
     if (!pathValue) throw new Error("local-file ResourceRef requires path");
-    return { kind: "local-file", path: pathValue };
+    return preserveInternalScope(value, { kind: "local-file", path: pathValue });
   }
   if (kind === "session-file") {
     if (!fileId) throw new Error("session-file ResourceRef requires fileId");
@@ -67,6 +68,21 @@ export function normalizeResourceRef(input: unknown): ResourceRef {
   if (mountId) return { kind: "mount", mountId, path: pathValue || "" };
   if (pathValue) return { kind: "local-file", path: pathValue };
   throw new Error("unsupported ResourceRef");
+}
+
+function preserveInternalScope<T extends ResourceRef>(
+  source: Record<PropertyKey, unknown>,
+  ref: T,
+): T {
+  const scopeRoot = source[RESOURCE_SCOPE_ROOT];
+  if (typeof scopeRoot !== "string" || scopeRoot.length === 0) return ref;
+  Object.defineProperty(ref, RESOURCE_SCOPE_ROOT, {
+    value: scopeRoot,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return ref;
 }
 
 export function resourceKeyForRef(ref: ResourceRef): string {

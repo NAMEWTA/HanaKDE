@@ -1,9 +1,16 @@
-export type ResourceRef =
+export const RESOURCE_SCOPE_ROOT = Symbol("hana.resource-io.scope-root");
+
+type ResourceInternalScope = {
+  [RESOURCE_SCOPE_ROOT]?: string;
+};
+
+export type ResourceRef = (
   | { kind: "local-file"; path: string }
   | { kind: "mount"; mountId: string; path: string }
   | { kind: "session-file"; fileId: string; sessionId?: string; sessionPath?: string }
   | { kind: "resource"; resourceId: string }
-  | { kind: "url"; url: string };
+  | { kind: "url"; url: string }
+) & ResourceInternalScope;
 
 export type ResourceVersion = {
   mtimeMs?: number;
@@ -130,6 +137,26 @@ export type ResourceProviderId =
   | "resource"
   | "url";
 
+/**
+ * Provider-owned proof that binds a stat result to a later read. The symbol
+ * keeps the proof out of JSON, logs, and remote DTO projection while allowing
+ * in-process callers to carry it across the ResourceIO seam.
+ */
+export const RESOURCE_READ_PROOF = Symbol("hana.resource-io.read-proof");
+
+/**
+ * Provider-only signal for directory entries intentionally omitted from a
+ * public list response (for example a symlink or junction). It is not
+ * serializable and lets integrity-sensitive in-process callers reject a scan
+ * while ordinary UI listing continues to show authorized entries.
+ */
+export const RESOURCE_LIST_BLOCKED_ENTRIES = Symbol("hana.resource-io.list-blocked-entries");
+
+export type ResourceReadProof = Readonly<{
+  providerId: ResourceProviderId;
+  value: unknown;
+}>;
+
 export type ResourceStat = {
   resourceKey: string;
   resource: ResourceDescriptor;
@@ -137,6 +164,7 @@ export type ResourceStat = {
   isDirectory: boolean;
   version?: ResourceVersion;
   filePath?: string;
+  [RESOURCE_READ_PROOF]?: ResourceReadProof;
 };
 
 export type ResourceReadResult = {
@@ -151,6 +179,7 @@ export type ResourceOpenReadOptions = {
   start?: number;
   end?: number;
   expectedVersion?: ResourceVersion;
+  [RESOURCE_READ_PROOF]?: ResourceReadProof;
 };
 
 export type ResourceOpenReadResult = {
@@ -232,6 +261,7 @@ export type ResourceListResult = {
   resourceKey: string;
   resource: ResourceDescriptor;
   items: ResourceListItem[];
+  [RESOURCE_LIST_BLOCKED_ENTRIES]?: readonly string[];
 };
 
 export type ResourceSearchMatch = {
@@ -294,6 +324,7 @@ export type ResourceImportTreeOptions = {
   signal?: AbortSignal;
   expectedTargetVersion?: string | null;
   replaceExisting?: boolean;
+  mergeExisting?: "skip" | "keep-both" | "replace";
   operationId: string;
   abortTransfer?: () => void;
   revalidateSourceScope?: () => void | Promise<void>;
@@ -308,14 +339,31 @@ export type ResourceImportTreeResult = {
   filePath?: string;
 };
 
+export type ResourceImportTreeRecoveryOptions = {
+  operationId: string;
+  expectedTargetVersion: string;
+};
+
+export type ResourceImportTreeRecoveryResult = {
+  outcome: "none" | "committed" | "rolled-back";
+  version?: ResourceVersion;
+};
+
 export type ResourceTransferRequest = {
   source: ResourceRef;
   targetDirectory: ResourceRef;
   targetName: string;
   expectedTargetVersion?: string | null;
   replaceExisting?: boolean;
+  mergeExisting?: "skip" | "keep-both" | "replace";
   signal?: AbortSignal;
   operationId: string;
+};
+
+export type ResourceTransferRecoveryRequest = {
+  target: ResourceRef;
+  operationId: string;
+  expectedTargetVersion: ResourceVersion;
 };
 
 export type ResourceTransferResult = {
@@ -387,6 +435,10 @@ export type ResourceProvider = {
     entries: AsyncIterable<ResourceExportEntry>,
     options: ResourceImportTreeOptions,
   ) => Promise<ResourceImportTreeResult>;
+  recoverImportTreePublication?: (
+    target: ResourceRef,
+    options: ResourceImportTreeRecoveryOptions,
+  ) => Promise<ResourceImportTreeRecoveryResult>;
 };
 
 export type ResourcePrincipal = {

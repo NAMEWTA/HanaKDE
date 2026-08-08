@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import {
   assertKnowledgeOperationId,
   canonicalKnowledgeOperationJson,
@@ -10,6 +11,9 @@ import {
 } from "../../lib/knowledge-workspace/knowledge-operation-plan.ts";
 import type {
   KnowledgeResourceAddress,
+} from "../../shared/knowledge-workspace-contract.ts";
+import {
+  parseKnowledgeResourceAddress,
 } from "../../shared/knowledge-workspace-contract.ts";
 import type {
   ProviderRootIdentity,
@@ -130,6 +134,131 @@ export type KnowledgeOperationResult = Readonly<{
   }>;
 }>;
 
+export const KNOWLEDGE_TRASH_OPERATION_KINDS = [
+  "delete",
+  "restore",
+  "cleanup",
+] as const;
+
+export type KnowledgeTrashOperationKind =
+  (typeof KNOWLEDGE_TRASH_OPERATION_KINDS)[number];
+
+export type KnowledgeTrashOperationStepKind =
+  | "manifest-write"
+  | "resource-move"
+  | "parent-mkdir"
+  | "link-write"
+  | "native-grant"
+  | "native-dispatch"
+  | "system-trash";
+
+export type KnowledgeTrashOperationStep = Readonly<{
+  stepId: string;
+  kind: KnowledgeTrashOperationStepKind;
+  state: "intent" | "applied" | "rolled-back" | "failed";
+  intentAt: string;
+  outcomeAt?: string;
+  errorCode?: string;
+}>;
+
+export type KnowledgeTrashOperationRequestItem = Readonly<{
+  entryId: string;
+  originalAddress: KnowledgeResourceAddress;
+  trashAddress: KnowledgeResourceAddress;
+  /**
+   * Delete records target the trash address; restore records target the
+   * resolved original/suffixed address. Cleanup deliberately has no target.
+   */
+  targetAddress?: KnowledgeResourceAddress;
+  resourceKind: "file" | "directory";
+  expectedVersion: ResourceVersion;
+}>;
+
+export type KnowledgeTrashOperationRequest = Readonly<{
+  kind: KnowledgeTrashOperationKind;
+  sourceKey: string;
+  batchId: string;
+  items: readonly KnowledgeTrashOperationRequestItem[];
+}>;
+
+export type KnowledgeTrashOperationJournalItem = Readonly<{
+  entryId: string;
+  originalAddress: KnowledgeResourceAddress;
+  trashAddress: KnowledgeResourceAddress;
+  targetAddress?: KnowledgeResourceAddress;
+  resourceKind: "file" | "directory";
+  expectedVersion: ResourceVersion;
+  state: KnowledgeOperationItemState;
+  appliedVersion?: ResourceVersion;
+  errorCode?: string;
+  steps: readonly KnowledgeTrashOperationStep[];
+}>;
+
+export type KnowledgeTrashOperationJournalRecord = Readonly<{
+  schemaVersion: 1;
+  operationId: string;
+  requestHash: string;
+  kind: KnowledgeTrashOperationKind;
+  batchId: string;
+  request: KnowledgeTrashOperationRequest;
+  owner: KnowledgeOperationOwner;
+  requestId: string | null;
+  sourceIdentity: ProviderRootIdentity;
+  createdAt: string;
+  expiresAt: string;
+  updatedAt: string;
+  state: KnowledgeOperationState;
+  items: readonly KnowledgeTrashOperationJournalItem[];
+  projections: Readonly<{
+    session: KnowledgeOperationProjectionState;
+    event: KnowledgeOperationProjectionState;
+    index: KnowledgeOperationProjectionState;
+  }>;
+  resultWrittenAt?: string;
+  recoveryReason?: string;
+}>;
+
+export type KnowledgeTrashOperationResultItem = Readonly<{
+  entryId: string;
+  originalAddress: KnowledgeResourceAddress;
+  trashAddress: KnowledgeResourceAddress;
+  targetAddress?: KnowledgeResourceAddress;
+  resourceKind: "file" | "directory";
+  state: KnowledgeOperationItemState;
+  errorCode?: string;
+}>;
+
+export type KnowledgeTrashOperationResult = Readonly<{
+  schemaVersion: 1;
+  operationId: string;
+  requestHash: string;
+  kind: KnowledgeTrashOperationKind;
+  sourceKey: string;
+  batchId: string;
+  state: KnowledgeOperationState;
+  completedAt: string;
+  items: readonly KnowledgeTrashOperationResultItem[];
+  summary: Readonly<{
+    succeeded: number;
+    failed: number;
+    rolledBack: number;
+    recoveryRequired: number;
+  }>;
+  projections: Readonly<{
+    session: KnowledgeOperationProjectionState;
+    event: KnowledgeOperationProjectionState;
+    index: KnowledgeOperationProjectionState;
+  }>;
+}>;
+
+type PersistedKnowledgeOperationRecord =
+  | KnowledgeOperationJournalRecord
+  | KnowledgeTrashOperationJournalRecord;
+
+type PersistedKnowledgeOperationResult =
+  | KnowledgeOperationResult
+  | KnowledgeTrashOperationResult;
+
 export class KnowledgeOperationJournalAlreadyExistsError extends Error {
   constructor(operationId: string) {
     super(`knowledge operation journal already exists: ${operationId}`);
@@ -148,6 +277,25 @@ const JOURNAL_FIELDS = new Set([
   "requestHash",
   "committedRequestHash",
   "kind",
+  "request",
+  "owner",
+  "requestId",
+  "sourceIdentity",
+  "createdAt",
+  "expiresAt",
+  "updatedAt",
+  "state",
+  "items",
+  "projections",
+  "resultWrittenAt",
+  "recoveryReason",
+]);
+const TRASH_JOURNAL_FIELDS = new Set([
+  "schemaVersion",
+  "operationId",
+  "requestHash",
+  "kind",
+  "batchId",
   "request",
   "owner",
   "requestId",
@@ -219,6 +367,62 @@ const SUMMARY_FIELDS = new Set([
   "failed",
   "rolledBack",
   "recoveryRequired",
+]);
+const TRASH_REQUEST_FIELDS = new Set([
+  "kind",
+  "sourceKey",
+  "batchId",
+  "items",
+]);
+const TRASH_REQUEST_ITEM_FIELDS = new Set([
+  "entryId",
+  "originalAddress",
+  "trashAddress",
+  "targetAddress",
+  "resourceKind",
+  "expectedVersion",
+]);
+const TRASH_JOURNAL_ITEM_FIELDS = new Set([
+  "entryId",
+  "originalAddress",
+  "trashAddress",
+  "targetAddress",
+  "resourceKind",
+  "expectedVersion",
+  "state",
+  "appliedVersion",
+  "errorCode",
+  "steps",
+]);
+const TRASH_STEP_FIELDS = new Set([
+  "stepId",
+  "kind",
+  "state",
+  "intentAt",
+  "outcomeAt",
+  "errorCode",
+]);
+const TRASH_RESULT_FIELDS = new Set([
+  "schemaVersion",
+  "operationId",
+  "requestHash",
+  "kind",
+  "sourceKey",
+  "batchId",
+  "state",
+  "completedAt",
+  "items",
+  "summary",
+  "projections",
+]);
+const TRASH_RESULT_ITEM_FIELDS = new Set([
+  "entryId",
+  "originalAddress",
+  "trashAddress",
+  "targetAddress",
+  "resourceKind",
+  "state",
+  "errorCode",
 ]);
 
 export class DurableKnowledgeOperationJournal {
@@ -312,31 +516,112 @@ export class DurableKnowledgeOperationJournal {
     return record;
   }
 
-  read(operationId: string): KnowledgeOperationJournalRecord | null {
-    const operationDir = this.#operationDir(operationId);
-    const currentPath = path.join(operationDir, "journal.json");
-    const current = this.#readRecord(currentPath);
-    if (current) return current;
-    const previous = this.#readRecord(
-      path.join(operationDir, "journal.json.prev"),
-    );
-    if (!previous) return null;
-    const previousItem = previous.items[0];
-    const recovered = freezeRecord({
-      ...previous,
-      state: "RECOVERY_REQUIRED",
-      recoveryReason: "journal_current_unreadable",
-      items: [Object.freeze({
-        ...previousItem,
-        state: "recovery-required",
-        rollbackStatus: "failed",
-        errorCode: "knowledge_operation_precondition_failed",
-      })],
+  createTrashPrepared({
+    operationId,
+    kind,
+    sourceKey,
+    batchId,
+    items,
+    owner,
+    requestId = null,
+    sourceIdentity,
+    createdAt,
+    expiresAt,
+  }: {
+    operationId: string;
+    kind: KnowledgeTrashOperationKind;
+    sourceKey: string;
+    batchId: string;
+    items: readonly KnowledgeTrashOperationRequestItem[];
+    owner: KnowledgeOperationOwner;
+    requestId?: string | null;
+    sourceIdentity: ProviderRootIdentity;
+    createdAt: string;
+    expiresAt: string;
+  }): KnowledgeTrashOperationJournalRecord {
+    assertKnowledgeOperationId(operationId);
+    const request = validateTrashRequest({
+      kind,
+      sourceKey,
+      batchId,
+      items: items.map((item) => ({
+        entryId: item.entryId,
+        originalAddress: item.originalAddress,
+        trashAddress: item.trashAddress,
+        ...(
+          kind === "delete" && item.targetAddress === undefined
+            ? { targetAddress: item.trashAddress }
+            : item.targetAddress === undefined
+            ? {}
+            : { targetAddress: item.targetAddress }
+        ),
+        resourceKind: item.resourceKind,
+        expectedVersion: item.expectedVersion,
+      })),
     });
-    // Do not rotate the unreadable current over the known-good previous copy.
-    // Repair current in place and preserve journal.json.prev as evidence.
-    atomicReplace(currentPath, `${JSON.stringify(recovered, null, 2)}\n`);
-    return recovered;
+    const record = validateTrashRecord({
+      schemaVersion: 1,
+      operationId,
+      requestHash: hashKnowledgeTrashOperationRequest(request),
+      kind: request.kind,
+      batchId: request.batchId,
+      request,
+      owner,
+      requestId,
+      sourceIdentity,
+      createdAt,
+      expiresAt,
+      updatedAt: createdAt,
+      state: "PREPARED",
+      items: request.items.map((item) => ({
+        entryId: item.entryId,
+        originalAddress: item.originalAddress,
+        trashAddress: item.trashAddress,
+        ...(item.targetAddress === undefined
+          ? {}
+          : { targetAddress: item.targetAddress }),
+        resourceKind: item.resourceKind,
+        expectedVersion: item.expectedVersion,
+        state: "prepared",
+        steps: [],
+      })),
+      projections: {
+        session: "pending",
+        event: "pending",
+        index: "pending",
+      },
+    });
+    const operationDir = this.#operationDir(operationId);
+    fs.mkdirSync(this.#root, { recursive: true, mode: 0o700 });
+    try {
+      fs.mkdirSync(operationDir, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new KnowledgeOperationJournalAlreadyExistsError(operationId);
+      }
+      throw error;
+    }
+    try {
+      this.writeTrash(record);
+    } catch (error) {
+      try {
+        fs.rmSync(operationDir, { recursive: true, force: true });
+      } catch {
+        // Preserve the journal publication failure.
+      }
+      throw error;
+    }
+    return record;
+  }
+
+  read(operationId: string): KnowledgeOperationJournalRecord | null {
+    const record = this.#readAny(operationId);
+    return isKnowledgeOperationJournalRecord(record) ? record : null;
+  }
+
+  readTrash(operationId: string): KnowledgeTrashOperationJournalRecord | null {
+    const record = this.#readAny(operationId);
+    return isKnowledgeTrashOperationJournalRecord(record) ? record : null;
   }
 
   write(record: KnowledgeOperationJournalRecord): void {
@@ -356,14 +641,27 @@ export class DurableKnowledgeOperationJournal {
     );
   }
 
+  writeTrash(record: KnowledgeTrashOperationJournalRecord): void {
+    const validated = validateTrashRecord(record);
+    const operationDir = this.#operationDir(validated.operationId);
+    fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 });
+    const journalPath = path.join(operationDir, "journal.json");
+    const previousPath = path.join(operationDir, "journal.json.prev");
+    const serialized = `${JSON.stringify(validated, null, 2)}\n`;
+    canonicalKnowledgeOperationJson(validated);
+    atomicReplaceWithPrevious(journalPath, previousPath, serialized);
+  }
+
   readResult(
     operationId: string,
     expectedRequestHash?: string,
   ): KnowledgeOperationResult | null {
     const resultPath = path.join(this.#operationDir(operationId), "result.json");
     try {
-      const result = validateResult(JSON.parse(fs.readFileSync(resultPath, "utf8")));
+      const result = validateAnyResult(JSON.parse(fs.readFileSync(resultPath, "utf8")));
       if (
+        !isKnowledgeOperationResult(result)
+        ||
         result.operationId !== operationId
         || (
           expectedRequestHash !== undefined
@@ -387,7 +685,78 @@ export class DurableKnowledgeOperationJournal {
     atomicReplace(target, `${JSON.stringify(validated, null, 2)}\n`);
   }
 
+  readTrashResult(
+    operationId: string,
+    expectedRequestHash?: string,
+  ): KnowledgeTrashOperationResult | null {
+    const resultPath = path.join(this.#operationDir(operationId), "result.json");
+    try {
+      const result = validateAnyResult(JSON.parse(fs.readFileSync(resultPath, "utf8")));
+      if (
+        !isKnowledgeTrashOperationResult(result)
+        || result.operationId !== operationId
+        || (
+          expectedRequestHash !== undefined
+          && result.requestHash !== expectedRequestHash
+        )
+      ) {
+        return null;
+      }
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
+  writeTrashResult(result: KnowledgeTrashOperationResult): void {
+    const validated = validateTrashResult(result);
+    const operationDir = this.#operationDir(validated.operationId);
+    fs.mkdirSync(operationDir, { recursive: true, mode: 0o700 });
+    const target = path.join(operationDir, "result.json");
+    canonicalKnowledgeOperationJson(validated);
+    atomicReplace(target, `${JSON.stringify(validated, null, 2)}\n`);
+  }
+
   list(): KnowledgeOperationJournalRecord[] {
+    return this.#listFamily("operation") as KnowledgeOperationJournalRecord[];
+  }
+
+  listTrash(): KnowledgeTrashOperationJournalRecord[] {
+    return this.#listFamily("trash") as KnowledgeTrashOperationJournalRecord[];
+  }
+
+  remove(operationId: string): void {
+    fs.rmSync(this.#operationDir(operationId), {
+      recursive: true,
+      force: true,
+    });
+  }
+
+  #operationDir(operationId: string): string {
+    return path.join(this.#root, assertKnowledgeOperationId(operationId));
+  }
+
+  #readAny(operationId: string): PersistedKnowledgeOperationRecord | null {
+    const operationDir = this.#operationDir(operationId);
+    const currentPath = path.join(operationDir, "journal.json");
+    const current = this.#readAnyRecord(currentPath);
+    if (current) return current;
+    const previous = this.#readAnyRecord(
+      path.join(operationDir, "journal.json.prev"),
+    );
+    if (!previous) return null;
+    const recovered = isKnowledgeTrashOperationJournalRecord(previous)
+      ? unreadableTrashRecoveryRecord(previous)
+      : unreadableOperationRecoveryRecord(previous);
+    // Do not rotate the unreadable current over the known-good previous copy.
+    // Repair current in place and preserve journal.json.prev as evidence.
+    atomicReplace(currentPath, `${JSON.stringify(recovered, null, 2)}\n`);
+    return recovered;
+  }
+
+  #listFamily(
+    target: "operation" | "trash",
+  ): PersistedKnowledgeOperationRecord[] {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(this.#root, { withFileTypes: true });
@@ -395,11 +764,15 @@ export class DurableKnowledgeOperationJournal {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
     }
-    const records: KnowledgeOperationJournalRecord[] = [];
+    const records: PersistedKnowledgeOperationRecord[] = [];
     for (const entry of entries.filter((candidate) => candidate.isDirectory())) {
-      let record: KnowledgeOperationJournalRecord | null;
+      const family = this.#recordFamily(entry.name);
+      if (family !== null && family !== target) continue;
+      let record: PersistedKnowledgeOperationRecord | null;
       try {
-        record = this.read(entry.name);
+        record = target === "trash"
+          ? this.readTrash(entry.name)
+          : this.read(entry.name);
       } catch (error) {
         throw new Error(
           `knowledge operation journal directory is invalid: ${entry.name}`,
@@ -418,20 +791,26 @@ export class DurableKnowledgeOperationJournal {
     );
   }
 
-  remove(operationId: string): void {
-    fs.rmSync(this.#operationDir(operationId), {
-      recursive: true,
-      force: true,
-    });
+  #recordFamily(operationId: string): "operation" | "trash" | "atomic" | null {
+    const operationDir = this.#operationDir(operationId);
+    for (const fileName of ["journal.json", "journal.json.prev"]) {
+      try {
+        const value = JSON.parse(fs.readFileSync(
+          path.join(operationDir, fileName),
+          "utf8",
+        ));
+        const family = persistedRecordFamily(value);
+        if (family !== null) return family;
+      } catch {
+        // A valid previous journal can still identify the record family.
+      }
+    }
+    return null;
   }
 
-  #operationDir(operationId: string): string {
-    return path.join(this.#root, assertKnowledgeOperationId(operationId));
-  }
-
-  #readRecord(filePath: string): KnowledgeOperationJournalRecord | null {
+  #readAnyRecord(filePath: string): PersistedKnowledgeOperationRecord | null {
     try {
-      return validateRecord(JSON.parse(fs.readFileSync(filePath, "utf8")));
+      return validateAnyRecord(JSON.parse(fs.readFileSync(filePath, "utf8")));
     } catch {
       return null;
     }
@@ -499,7 +878,10 @@ function writeFsyncedFile(filePath: string, content: string): void {
 }
 
 function fsyncFile(filePath: string): void {
-  const handle = fs.openSync(filePath, fs.constants.O_RDONLY);
+  // The recovery copy is created with mode 0600 immediately above.  Opening
+  // it read/write keeps the required fsync valid on hosted NTFS, where Node
+  // can reject fsync on an otherwise readable handle with EPERM.
+  const handle = fs.openSync(filePath, fs.constants.O_RDWR);
   try {
     fs.fsyncSync(handle);
   } finally {
@@ -520,6 +902,545 @@ function fsyncDirectory(directory: string): void {
   }
 }
 
+export function hashKnowledgeTrashOperationRequest(value: unknown): string {
+  const request = validateTrashRequest(value);
+  return createHash("sha256")
+    .update(canonicalKnowledgeOperationJson(request), "utf8")
+    .digest("hex");
+}
+
+function validateAnyRecord(value: unknown): PersistedKnowledgeOperationRecord {
+  const record = plainRecord(value);
+  return isKnowledgeTrashOperationKind(record.kind)
+    ? validateTrashRecord(record)
+    : validateRecord(record);
+}
+
+function validateAnyResult(value: unknown): PersistedKnowledgeOperationResult {
+  const result = plainRecord(value);
+  return isKnowledgeTrashOperationKind(result.kind)
+    ? validateTrashResult(result)
+    : validateResult(result);
+}
+
+function persistedRecordFamily(
+  value: unknown,
+): "operation" | "trash" | "atomic" | null {
+  if (
+    typeof value !== "object"
+    || value === null
+    || Array.isArray(value)
+    || !("kind" in value)
+  ) {
+    return null;
+  }
+  const kind = (value as { kind?: unknown }).kind;
+  if (isKnowledgeTrashOperationKind(kind)) return "trash";
+  if (kind === "create" || kind === "copy" || kind === "import") return "atomic";
+  return kind === "rename" || kind === "move" ? "operation" : null;
+}
+
+function isKnowledgeOperationJournalRecord(
+  value: PersistedKnowledgeOperationRecord | null,
+): value is KnowledgeOperationJournalRecord {
+  return value !== null && !isKnowledgeTrashOperationKind(value.kind);
+}
+
+function isKnowledgeTrashOperationJournalRecord(
+  value: PersistedKnowledgeOperationRecord | null,
+): value is KnowledgeTrashOperationJournalRecord {
+  return value !== null && isKnowledgeTrashOperationKind(value.kind);
+}
+
+function isKnowledgeOperationResult(
+  value: PersistedKnowledgeOperationResult,
+): value is KnowledgeOperationResult {
+  return !isKnowledgeTrashOperationKind(value.kind);
+}
+
+function isKnowledgeTrashOperationResult(
+  value: PersistedKnowledgeOperationResult,
+): value is KnowledgeTrashOperationResult {
+  return isKnowledgeTrashOperationKind(value.kind);
+}
+
+function unreadableOperationRecoveryRecord(
+  previous: KnowledgeOperationJournalRecord,
+): KnowledgeOperationJournalRecord {
+  const previousItem = previous.items[0];
+  return freezeRecord({
+    ...previous,
+    state: "RECOVERY_REQUIRED",
+    recoveryReason: "journal_current_unreadable",
+    items: [Object.freeze({
+      ...previousItem,
+      state: "recovery-required",
+      rollbackStatus: "failed",
+      errorCode: "knowledge_operation_precondition_failed",
+    })],
+  });
+}
+
+function unreadableTrashRecoveryRecord(
+  previous: KnowledgeTrashOperationJournalRecord,
+): KnowledgeTrashOperationJournalRecord {
+  return freezeTrashRecord({
+    ...previous,
+    state: "RECOVERY_REQUIRED",
+    recoveryReason: "journal_current_unreadable",
+    items: previous.items.map((item) => Object.freeze({
+      ...item,
+      state: "recovery-required" as const,
+      errorCode: item.errorCode ?? "knowledge_operation_precondition_failed",
+    })),
+  });
+}
+
+function validateTrashRecord(
+  value: unknown,
+): KnowledgeTrashOperationJournalRecord {
+  const record = plainRecord(value);
+  rejectUnknownFields(record, TRASH_JOURNAL_FIELDS);
+  if (
+    record.schemaVersion !== 1
+    || typeof record.operationId !== "string"
+    || !isKnowledgeOperationRequestHash(record.requestHash)
+    || !isKnowledgeTrashOperationKind(record.kind)
+    || typeof record.batchId !== "string"
+    || !isOperationState(record.state)
+    || !Array.isArray(record.items)
+  ) {
+    throw new TypeError("invalid knowledge trash operation journal");
+  }
+  assertKnowledgeOperationId(record.operationId);
+  const request = validateTrashRequest(record.request);
+  if (
+    record.kind !== request.kind
+    || record.batchId !== request.batchId
+    || record.requestHash !== hashKnowledgeTrashOperationRequest(request)
+  ) {
+    throw new TypeError("knowledge trash operation request hash mismatch");
+  }
+  if (record.items.length !== request.items.length) {
+    throw new TypeError("knowledge trash journal item count mismatch");
+  }
+  const items = record.items.map((item, index) =>
+    validateTrashJournalItem(item, request.items[index], request)
+  );
+  assertTrashStateConsistency(record.state, items);
+  const owner = validateOwner(record.owner);
+  const sourceIdentity = validateIdentity(record.sourceIdentity);
+  const projections = validateProjections(record.projections);
+  const createdAt = validIsoDate(record.createdAt);
+  const expiresAt = validIsoDate(record.expiresAt);
+  const updatedAt = validIsoDate(record.updatedAt);
+  if (
+    Date.parse(expiresAt) - Date.parse(createdAt) !== 15 * 60 * 1_000
+    || Date.parse(updatedAt) < Date.parse(createdAt)
+  ) {
+    throw new TypeError("invalid knowledge trash operation journal timestamps");
+  }
+  const requestId = nullableSafeString(record.requestId, 256);
+  const resultWrittenAt = record.resultWrittenAt === undefined
+    ? undefined
+    : validIsoDate(record.resultWrittenAt);
+  if (
+    resultWrittenAt !== undefined
+    && Date.parse(resultWrittenAt) < Date.parse(createdAt)
+  ) {
+    throw new TypeError("invalid knowledge trash operation result timestamp");
+  }
+  const recoveryReason = record.recoveryReason === undefined
+    ? undefined
+    : safeCode(record.recoveryReason);
+  const validated: KnowledgeTrashOperationJournalRecord = {
+    schemaVersion: 1,
+    operationId: record.operationId,
+    requestHash: record.requestHash,
+    kind: request.kind,
+    batchId: request.batchId,
+    request,
+    owner,
+    requestId,
+    sourceIdentity,
+    createdAt,
+    expiresAt,
+    updatedAt,
+    state: record.state,
+    items: Object.freeze(items),
+    projections,
+    ...(resultWrittenAt ? { resultWrittenAt } : {}),
+    ...(recoveryReason ? { recoveryReason } : {}),
+  };
+  canonicalKnowledgeOperationJson(validated);
+  return freezeTrashRecord(validated);
+}
+
+function validateTrashRequest(value: unknown): KnowledgeTrashOperationRequest {
+  const request = plainRecord(value);
+  rejectUnknownFields(request, TRASH_REQUEST_FIELDS);
+  if (
+    !isKnowledgeTrashOperationKind(request.kind)
+    || !Array.isArray(request.items)
+    || request.items.length === 0
+    || request.items.length > 10_000
+  ) {
+    throw new TypeError("invalid knowledge trash operation request");
+  }
+  const sourceKey = validSourceKey(request.sourceKey);
+  const batchId = assertKnowledgeOperationId(request.batchId);
+  const kind = request.kind as KnowledgeTrashOperationKind;
+  const entryIds = new Set<string>();
+  const items = request.items.map((item) => {
+    const parsed = validateTrashRequestItem(
+      item,
+      kind,
+      batchId,
+      sourceKey,
+    );
+    if (entryIds.has(parsed.entryId)) {
+      throw new TypeError("duplicate knowledge trash operation entry");
+    }
+    entryIds.add(parsed.entryId);
+    return parsed;
+  });
+  return Object.freeze({
+    kind,
+    sourceKey,
+    batchId,
+    items: Object.freeze(items),
+  });
+}
+
+function validateTrashRequestItem(
+  value: unknown,
+  kind: KnowledgeTrashOperationKind,
+  batchId: string,
+  sourceKey: string,
+): KnowledgeTrashOperationRequestItem {
+  const item = plainRecord(value);
+  rejectUnknownFields(item, TRASH_REQUEST_ITEM_FIELDS);
+  const entryId = assertKnowledgeOperationId(item.entryId);
+  const originalAddress = validateJournalAddress(item.originalAddress);
+  const trashAddress = validateJournalAddress(item.trashAddress);
+  const hasTargetAddress = hasOwn(item, "targetAddress");
+  const targetAddress = hasTargetAddress
+    ? validateJournalAddress(item.targetAddress)
+    : undefined;
+  if (
+    originalAddress.sourceKey !== sourceKey
+    || trashAddress.sourceKey !== sourceKey
+    || (targetAddress && targetAddress.sourceKey !== sourceKey)
+    || isTrashRelativePath(originalAddress.relativePath)
+    || !trashAddress.relativePath.startsWith(`.trash/${batchId}/payload/`)
+  ) {
+    throw new TypeError("invalid knowledge trash operation addresses");
+  }
+  if (item.resourceKind !== "file" && item.resourceKind !== "directory") {
+    throw new TypeError("invalid knowledge trash operation resource kind");
+  }
+  const expectedVersion = validateVersion(item.expectedVersion);
+  if (
+    (kind === "delete" && (
+      !targetAddress || !addressesEqual(targetAddress, trashAddress)
+    ))
+    || (kind === "restore" && (
+      !targetAddress || isTrashRelativePath(targetAddress.relativePath)
+    ))
+    || (kind === "cleanup" && hasTargetAddress)
+  ) {
+    throw new TypeError("invalid knowledge trash operation target");
+  }
+  return Object.freeze({
+    entryId,
+    originalAddress,
+    trashAddress,
+    ...(targetAddress === undefined ? {} : { targetAddress }),
+    resourceKind: item.resourceKind,
+    expectedVersion,
+  });
+}
+
+function validateTrashJournalItem(
+  value: unknown,
+  expected: KnowledgeTrashOperationRequestItem | undefined,
+  request: KnowledgeTrashOperationRequest,
+): KnowledgeTrashOperationJournalItem {
+  if (!expected) throw new TypeError("knowledge trash journal item is unexpected");
+  const item = plainRecord(value);
+  rejectUnknownFields(item, TRASH_JOURNAL_ITEM_FIELDS);
+  const base = validateTrashRequestItem({
+    entryId: item.entryId,
+    originalAddress: item.originalAddress,
+    trashAddress: item.trashAddress,
+    ...(hasOwn(item, "targetAddress")
+      ? { targetAddress: item.targetAddress }
+      : {}),
+    resourceKind: item.resourceKind,
+    expectedVersion: item.expectedVersion,
+  }, request.kind, request.batchId, request.sourceKey);
+  if (
+    canonicalKnowledgeOperationJson(base)
+    !== canonicalKnowledgeOperationJson(expected)
+  ) {
+    throw new TypeError("knowledge trash journal item diverges from request");
+  }
+  if (!isItemState(item.state) || !Array.isArray(item.steps)) {
+    throw new TypeError("invalid knowledge trash journal item");
+  }
+  const steps = item.steps.map(validateTrashStep);
+  if (new Set(steps.map((step) => step.stepId)).size !== steps.length) {
+    throw new TypeError("duplicate knowledge trash journal step");
+  }
+  const appliedVersion = item.appliedVersion === undefined
+    ? undefined
+    : validateVersion(item.appliedVersion);
+  const errorCode = item.errorCode === undefined
+    ? undefined
+    : safeCode(item.errorCode);
+  return Object.freeze({
+    ...base,
+    state: item.state,
+    ...(appliedVersion ? { appliedVersion } : {}),
+    ...(errorCode ? { errorCode } : {}),
+    steps: Object.freeze(steps),
+  });
+}
+
+function validateTrashStep(value: unknown): KnowledgeTrashOperationStep {
+  const step = plainRecord(value);
+  rejectUnknownFields(step, TRASH_STEP_FIELDS);
+  if (
+    ![
+      "manifest-write",
+      "resource-move",
+      "parent-mkdir",
+      "link-write",
+      "native-grant",
+      "native-dispatch",
+      "system-trash",
+    ].includes(String(step.kind))
+    || !["intent", "applied", "rolled-back", "failed"].includes(
+      String(step.state),
+    )
+  ) {
+    throw new TypeError("invalid knowledge trash journal step");
+  }
+  const errorCode = step.errorCode === undefined
+    ? undefined
+    : safeCode(step.errorCode);
+  return Object.freeze({
+    stepId: safeString(step.stepId, 128),
+    kind: step.kind as KnowledgeTrashOperationStepKind,
+    state: step.state as KnowledgeTrashOperationStep["state"],
+    intentAt: validIsoDate(step.intentAt),
+    ...(step.outcomeAt === undefined
+      ? {}
+      : { outcomeAt: validIsoDate(step.outcomeAt) }),
+    ...(errorCode ? { errorCode } : {}),
+  });
+}
+
+function validateTrashResult(value: unknown): KnowledgeTrashOperationResult {
+  const result = plainRecord(value);
+  rejectUnknownFields(result, TRASH_RESULT_FIELDS);
+  if (
+    result.schemaVersion !== 1
+    || typeof result.operationId !== "string"
+    || !isKnowledgeOperationRequestHash(result.requestHash)
+    || !isKnowledgeTrashOperationKind(result.kind)
+    || !isOperationState(result.state)
+    || !Array.isArray(result.items)
+    || result.items.length === 0
+    || ![
+      "FINALIZED",
+      "ROLLED_BACK",
+      "RECOVERY_REQUIRED",
+      "FAILED_PERMANENTLY",
+    ].includes(result.state)
+  ) {
+    throw new TypeError("invalid knowledge trash operation result");
+  }
+  assertKnowledgeOperationId(result.operationId);
+  const sourceKey = validSourceKey(result.sourceKey);
+  const batchId = assertKnowledgeOperationId(result.batchId);
+  const kind = result.kind as KnowledgeTrashOperationKind;
+  const entryIds = new Set<string>();
+  const items = result.items.map((item) => {
+    const parsed = validateTrashResultItem(
+      item,
+      kind,
+      batchId,
+      sourceKey,
+    );
+    if (entryIds.has(parsed.entryId)) {
+      throw new TypeError("duplicate knowledge trash result entry");
+    }
+    entryIds.add(parsed.entryId);
+    return parsed;
+  });
+  assertTrashStateConsistency(result.state, items);
+  const summary = validateSummary(result.summary);
+  const expectedSummary = summaryForItems(items);
+  if (
+    summary.succeeded !== expectedSummary.succeeded
+    || summary.failed !== expectedSummary.failed
+    || summary.rolledBack !== expectedSummary.rolledBack
+    || summary.recoveryRequired !== expectedSummary.recoveryRequired
+  ) {
+    throw new TypeError("knowledge trash operation result summary mismatch");
+  }
+  const validated: KnowledgeTrashOperationResult = {
+    schemaVersion: 1,
+    operationId: result.operationId,
+    requestHash: result.requestHash,
+    kind,
+    sourceKey,
+    batchId,
+    state: result.state,
+    completedAt: validIsoDate(result.completedAt),
+    items: Object.freeze(items),
+    summary,
+    projections: validateProjections(result.projections),
+  };
+  canonicalKnowledgeOperationJson(validated);
+  return freezeTrashResult(validated);
+}
+
+function validateTrashResultItem(
+  value: unknown,
+  kind: KnowledgeTrashOperationKind,
+  batchId: string,
+  sourceKey: string,
+): KnowledgeTrashOperationResultItem {
+  const item = plainRecord(value);
+  rejectUnknownFields(item, TRASH_RESULT_ITEM_FIELDS);
+  const entryId = assertKnowledgeOperationId(item.entryId);
+  const originalAddress = validateJournalAddress(item.originalAddress);
+  const trashAddress = validateJournalAddress(item.trashAddress);
+  const hasTargetAddress = hasOwn(item, "targetAddress");
+  const targetAddress = hasTargetAddress
+    ? validateJournalAddress(item.targetAddress)
+    : undefined;
+  if (
+    originalAddress.sourceKey !== sourceKey
+    || trashAddress.sourceKey !== sourceKey
+    || (targetAddress && targetAddress.sourceKey !== sourceKey)
+    || isTrashRelativePath(originalAddress.relativePath)
+    || !trashAddress.relativePath.startsWith(`.trash/${batchId}/payload/`)
+    || (kind === "delete" && (
+      !targetAddress || !addressesEqual(targetAddress, trashAddress)
+    ))
+    || (kind === "restore" && (
+      !targetAddress || isTrashRelativePath(targetAddress.relativePath)
+    ))
+    || (kind === "cleanup" && hasTargetAddress)
+    || (item.resourceKind !== "file" && item.resourceKind !== "directory")
+    || !isItemState(item.state)
+  ) {
+    throw new TypeError("invalid knowledge trash result item");
+  }
+  const errorCode = item.errorCode === undefined
+    ? undefined
+    : safeCode(item.errorCode);
+  return Object.freeze({
+    entryId,
+    originalAddress,
+    trashAddress,
+    ...(targetAddress === undefined ? {} : { targetAddress }),
+    resourceKind: item.resourceKind,
+    state: item.state,
+    ...(errorCode ? { errorCode } : {}),
+  });
+}
+
+function assertTrashStateConsistency(
+  state: KnowledgeOperationState,
+  items: readonly Readonly<{ state: KnowledgeOperationItemState }>[],
+): void {
+  const itemStates = items.map((item) => item.state);
+  const every = (...allowed: KnowledgeOperationItemState[]) =>
+    itemStates.every((itemState) => allowed.includes(itemState));
+  const some = (...allowed: KnowledgeOperationItemState[]) =>
+    itemStates.some((itemState) => allowed.includes(itemState));
+  const valid = state === "PLANNED" || state === "PREPARING"
+    ? every("pending")
+    : state === "PREPARED"
+    ? every("prepared")
+    : state === "COMMITTING"
+    ? every("prepared", "applying", "applied", "failed")
+    : state === "COMMITTED" || state === "FINALIZED"
+    ? every("applied", "failed")
+    : state === "ROLLING_BACK"
+    ? every("rolling-back", "rolled-back", "failed")
+    : state === "ROLLED_BACK"
+    ? every("rolled-back")
+    : state === "RECOVERY_REQUIRED"
+    ? some("recovery-required")
+      && every("prepared", "applying", "applied", "failed", "recovery-required")
+    : state === "FAILED_PERMANENTLY"
+    ? every("failed", "recovery-required")
+    : false;
+  if (!valid) {
+    throw new TypeError("knowledge trash operation state/item mismatch");
+  }
+}
+
+function summaryForItems(
+  items: readonly Readonly<{ state: KnowledgeOperationItemState }>[],
+): KnowledgeTrashOperationResult["summary"] {
+  return Object.freeze({
+    succeeded: items.filter((item) => item.state === "applied").length,
+    failed: items.filter((item) =>
+      item.state === "failed"
+      || item.state === "rolled-back"
+      || item.state === "recovery-required"
+    ).length,
+    rolledBack: items.filter((item) => item.state === "rolled-back").length,
+    recoveryRequired: items.filter((item) =>
+      item.state === "recovery-required"
+    ).length,
+  });
+}
+
+function validateJournalAddress(value: unknown): KnowledgeResourceAddress {
+  const parsed = parseKnowledgeResourceAddress(value);
+  if (parsed.ok === false) {
+    throw new TypeError("invalid knowledge trash journal address");
+  }
+  return Object.freeze({ ...parsed.value });
+}
+
+function validSourceKey(value: unknown): string {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9-]{0,31}$/.test(value)) {
+    throw new TypeError("invalid knowledge trash journal source key");
+  }
+  return value;
+}
+
+function isKnowledgeTrashOperationKind(
+  value: unknown,
+): value is KnowledgeTrashOperationKind {
+  return typeof value === "string"
+    && (KNOWLEDGE_TRASH_OPERATION_KINDS as readonly string[]).includes(value);
+}
+
+function isTrashRelativePath(relativePath: string): boolean {
+  return relativePath === ".trash" || relativePath.startsWith(".trash/");
+}
+
+function addressesEqual(
+  left: KnowledgeResourceAddress,
+  right: KnowledgeResourceAddress,
+): boolean {
+  return left.sourceKey === right.sourceKey
+    && left.relativePath === right.relativePath;
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
 function validateRecord(value: unknown): KnowledgeOperationJournalRecord {
   const record = plainRecord(value);
   rejectUnknownFields(record, JOURNAL_FIELDS);
@@ -527,7 +1448,7 @@ function validateRecord(value: unknown): KnowledgeOperationJournalRecord {
     record.schemaVersion !== 1
     || typeof record.operationId !== "string"
     || !isKnowledgeOperationRequestHash(record.requestHash)
-    || record.kind !== "rename"
+    || (record.kind !== "rename" && record.kind !== "move")
     || !isOperationState(record.state)
     || !Array.isArray(record.items)
     || record.items.length !== 1
@@ -537,7 +1458,8 @@ function validateRecord(value: unknown): KnowledgeOperationJournalRecord {
   assertKnowledgeOperationId(record.operationId);
   const request = parseKnowledgeOperationRequest(record.request);
   if (
-    record.requestHash !== hashKnowledgeOperationRequest(request)
+    record.kind !== request.kind
+    || record.requestHash !== hashKnowledgeOperationRequest(request)
     || (
       record.committedRequestHash !== undefined
       && (
@@ -585,7 +1507,7 @@ function validateRecord(value: unknown): KnowledgeOperationJournalRecord {
     ...(committedRequestHash
       ? { committedRequestHash }
       : {}),
-    kind: "rename",
+    kind: request.kind,
     request,
     owner,
     requestId,
@@ -610,7 +1532,7 @@ function validateResult(value: unknown): KnowledgeOperationResult {
     result.schemaVersion !== 1
     || typeof result.operationId !== "string"
     || !isKnowledgeOperationRequestHash(result.requestHash)
-    || result.kind !== "rename"
+    || (result.kind !== "rename" && result.kind !== "move")
     || !isOperationState(result.state)
     || !Array.isArray(result.items)
     || result.items.length !== 1
@@ -623,8 +1545,9 @@ function validateResult(value: unknown): KnowledgeOperationResult {
   ) {
     throw new TypeError("invalid knowledge operation result");
   }
+  const kind = result.kind as KnowledgeOperationRequest["kind"];
   assertKnowledgeOperationId(result.operationId);
-  const items = result.items.map(validateResultItem);
+  const items = result.items.map(item => validateResultItem(item, kind));
   assertJournalStateConsistency(result.state, items[0].state);
   const summary = validateSummary(result.summary);
   const expectedSummary = {
@@ -652,7 +1575,7 @@ function validateResult(value: unknown): KnowledgeOperationResult {
     schemaVersion: 1,
     operationId: result.operationId,
     requestHash: result.requestHash,
-    kind: "rename",
+    kind,
     state: result.state,
     completedAt: validIsoDate(result.completedAt),
     items: Object.freeze(items),
@@ -667,6 +1590,18 @@ function freezeRecord(
   record: KnowledgeOperationJournalRecord,
 ): KnowledgeOperationJournalRecord {
   return deepFreeze(structuredClone(record));
+}
+
+function freezeTrashRecord(
+  record: KnowledgeTrashOperationJournalRecord,
+): KnowledgeTrashOperationJournalRecord {
+  return deepFreeze(structuredClone(record));
+}
+
+function freezeTrashResult(
+  result: KnowledgeTrashOperationResult,
+): KnowledgeTrashOperationResult {
+  return deepFreeze(structuredClone(result));
 }
 
 function deepFreeze<T>(value: T): T {
@@ -813,11 +1748,14 @@ function validateStep(value: unknown): KnowledgeOperationStep {
   });
 }
 
-function validateResultItem(value: unknown): KnowledgeOperationResultItem {
+function validateResultItem(
+  value: unknown,
+  kind: KnowledgeOperationRequest["kind"],
+): KnowledgeOperationResultItem {
   const item = plainRecord(value);
   rejectUnknownFields(item, RESULT_ITEM_FIELDS);
   const fromRequest = parseKnowledgeOperationRequest({
-    kind: "rename",
+    kind,
     from: item.from,
     to: item.to,
     expectedVersion: { sequence: 0 },

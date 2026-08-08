@@ -47,7 +47,9 @@ describe("HanaEngine Computer Use lazy runtime", () => {
   });
 
   it("constructs the Computer Use runtime when the global switch is enabled", () => {
+    const platform = vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
     const engine = createEngine();
+    const supported = vi.spyOn(engine, "isComputerUseSupported").mockReturnValue(true);
 
     const disabled = engine.setComputerUseSettings({ enabled: false });
     expect(disabled.enabled).toBe(false);
@@ -58,10 +60,14 @@ describe("HanaEngine Computer Use lazy runtime", () => {
     expect(enabled.enabled).toBe(true);
     expect(engine._computerProviders).toBeTruthy();
     expect(engine._computerHost).toBeTruthy();
+    supported.mockRestore();
+    platform.mockRestore();
   });
 
   it("disposes the lazy Computer Use runtime during engine shutdown", async () => {
+    const platform = vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
     const engine = createEngine();
+    const supported = vi.spyOn(engine, "isComputerUseSupported").mockReturnValue(true);
     engine.setComputerUseSettings({ enabled: true });
     const dispose = vi.fn(async () => {});
     engine._computerHost = { dispose };
@@ -72,6 +78,8 @@ describe("HanaEngine Computer Use lazy runtime", () => {
     expect(dispose).toHaveBeenCalledOnce();
     expect(engine._computerHost).toBeNull();
     expect(engine._computerProviders).toBeNull();
+    supported.mockRestore();
+    platform.mockRestore();
   });
 
   it("stores usage ledger entries under hanakoHome so engine restarts keep them", () => {

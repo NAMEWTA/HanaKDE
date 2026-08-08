@@ -10,6 +10,7 @@ import {
   KNOWLEDGE_MARKDOWN_MAX_BYTES,
   parseKnowledgeResourceAddress,
 } from "../../shared/knowledge-workspace-contract.ts";
+import { RESOURCE_READ_PROOF } from "../../lib/resource-io/types.ts";
 import { KnowledgeWorkspaceError, snapshotOwnData, toKnowledgeErrorEnvelope, toPublicKnowledgeErrorEnvelope } from "../../shared/knowledge-workspace-errors.ts";
 import { safeJson } from "../hono-helpers.ts";
 import { createHonoResourceOperationContext } from "../http/resource-operation-context.ts";
@@ -335,6 +336,7 @@ export function createResourceIoRoute(engine, {
     const resource = await readResourceRef(c, engine, body, {
       capability: "files.read",
       allowedAddressFields: KNOWLEDGE_ADDRESS_ROUTE_FIELDS.list,
+      allowSourceRoot: true,
     });
     return resourceIO.list(resource);
   }, { responseKind: "list" }));
@@ -436,6 +438,7 @@ export function createResourceIoRoute(engine, {
 async function readResourceRef(c, engine, body, {
   capability,
   allowedAddressFields,
+  allowSourceRoot = false,
 }) {
   if (body?.address !== undefined) {
     rejectUnexpectedFields(body, allowedAddressFields);
@@ -456,6 +459,7 @@ async function readResourceRef(c, engine, body, {
       engine,
       body.address,
       capability,
+      { allowSourceRoot },
     );
   }
   return body?.resource || body?.ref || body?.target || body;
@@ -659,6 +663,7 @@ async function readKnowledgeContentWithGate(
   throwIfKnowledgeReadAborted(signal);
   const opened = await resourceIO.openRead(resource, {
     expectedVersion: stat.version,
+    [RESOURCE_READ_PROOF]: stat[RESOURCE_READ_PROOF],
   });
   assertKnowledgeContentSize(opened?.size);
   if (opened.size !== size) {

@@ -15,6 +15,7 @@ import {
   KnowledgeResourceTree,
   type KnowledgeResourceTreeChangeSignal,
 } from '../../components/knowledge-workspace/KnowledgeResourceTree';
+import type { ResourceWatchRelease } from '../../services/resource-events';
 import { useStore } from '../../stores';
 
 const mainSource: KnowledgeSourceDto = {
@@ -88,7 +89,7 @@ function renderTree({
   subscribeToChanges?: (
     listener: (signal: KnowledgeResourceTreeChangeSignal) => void,
   ) => () => void;
-  watchSource?: (sourceKey: string) => () => void;
+  watchSource?: (sourceKey: string) => ResourceWatchRelease;
 }) {
   return render(
     <KnowledgeResourceTree
@@ -165,6 +166,32 @@ describe('KnowledgeResourceTree', () => {
       '',
       'Folder 2',
     ]);
+  });
+
+  it('publishes selected files in both tree-operation and editor-attachment drag formats', async () => {
+    const list = vi.fn(async () => listResult([
+      { name: 'Page.md', isDirectory: false },
+      { name: 'photo.png', isDirectory: false },
+    ]));
+    renderTree({ client: treeClient(list), sources: [mainSource] });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+    const page = await screen.findByRole('treeitem', { name: /Page\.md/u });
+    const values = new Map<string, string>();
+
+    fireEvent.dragStart(page, {
+      dataTransfer: {
+        setData: (type: string, value: string) => values.set(type, value),
+        effectAllowed: 'none',
+      },
+    });
+
+    expect(JSON.parse(values.get('application/x-openhanako-knowledge-resources+json') ?? 'null'))
+      .toMatchObject({ sourceKey: 'main', addresses: [{ relativePath: 'Page.md' }] });
+    expect(JSON.parse(values.get('application/x-hanako-knowledge-editor-resources+json') ?? 'null'))
+      .toEqual([{
+        sourceAddress: { sourceKey: 'main', relativePath: 'Page.md' },
+        kind: 'page',
+      }]);
   });
 
   it('aborts a pending branch when it is collapsed and ignores the stale result', async () => {
@@ -289,6 +316,87 @@ describe('KnowledgeResourceTree', () => {
     expect(await screen.findByText('main-after.md')).toBeInTheDocument();
     expect(screen.getByText('archive-before.md')).toBeInTheDocument();
     expect(screen.queryByText('main-before.md')).not.toBeInTheDocument();
+  });
+
+  it('takes one catch-up snapshot when the first expanded source-root listing is empty', async () => {
+    let calls = 0;
+    const list = vi.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? listResult([])
+        : listResult([{ name: 'appeared-after-watch.md', isDirectory: false }]);
+    });
+
+    renderTree({
+      client: treeClient(list),
+      sources: [mainSource],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+
+    expect(await screen.findByText('appeared-after-watch.md')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalidates an expanded empty root when its source watch is confirmed', async () => {
+    let confirmWatch: (() => void) | undefined;
+    const watchReady = new Promise<void>((resolve) => {
+      confirmWatch = resolve;
+    });
+    const release = vi.fn() as ResourceWatchRelease;
+    Object.defineProperty(release, 'ready', {
+      value: watchReady,
+      enumerable: false,
+    });
+    let revision = 0;
+    const list = vi.fn(async () => (
+      revision === 0
+        ? listResult([])
+        : listResult([{ name: 'written-after-watch.md', isDirectory: false }])
+    ));
+
+    renderTree({
+      client: treeClient(list),
+      sources: [mainSource],
+      watchSource: () => release,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+
+    revision = 1;
+    act(() => confirmWatch?.());
+
+    expect(await screen.findByText('written-after-watch.md')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalidates after a watch confirms before the first root snapshot arrives', async () => {
+    let confirmWatch: (() => void) | undefined;
+    const watchReady = new Promise<void>((resolve) => {
+      confirmWatch = resolve;
+    });
+    const release = vi.fn() as ResourceWatchRelease;
+    Object.defineProperty(release, 'ready', {
+      value: watchReady,
+      enumerable: false,
+    });
+    let revision = 0;
+    const list = vi.fn(async () => (
+      revision === 0
+        ? listResult([])
+        : listResult([{ name: 'written-after-early-watch.md', isDirectory: false }])
+    ));
+
+    renderTree({
+      client: treeClient(list),
+      sources: [mainSource],
+      watchSource: () => release,
+    });
+    act(() => confirmWatch?.());
+    revision = 1;
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+
+    expect(await screen.findByText('written-after-early-watch.md')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
   });
 
   it('restores expansion only inside the same workspace session', async () => {

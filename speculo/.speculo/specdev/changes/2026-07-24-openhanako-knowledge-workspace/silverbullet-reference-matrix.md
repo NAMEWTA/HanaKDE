@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 仓库内位置 | `silverbullet/`（被 `.gitignore` 排除，不作为运行依赖） |
+| 仓库内位置 | `silverbullet/`（仅纳入本矩阵引用的 8 个文件与 3 个目录的受控审计快照；不作为运行依赖） |
 | package | `@silverbulletmd/silverbullet` |
 | 版本 | `2.9.0` |
 | Node 要求 | `>=24.13.0` |

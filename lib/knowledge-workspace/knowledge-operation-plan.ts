@@ -21,7 +21,16 @@ export type KnowledgeRenameOperationRequest = Readonly<{
   expectedVersion: ResourceVersion;
 }>;
 
-export type KnowledgeOperationRequest = KnowledgeRenameOperationRequest;
+export type KnowledgeMoveOperationRequest = Readonly<{
+  kind: "move";
+  from: KnowledgeResourceAddress;
+  to: KnowledgeResourceAddress;
+  expectedVersion: ResourceVersion;
+}>;
+
+export type KnowledgeOperationRequest =
+  | KnowledgeRenameOperationRequest
+  | KnowledgeMoveOperationRequest;
 
 export type KnowledgeOperationCommitRequest = Readonly<{
   requestHash: string;
@@ -79,19 +88,19 @@ export function parseKnowledgeOperationRequest(
 ): KnowledgeOperationRequest {
   const value = plainRecord(input, "operation request");
   rejectUnknownFields(value, REQUEST_FIELDS);
-  if (value.kind !== "rename") {
-    throw precondition("operation kind must be rename", "kind");
+  if (value.kind !== "rename" && value.kind !== "move") {
+    throw precondition("operation kind must be rename or move", "kind");
   }
   const from = parseAddress(value.from, "from");
   const to = parseAddress(value.to, "to");
   if (from.sourceKey !== to.sourceKey) {
-    throw precondition("rename must stay within one source", "to");
+    throw precondition("operation must stay within one source", "to");
   }
   if (from.relativePath === to.relativePath) {
-    throw precondition("rename target must differ from source", "to");
+    throw precondition("operation target must differ from source", "to");
   }
   return Object.freeze({
-    kind: "rename",
+    kind: value.kind,
     from: Object.freeze(from),
     to: Object.freeze(to),
     expectedVersion: Object.freeze(parseResourceVersion(

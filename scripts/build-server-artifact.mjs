@@ -586,7 +586,7 @@ export async function packDualKindSeed({
   const signKeyPath = requireSignKeyPath(env);
   const { keysetPath, keyset } = resolveBuildKeyset(env);
   if (keysetPath) {
-    log(`[build-server] seed: using HANA_SIGN_KEYSET override for THIS build: ${keysetPath}`);
+    log("[build-server] seed: using HANA_SIGN_KEYSET override for this build");
   }
 
   // ── 两个归档都打完 ──

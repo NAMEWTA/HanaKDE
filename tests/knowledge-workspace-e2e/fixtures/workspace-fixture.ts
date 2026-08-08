@@ -2,6 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import YAML from "js-yaml";
+import { upsertStudioMount } from "../../../core/studio-mounts.ts";
+import {
+  ensureLocalIdentityRegistries,
+  loadServerIdentity,
+} from "../../../core/server-identity.ts";
 
 export type KnowledgeWorkspaceSandbox = {
   rootDir: string;
@@ -50,6 +55,41 @@ export async function createKnowledgeWorkspaceSandbox(
         ...mountedSources,
       ].map((directory) => fs.mkdir(directory, { recursive: true })),
     );
+    ensureLocalIdentityRegistries(hanaHome);
+    const { studioId } = loadServerIdentity(hanaHome);
+    for (const [index, root] of mountedSources.entries()) {
+      upsertStudioMount(hanaHome, {
+        mountId: `knowledge_e2e_mount_${index + 1}`,
+        hostStudioId: studioId,
+        sourceKind: "storage",
+        provider: "local_fs",
+        rootLocator: { path: root },
+        label: `Knowledge E2E mount ${index + 1}`,
+        presentation: "folder",
+        capabilities: [
+          "list",
+          "read",
+          "write",
+          "watch",
+          "materialize",
+        ],
+      });
+    }
+    for (const [mountId, root, label] of [
+      ["knowledge_e2e_mount_same", mainSource, "Knowledge E2E same root"],
+      ["knowledge_e2e_mount_ancestor", rootDir, "Knowledge E2E ancestor root"],
+    ] as const) {
+      upsertStudioMount(hanaHome, {
+        mountId,
+        hostStudioId: studioId,
+        sourceKind: "storage",
+        provider: "local_fs",
+        rootLocator: { path: root },
+        label,
+        presentation: "folder",
+        capabilities: ["list", "read", "write", "watch", "materialize"],
+      });
+    }
     await seedPrimaryAgent({
       hanaHome,
       mainSource,

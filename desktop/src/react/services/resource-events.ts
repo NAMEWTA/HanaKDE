@@ -34,6 +34,15 @@ type WatchEntry = {
   releaseKeepalive: boolean;
   releasePromise: Promise<void> | null;
   ready: Promise<void>;
+  confirmed: Promise<void>;
+  confirm(): void;
+};
+
+// This receipt is renderer-process-only. It lets consumers close the first
+// snapshot/watch-registration window without adding authority or data to any
+// ResourceIO DTO, event payload, diagnostic, or persisted state.
+export type ResourceWatchRelease = (() => void) & {
+  readonly ready?: Promise<void>;
 };
 
 const watches = new Map<string, WatchEntry>();
@@ -215,18 +224,23 @@ export function resourceWatchKey(ref: WatchRef): string {
   return `mount:${normalized.mountId}:${normalized.path}`;
 }
 
-export function retainResourceWatch(ref: ResourceRef): () => void {
+export function retainResourceWatch(ref: ResourceRef): ResourceWatchRelease {
   return retainWatch(ref);
 }
 
-function retainWatch(ref: WatchRef): () => void {
+function retainWatch(ref: WatchRef): ResourceWatchRelease {
   const normalizedRef = normalizeResourceRef(ref);
   const key = resourceWatchKey(normalizedRef);
   const existing = watches.get(key);
   if (existing) {
     existing.refCount += 1;
-    return () => releaseResourceWatch(key);
+    return createWatchRelease(key, existing.confirmed);
   }
+
+  let confirm = () => {};
+  const confirmed = new Promise<void>((resolve) => {
+    confirm = resolve;
+  });
 
   const entry: WatchEntry = {
     ref: normalizedRef,
@@ -242,11 +256,22 @@ function retainWatch(ref: WatchRef): () => void {
     releaseKeepalive: false,
     releasePromise: null,
     ready: Promise.resolve(),
+    confirmed,
+    confirm,
   };
   entry.ready = subscribeEntry(entry);
   watches.set(key, entry);
   bindPageLifecycleCleanup();
-  return () => releaseResourceWatch(key);
+  return createWatchRelease(key, entry.confirmed);
+}
+
+function createWatchRelease(key: string, ready: Promise<void>): ResourceWatchRelease {
+  const release = (() => releaseResourceWatch(key)) as ResourceWatchRelease;
+  Object.defineProperty(release, 'ready', {
+    value: ready,
+    enumerable: false,
+  });
+  return release;
 }
 
 async function subscribeEntry(entry: WatchEntry): Promise<void> {
@@ -289,6 +314,7 @@ async function subscribeEntry(entry: WatchEntry): Promise<void> {
     entry.subscriptionId = data.subscriptionId;
     entry.subscriptionRetryAttempt = 0;
     configureEntryLease(entry, data);
+    entry.confirm();
     if (entry.disposed || entry.suspended) await releaseEntry(entry);
   } catch (err) {
     if (!entry.disposed && !entry.suspended) {
@@ -298,11 +324,11 @@ async function subscribeEntry(entry: WatchEntry): Promise<void> {
   }
 }
 
-export function retainLocalFileResourceWatch(filePath: string): () => void {
+export function retainLocalFileResourceWatch(filePath: string): ResourceWatchRelease {
   return retainResourceWatch({ kind: 'local-file', path: filePath });
 }
 
-export function retainKnowledgeSourceWatch(sourceKey: string): () => void {
+export function retainKnowledgeSourceWatch(sourceKey: string): ResourceWatchRelease {
   return retainWatch({ kind: 'knowledge-source', sourceKey });
 }
 
@@ -316,6 +342,7 @@ function releaseResourceWatch(key: string): void {
   watches.delete(key);
   unbindPageLifecycleCleanupIfIdle();
   entry.disposed = true;
+  entry.confirm();
   trackWatchCleanup(entry.ready.then(() => releaseEntry(entry)));
 }
 
@@ -565,7 +592,10 @@ function releaseAllWatchesOnPageHide(event: PageTransitionEvent): void {
   }
   for (const entry of entries) {
     if (event.persisted) entry.suspended = true;
-    else entry.disposed = true;
+    else {
+      entry.disposed = true;
+      entry.confirm();
+    }
     entry.releaseKeepalive = true;
     clearEntryLeaseRenewal(entry);
     trackWatchCleanup(entry.ready.then(() => releaseEntry(entry)));

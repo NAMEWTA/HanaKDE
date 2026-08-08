@@ -331,7 +331,7 @@ export class KnowledgeOperationCoordinator {
     schemaVersion: 1;
     operationId: string;
     requestHash: string;
-    kind: "rename";
+    kind: KnowledgeOperationRequest["kind"];
     state: KnowledgeOperationState;
     createdAt: string;
     expiresAt: string;

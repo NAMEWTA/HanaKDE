@@ -369,6 +369,7 @@ export function KnowledgeConflictResolver({
     <aside
       className={styles.conflictResolver}
       aria-label={tr('knowledge.conflict.resolverLabel')}
+      data-error-only={conflicts.length === 0 ? 'true' : undefined}
     >
       {errorSessions.map(({ session, reason }) => (
         <div className={styles.conflictRefreshError} role="alert" key={session.key}>

@@ -343,15 +343,19 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     format: "mixed-directory",
     schemaSource: directorySource(
       "core/knowledge-workspace/durable-operation-journal.ts",
-      "schemaVersion 1 journal/result validators, atomic current/previous publication, and operation directory retention protocol",
+      "schemaVersion 1 refactor/trash and atomic journal/result validators, atomic current/previous publication, and shared operation directory retention protocol",
     ),
     openEntry: [
       "KnowledgeOperationCoordinator.recover",
       "KnowledgeOperationCoordinator.plan",
+      "KnowledgeAtomicOperationCoordinator.recover",
+      "KnowledgeAtomicOperationCoordinator.plan",
     ],
     protocolModules: [
       "lib/knowledge-workspace/knowledge-operation-plan.ts",
       "core/knowledge-workspace/knowledge-operation-coordinator.ts",
+      "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      "core/knowledge-workspace/knowledge-atomic-operation-coordinator.ts",
     ],
     firstPossibleOpenPhase: "runtime_ready",
     firstPossibleWritePhase: "runtime_ready",
@@ -359,15 +363,20 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     restorePolicy: "Restore the complete tree before registering Knowledge mutation routes, then run the coordinator recovery barrier before accepting writes.",
     identityContract: "A server-issued UUIDv4 operationId names one owner-, requestHash-, and provider-root-identity-bound operation directory.",
     siteRules: rules(
-      ["core/knowledge-workspace/durable-operation-journal.ts"],
-      "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results.",
+      [
+        "core/knowledge-workspace/durable-operation-journal.ts",
+        "core/knowledge-workspace/durable-atomic-operation-journal.ts",
+      ],
+      "Creates, atomically advances, repairs, retains, or expires durable Knowledge operation journals and public results in the shared operations tree.",
     ),
   }),
   defineStore({
     id: "knowledge-index-generations",
     ownerModule: "lib/knowledge-workspace/knowledge-index-store.ts",
     pathPatterns: [
-      "knowledge-workspace/index/v1/{workspaceFingerprint}/{sourceFingerprint}/**",
+      "knowledge-workspace/index/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+      "kw/i/v1/{workspaceFingerprintBase64url}/{sourceFingerprintBase64url}/**",
+      "knowledge-workspace/index/v1/{workspaceFingerprintHex}/{sourceFingerprintHex}/**",
     ],
     pathKind: "tree",
     format: "mixed-directory",
@@ -389,9 +398,9 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     firstPossibleWritePhase: "runtime_ready",
     epochPolicy: "regenerable",
     checkpointPolicy: "Exclude; every source partition is a discardable cache rebuilt only from revalidated saved disk resources.",
-    restorePolicy: "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition.",
+    restorePolicy: "Never restore index bytes as knowledge facts; validate a compatible generation or rebuild the affected source partition. Legacy kw/i/v1 and hexadecimal v1 partitions are read-only compatibility sources and are never write targets.",
     affectedByEpochMigration: false,
-    identityContract: "workspace/source ProviderRootIdentity fingerprints select one isolated partition; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation.",
+    identityContract: "workspace/source ProviderRootIdentity fingerprints select one isolated canonical Base64URL partition below knowledge-workspace/index/v1; generationId selects one published SQLite generation whose incremental updates advance last_complete_sequence transactionally, while full rebuild publishes a new generation. Legacy kw/i/v1 and hexadecimal partitions remain read-compatible until rebuild.",
     siteRules: rules(
       ["lib/knowledge-workspace/knowledge-index-store.ts"],
       "Creates, validates, atomically publishes, locks, leases, and prunes source-partitioned Knowledge index generations.",

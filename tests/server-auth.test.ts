@@ -57,6 +57,44 @@ describe("server auth service", () => {
     })).toBeNull();
   });
 
+  it("issues revocable local credentials bound to one desktop window session", async () => {
+    tmpDir = makeTmpDir();
+    const { createServerAuthService } = await import("../core/server-auth.ts");
+    const auth = createServerAuthService({
+      hanakoHome: tmpDir,
+      loopbackToken: "local-secret",
+      runtimeContext: runtimeContext(),
+    });
+
+    const first = auth.issueLocalSessionCredential({ sessionId: "desktop-window-a" });
+    const second = auth.issueLocalSessionCredential({ sessionId: "desktop-window-b" });
+
+    expect(first.token).not.toBe(second.token);
+    expect(auth.authenticateRequest({
+      authorization: `Bearer ${first.token}`,
+      connectionKind: "local",
+    })).toMatchObject({
+      kind: "local_user",
+      credentialKind: "loopback_token",
+      connectionKind: "local",
+      sessionId: "desktop-window-a",
+    });
+    expect(auth.authenticateRequest({
+      authorization: `Bearer ${first.token}`,
+      connectionKind: "lan",
+    })).toBeNull();
+
+    expect(auth.revokeLocalSessionCredential({ sessionId: "desktop-window-a" })).toBe(true);
+    expect(auth.authenticateRequest({
+      authorization: `Bearer ${first.token}`,
+      connectionKind: "local",
+    })).toBeNull();
+    expect(auth.authenticateRequest({
+      authorization: `Bearer ${second.token}`,
+      connectionKind: "local",
+    })).toMatchObject({ sessionId: "desktop-window-b" });
+  });
+
   it("accepts query token only when the adapter explicitly allows it", async () => {
     tmpDir = makeTmpDir();
     const { createServerAuthService } = await import("../core/server-auth.ts");

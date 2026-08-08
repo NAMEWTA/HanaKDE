@@ -1,6 +1,12 @@
 import type { ResourceEventBus } from "./resource-event-bus.ts";
 import { isOperationCorrelationId } from "../../shared/knowledge-diagnostics.ts";
-import { capabilityDenied, crossProviderCopyUnsupported, crossProviderMoveUnsupported, providerNotAvailable } from "./errors.ts";
+import {
+  capabilityDenied,
+  crossProviderCopyUnsupported,
+  crossProviderMoveUnsupported,
+  providerNotAvailable,
+  ResourceIOError,
+} from "./errors.ts";
 import { childResourceRef, normalizeResourceRef, providerIdForResourceRef } from "./resource-refs.ts";
 import {
   TransferPlanTracker,
@@ -32,7 +38,9 @@ import type {
   ResourceStat,
   ResourceTrashOptions,
   ResourceTrashResult,
+  ResourceImportTreeRecoveryResult,
   ResourceTransferRequest,
+  ResourceTransferRecoveryRequest,
   ResourceTransferResult,
   ResourceVersion,
   ResourceWriteConflictResult,
@@ -259,6 +267,7 @@ export class ResourceIO {
           signal: transferAbort.signal,
           expectedTargetVersion: request.expectedTargetVersion,
           replaceExisting: request.replaceExisting,
+          mergeExisting: request.mergeExisting,
           operationId: request.operationId,
           abortTransfer: transferAbort.abort,
           revalidateSourceScope: async () => {
@@ -279,18 +288,63 @@ export class ResourceIO {
         bytesTransferred: result.bytesTransferred,
       };
     } catch (error) {
+      const safeError = normalizeTransferError(error);
       transferAbort.abort();
       this.recordAudit({
-        outcome: transferErrorOutcome(error),
+        outcome: transferErrorOutcome(safeError),
         operation: "transfer",
         providerId: targetProviderId,
-        code: errorCode(error),
+        code: errorCode(safeError),
         safeMessage: "Resource transfer failed",
         ...transferAuditContext(context),
       });
-      throw error;
+      throw safeError;
     } finally {
       transferAbort.dispose();
+    }
+  }
+
+  async recoverTransferPublication(
+    input: ResourceTransferRecoveryRequest,
+    options: ResourceOperationContext = {},
+  ): Promise<ResourceImportTreeRecoveryResult> {
+    if (
+      !input
+      || typeof input !== "object"
+      || Array.isArray(input)
+      || Object.keys(input).some((field) => ![
+        "target",
+        "operationId",
+        "expectedTargetVersion",
+      ].includes(field))
+      || !isOperationCorrelationId(input.operationId)
+    ) {
+      throw transferEntryUnsupported("invalid_transfer_recovery_request");
+    }
+    const target = normalizeResourceRef(input.target);
+    const providerId = providerIdForResourceRef(target);
+    const provider = this.providerFor(target);
+    if (typeof provider.recoverImportTreePublication !== "function") {
+      return { outcome: "none" };
+    }
+    try {
+      return await provider.recoverImportTreePublication(target, {
+        operationId: input.operationId,
+        expectedTargetVersion: encodeResourceTransferVersion(
+          input.expectedTargetVersion,
+        ),
+      });
+    } catch (error) {
+      const safeError = normalizeTransferError(error);
+      this.recordAudit({
+        outcome: transferErrorOutcome(safeError),
+        operation: "transfer",
+        providerId,
+        code: errorCode(safeError),
+        safeMessage: "Resource transfer recovery failed",
+        ...transferAuditContext({ ...options, operationId: input.operationId }),
+      });
+      throw safeError;
     }
   }
 
@@ -493,8 +547,17 @@ function normalizeTransferRequest(input: ResourceTransferRequest | unknown): Res
   if (value.replaceExisting !== undefined && typeof value.replaceExisting !== "boolean") {
     throw transferEntryUnsupported("invalid_replace_existing");
   }
+  if (
+    value.mergeExisting !== undefined
+    && !["skip", "keep-both", "replace"].includes(value.mergeExisting)
+  ) {
+    throw transferEntryUnsupported("invalid_merge_existing");
+  }
   if (value.replaceExisting === true && value.expectedTargetVersion !== undefined) {
     throw transferEntryUnsupported("ambiguous_target_precondition");
+  }
+  if (value.replaceExisting === true && value.mergeExisting !== undefined) {
+    throw transferEntryUnsupported("ambiguous_target_mode");
   }
   return {
     source,
@@ -502,6 +565,7 @@ function normalizeTransferRequest(input: ResourceTransferRequest | unknown): Res
     targetName: value.targetName,
     expectedTargetVersion: value.expectedTargetVersion,
     replaceExisting: value.replaceExisting,
+    mergeExisting: value.mergeExisting,
     signal: value.signal,
     operationId: value.operationId,
   };
@@ -527,6 +591,23 @@ function transferErrorOutcome(error: unknown): "denied" | "conflict" {
   return code === "knowledge_resource_conflict" || code === "knowledge_version_conflict"
     ? "conflict"
     : "denied";
+}
+
+/**
+ * Providers can encounter an OS-level access error after a caller has moved
+ * a directory or closed a handle mid-transfer. That detail is neither a
+ * stable ResourceIO contract nor safe to surface from a route, so turn it
+ * into the same path-free denial used by LocalFS before auditing or replying.
+ */
+function normalizeTransferError(error: unknown): unknown {
+  const code = errorCode(error);
+  if (code === "EACCES" || code === "EPERM" || code === "ELOOP") {
+    return new ResourceIOError("Resource transfer access denied", {
+      code: "resource_access_denied",
+      status: 403,
+    });
+  }
+  return error;
 }
 
 function createTransferAbort(parentSignal?: AbortSignal): {

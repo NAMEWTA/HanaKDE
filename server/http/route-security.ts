@@ -289,6 +289,18 @@ function classifyKnowledgeWorkspaceRoute(verb, routePath) {
   if (/^\/api\/knowledge-workspace\/sources\/[^/]+$/.test(routePath)) {
     return verb === "DELETE" ? scoped("files.write") : LOCAL_ONLY;
   }
+  if (routePath === "/api/knowledge-workspace/index/status") {
+    return verb === "GET" ? scoped("files.read") : LOCAL_ONLY;
+  }
+  if (
+    routePath === "/api/knowledge-workspace/query"
+    || routePath === "/api/knowledge-workspace/search"
+  ) {
+    return verb === "POST" ? scoped("files.read") : LOCAL_ONLY;
+  }
+  if (/^\/api\/knowledge-workspace\/index\/[^/]+\/rebuild$/.test(routePath)) {
+    return verb === "POST" ? scoped("files.write") : LOCAL_ONLY;
+  }
   if (
     routePath === "/api/knowledge-workspace/copy-for-editor"
     || routePath === "/api/knowledge-workspace/copy-external-for-editor"

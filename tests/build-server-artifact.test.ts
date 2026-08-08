@@ -510,9 +510,13 @@ describe("build-server-artifact: packDualKindSeed guards and ordering", () => {
   it("end-to-end: packs both archives, signs and verifies a seed whose manifest matches both", async () => {
     const root = makeTempDir("hana-dual-e2e-");
     const { keyPath, keysetPath, keyId } = makeKeypairFiles(root, "e2e2026");
-    const opts = baseOpts(root);
+    const logs: string[] = [];
+    const opts = { ...baseOpts(root), log: (message: string) => logs.push(message) };
 
     const result = await packDualKindSeed({ ...opts, env: { HANA_SIGN_KEY: keyPath, HANA_SIGN_KEYSET: keysetPath } });
+
+    expect(logs).toContain("[build-server] seed: using HANA_SIGN_KEYSET override for this build");
+    expect(logs.join("\n")).not.toContain(keysetPath);
 
     expect(fs.existsSync(result.serverArchivePath)).toBe(true);
     expect(fs.existsSync(result.rendererArchivePath)).toBe(true);

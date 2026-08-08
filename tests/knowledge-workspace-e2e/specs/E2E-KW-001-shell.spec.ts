@@ -20,7 +20,7 @@ test("E2E-KW-001 opens a blank main Knowledge shell", async ({
   const { page } = knowledgeApp;
   const workspace = await openKnowledge(page);
 
-  await expect(workspace.locator('[data-source-key="main"]')).toBeVisible();
+  await expect(workspace.locator('li[data-source-key="main"]')).toBeVisible();
   await expect(
     workspace.getByRole("tree", { name: /resource tree|资源树|資源樹|リソースツリー|리소스 트리/i }),
   ).toBeVisible();
@@ -39,7 +39,7 @@ test("E2E-KW-023 covers five locales, themes, narrow layout and accessibility", 
     knowledgeApp.runtime !== "desktop-full",
     "E2E-KW-023 is a desktop-full user-flow gate",
   );
-  const { page } = knowledgeApp;
+  const { apiFetch, page } = knowledgeApp;
   await openKnowledge(page);
 
   const localeTitles = [
@@ -50,11 +50,12 @@ test("E2E-KW-023 covers five locales, themes, narrow layout and accessibility", 
     ["ko", "리소스 열기"],
   ] as const;
   for (const [locale, expectedTitle] of localeTitles) {
-    await page.evaluate(async (nextLocale) => {
-      await window.i18n.load(nextLocale);
-    }, locale);
-    await page.locator('[data-tab="chat"]').click();
-    await page.locator('[data-tab="knowledge"]').click();
+    const response = await apiFetch('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locale }),
+    });
+    expect(response.ok).toBe(true);
     await expect(
       page.locator('[data-knowledge-workspace] h1'),
     ).toHaveText(expectedTitle);
@@ -92,12 +93,12 @@ test("E2E-KW-023 covers five locales, themes, narrow layout and accessibility", 
   const narrowWorkspace = page.locator('[data-knowledge-workspace]');
   const sources = await narrowWorkspace.getByRole("region").boundingBox();
   const tree = await narrowWorkspace.getByRole("navigation").boundingBox();
-  const editor = await narrowWorkspace.getByRole("group").boundingBox();
+  const editorGroup = narrowWorkspace.locator('[data-editor-group-id]');
+  const editor = await editorGroup.boundingBox();
   expect(sources && tree && editor).toBeTruthy();
   expect(sources!.y).toBeLessThan(tree!.y);
   expect(tree!.y).toBeLessThan(editor!.y);
 
-  const editorGroup = narrowWorkspace.getByRole("group");
   await editorGroup.focus();
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Tab");

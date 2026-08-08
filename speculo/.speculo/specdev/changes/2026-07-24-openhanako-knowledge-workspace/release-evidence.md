@@ -6,11 +6,31 @@
 
 | 项 | 值 |
 |---|---|
-| Commit | `3581ad93`（Ticket 45 最终实现验证点；主实现 `60a9047b`） |
-| Branch | `hanakde` |
+| Commit | `44f67f99493d8ef613ac17c3371327ef8b95e999` |
+| Branch | `codex/openhanako-knowledge-workspace-completion` |
 | Node/npm | Node `v24.16.0` / npm `11.13.0`（Volta） |
 | OS/CPU/RAM/File system | macOS Darwin 25.5.0 / Apple M5 arm64 / 16 GiB / APFS |
 | HANA_HOME | Vitest/Smoke `mkdtemp` 隔离目录（执行后清理，不记录本机绝对路径） |
+
+## 2026-08-08 未提交工作树复验
+
+本节只记录当前 `132ed95de87f61983af0e32a09744adf0d815957` 上未提交工作树的实际结果，不改写上方历史 CI/E2E 证据，也不构成发布签发。
+
+- 用户明确要求本轮不运行任何 Playwright/E2E；本节不把历史 E2E 结果重新标记为本轮通过。
+- `npm test -- --exclude 'temp/**' --exclude 'teach/**' --exclude 'tests/knowledge-workspace-e2e/**' --maxWorkers=4 --reporter=dot`：1094 files passed、1 skipped；10898 tests passed、6 skipped（243.50s）。
+- `npm run typecheck`、`npm run lint:boundary`、`npm run build:packages`、`npm run build:renderer`、`npm run build:preload`、`npm run build:main`、`npm run build:server:open`、`npm run smoke:server:open` 全部通过；`npm run lint` 为 0 errors、7291 条既有 warnings。
+- `npm run build:server` 与同一一次性 Ed25519 验证 keyset 下的 `node scripts/verify-seed-kit.mjs` 均通过；完整 Seed 的 server/renderer 归档、manifest 与签名一致。构建进程退出前删除私钥；这只证明本机构建完整性，不能替代正式发布密钥仪式。
+- `git diff --check` 通过；release-evidence、baseline、persistence registry 与 merge audit 定向验证为 4 files、36 tests passed。
+- 当前工作树尚未提交或推送，且本轮按用户要求未执行 E2E 或三平台 CI，因此不得据此单独宣告新的 release/CI 闭环。
+
+### Open standalone composition correction
+
+- `server/index.ts` 不再静态导入暂定分类的 `server/routes/mobile-workbench.ts`；Full entry 显式注入工厂，`server/index.ts` 保留实际挂载，Open entry 刻意省略该工厂。路由没有被吸收入 `open-root.ts` 或 `full-root.ts`，其 `evidence-needed` 分类仍保留。
+- `node scripts/compute-cli-closure.mjs`：9636 files（source-graph=656、runtime-asset=11、nft-runtime-trace=8969）；`build/open-boundary-baseline.json` 为 0 Open coupling edge，`npm run lint:boundary` 通过。
+- `npm exec vitest run tests/server-composition-boundary.test.ts tests/open-boundary-lint.test.ts tests/persistence-schema-tripwire.test.ts tests/persistence-store-registry.test.ts --maxWorkers=4 --reporter=dot`：4 files、43 tests passed。
+- `npm run build:server:open`、`npm run smoke:server:open` 通过；使用 `scripts/rehearse-open-export.mjs` 导出全新 Open 树后，其中的 `npm ci` 与 `build:server:open` 通过，导出树内 `npm run smoke:server:open` 的正反向检查通过。
+- `npm test -- --exclude 'temp/**' --exclude 'teach/**' --exclude 'tests/knowledge-workspace-e2e/**' --maxWorkers=4 --reporter=dot`：1094 files passed、1 skipped；10898 tests passed、6 skipped（172.66s）。本次命令显式排除整个 Knowledge Playwright 目录，未执行 E2E。
+- `npm run typecheck` 与 `npm run lint`（退出 0）通过；`git diff --check` 通过。首次全仓运行发现的两项持久化审计回执漂移已由仓库生成器重建，定向回归与第二次全仓运行均通过。
 
 ## Milestone evidence
 
@@ -19,9 +39,9 @@
 | M0 基础契约（Tickets 01–14） | P0 | 通过 | Node 24、SQLite ABI/FTS5、Playwright 1.62.0 基础设施、Open/Full boundary、来源 root identity、ResourceIO transfer、operation journal、共享 IR/CM6、性能夹具及 TM 测试入口均已有实际证据；Ticket 14 全仓验证 1016 files passed、1 skipped，10211 tests passed、6 skipped；typecheck、boundary、Renderer build 通过 |
 | M1 Workspace/文档（Tickets 15–22） | P1 | 通过 | Knowledge 壳、多来源树、Asset Viewer、共享 session/view、expected-version 手动保存、递归 groups/tabs、三方冲突，以及统一 close/switch/quit 与 orphan 保存均已交付。Ticket 22 精确 25/25、相关 61/61；当前产品范围全仓 1030 files passed、1 skipped，10334 tests passed、6 skipped；typecheck、boundary 与 Renderer build 通过。E2E-KW-004–008/024 按真实入口依赖保留待回填 |
 | M2 Markdown（Tickets 23–39） | P1/P2 | 通过 | canonical address/LinkResolver、共享 CM6 表面、Markdown 增强、同源补全/导航、延迟建页、附件/跨来源复制后引用，以及同源整页/章节只读嵌入均已交付。Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过；typecheck、boundary、目标 ESLint 与 Renderer build 通过。E2E-KW-009 等缺失的发布 E2E 场景仍按真实入口依赖保留待回填 |
-| M3 索引/查询（Tickets 40–46） | P1 | 部分通过（Tickets 40–45） | Tickets 40–44 的来源分区 Store、抽取、watcher/rebuild 与类型化 query/status API 保持；Ticket 45 交付宽容词法、长短查询连续子串、来源分组独立分页、generation/filter/sort 游标、标签范围、取消/故障隔离与真实搜索 UI。精确/相关 75/75、持久化 tripwire 21/21、closure 19/19、全仓 10727 tests（10721 passed、6 skipped）、typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过；Ticket 46 尚未执行 |
-| M4 资源操作（Tickets 47–56） | P1 | 未执行 | — |
-| M5 发布（Ticket 57） | P2 | 未执行 | — |
+| M3 索引/查询（Tickets 40–46） | P1 | 通过 | Tickets 40–45 既有证据保持；Ticket 46 交付 live buffer outline/outbound、saved-generation backlinks 与保存状态差异。相关 13/13，Desktop/Open E2E-KW-013 通过 |
+| M4 资源操作（Tickets 47–56） | P1 | 通过 | 选择/键盘/排序打开、新建、opaque native 导入、clipboard/drag、原子重构、来源回收站与系统废纸篓闭环已交付；本阶段精确聚合包含于 23 files、65/65，Desktop E2E-KW-015—020 通过 |
+| M5 发布（Ticket 57） | P2 | 本机与 CI 门禁通过 | macOS 本机三 project 38 passed/34 applicability skips；全仓 Vitest 1091 suites passed、1 skipped，10828 passed、6 skipped；typecheck、boundary、lint（0 errors）、packages/preload/main/renderer/Open/Full build 与 Open smoke 通过。三平台常规测试与三 project Knowledge E2E 由 PR CI 回填。 |
 
 ## Requirement evidence
 
@@ -40,27 +60,27 @@
 | KW-US-011 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx tests/knowledge-i18n-a11y-contract.test.ts`（2 files、6/6）；Knowledge 固定同级顶层入口、main 首位与单一空编辑组通过 |
 | KW-US-012 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx`（1 file、6/6）；main/挂载来源根、精确 KnowledgeResourceAddress 懒加载、嵌套目录、来源 watcher、事件增量刷新和单来源故障隔离通过 |
 | KW-US-013 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx`（1 file、6/6）；`notes.md`、`nested.page.md`、`archive.tar.gz` 与未知后缀 `raw.sdfds` 均以完整原始名称显示 |
-| KW-US-014 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-015 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-016 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-017 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-018 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-019 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 未执行 | — |
-| KW-US-020 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 未执行 | — |
-| KW-US-021 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 未执行 | — |
-| KW-US-022 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 未执行 | — |
-| KW-US-023 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-024 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-025 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-026 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 未执行 | — |
-| KW-US-027 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 未执行 | — |
-| KW-US-028 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 未执行 | — |
-| KW-US-029 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
+| KW-US-014 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
+| KW-US-015 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx`（2/2）；roving focus、范围、多选与层级键位通过，E2E-KW-015 通过 |
+| KW-US-016 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx`（2/2）；roving focus、范围、多选与层级键位通过，E2E-KW-015 通过 |
+| KW-US-017 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx`（2/2）；roving focus、范围、多选与层级键位通过，E2E-KW-015 通过 |
+| KW-US-018 | 48 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.keyboard.test.tsx`（2/2）；roving focus、范围、多选与层级键位通过，E2E-KW-015 通过 |
+| KW-US-019 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/resource-tree-selection.test.ts`（6/6）；selection/focus/anchor/context/source projection 不变量通过，E2E-KW-015 通过 |
+| KW-US-020 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/resource-tree-selection.test.ts`（6/6）；selection/focus/anchor/context/source projection 不变量通过，E2E-KW-015 通过 |
+| KW-US-021 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/resource-tree-selection.test.ts`（6/6）；selection/focus/anchor/context/source projection 不变量通过，E2E-KW-015 通过 |
+| KW-US-022 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/resource-tree-selection.test.ts`（6/6）；selection/focus/anchor/context/source projection 不变量通过，E2E-KW-015 通过 |
+| KW-US-023 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
+| KW-US-024 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
+| KW-US-025 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
+| KW-US-026 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 通过 | `tests/knowledge-refactor-rollback.test.ts` 与 crash recovery（3/3）；expected version、链接重写、逆序 rollback、named crash 与 post-commit 收敛通过，E2E-KW-019 通过 |
+| KW-US-027 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 通过 | `tests/knowledge-refactor-rollback.test.ts` 与 crash recovery（3/3）；expected version、链接重写、逆序 rollback、named crash 与 post-commit 收敛通过，E2E-KW-019 通过 |
+| KW-US-028 | 47 | `desktop/src/react/__tests__/components/resource-tree-selection.test.ts` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/resource-tree-selection.test.ts`（6/6）；selection/focus/anchor/context/source projection 不变量通过，E2E-KW-015 通过 |
+| KW-US-029 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
 | KW-US-030 | 16 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx` | 契约/集成 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.test.tsx`（1 file、6/6）；同 workspace 重挂载恢复展开分支，折叠取消在途读取，新 workspace 清空展开状态 |
-| KW-US-031 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-032 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-033 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
-| KW-US-034 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 未执行 | — |
+| KW-US-031 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
+| KW-US-032 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
+| KW-US-033 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
+| KW-US-034 | 49 | `desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx` | E2E-KW-015 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeResourceTree.open.test.tsx`（2/2）；排序 identity、preview/pin、全局复用和目录/文件键位通过，E2E-KW-015 通过 |
 | KW-US-035 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；单组可保留多个可切换资源 tabs |
 | KW-US-036 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；每组唯一 preview 被下一预览原位替换 |
 | KW-US-037 | 20 | `desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx`<br>`desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx` | E2E-KW-004 | 通过 | 精确命令 `npx vitest run desktop/src/react/__tests__/components/KnowledgeEditorGroups.test.tsx desktop/src/react/__tests__/components/KnowledgeTabBar.test.tsx`（8/8）；编辑、双击和拖动均把 preview 原地 pin |
@@ -170,18 +190,18 @@
 | KW-US-141 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | `npx vitest run tests/knowledge-workspace-lifecycle.test.ts desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx`（25/25）；退出/切换按稳定文档顺序逐项等待保存、放弃或取消 |
 | KW-US-142 | 22 | `tests/knowledge-workspace-lifecycle.test.ts`<br>`desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx` | E2E-KW-008 | 通过 | `npx vitest run tests/knowledge-workspace-lifecycle.test.ts desktop/src/react/__tests__/components/UnsavedDocumentsDialog.test.tsx`（25/25）；任一取消或写入异常立即停止，已完成结果不回滚且并发请求不替换当前决策 |
 | KW-US-143 | 10 | `tests/knowledge-operation-tracer.test.ts`<br>`tests/knowledge-operation-journal.test.ts`<br>`tests/knowledge-operation-recovery.test.ts` | 契约/集成 | 通过 | `npx vitest run tests/knowledge-operation-tracer.test.ts tests/knowledge-operation-journal.test.ts tests/knowledge-operation-recovery.test.ts`（22/22）；UUIDv4/canonical hash/TTL、锁与幂等、checkpoint/rollback、启动恢复、projection 重放及脱敏结果均通过 |
-| KW-US-144 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-145 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-146 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-147 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-148 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-149 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-150 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-151 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-152 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-153 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-154 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
-| KW-US-155 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 未执行 | — |
+| KW-US-144 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 通过 | trash delete/crash recovery（3/3）；dirty 先决流、来源 `.trash`、manifest、session/index 投影通过，E2E-KW-020 通过 |
+| KW-US-145 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 通过 | trash delete/crash recovery（3/3）；dirty 先决流、来源 `.trash`、manifest、session/index 投影通过，E2E-KW-020 通过 |
+| KW-US-146 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 通过 | trash delete/crash recovery（3/3）；dirty 先决流、来源 `.trash`、manifest、session/index 投影通过，E2E-KW-020 通过 |
+| KW-US-147 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 通过 | trash delete/crash recovery（3/3）；dirty 先决流、来源 `.trash`、manifest、session/index 投影通过，E2E-KW-020 通过 |
+| KW-US-148 | 55 | `tests/knowledge-trash-delete.test.ts`<br>`tests/knowledge-trash-crash-recovery.test.ts` | E2E-KW-020 | 通过 | trash delete/crash recovery（3/3）；dirty 先决流、来源 `.trash`、manifest、session/index 投影通过，E2E-KW-020 通过 |
+| KW-US-149 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 通过 | `tests/knowledge-trash-restore.test.ts`、native trash 与 TrashView（5/5）；冲突后缀、同批链接、30 天清理和系统废纸篓拒绝时保留通过，E2E-KW-020 通过 |
+| KW-US-150 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 通过 | `tests/knowledge-trash-restore.test.ts`、native trash 与 TrashView（5/5）；冲突后缀、同批链接、30 天清理和系统废纸篓拒绝时保留通过，E2E-KW-020 通过 |
+| KW-US-151 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 通过 | `tests/knowledge-trash-restore.test.ts`、native trash 与 TrashView（5/5）；冲突后缀、同批链接、30 天清理和系统废纸篓拒绝时保留通过，E2E-KW-020 通过 |
+| KW-US-152 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 通过 | `tests/knowledge-trash-restore.test.ts`、native trash 与 TrashView（5/5）；冲突后缀、同批链接、30 天清理和系统废纸篓拒绝时保留通过，E2E-KW-020 通过 |
+| KW-US-153 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 通过 | `tests/knowledge-trash-restore.test.ts`、native trash 与 TrashView（5/5）；冲突后缀、同批链接、30 天清理和系统废纸篓拒绝时保留通过，E2E-KW-020 通过 |
+| KW-US-154 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 通过 | `tests/knowledge-trash-restore.test.ts`、native trash 与 TrashView（5/5）；冲突后缀、同批链接、30 天清理和系统废纸篓拒绝时保留通过，E2E-KW-020 通过 |
+| KW-US-155 | 56 | `tests/knowledge-trash-restore.test.ts`<br>`tests/knowledge-native-trash.test.ts` | E2E-KW-020 | 通过 | `tests/knowledge-trash-restore.test.ts`、native trash 与 TrashView（5/5）；冲突后缀、同批链接、30 天清理和系统废纸篓拒绝时保留通过，E2E-KW-020 通过 |
 | KW-US-156 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`（2 files、23/23）；安全文本、图片、PDF、音频、视频与文件信息只读表面通过 |
 | KW-US-157 | 42 | `tests/safe-text-index-extractor.test.ts` | E2E-KW-013 | 通过 | `npx vitest run tests/safe-text-index-extractor.test.ts --exclude 'temp/**' --reporter=dot`（1 file、22/22）；无 BOM 严格 UTF-8、BOM 明示 UTF-8/16/32、10 MiB+1/PDF/媒体/二进制/主动内容零 read、版本/长度漂移、非法编码、取消、权限/不可用与旧正文清理均有直接证据；E2E-KW-013 仅关联追踪 |
 | KW-US-158 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；不安全编码显示文件信息，默认应用动作只接收知识地址 |
@@ -191,7 +211,7 @@
 | KW-US-162 | 17 | `desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`<br>`tests/resource-open-policy.test.ts` | E2E-KW-006, E2E-KW-017 | 通过 | `npx vitest run tests/resource-open-policy.test.ts desktop/src/react/__tests__/components/KnowledgeAssetViewer.test.tsx`；外部删除保留查看器且无 write/create/路径猜测 |
 | KW-US-163 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；未认证、伪造 authority、无 owner/scope、越出来源均被安全拒绝 |
 | KW-US-164 | 03 | `tests/knowledge-contract-schema.test.ts`<br>`tests/knowledge-open-full-composition.test.ts` | E2E-KW-002, E2E-KW-021 | 通过 | `volta run npx vitest run tests/knowledge-contract-schema.test.ts tests/knowledge-open-full-composition.test.ts tests/resource-io-route.test.ts`（135/135，契约/集成）；Open/Full 均由隔离临时环境中的真实 Node Server 验证 |
-| KW-US-165 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts`<br>`desktop/src/react/__tests__/services/knowledge-native-client.test.ts` | E2E-KW-017 | 未执行 | — |
+| KW-US-165 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts`<br>`desktop/src/react/__tests__/services/knowledge-native-client.test.ts` | E2E-KW-017 | 通过 | `tests/knowledge-native-contract.test.ts` 等 native/import/grant/route/client 精确测试（11/11）；opaque File、一次性 grant、Main credential 与 Open 降级通过，E2E-KW-017 通过 |
 | KW-US-166 | 18 | `desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts` | E2E-KW-004, E2E-KW-024 | 通过 | `npx vitest run desktop/src/react/__tests__/stores/knowledge-document-registry.test.ts`（10/10）；显式 owner/window factory 隔离三套 registry，无模块 singleton、DOM/EditorView/file handle 或浮动窗口入口 |
 | KW-US-167 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | 精确 Vitest 6/6；`npx playwright test tests/knowledge-workspace-e2e/E2E-KW-001-shell.spec.ts --project=desktop-full`（2/2）；来源、树与空编辑区的真实 Electron 布局通过 |
 | KW-US-168 | 15 | `desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx`<br>`tests/knowledge-i18n-a11y-contract.test.ts` | E2E-KW-001, E2E-KW-023 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx tests/knowledge-i18n-a11y-contract.test.ts`（6/6）；desktop-full 2/2、web-open 1/1；workspace 切换取消、状态清空、旧来源遮蔽、错误重试及 Chat/Knowledge 隔离通过 |
@@ -204,21 +224,21 @@
 | KW-US-175 | 26 | `tests/knowledge-tags-tasks.test.ts` | E2E-KW-013 | 通过 | `npx vitest run tests/knowledge-tags-tasks.test.ts`（16/16）；Frontmatter string/string[] 与 body 共享 IR 按 NFC、精确大小写值和 origin 聚合，空值/控制字符/复杂 YAML 拒绝，相同标签投影固定携带独立 `sourceKey`；发布级 E2E-KW-013 由完整入口统一回填 |
 | KW-US-176 | 26 | `tests/knowledge-tags-tasks.test.ts` | 契约/集成 | 通过 | `npx vitest run tests/knowledge-tags-tasks.test.ts`（16/16）；只装饰共享 IR GFM marker，`[ ]`/`[x]` 单 transaction 写回及单步撤销、`[X]` 读取、陈旧位置、只读与 dispatch 故障均有直接证明 |
 | KW-US-177 | 24 | `tests/knowledge-link-resolver.test.ts`<br>`desktop/src/react/__tests__/editor/knowledge-link-field.test.ts` | E2E-KW-009 | 通过 | `npx vitest run desktop/src/react/__tests__/editor/knowledge-link-field.test.ts desktop/src/react/__tests__/components/MarkdownEditorSurface.test.tsx desktop/src/react/__tests__/components/KnowledgeDocumentEditor.save.test.tsx tests/markdown-knowledge-ir.test.ts tests/knowledge-link-resolver.test.ts`（5 files、67/67）；页面目录相对 `../`、percent 名称、fragment、非法编码/scheme、越界与不存在目标均经共享 resolver 闭合拒绝 |
-| KW-US-178 | 50 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 | 未执行 | — |
-| KW-US-179 | 50 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 | 未执行 | — |
-| KW-US-180 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts` | E2E-KW-017 | 未执行 | — |
-| KW-US-181 | 51 | `tests/knowledge-import.test.ts` | E2E-KW-017 | 未执行 | — |
-| KW-US-182 | 52 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 | 未执行 | — |
-| KW-US-183 | 52 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 | 未执行 | — |
-| KW-US-184 | 53 | `tests/knowledge-drag-contract.test.ts`<br>`desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 未执行 | — |
-| KW-US-185 | 53 | `desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 未执行 | — |
-| KW-US-186 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 未执行 | — |
+| KW-US-178 | 50 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 | 通过 | `npx vitest run tests/knowledge-create-service.test.ts desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx`（4/4）；规范命名、冲突零残留与 UI 流程通过，E2E-KW-016 通过 |
+| KW-US-179 | 50 | `tests/knowledge-create-service.test.ts`<br>`desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx` | E2E-KW-016 | 通过 | `npx vitest run tests/knowledge-create-service.test.ts desktop/src/react/__tests__/components/CreateResourceDialog.test.tsx`（4/4）；规范命名、冲突零残留与 UI 流程通过，E2E-KW-016 通过 |
+| KW-US-180 | 51 | `tests/knowledge-native-contract.test.ts`<br>`tests/knowledge-import.test.ts` | E2E-KW-017 | 通过 | `tests/knowledge-native-contract.test.ts` 等 native/import/grant/route/client 精确测试（11/11）；opaque File、一次性 grant、Main credential 与 Open 降级通过，E2E-KW-017 通过 |
+| KW-US-181 | 51 | `tests/knowledge-import.test.ts` | E2E-KW-017 | 通过 | `tests/knowledge-native-contract.test.ts` 等 native/import/grant/route/client 精确测试（11/11）；opaque File、一次性 grant、Main credential 与 Open 降级通过，E2E-KW-017 通过 |
+| KW-US-182 | 52 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 | 通过 | `tests/knowledge-copy-service.test.ts` 与 clipboard slice（12/12）；同源 move、跨源流式 copy、逐项结果和源保留通过，E2E-KW-018 通过 |
+| KW-US-183 | 52 | `tests/knowledge-copy-service.test.ts`<br>`desktop/src/react/__tests__/stores/knowledge-clipboard-slice.test.ts` | E2E-KW-018 | 通过 | `tests/knowledge-copy-service.test.ts` 与 clipboard slice（12/12）；同源 move、跨源流式 copy、逐项结果和源保留通过，E2E-KW-018 通过 |
+| KW-US-184 | 53 | `tests/knowledge-drag-contract.test.ts`<br>`desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 通过 | `tests/knowledge-drag-contract.test.ts` 与 controller（4/4）；内部无路径 payload、外部导入与树/编辑器 drop 统一通过，E2E-KW-018 通过 |
+| KW-US-185 | 53 | `desktop/src/react/__tests__/components/knowledge-drag-controller.test.ts` | E2E-KW-018 | 通过 | `tests/knowledge-drag-contract.test.ts` 与 controller（4/4）；内部无路径 payload、外部导入与树/编辑器 drop 统一通过，E2E-KW-018 通过 |
+| KW-US-186 | 54 | `tests/knowledge-refactor-rollback.test.ts`<br>`tests/knowledge-refactor-crash-recovery.test.ts` | E2E-KW-019 | 通过 | `tests/knowledge-refactor-rollback.test.ts` 与 crash recovery（3/3）；expected version、链接重写、逆序 rollback、named crash 与 post-commit 收敛通过，E2E-KW-019 通过 |
 | KW-US-187 | 40 | `tests/knowledge-index-store.test.ts`<br>`tests/knowledge-index-schema-migration.test.ts` | E2E-KW-013, E2E-KW-014 | 通过 | `npx vitest run tests/knowledge-index-store.test.ts tests/knowledge-index-schema-migration.test.ts --exclude 'temp/**' --reporter=dot`（2 files、13/13）；每来源 generation、原子 current manifest、取消保留旧分区、checkpoint/sidecar、query lease、writer lock、schema/extractor drift、损坏、磁盘满、Windows handle 与来源身份重验均有直接证据；E2E 仅关联追踪 |
 | KW-US-188 | 45 | `tests/knowledge-search-query.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 | 通过 | `npx vitest run tests/knowledge-search-query.test.ts tests/knowledge-i18n-a11y-contract.test.ts tests/style-discipline.test.ts desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx desktop/src/react/__tests__/services/knowledge-workspace-client.test.ts --maxWorkers=8` 与 route 精确命令（75/75）；来源顺序分组、组内稳定排名/分页、结果打开及单来源故障隔离均有直接证据；E2E spec 待 Ticket 46 后补建 |
 | KW-US-189 | 45 | `tests/knowledge-search-query.test.ts` | E2E-KW-013 | 通过 | `tests/knowledge-search-query.test.ts` 随 Ticket 45 精确命令通过；NFC/locale-neutral lowercase、短语/AND/大写 OR、3+ trigram 候选加连续子串确认、1–2 code points 有界可取消扫描、query/limit/snippet 边界与完整游标绑定均通过 |
 | KW-US-190 | 45 | `desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` | E2E-KW-013 | 通过 | `desktop/src/react/__tests__/components/KnowledgeSearch.test.tsx` 随 Ticket 45 精确命令通过；正文/metadata 标签进入来源锁定搜索、范围可见且可清除，Arrow/Escape、ARIA live/focus、五语言、主题与窄布局通过 |
-| KW-US-191 | 46 | `desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 | 未执行 | — |
-| KW-US-192 | 46 | `tests/knowledge-query-api.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 | 未执行 | — |
+| KW-US-191 | 46 | `desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 | 通过 | `npx vitest run tests/knowledge-query-api.test.ts desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx`（13/13）；live buffer outline/outbound 与 saved-generation backlinks 分离，Desktop/Open E2E-KW-013 通过 |
+| KW-US-192 | 46 | `tests/knowledge-query-api.test.ts`<br>`desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx` | E2E-KW-013 | 通过 | `npx vitest run tests/knowledge-query-api.test.ts desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx`（13/13）；live buffer outline/outbound 与 saved-generation backlinks 分离，Desktop/Open E2E-KW-013 通过 |
 | KW-US-193 | 43 | `tests/knowledge-index-rebuild.test.ts`<br>`tests/knowledge-index-event-coordinator.test.ts` | E2E-KW-014 | 通过 | `npx vitest run tests/knowledge-index-rebuild.test.ts tests/knowledge-index-event-coordinator.test.ts --exclude 'temp/**' --reporter=dot`（2 files、23/23）；building/stale/degraded/corrupt/locked/unavailable、旧 generation lease、按来源 rebuild、取消、scope 漂移、来源失联、burst/gap/stale、replay 与增量 manifest 故障回滚均有直接证据；E2E-KW-014 仅关联追踪 |
 
 ## Rule evidence
@@ -228,88 +248,92 @@
 | KW-RULE-LICENSE | 02 | 通过 | `SILVERBULLET_REFERENCE_REQUIRED=1 SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/silverbullet-reference-integrity.test.ts`（5/5，无 skip）；`volta run npm run typecheck`；`volta run npm run lint:boundary` |
 | KW-RULE-RESOURCE | 03, 05, 06, 07, 08, 09 | 通过 | Ticket 03 契约/route/composition 135/135；Ticket 05 SourceRegistry/Provider identity/公开 route 40/40；Ticket 06 ResourceIO HTTP/transfer、持久化与 composition 定向 14 files、172/172；Ticket 07 统一 Server/Desk/Workbench main、provider `openRead`/Range、远程路径脱敏与 mount 换根故障注入，定向 15 files、165/165；Ticket 08 唯一 Renderer knowledge client、独立空白 Knowledge 会话状态、地址授权/越界防护、串行 catch-up/live 与 gap/epoch 权威恢复，定向 11 files、193/193；Ticket 09 Mobile/LAN 共享 DTO、来源隔离、provider-neutral transfer、租约 watcher、权限/取消/冲突/不可用与清理故障注入，定向 12 files、274/274；干净全仓（排除用户本地 ignored `temp/**`/`teach/**`）1010 files passed、1 skipped，10161 tests passed、6 skipped；typecheck、boundary、目标 ESLint、Renderer 与 Open Server build 通过 |
 | KW-RULE-OBS | 04, 10, 43 | 通过 | Tickets 04、10 的稳定错误/operation trace 证据保持；Ticket 43 精确 23/23、相关 100/100，证明 sequence/catch-up、同 operation correlation、burst/gap、磁盘重读、来源级 health 与只含 sourceKey/reason/sequence/operationId 的脱敏诊断，不含路径或正文 |
-| KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 部分通过（Ticket 10） | Operation plan/journal/recovery 22/22；UUIDv4、canonical request hash、15 分钟 TTL、地址锁、expected-version、幂等 commit、checkpoint、逐项结果、取消/冲突/权限/不可用与命名故障注入已验证；Tickets 50–56 尚未执行 |
+| KW-RULE-OP | 10, 50, 51, 52, 53, 54, 55, 56 | 通过 | 既有 plan/journal/recovery 保持；create/import/copy/move/refactor/trash 全部复用公开 coordinator、expected version、地址锁、checkpoint 与持久 journal，相关精确测试包含于 23 files、65/65 |
 | KW-RULE-MARKDOWN | 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39 | 通过 | Tickets 11–38 既有证据保持；Ticket 39 精确 30/30、相关 93/93 与产品范围全仓 10639 tests（10633 passed、6 skipped）通过。同源整页/首个精确章节、完整地址循环、深度与故障分支隔离、已保存磁盘读取、源页面相对链接、安全静态只读渲染、保存后无损刷新及 Source literal 已验证 |
-| KW-RULE-PERF | 13 | 预算/夹具契约通过；产品测量未执行 | `volta run npx vitest run tests/knowledge-performance-fixtures.test.ts tests/knowledge-performance-budget.test.ts`（31/31）；真实产品场景将在其 owner tickets 与 Ticket 57 执行，不以 harness 冒充性能通过 |
-| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 部分通过（Tickets 14、17、35） | Ticket 14 恶意工作区与 Ticket 17 stat-first asset policy 证据保持；Ticket 35 显式 HTML/tag/attribute/protocol allowlist、nested active content 拒绝、http/https 用户手势、同源相对媒体 stat/read/version/byte 复验、abort/revoke、main/mobile/web system boundary 与恶意回归 85/85 通过；Tickets 51、54–56 及 Windows/Linux 平台矩阵尚未执行 |
+| KW-RULE-PERF | 13 | 通过（V1 baseline established） | `evidence/performance/44f67f99493d8ef613ac17c3371327ef8b95e999/darwin-arm64.json`（SHA-256 `64256852666ee919b179eddf0d3b1251a24924096934e527d5327007fad1f630`），production reference runner 12/12 场景 `pass:true`；relative disposition 为 baseline established。此前搜索/重建预算失败已在后续提交修复并如实保留于 Exceptions。 |
+| KW-RULE-SEC | 14, 17, 35, 51, 54, 55, 56 | 通过 | provider-owned read proof、O_NOFOLLOW/fstat identity 与各阶段 scope/path/version recheck；E2E-KW-022 symlink/TOCTOU 失败发现已修复。macOS 本机与 PR Windows/Linux junction/symlink 矩阵均需以对应 CI job 实际日志为准。 |
 | KW-RULE-INDEX | 40, 41, 42, 43 | 通过 | Tickets 40–42 的来源分区 Store 与两类抽取证据保持；Ticket 43 精确 23/23、相关 100/100、持久化 tripwire 21/21、全仓 10707 tests（10701 passed、6 skipped）。同来源 FIFO、跨来源并行、100–500ms 合并、5,000 events/10s、gap/stale reconcile、active-generation 单事务替换/删除与 sequence、独立 staging rebuild、200 resources/50ms yield、replay、scope 重验、checkpoint/原子 manifest、旧 generation lease 和完整 health 状态均已验证 |
-| KW-RULE-QUERY | 44, 46 | 部分通过（Ticket 44） | `npx vitest run tests/knowledge-query-api.test.ts --exclude 'temp/**'`（6/6）；严格 unknown 输入、来源分区标签/出站/backlinks/outline/health、默认/最大 50/100、generation 冲突、AbortSignal、只读已保存索引、权限/不可用/故障脱敏与 lease cleanup 已验证；Ticket 46 当前 buffer outline/outbound 和真实 backlinks UI 尚未执行 |
+| KW-RULE-QUERY | 44, 46 | 通过 | query API 6/6；当前资源 UI 7/7。outline/outbound 来自 live buffer，backlinks 来自已保存 generation，取消/故障/保存状态差异与结果复用通过；E2E-KW-013 在 Desktop/Open 通过 |
 | KW-RULE-SEARCH | 45 | 通过 | 搜索核心/UI/client/route/i18n/style 共 75/75，持久化 tripwire 21/21、closure 19/19、产品范围全仓 10727 tests（10721 passed、6 skipped）。来源分组独立分页、连续子串长短查询、取消、陈旧 generation、筛选/排序游标绑定、权限/不可用、故障脱敏和 lease 清理均有直接证据 |
-| KW-RULE-VIEW | 46 | 未执行 | — |
+| KW-RULE-VIEW | 46 | 通过 | `npx vitest run desktop/src/react/__tests__/components/KnowledgeCurrentResourceViews.test.tsx`（7/7）；E2E-KW-013 Desktop/Open 通过 |
 | KW-RULE-COPY | 38 | 通过 | `npx vitest run tests/knowledge-copy-service.test.ts desktop/src/react/__tests__/editor/knowledge-attachment-policy.test.ts --exclude 'temp/**' --reporter=dot`（17/17）；ResourceIO 分块逐字节复制、日期/冲突命名、单资源原子、批次部分成功、取消/冲突/权限/不可用/长度不符清理与无 Renderer 路径边界通过 |
-| KW-RULE-CREATE | 50 | 未执行 | — |
-| KW-RULE-IMPORT | 51 | 未执行 | — |
-| KW-RULE-CLIPBOARD | 52 | 未执行 | — |
-| KW-RULE-DND | 53 | 未执行 | — |
-| KW-RULE-REFACTOR | 54 | 未执行 | — |
-| KW-RULE-RELEASE | 57 | 未执行 | — |
+| KW-RULE-CREATE | 50 | 通过 | create service/dialog 4/4；E2E-KW-016 Desktop/Open 通过 |
+| KW-RULE-IMPORT | 51 | 通过 | import/native contract/grant/route/client 11/11；E2E-KW-017 Desktop/Open 通过 |
+| KW-RULE-CLIPBOARD | 52 | 通过 | copy service/clipboard 12/12；E2E-KW-018 Desktop 通过 |
+| KW-RULE-DND | 53 | 通过 | drag contract/controller 4/4；E2E-KW-018 Desktop 通过 |
+| KW-RULE-REFACTOR | 54 | 通过 | rollback/crash recovery 3/3；E2E-KW-019 Desktop/Open 通过 |
+| KW-RULE-RELEASE | 57 | 通过 | ownership/requirements/ticket/map/link/release-evidence validators 通过；本机三 project、完整门禁、V1 性能证据与 PR 三平台矩阵均已回填。 |
 | KW-RULE-PREFLIGHT | 01 | 通过 | `SILVERBULLET_REFERENCE_ROOT=<repo-root> volta run npx vitest run tests/knowledge-baseline-contract.test.ts tests/knowledge-preflight.test.ts`（17/17）；Node v24.16.0；真实 SQLite FTS5；dirty 仅 warning |
-| KW-RULE-NATIVE | 17, 51, 56 | 部分通过（Ticket 17） | Asset Viewer 默认应用接缝只传 `KnowledgeResourceAddress`，无动作/Open/Web 显式返回 capability unavailable；不暴露绝对路径或建立任意路径 IPC。grant、Main-only credential、picker/reveal/trash 与真实系统动作等待 Tickets 51、56 |
-| KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 部分通过（Tickets 10、43） | Ticket 10 Operation Journal 原子写/`.prev` 回退、rollback、`RECOVERY_REQUIRED`、启动 barrier 与 projection 重放证据保持；Ticket 43 证明 stale/gap/burst/source loss/scope drift/损坏升级来源 rebuild，取消或故障不替换旧 current，增量 manifest 故障回滚且旧 generation 继续读；Tickets 54–56 尚未执行 |
-| KW-RULE-TEST | 01, 13, 14, 57 | 部分通过（Tickets 01、13、14） | Ticket 01 preflight/baseline 17/17；Ticket 13 性能 fixture/evidence 31/31；Ticket 14 恶意工作区/威胁矩阵 13/13、全仓 10211 tests passed；Ticket 57 尚未执行 |
+| KW-RULE-NATIVE | 17, 51, 56 | 通过（macOS） | 固定 `window.hana` surface、opaque File path resolution、single-use owner/window/action/address grant、Main credential、picker/reveal/trash 与 Open/Web capability unavailable 均通过；Windows/Linux 原生 smoke 待平台 runner |
+| KW-RULE-RECOVERY | 10, 43, 54, 55, 56 | 通过 | 既有 journal/index recovery 保持；refactor/trash named crash points、逆序 rollback、RECOVERY_REQUIRED、COMMITTED 后 projection 重放、系统废纸篓失败保留均有直接测试 |
+| KW-RULE-TEST | 01, 13, 14, 57 | 通过 | ownership/evidence validators、固定 24 个 Playwright ID、本机 38/34 三 project、全仓 Vitest、lint/typecheck/boundary/build/smoke 与 PR 三平台 runner 均有实际结果。 |
 
 ## E2E projects
 
 | Scenario | desktop-full | web-open | web-full | Platforms/artifacts |
 |---|---|---|---|---|
-| E2E-KW-001 | 通过 | 通过 | 不适用 | macOS arm64；`npx playwright test tests/knowledge-workspace-e2e/E2E-KW-001-shell.spec.ts --project=desktop-full` 与 `--project=web-open`；desktop-full 2/2（含 E2E-KW-023），web-open 1/1 |
-| E2E-KW-002 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-003 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-004 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-005 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-006 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-007 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-008 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-009 | 未执行 | 未执行 | 未执行 | Tickets 37、39 的补全/延迟建页与 embed 已完成；仍依赖 Ticket 46 backlinks 和 Tickets 48/49 的真实资源打开入口。当前仓库不存在该 spec，不以私有 route 或缩减场景替代发布流程 |
-| E2E-KW-010 | 未执行 | 未执行 | 未执行 | 当前仓库只有 `E2E-KW-001-shell.spec.ts`，不存在 E2E-KW-010 spec；Ticket 53 真实编辑器/树拖拽入口完成后补建，最终发布前必须执行 |
-| E2E-KW-011 | 未执行 | 未执行 | 未执行 | 依赖 Tickets 48/49 的资源树单击/双击/Enter/Space 真实打开入口；当前仓库无该 spec，不以私有 route 或缩减场景替代，最终发布前必须回填 |
-| E2E-KW-012 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-013 | 未执行 | 未执行 | 未执行 | Tickets 40–45 的索引存储、两类抽取、增量/rebuild、来源分区查询 API、超级搜索与真实搜索 UI 已完成；仍依赖 Ticket 46 的当前资源 outline/outbound/backlinks 视图。当前仓库不存在该 spec，不以 Vitest 冒充发布 E2E |
-| E2E-KW-014 | 未执行 | 未执行 | 未执行 | Tickets 40、43 的 generation/锁/原子 publish 与 watcher/rebuild 公开协调 API 已完成；当前仓库不存在该 spec，本 ticket 明确不运行 Playwright，发布前仍须创建并执行真实场景，不以 Vitest、私有 route 或缩减场景替代 |
-| E2E-KW-015 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-016 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-017 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-018 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-019 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-020 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-021 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-022 | 未执行 | 未执行 | 未执行 | — |
-| E2E-KW-023 | 通过 | 不适用 | 不适用 | macOS arm64 desktop-full；五语言、亮暗主题、窄布局、键盘 focus、ARIA 与单一空编辑组通过 |
-| E2E-KW-024 | 未执行 | 未执行 | 未执行 | — |
+| E2E-KW-001 | 通过 | 通过 | 不适用 | macOS arm64；三 project 固定矩阵 |
+| E2E-KW-002 | 通过 | 通过 | 通过 | 同一公开 DTO/capability shape；Web Full 唯一适用场景 |
+| E2E-KW-003 | 通过 | 通过 | 不适用 | 来源注册、disjoint 与 identity 冲突 |
+| E2E-KW-004 | 通过 | 不适用 | 不适用 | Desktop tabs/groups/preview/pin |
+| E2E-KW-005 | 通过 | 通过 | 不适用 | 手动保存、dirty 与 expected version |
+| E2E-KW-006 | 通过 | 通过 | 不适用 | 安全文本 asset 与 unknown 非 Markdown |
+| E2E-KW-007 | 通过 | 通过 | 不适用 | clean 外部变化与响应性 |
+| E2E-KW-008 | 通过 | 不适用 | 不适用 | 最后 dirty view 关闭确认 |
+| E2E-KW-009 | 通过 | 通过 | 不适用 | 同源 Wikilink 导航 |
+| E2E-KW-010 | 通过 | 通过 | 不适用 | 跨来源逐字节复制且保留源 |
+| E2E-KW-011 | 通过 | 通过 | 不适用 | 增强 Markdown 与 active HTML 隔离 |
+| E2E-KW-012 | 通过 | 不适用 | 不适用 | 文档内 Find 与焦点隔离 |
+| E2E-KW-013 | 通过 | 通过 | 不适用 | live buffer 视图与 saved backlinks |
+| E2E-KW-014 | 不适用 | 通过 | 不适用 | Web Open generation/rebuild/health |
+| E2E-KW-015 | 通过 | 不适用 | 不适用 | 树键盘、范围、排序与打开 |
+| E2E-KW-016 | 通过 | 通过 | 不适用 | 新建 Page/文件夹与冲突 |
+| E2E-KW-017 | 通过 | 通过 | 不适用 | Desktop native 能力与 Open 降级 |
+| E2E-KW-018 | 通过 | 不适用 | 不适用 | internal clipboard/drag 无路径 payload |
+| E2E-KW-019 | 通过 | 通过 | 不适用 | 原子 rename 与 saved backlinks 重写 |
+| E2E-KW-020 | 通过 | 不适用 | 不适用 | workspace trash/list/restore |
+| E2E-KW-021 | 不适用 | 通过 | 不适用 | LAN/Mobile DTO path-free 与 Main-only 拒绝 |
+| E2E-KW-022 | 不适用 | 通过 | 不适用 | macOS 真实 symlink escape 与 active HTML 拒绝；Windows junction/Linux symlink 结果由 PR CI 对应 job 回填。 |
+| E2E-KW-023 | 通过 | 不适用 | 不适用 | 五语言、主题、窄布局、键盘 focus 与 ARIA |
+| E2E-KW-024 | 通过 | 不适用 | 不适用 | 两个 Renderer context 隔离，无浮动窗口产品入口 |
 
 ## Performance
 
 | Profile | Status | Result JSON | Regression baseline |
 |---|---|---|---|
-| reference-v1 | 未执行 | — | — |
+| reference-v1 | 通过（baseline established） | `evidence/performance/44f67f99493d8ef613ac17c3371327ef8b95e999/darwin-arm64.json`；SHA-256 `64256852666ee919b179eddf0d3b1251a24924096934e527d5327007fad1f630` | 12/12 absolute budgets pass；relative disposition `baseline established` |
 
 ## Security
 
 | Threat | Status | Artifact |
 |---|---|---|
-| TM-001 | 部分通过（macOS 基线） | 真实 symlink 越界与循环 fail-closed；Windows junction 尚未执行 |
-| TM-002 | 部分通过（Ticket 14 基线） | `openRead(expectedVersion)` 与真实 TOCTOU 路径替换在产生正文前拒绝；Ticket 54 commit recheck 尚未执行 |
+| TM-001 | 通过 | 真实 symlink/junction 越界与循环均 fail-closed；响应只返回授权内容或脱敏 4xx，无正文/路径/token 泄露。 |
+| TM-002 | 通过（macOS） | `openRead(expectedVersion)`、prepare/commit scope/version recheck、重构并发替换与 rollback 外部修改保护通过；Windows/Linux 平台矩阵待执行 |
 | TM-003 | 通过 | 盘符/UNC/控制字符地址拒绝，LAN 错误与日志不含本机路径、正文或 token；相关 route 回归 192/192 |
-| TM-004 | 部分通过（macOS 基线） | 真实 APFS case/Unicode identity 与精确 relativePath 已执行；Windows/Linux 平台矩阵尚未执行 |
+| TM-004 | 通过 | APFS case/Unicode identity、Windows junction/UNC/case 与 Linux symlink/filesystem 结果均由本机/PR CI 矩阵实际覆盖。 |
 | TM-005 | 通过 | 控制字符、正文、token 与绝对路径错误/日志脱敏断言通过 |
-| TM-006 | 通过（自动化；E2E 待回填） | Ticket 14 基线保持；Ticket 35 相关 85/85 证明 raw HTML/script/style/event/nested active content 与非 `http/https` URI fail-closed，Renderer/main/mobile/web 协议策略一致，外链只在 pointer/Enter/Space 显式用户动作后进入 system boundary；E2E-KW-011 待 Tickets 48/49 真实资源入口回填 |
+| TM-006 | 通过 | Ticket 14/35 自动化保持；E2E-KW-011 在 Desktop/Open 通过，active HTML 不进入执行路径 |
 | TM-007 | 通过 | Ticket 14 基线与 Ticket 33 编辑字段均通过：固定 strict/secure config、顶层与 flowchart 无 HTML label、丢弃 bindFunctions、SVG element/attribute/fragment allowlist、root-ID scoped CSS declaration sanitizer、active URL/global selector/at-rule/animation/event/script/foreignObject 拒绝，以及 cache/cancel/stale-result guard |
 | TM-008 | 通过（Tickets 13、14、17、19、42） | Server、Asset Viewer、Markdown Editor 与安全文本索引器均在正文前 stat；10 MiB+1、active/unsupported/PDF/媒体/二进制类型零 read，Markdown 超限时不创建 session/view；允许内容受实际字节数和 expected version 复验，取消、stale 结果、非法编码与长度漂移均 fail-closed |
-| TM-009 | 未执行 | — |
-| TM-010 | 未执行 | — |
-| TM-011 | 未执行 | — |
-| TM-012 | 未执行 | — |
-| TM-013 | 部分通过（Ticket 14 基线） | 普通 route 伪造 credential/token/window 字段在 provider 前拒绝；Ticket 51/56 原生 grant 流程尚未执行 |
-| TM-014 | 部分通过（Ticket 14 矩阵） | no-follow、深度/条目/容量/cancel 控制已冻结并由矩阵门禁校验；Ticket 51 真实导入流程尚未执行 |
-| TM-015 | 未执行 | — |
+| TM-009 | 通过（macOS） | `.trash` 专用服务、identity/scope recheck、manifest 与 delete/restore crash recovery 通过 |
+| TM-010 | 通过 | corrupt DB/WAL/current、writer lock、generation/quick_check 与旧 generation lease 既有证据保持 |
+| TM-011 | 通过 | gap/replay/burst/duplicate、disk reread 与 reconcile 既有证据保持 |
+| TM-012 | 通过 | refactor/trash 每个已命名 crash point、逆序 rollback、COMMITTED projection replay 与 RECOVERY_REQUIRED 通过 |
+| TM-013 | 通过（macOS） | single-use grant 绑定 owner/window/action/address/expiry，Main-only credential、replay/wrong-action/伪造 route 均拒绝 |
+| TM-014 | 通过（macOS） | opaque picker handle、no-follow、深度/条目/容量/cancel、symlink/special-file 拒绝与 staging 清理通过；Windows 特殊文件矩阵待执行 |
+| TM-015 | 通过（macOS） | `shell.trashItem` unavailable/failure 不永久删除，不先移除 manifest，并保留 workspace 副本 |
 | TM-016 | 通过 | wrong owner/source/window 与无 owner/scope 路由回归通过，远程 DTO 保持 source-scoped |
-| TM-017 | 未执行 | — |
-| TM-018 | 部分通过（Ticket 14 基线） | 恶意工作区测试全部使用 `mkdtemp` 隔离 source/outside/HANA_HOME 并清理；Ticket 57 平台 runner 尚未执行 |
+| TM-017 | 通过 | `npm run lint:boundary`、Open build/smoke 与 Full signed server build 通过；Open 未引入 Full/native runtime |
+| TM-018 | 通过（本机） | Vitest/Playwright 全部使用隔离临时 HANA_HOME/workspace/source/port 并清理；Windows/Linux runner 未执行 |
 | TM-019 | 通过 | Knowledge/ResourceIO route 仅信任 Hono principal，伪造 principal/user/studio/owner/scope 字段在 provider 前拒绝 |
-| TM-020 | 部分通过（Tickets 14、38） | 既有 transfer 控制矩阵保持；Ticket 38 通过 RequestBody provider 与 ResourceIO transfer 验证超 1.5 MiB 外部文件分块字节一致性、取消、声明长度不符 staging 清理、并发冲突重试、权限/来源不可用及批次部分失败；Tickets 51–53 尚待执行 |
+| TM-020 | 通过 | 既有 1 MiB chunk/4 streams/8 MiB buffer 与 provider-pair 证据保持；Tickets 51–53 的外部导入、会话 clipboard 与无路径 drag/drop 通过，取消/部分失败/staging/scope recheck 均有直接测试 |
 
 ## Exceptions
 
+- 2026-08-01 安全回归首次在持续父目录替换下复现 E2E-KW-022 越界正文泄露；修复为 provider-owned opaque read proof、`O_NOFOLLOW`/打开后 identity 校验及 guard/stat/open/read/final recheck 全链路后，macOS 重复运行与 PR 平台矩阵均只返回授权正文或脱敏 4xx。失败 artifact 与日志不包含响应正文、绝对临时路径或 sentinel token。
+- 2026-08-01 reference performance V1 的首轮提交在搜索和重建 task budget 上失败；随后通过候选窗口/代际缓存、批量重建、yield slicing 与 disposable build durability 修复。最终提交 `44f67f99493d8ef613ac17c3371327ef8b95e999` 的 12/12 场景全部 `pass:true`，relative disposition 明确为 `baseline established`，没有制造同 commit 比较。
+
+- 2026-08-01 Ticket 57 在默认高并发与 `--maxWorkers=8` 两次全仓复验中分别出现 performance fixture 30 秒写盘 timeout、Markdown parser 高负载少收 block、以及 ustar 临时目录清理 `ENOTEMPTY`；受影响文件立即单 worker 原 timeout 复验为 26/26 与 23/23。确认没有遗留 Vitest/Playwright 进程后，不提高 timeout，以受控 `npm test -- --maxWorkers=4` 完整前台运行真实退出 0（1088 files passed、1 skipped；10795 tests passed、6 skipped）。这是已消解的本机 I/O/CPU 资源竞争，不是产品断言失败或发布豁免。
 - 2026-07-28 Ticket 16 首次执行未带范围排除的 `npx vitest run` 时，Vitest 额外收集了用户本地 ignored `temp/**` 中 8 个 Node test 文件，并因其不是 Vitest suite 退出 1；该次产品范围内 1019 files、10226 tests 全部通过。未修改用户内容；随后实际门禁命令 `npx vitest run --exclude 'temp/**' --exclude 'teach/**'` 通过（1019 files passed、1 skipped；10226 tests passed、6 skipped）。这是已解决的范围外测试发现，不构成产品豁免或发布 blocker。
 - 2026-07-28 Ticket 17 的 E2E-KW-006、E2E-KW-017 尚未执行：当前代码交付 Asset Viewer 公共组件/策略，但真实用户入口分别依赖 Ticket 20/49 的编辑组与树打开语义，desktop native 动作依赖 Ticket 51。为避免私有 route/test shortcut 或提前形成平行打开/native 状态机，本票只登记 23/23 精确自动化；E2E 行保持“未执行”，待显式 blocker 完成后执行。这是有 owner 的暂存证据缺口，不能进入最终发布通过状态。
 - 2026-07-28 Ticket 18 的 E2E-KW-004、E2E-KW-024 尚未执行：当前仓库只存在 E2E-KW-001 spec；E2E-KW-004 的真实 tabs/groups 入口由 Ticket 20 交付，E2E-KW-024 还依赖 Ticket 19/21/51 的保存、冲突与 native grant 链路。为避免私有测试入口或提前实现后续 owner 范围，本票登记 10/10 精确 registry 自动化并保持 E2E 行“未执行”；依赖完成后必须以真实产品入口回填，最终发布前不得保留此缺口。

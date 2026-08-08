@@ -134,6 +134,35 @@ describe("knowledge performance budget contract", () => {
     expect(result.summary.peakRssBytes).toBe(1_013);
   });
 
+  it("keeps per-sample preparation and cleanup outside the measured interval", async () => {
+    let nowValue = 0;
+    const phases: string[] = [];
+    const result = await runMeasuredScenario({
+      now: () => nowValue,
+      beforeEach: async (phase, iteration) => {
+        phases.push(`prepare:${phase}:${iteration}`);
+        nowValue += 100;
+      },
+      measure: async (phase, iteration) => {
+        phases.push(`measure:${phase}:${iteration}`);
+        nowValue += 5;
+      },
+      afterEach: async (phase, iteration) => {
+        phases.push(`cleanup:${phase}:${iteration}`);
+        nowValue += 100;
+      },
+      readRssBytes: () => 1_000,
+    });
+
+    expect(result.samplesMs).toEqual(Array.from({ length: 10 }, () => 5));
+    expect(phases).toHaveLength(13 * 3);
+    expect(phases.slice(0, 3)).toEqual([
+      "prepare:warmup:0",
+      "measure:warmup:0",
+      "cleanup:warmup:0",
+    ]);
+  });
+
   it("rejects invalid sample contracts and percentile requests", async () => {
     expect(() => nearestRankPercentile([], 95)).toThrow(/sample/i);
     expect(() => nearestRankPercentile([1], 0)).toThrow(/percentile/i);

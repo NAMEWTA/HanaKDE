@@ -92,6 +92,16 @@ describe('CSP sync', () => {
     expect(runtimeCsp).not.toMatch(/"connect-src":\s*\[[^\]]*"file:"/s);
   });
 
+  it('desktop index CSP allows only in-memory blob previews for Knowledge assets', () => {
+    const indexCsp = profiles['index.html'];
+    const runtimeCsp = fs.readFileSync(path.join(htmlDir, 'modules', 'connection-csp.js'), 'utf-8');
+
+    expect(indexCsp).toMatch(/img-src[^;]*\sblob:(?:\s|;|$)/);
+    expect(indexCsp).toMatch(/media-src[^;]*\sblob:(?:\s|;|$)/);
+    expect(runtimeCsp).toMatch(/"img-src":\s*\[[^\]]*"blob:"/s);
+    expect(runtimeCsp).toMatch(/"media-src":\s*\[[^\]]*"blob:"/s);
+  });
+
   it('settings window uses the same dynamic scoped connection CSP as the desktop index', () => {
     const html = fs.readFileSync(path.join(htmlDir, 'settings.html'), 'utf-8');
     const runtimeCsp = fs.readFileSync(path.join(htmlDir, 'modules', 'connection-csp.js'), 'utf-8');

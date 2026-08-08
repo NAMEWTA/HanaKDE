@@ -4,6 +4,7 @@ import { loadStudioMountRegistry } from "../../../core/studio-mounts.ts";
 import { capabilityDenied, providerNotAvailable, ResourceIOError } from "../errors.ts";
 import { resourceKeyForRef } from "../resource-refs.ts";
 import { resolveLocalFsRootIdentity } from "../root-identity.ts";
+import { RESOURCE_LIST_BLOCKED_ENTRIES, RESOURCE_READ_PROOF } from "../types.ts";
 import type {
   MaterializeResult,
   ResourceDescriptor,
@@ -11,6 +12,8 @@ import type {
   ResourceExportEntry,
   ResourceExportTreeOptions,
   ResourceImportTreeOptions,
+  ResourceImportTreeRecoveryOptions,
+  ResourceImportTreeRecoveryResult,
   ResourceImportTreeResult,
   ResourceListResult,
   ResourceMutationResult,
@@ -150,7 +153,18 @@ export class MountProvider {
 
   async list(ref: ResourceRef): Promise<ResourceListResult> {
     const resolved = this.resolveLocalMount(ref, "list");
-    return this.mapResult(ref, await resolved.provider.list({ kind: "local-file", path: resolved.path }));
+    const result = await resolved.provider.list({ kind: "local-file", path: resolved.path });
+    const mapped = this.mapResult(ref, result);
+    const blockedEntries = result[RESOURCE_LIST_BLOCKED_ENTRIES];
+    if (blockedEntries) {
+      Object.defineProperty(mapped, RESOURCE_LIST_BLOCKED_ENTRIES, {
+        value: blockedEntries,
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return mapped;
   }
 
   async search(ref: ResourceRef, options: Record<string, unknown> = {}): Promise<ResourceSearchResult> {
@@ -199,6 +213,20 @@ export class MountProvider {
         path: targetPath,
       },
       result,
+    );
+  }
+
+  async recoverImportTreePublication(
+    target: ResourceRef,
+    options: ResourceImportTreeRecoveryOptions,
+  ): Promise<ResourceImportTreeRecoveryResult> {
+    const resolved = this.resolveLocalMount(target, "write");
+    if (typeof resolved.provider.recoverImportTreePublication !== "function") {
+      return { outcome: "none" };
+    }
+    return resolved.provider.recoverImportTreePublication(
+      { kind: "local-file", path: resolved.path },
+      options,
     );
   }
 
@@ -402,7 +430,7 @@ export class MountProvider {
   mapResult<T extends { resourceKey: string; resource: any; filePath?: string }>(ref: ResourceRef, result: T): T {
     if (ref.kind !== "mount") return result;
     const mountPath = normalizeMountPath(ref.path);
-    return {
+    const mapped = {
       ...result,
       resourceKey: resourceKeyForRef({ kind: "mount", mountId: ref.mountId, path: mountPath }),
       resource: {
@@ -413,6 +441,16 @@ export class MountProvider {
         ...(result.filePath || result.resource?.filePath ? { filePath: result.filePath || result.resource.filePath } : {}),
       } satisfies ResourceDescriptor,
     };
+    const proof = (result as unknown as ResourceStat)[RESOURCE_READ_PROOF];
+    if (proof) {
+      Object.defineProperty(mapped, RESOURCE_READ_PROOF, {
+        value: proof,
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      });
+    }
+    return mapped;
   }
 
   mapMoveResult(from: ResourceRef, to: ResourceRef, result: ResourceMoveResult): ResourceMoveResult {

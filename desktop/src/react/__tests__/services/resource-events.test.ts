@@ -78,7 +78,8 @@ describe('resource-events', () => {
 
     const releaseFirst = retainKnowledgeSourceWatch('main');
     const releaseSecond = retainKnowledgeSourceWatch('main');
-    await Promise.resolve();
+    await releaseFirst.ready;
+    await releaseSecond.ready;
 
     expect(hanaFetch).toHaveBeenCalledTimes(1);
     expect(hanaFetch).toHaveBeenCalledWith('/api/resource-io/subscribe', expect.objectContaining({
@@ -91,6 +92,7 @@ describe('resource-events', () => {
     expect(JSON.stringify(hanaFetch.mock.calls)).not.toMatch(
       /local-file|mountId|filePath|resolvedPath|[/\\\\](?:Users|private|tmp)[/\\\\]/,
     );
+    expect(Object.keys(releaseFirst)).not.toContain('ready');
 
     releaseFirst();
     releaseSecond();

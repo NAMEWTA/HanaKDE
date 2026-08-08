@@ -16,6 +16,7 @@ import {
 import {
   ProviderRootIdentityBroker,
 } from "../../lib/resource-io/root-identity.ts";
+import { RESOURCE_SCOPE_ROOT } from "../../lib/resource-io/types.ts";
 import type {
   ProviderRootIdentity,
   ResourceOperationContext,
@@ -179,6 +180,16 @@ export class SourceRegistry {
       throw Object.assign(new Error("invalid knowledge resource address"), parsed.error);
     }
     await this.revalidate(parsed.value.sourceKey);
+    return this.resolveAddressAfterRevalidation(parsed.value);
+  }
+
+  resolveAddressAfterRevalidation(
+    address: KnowledgeResourceAddress,
+  ): ResourceRef {
+    const parsed = parseKnowledgeResourceAddress(address);
+    if (parsed.ok === false) {
+      throw Object.assign(new Error("invalid knowledge resource address"), parsed.error);
+    }
     const root = this.rootRef(parsed.value.sourceKey);
     if (parsed.value.relativePath.includes("\\")) {
       throw createKnowledgeWorkspaceError(
@@ -198,10 +209,17 @@ export class SourceRegistry {
           "knowledge resource address escapes its source",
         );
       }
-      return {
+      const resolved = {
         kind: "local-file",
         path: candidatePath,
-      };
+      } as ResourceRef;
+      Object.defineProperty(resolved, RESOURCE_SCOPE_ROOT, {
+        value: rootPath,
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      });
+      return resolved;
     }
     if (root.kind === "mount") {
       return {

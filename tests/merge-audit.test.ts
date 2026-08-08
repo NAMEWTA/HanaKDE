@@ -82,7 +82,10 @@ afterEach(() => {
   }
 });
 
-describe("merge-audit", () => {
+// This suite creates and inspects several real temporary Git repositories.
+// Keep its allowance local so Windows filesystem scheduling cannot turn a
+// deterministic audit assertion into a general-suite timeout.
+describe("merge-audit", { timeout: 30_000 }, () => {
   it("flags a merge that resolved a both-sides-changed file wholesale to one parent", () => {
     const dir = makeClobberedRepo();
     const { status, json, stderr } = runAudit(dir);

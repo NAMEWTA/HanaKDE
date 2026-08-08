@@ -189,6 +189,34 @@ describe("knowledge index event coordinator", () => {
     lease.release();
   });
 
+  it("rebuilds the source for a directory mutation so descendant rows converge", async () => {
+    const fixture = createFixture("directory-mutation", {
+      "old/a.md": document("old/a.md", "a", "page"),
+      "old/b.md": document("old/b.md", "b", "page"),
+    });
+    await fixture.events.rebuild("main");
+    fixture.documents.clear();
+    fixture.documents.set("renamed/c.md", document("renamed/c.md", "c", "page"));
+
+    fixture.events.accept(
+      "main",
+      renamed(1, "old", "renamed", true),
+    );
+    await fixture.events.flush("main");
+
+    const lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect()).toMatchObject({
+      resourceCount: 1,
+      rowCounts: { resources: 1, pages: 1 },
+    });
+    lease.release();
+    expect(fixture.diagnostics).toContainEqual(expect.objectContaining({
+      state: "rebuild",
+      reason: "directory_event",
+      sequence: 1,
+    }));
+  });
+
   it("turns a sequence gap into a source rebuild instead of trusting event payload facts", async () => {
     const fixture = createFixture("gap");
     await fixture.events.rebuild("main");
@@ -289,6 +317,72 @@ describe("knowledge index event coordinator", () => {
     const lease = fixture.index.acquireQueryLease("main");
     expect(lease.inspect().resourceCount).toBe(2);
     lease.release();
+  });
+
+  it("does not publish a sequence for an event that arrives after the final replay drain", async () => {
+    const fixture = createFixture("late-replay", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await fixture.events.rebuild("main");
+    let revalidateCount = 0;
+    Object.assign(fixture.source, {
+      revalidate: async () => {
+        revalidateCount += 1;
+        if (revalidateCount === 2) {
+          fixture.documents.set("late.txt", document("late.txt", "late"));
+          fixture.events.accept("main", changed(1, "late.txt"));
+        }
+      },
+    });
+
+    await fixture.events.rebuild("main");
+
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 0 });
+    let lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect().resourceCount).toBe(1);
+    lease.release();
+
+    await fixture.events.flush("main");
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 1 });
+    lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect().resourceCount).toBe(2);
+    lease.release();
+  });
+
+  it("cancels only an aborted caller while another rebuild waiter remains active", async () => {
+    const fixture = createFixture("shared-cancel", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await fixture.events.rebuild("main");
+    let releaseScan!: () => void;
+    const scanGate = new Promise<void>((resolve) => {
+      releaseScan = resolve;
+    });
+    let reportStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      reportStarted = resolve;
+    });
+    fixture.source.scan = async function* () {
+      reportStarted();
+      await scanGate;
+      yield* fixture.documents.values();
+    };
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const first = fixture.events.rebuild("main", {
+      signal: firstController.signal,
+    });
+    await started;
+    const second = fixture.events.rebuild("main", {
+      signal: secondController.signal,
+    });
+
+    firstController.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    expect(fixture.events.inspect("main").rebuilding).toBe(true);
+    releaseScan();
+    await second;
+    expect(fixture.index.health("main")).toMatchObject({ state: "ready" });
   });
 
   it("degrades on source read failure while keeping the previous generation readable", async () => {
@@ -569,6 +663,7 @@ function changed(
       kind: "mount",
       mountId: "main",
       path: relativePath,
+      isDirectory: false,
     },
     version: { sequence },
     source: "provider_watch",
@@ -586,6 +681,7 @@ function deleted(sequence: number, relativePath: string): ResourceEvent {
       kind: "mount",
       mountId: "main",
       path: relativePath,
+      isDirectory: false,
     },
     source: "provider_watch",
     sequence,
@@ -597,13 +693,24 @@ function renamed(
   sequence: number,
   oldPath: string,
   newPath: string,
+  isDirectory = false,
 ): ResourceEvent {
   return {
     type: "resource.renamed",
     oldResourceKey: `mount:main:${oldPath}`,
     newResourceKey: `mount:main:${newPath}`,
-    oldResource: { kind: "mount", mountId: "main", path: oldPath },
-    newResource: { kind: "mount", mountId: "main", path: newPath },
+    oldResource: {
+      kind: "mount",
+      mountId: "main",
+      path: oldPath,
+      isDirectory,
+    },
+    newResource: {
+      kind: "mount",
+      mountId: "main",
+      path: newPath,
+      isDirectory,
+    },
     source: "provider_watch",
     sequence,
     occurredAt: new Date(sequence).toISOString(),

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   KNOWLEDGE_INDEX_SCHEMA_VERSION,
   KnowledgeIndexStore,
+  knowledgeIndexCompactPartitionPath,
   foldSearchText,
   nodeKnowledgeIndexFileSystem,
   type KnowledgeIndexFileSystem,
@@ -46,6 +47,7 @@ describe("knowledge index store", () => {
       fileSystem?: KnowledgeIndexFileSystem;
       processIsAlive?: (pid: number) => boolean;
       extractorContractVersion?: string;
+      checkpointBusyTimeoutMs?: number;
     } = {},
   ): KnowledgeIndexStore {
     return new KnowledgeIndexStore({
@@ -58,6 +60,7 @@ describe("knowledge index store", () => {
       fileSystem: options.fileSystem,
       processIsAlive: options.processIsAlive,
       extractorContractVersion: options.extractorContractVersion ?? "extractor-v1",
+      checkpointBusyTimeoutMs: options.checkpointBusyTimeoutMs,
     });
   }
 
@@ -175,6 +178,119 @@ describe("knowledge index store", () => {
     oldLease.release();
   });
 
+  it("writes compact fingerprints below the contract root and upgrades legacy partitions by rebuild", () => {
+    const workspaceSegment = Buffer.from(WORKSPACE_FINGERPRINT, "hex").toString("base64url");
+    const sourceSegment = Buffer.from(SOURCE_FINGERPRINT, "hex").toString("base64url");
+    const legacyPaths = [
+      (hanakoHome: string) => path.join(
+        hanakoHome,
+        "kw",
+        "i",
+        "v1",
+        workspaceSegment,
+        sourceSegment,
+      ),
+      (hanakoHome: string) => path.join(
+        hanakoHome,
+        "knowledge-workspace",
+        "index",
+        "v1",
+        WORKSPACE_FINGERPRINT,
+        SOURCE_FINGERPRINT,
+      ),
+    ];
+
+    for (const legacyPathFor of legacyPaths) {
+      const hanakoHome = temporaryHome("legacy-path");
+      const created = createStore(hanakoHome);
+      created.beginRebuild({
+        rebuildId: "canonical",
+        generationId: "generation-1",
+        startedSequence: 0,
+      }).publish({ lastCompleteSequence: 1 });
+      const canonicalPath = partitionPath(hanakoHome, SOURCE_FINGERPRINT);
+      expect(path.relative(hanakoHome, canonicalPath)).toBe(path.join(
+        "knowledge-workspace",
+        "index",
+        "v1",
+        workspaceSegment,
+        sourceSegment,
+      ));
+
+      const legacyPath = legacyPathFor(hanakoHome);
+      fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+      fs.cpSync(canonicalPath, legacyPath, { recursive: true });
+      const legacyGeneration = path.join(
+        legacyPath,
+        "generation-generation-1.sqlite",
+      );
+      const legacyBytes = fs.readFileSync(legacyGeneration);
+      fs.rmSync(canonicalPath, { recursive: true, force: true });
+      // A legacy partition may have kept a reader's SHM sidecar. It has no
+      // published WAL frames and must not make the immutable generation corrupt.
+      fs.writeFileSync(`${legacyGeneration}-shm`, Buffer.alloc(32));
+
+      const legacy = createStore(hanakoHome);
+      expect(legacy.health()).toEqual({
+        state: "stale",
+        generationId: "generation-1",
+        reason: "legacy_partition",
+      });
+      const lease = legacy.acquireQueryLease();
+      expect(lease.inspect().generationId).toBe("generation-1");
+      lease.release();
+      expect(() => legacy.applyIncremental({
+        lastCompleteSequence: 2,
+        changes: [{ kind: "delete", relativePath: "obsolete.md" }],
+      })).toThrow(expect.objectContaining({
+        code: "knowledge_index_unavailable",
+      }));
+
+      legacy.beginRebuild({
+        rebuildId: "upgrade",
+        generationId: "generation-2",
+        startedSequence: 1,
+      }).publish({ lastCompleteSequence: 2 });
+      expect(legacy.health()).toEqual({
+        state: "ready",
+        generationId: "generation-2",
+        sequence: 2,
+      });
+      expect(fs.existsSync(path.join(
+        canonicalPath,
+        "generation-generation-2.sqlite",
+      ))).toBe(true);
+      expect(fs.readFileSync(legacyGeneration)).toEqual(legacyBytes);
+    }
+  });
+
+  it("does not let a legacy partition mask a corrupt canonical manifest", () => {
+    const hanakoHome = temporaryHome("canonical-priority");
+    const created = createStore(hanakoHome);
+    created.beginRebuild({
+      rebuildId: "canonical",
+      generationId: "generation-1",
+      startedSequence: 0,
+    }).publish({ lastCompleteSequence: 1 });
+    const canonicalPath = partitionPath(hanakoHome, SOURCE_FINGERPRINT);
+    const legacyPath = path.join(
+      hanakoHome,
+      "kw",
+      "i",
+      "v1",
+      Buffer.from(WORKSPACE_FINGERPRINT, "hex").toString("base64url"),
+      Buffer.from(SOURCE_FINGERPRINT, "hex").toString("base64url"),
+    );
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+    fs.cpSync(canonicalPath, legacyPath, { recursive: true });
+    fs.writeFileSync(path.join(canonicalPath, "current.json"), "not-json");
+
+    expect(createStore(hanakoHome).health()).toEqual({
+      state: "corrupt",
+      reason: "manifest_invalid",
+    });
+  });
+
   it("turns AbortSignal and staging rename failure into non-destructive rebuild outcomes", () => {
     const hanakoHome = temporaryHome("abort");
     const store = createStore(hanakoHome);
@@ -232,7 +348,9 @@ describe("knowledge index store", () => {
 
   it("refuses checkpoint-busy staging content instead of publishing a main file without its WAL", () => {
     const hanakoHome = temporaryHome("checkpoint");
-    const store = createStore(hanakoHome);
+    const store = createStore(hanakoHome, SOURCE_FINGERPRINT, {
+      checkpointBusyTimeoutMs: 25,
+    });
     const rebuild = store.beginRebuild({
       rebuildId: "busy",
       generationId: "generation-busy",
@@ -246,20 +364,23 @@ describe("knowledge index store", () => {
     reader.exec("BEGIN");
     reader.prepare("SELECT value FROM meta WHERE key = 'generation_id'").get();
 
-    expect(() => rebuild.publish({ lastCompleteSequence: 1 })).toThrow(
-      expect.objectContaining({
-        code: "knowledge_index_unavailable",
-        details: { state: "checkpoint_busy" },
-      }),
-    );
-    expect(store.health()).toMatchObject({ state: "unavailable" });
-    expect(fs.existsSync(path.join(
-      partitionPath(hanakoHome, SOURCE_FINGERPRINT),
-      "current.json",
-    ))).toBe(false);
-    reader.exec("ROLLBACK");
-    reader.close();
-    rebuild.cancel();
+    try {
+      expect(() => rebuild.publish({ lastCompleteSequence: 1 })).toThrow(
+        expect.objectContaining({
+          code: "knowledge_index_unavailable",
+          details: { state: "checkpoint_busy" },
+        }),
+      );
+      expect(store.health()).toMatchObject({ state: "unavailable" });
+      expect(fs.existsSync(path.join(
+        partitionPath(hanakoHome, SOURCE_FINGERPRINT),
+        "current.json",
+      ))).toBe(false);
+    } finally {
+      reader.exec("ROLLBACK");
+      reader.close();
+      rebuild.cancel();
+    }
   });
 
   it("serializes writers with a recoverable same-host lock and never steals another host lock", () => {
@@ -375,26 +496,67 @@ describe("knowledge index store", () => {
     });
   });
 
+  it("publishes when an empty Windows-style SHM sidecar is transiently locked", () => {
+    const hanakoHome = temporaryHome("locked-sidecar");
+    let sidecarRemovalAttempts = 0;
+    const transientSidecarFileSystem: KnowledgeIndexFileSystem = {
+      ...nodeKnowledgeIndexFileSystem,
+      exists(target) {
+        if (target.endsWith("build-sidecar.sqlite-shm")) return true;
+        return nodeKnowledgeIndexFileSystem.exists(target);
+      },
+      remove(target, options) {
+        if (target.endsWith("build-sidecar.sqlite-shm")) {
+          sidecarRemovalAttempts += 1;
+          throw Object.assign(new Error("sharing violation"), { code: "EPERM" });
+        }
+        nodeKnowledgeIndexFileSystem.remove(target, options);
+      },
+    };
+    const store = createStore(hanakoHome, SOURCE_FINGERPRINT, {
+      fileSystem: transientSidecarFileSystem,
+    });
+
+    store.beginRebuild({
+      rebuildId: "sidecar",
+      generationId: "generation-sidecar",
+      startedSequence: 0,
+    }).publish({ lastCompleteSequence: 1 });
+
+    expect(sidecarRemovalAttempts).toBeGreaterThan(0);
+    expect(store.health()).toEqual({
+      state: "ready",
+      generationId: "generation-sidecar",
+      sequence: 1,
+    });
+  });
+
   it.skipIf(process.platform === "win32")(
     "refuses a symlinked internal index directory or manifest",
     () => {
       const hanakoHome = temporaryHome("symlink");
       const outside = temporaryHome("symlink-outside");
-      fs.mkdirSync(path.join(hanakoHome, "knowledge-workspace"), {
+      fs.mkdirSync(path.join(hanakoHome, "knowledge-workspace", "index"), {
         recursive: true,
       });
       fs.symlinkSync(
         outside,
-        path.join(hanakoHome, "knowledge-workspace", "index"),
+        path.join(hanakoHome, "knowledge-workspace", "index", "v1"),
         "dir",
       );
       expect(() => createStore(hanakoHome)).toThrow(
         expect.objectContaining({ code: "knowledge_index_unavailable" }),
       );
 
-      fs.rmSync(path.join(hanakoHome, "knowledge-workspace", "index"), {
+      fs.rmSync(path.join(hanakoHome, "knowledge-workspace", "index", "v1"), {
         force: true,
       });
+      fs.mkdirSync(path.join(hanakoHome, "kw", "i"), { recursive: true });
+      fs.symlinkSync(outside, path.join(hanakoHome, "kw", "i", "v1"), "dir");
+      expect(() => createStore(hanakoHome)).toThrow(
+        expect.objectContaining({ code: "knowledge_index_unavailable" }),
+      );
+      fs.rmSync(path.join(hanakoHome, "kw", "i", "v1"), { force: true });
       const store = createStore(hanakoHome);
       fs.writeFileSync(path.join(outside, "manifest.json"), "{}");
       fs.symlinkSync(
@@ -565,11 +727,8 @@ function partitionPath(
   hanakoHome: string,
   sourceFingerprint: string,
 ): string {
-  return path.join(
+  return knowledgeIndexCompactPartitionPath(
     hanakoHome,
-    "knowledge-workspace",
-    "index",
-    "v1",
     WORKSPACE_FINGERPRINT,
     sourceFingerprint,
   );
