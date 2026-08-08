@@ -2,75 +2,83 @@
 id: specdev/triage
 type: workflow-entry
 workflow: specdev
-name: Issue 分诊
-description: 将外部 issue 摄入并分诊为本地 change：深度理解上下文后写入 source-issue.md 与 triage.md，再推荐下一 work（G-grill / S-spec / I-implement / D-diagnose 等）。
-keywords: [分诊, triage, issue, 摄入, 变更引导, needs-triage]
+name: 请求分诊
+description: 把远程 Issue、URL、文件或对话冻结为本地来源工件，完成风险分诊与路由，并在本地 change 完成后受控回写和关闭支持的远程 Issue。
+keywords: [triage, 摄入, import, issue, reconcile, close, 风险, 路由]
 ---
 
-# Issue 分诊
+# 请求分诊
 
-将外部 issue **分诊**为本地 change 引导：摄入 → 深度理解 → 写入 `source-issue.md` 与 `triage.md` → 推荐下一 work 后停止。本 work 只落本地产物；ADR / LOG / CONTEXT / spec / ticket 与 tracker 写回由其他 work 或 `common/triage` skill 负责。
+Triage 是 SpecDev 唯一的远程摄入与关闭边界。开发期间，`<Path>{roots.state}/specdev/changes/{change}/source.md</Path>`、`<Path>{roots.state}/specdev/changes/{change}/triage.md</Path>`、Spec、Ticket、Map、Goal Plan、Evidence 和状态文件是唯一权威；远程系统只保存原始请求以及经确认后的完成通知。
 
-产物路径：`<Path>{roots.state}/specdev/changes/{change}/</Path>`（`{change}` = `<YYYY-MM-DD>-<topic>`）。
+## 模式
 
-## 流程
+- **intake**：冻结输入、创建或恢复 change、分类并返回下一 Work。
+- **reconcile**：本地 change 已完成后，确认远程完成摘要并关闭支持的 GitHub Issue；不重新分诊或修改开发契约。
 
-### 1. 摄入 Issue
+## 共同启动
 
-加载 `<Path>{roots.workflows}/specdev/T-triage/intake-rules.md</Path>`。将 `#N`、URL、粘贴正文或口头描述规范化为统一结构（source、title、body、comments、来源标识）。`gh` 可用则拉取；否则请用户粘贴或补齐最小字段。
+1. 解析 roots，读取 `<Path>{roots.workflows}/specdev/INDEX.md</Path>`、全局状态和 change 状态。
+2. Intake 可以创建 change；reconcile 必须选择一个已存在的 completed change。
+3. 若该 change 的 `current_work` 为 null，设置为 `specdev/triage`；指向其他 Work 时先恢复或完成显式 handoff。
+4. 重读已有 `<Path>{roots.state}/specdev/changes/{change}/source.md</Path>` 与 `<Path>{roots.state}/specdev/changes/{change}/triage.md</Path>`，不覆盖已冻结的来源。
 
-**完成标准**：标题、正文、评论与来源标识齐全，或已标注 paste/manual 且最小字段已齐。
+## Intake
 
-### 2. 深度理解
+输入为远程 Issue、URL、项目相对文件、用户粘贴内容或当前对话时，加载 `<Path>{roots.workflows}/specdev/T-triage/intake-protocol.md</Path>`：
 
-加载 `<Path>{roots.workflows}/specdev/T-triage/understanding-rules.md</Path>`。行为契约对齐 `<Path>{roots.workflows}/specdev/common/triage/AGENT-BRIEF.md</Path>`；范围外只读去重遵循 `<Path>{roots.workflows}/specdev/common/triage/OUT-OF-SCOPE.md</Path>`。
+1. 按协议解析来源、查重、脱敏、冻结并计算内容 hash；使用 `<Path>{roots.workflows}/specdev/T-triage/source-template.md</Path>` 原子写入 `<Path>{roots.state}/specdev/changes/{change}/source.md</Path>`。
+2. 按需读取永久 ADR/CONTEXT、当前 change 工件和相关代码事实；缺失的可选输入静默跳过。
+3. 分类为 bug、feature、refactor、investigation、operations、documentation、review 或 mixed。
+4. 评估影响、紧急度、事故半径、安全、数据、迁移和人工批准；把未知项分为可发现事实、decision-needed 和低影响实现细节。
+5. 使用 `<Path>{roots.workflows}/specdev/T-triage/triage-template.md</Path>` 写入 `<Path>{roots.state}/specdev/changes/{change}/triage.md</Path>`。
+6. 运行阶段校验并返回最小正确路线：
+   - 根因未知的 bug → `<Path>{roots.workflows}/specdev/D-diagnose-bugs/D-diagnose-bugs.md</Path>`；
+   - 产品或架构决定未锁定 → `<Path>{roots.workflows}/specdev/G-grill-with-docs/G-grill-with-docs.md</Path>`；
+   - 路径超出单次上下文 → `<Path>{roots.workflows}/specdev/W-wayfinder/W-wayfinder.md</Path>`；
+   - 需要可运行原型回答设计问题 → `<Path>{roots.workflows}/specdev/P-prototype/P-prototype.md</Path>`；
+   - 外部行为明确 → `<Path>{roots.workflows}/specdev/S-spec/S-spec.md</Path>`；
+   - 固定点 diff 或 PR 审查 → `<Path>{roots.workflows}/specdev/C-code-review/C-code-review.md</Path>`；
+   - 小型明确变更 → `<Path>{roots.workflows}/specdev/T-tickets/T-tickets.md</Path>` 或获批 Direct Spec。
 
-读取永久 `<Path>{roots.state}/specdev/adr/</Path>`、`<Path>{roots.state}/specdev/context/</Path>`（若有）；按领域概念探查代码库；扫描 `.out-of-scope/`；对 bug 做轻量可复现判定；归类 `bug` | `enhancement` 并列出具体信息缺口。
+只有目标、范围、验证、路径和风险全部明确且用户批准 Direct Spec 时，`ready_for_implementation` 才能为 true。
 
-**完成标准**：类别已判定；冗余与范围外结果已报告；验证结果或缺口已明确；足以起草行为摘要或已穷尽缺失问题。
+## Reconcile
 
-### 3. 选择 / 创建 Change
+本地 change 完成并需要关闭来源 Issue 时，加载：
 
-读 `<Path>{roots.state}/specdev/status.json</Path>`（INDEX 启动协议）：新 issue 默认创建 `changes/<YYYY-MM-DD>-<kebab-topic>/`；仅用户声明续作时复用 active；多候选先消歧。在 `active` 数组中追加条目 `{ change, current_work: "specdev/triage", works_run: [], result: null }`；`work_history` 追加进行中记录（含 `change` 字段，缺字段时按 INDEX 补齐）。创建 change 目录后写入初始 `<Path>{roots.state}/specdev/changes/{change}/.status.json</Path>`（`change_status: "active"`、`created_at` 为当前时间）。
+- `<Path>{roots.workflows}/specdev/common/rules/change-completion.md</Path>`；
+- `<Path>{roots.workflows}/specdev/T-triage/reconcile-protocol.md</Path>`。
 
-**完成标准**：`{change}` 目录存在；`active` 含该 change；`current_work` 为 `"specdev/triage"`。
+按协议重验本地完成、生成最小外部摘要、展示准确目标和动作、取得本次明确授权，再调用 `<Path>{roots.skills}/github-npm-ops/SKILL.md</Path>`。成功时把 `external_action` 更新为 `closed`；部分或完全失败为 `close-failed` 并保留可重试检查点；用户明确不关闭时为 `waived`。任何结果都不改写本地完成事实。
 
-### 4. 写入分诊产物
+Reconcile 成功或 waived 后返回 `<Path>{roots.workflows}/specdev/A-archive-and-consolidate/A-archive-and-consolidate.md</Path>`。不支持关闭的来源使用 `not-applicable`，无需虚构 provider。
 
-加载 `<Path>{roots.workflows}/specdev/T-triage/artifact-templates.md</Path>`，仅写入：
+## 状态与验证
 
-1. `<Path>{roots.state}/specdev/changes/{change}/source-issue.md</Path>` — 原文快照
-2. `<Path>{roots.state}/specdev/changes/{change}/triage.md</Path>` — 分诊结论、行为契约草案、推荐 status 与 next work
+运行：
 
-推荐 status 只记在 `triage.md`。标签字符串可读 `<Path>{roots.state}/specdev/.config/status-labels.md</Path>`（若有），否则用角色名。
+```bash
+node <Path>{roots.workflows}/specdev/common/tools/validate-specdev.mjs</Path> \
+  --stage triage \
+  <Path>{roots.state}/specdev/changes/{change}</Path>
+```
 
-**完成标准**：两文件已落盘；含类别、推荐 status、行为契约草案与 next work；无残留 `[TODO:]`（`needs-info` 的信息缺口列表除外）。
+验证通过后原子重读 source、triage 和 change 状态。Intake 或 reconcile 成功时将 `specdev/triage` 去重加入 `works_run` 并清空 `current_work`；可恢复失败保留 `current_work` 和具体 blocker。
 
-### 5. 路由推荐
+## 完成标准
 
-加载 `<Path>{roots.workflows}/specdev/T-triage/routing-rules.md</Path>`。首匹配恰好一条主推荐（可附一条备选），写入 `triage.md` 并展示 Path 与理由。
-
-**完成标准**：主推荐已展示；下游尚未启动。
-
-### 6. 停止并交接
-
-更新 `<Path>{roots.state}/specdev/status.json</Path>`：`active` 中对应条目的 `current_work = null`；`work_history` 对应条目补 `completed_at`、`result`（无 `artifacts` 字段）。汇报 change、类别、status、next work、产物路径；明确询问是否进入推荐 work。用户确认前保持代码与下游不动。
-
-**完成标准**：status 已更新；用户已收到摘要与确认问题；本 work 结束。
+- 来源已冻结为本地工件，原意未被改写，敏感值未持久化；
+- 相同 locator 不会静默创建重复 change或覆盖已有快照；
+- 分类、影响、风险、未知项和下一 Work 有证据；
+- 开发权威完全位于本地 state；
+- 未授权时远程写入为零；
+- Reconcile 可从失败检查点幂等恢复；
+- 状态、验证结果和下一 Work 完整路径已返回。
 
 ## 子文件引用
 
-| 文件 | 内容 | 触发条件 |
-|------|------|----------|
-| `<Path>{roots.workflows}/specdev/T-triage/intake-rules.md</Path>` | gh / 粘贴摄入、字段规范化 | 步骤 1 |
-| `<Path>{roots.workflows}/specdev/T-triage/understanding-rules.md</Path>` | 理解清单、冗余与范围外 | 步骤 2 |
-| `<Path>{roots.workflows}/specdev/T-triage/artifact-templates.md</Path>` | 两产物模板 | 步骤 4 |
-| `<Path>{roots.workflows}/specdev/T-triage/routing-rules.md</Path>` | 首匹配路由与话术 | 步骤 5 |
-| `<Path>{roots.workflows}/specdev/common/triage/AGENT-BRIEF.md</Path>` | 行为契约原则 | 步骤 2/4 起草摘要 |
-| `<Path>{roots.workflows}/specdev/common/triage/OUT-OF-SCOPE.md</Path>` | 范围外只读去重 | 步骤 2 扫描时 |
-
-## 依赖关系
-
-- **上游**：外部 issue（`gh` 或用户）；可选永久 adr/context；可选 `.out-of-scope/`
-- **下游**（确认后）：`<Path>{roots.workflows}/specdev/G-grill-with-docs/G-grill-with-docs.md</Path>`、`<Path>{roots.workflows}/specdev/S-spec/S-spec.md</Path>`、`<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>`、`<Path>{roots.workflows}/specdev/D-diagnose-bugs/D-diagnose-bugs.md</Path>`、`<Path>{roots.workflows}/specdev/W-wayfinder/W-wayfinder.md</Path>`
-- **并列**：`<Path>{roots.workflows}/specdev/common/triage/SKILL.md</Path>` 仍可独立做 tracker 状态机；本 work 只引用其 AGENT-BRIEF / OUT-OF-SCOPE
+- Intake：`<Path>{roots.workflows}/specdev/T-triage/intake-protocol.md</Path>`
+- Reconcile：`<Path>{roots.workflows}/specdev/T-triage/reconcile-protocol.md</Path>`
+- Source 模板：`<Path>{roots.workflows}/specdev/T-triage/source-template.md</Path>`
+- Triage 模板：`<Path>{roots.workflows}/specdev/T-triage/triage-template.md</Path>`

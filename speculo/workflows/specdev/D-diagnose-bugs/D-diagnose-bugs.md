@@ -2,86 +2,83 @@
 id: specdev/diagnose-bugs
 type: workflow-entry
 workflow: specdev
-name: 诊断
-description: 针对疑难 bug 建立诊断循环——构建紧凑反馈回路、复现最小化、可证伪假设排名、插桩定位根因，确认后移交 I-implement 修复。
-keywords: [诊断, 调试, bug, 反馈回路, 假设, 根因分析]
+name: 诊断 Bug
+description: 先建立会在精确症状上变红的紧凑反馈回路，再通过最小化、排名假设和单变量探针确认根因，输出修复契约而不实施生产修复。
+keywords: [bug, 诊断, 红灯, tight-loop, 根因, 复现, 假设]
 ---
 
-# 诊断
+# 诊断 Bug
 
-针对疑难 bug 的诊断规程。先建立紧凑的反馈回路锚定症状，再通过可证伪假设排名定位根因，确认后移交 I-implement 执行修复。仅在明确有理由时才跳过阶段。
+D 的主导词是**红灯**：没有一条已执行且能在此 bug 上变红的紧凑命令，就没有可进入的假设阶段。D 默认只读项目代码，可以创建 change 诊断工件和经授权的临时可撤销探针；生产修复由 Implement 拥有。
 
-在开始诊断之前，读取当前变更的上下文与架构决策：
+## 输入与所有权
 
-- **CONTEXT.md** —— 项目领域术语与概念：`<Path>{roots.state}/specdev/changes/{change}/CONTEXT.md</Path>`
-- **ADR.md** —— 架构决策记录：`<Path>{roots.state}/specdev/changes/{change}/ADR.md</Path>`
+按存在情况读取：
 
-如果这些文件不存在，先运行 `<Path>{roots.workflows}/specdev/W-wayfinder/W-wayfinder.md</Path>` 或询问用户以建立上下文。
+- `<Path>{roots.state}/specdev/changes/{change}/source.md</Path>`
+- `<Path>{roots.state}/specdev/changes/{change}/triage.md</Path>`
+- `<Path>{roots.state}/specdev/changes/{change}/CONTEXT.md</Path>`
+- `<Path>{roots.state}/specdev/changes/{change}/ADR.md</Path>`
+- 相关代码、测试、配置、日志和运行环境事实。
+
+D 拥有：
+
+- `<Path>{roots.state}/specdev/changes/{change}/diagnosis.md</Path>`
+- `<Path>{roots.state}/specdev/changes/{change}/diagnostics/</Path>`，仅在需要脚本、捕获物或临时探针结果时延迟创建。
 
 ## 流程
 
-### 1. 加载上下文
+### 1. 建立并执行红灯回路
 
-读取 `<Path>{roots.state}/specdev/status.json</Path>` 确认活跃变更。读取 CONTEXT.md 获取领域词汇表——使用其中已定义的术语。读取 ADR.md 了解已做出的架构决策——诊断过程中涉及的模块若与已有 ADR 相关，在假设中引用。
+加载 `<Path>{roots.workflows}/specdev/D-diagnose-bugs/feedback-loop.md</Path>`。按其顺序尝试测试、HTTP/CLI、浏览器、追踪回放、夹具、模糊循环、bisect、差分和最终 HITL。保存命令、至少一次真实输出、精确症状断言、运行时间、确定性或复现率，以及 Agent 可运行性。
 
-**完成标准**：活跃变更已确认，领域词汇表和架构决策已加载。`{change}` 已确定。
+无法建立回路时立即使用诊断模板写 `status: blocked`、`feedback_loop_ready: false`、已尝试方式和所需输入；假设表保持为空，保留 `current_work` 后返回。不得继续阅读代码来构造根因理论。
 
-若诊断过程中遇到不熟悉的第三方库行为、API 语义、运行时特性或工具链细节，先调用 `<Path>{roots.workflows}/specdev/common/research/SKILL.md</Path>` 完成一手来源调查，再继续构建回路。
+**完成标准**：一条已运行命令快速、可重复、由 Agent 执行，并能在用户精确症状上变红。
 
-### 2. 构建反馈回路
+### 2. 复现并最小化
 
-委托给 `<Path>{roots.workflows}/specdev/D-diagnose-bugs/feedback-loop-techniques.md</Path>`。构建一个紧凑的通过/失败信号——一条命令，确定性、秒级、agent 可无人值守运行。在此投入不成比例的精力：反馈回路是诊断的超能力。如果确实无法构建回路，向用户明确说明已尝试的方法并请求访问复现环境或捕获产物。
+运行回路确认捕获的是用户报告的故障。逐个删除输入、调用者、配置、数据和步骤，每次删除后重跑；只保留对红灯有负载作用的元素。非确定性 bug 通过并行、压力、固定时间/随机或缩小窗口提高到可调试复现率。
 
-**完成标准**：反馈回路紧凑且具备变红能力——一条命令已运行并通过/失败输出验证，确定性、秒级、agent 可运行。回路断言的是用户的确切症状，而非"运行不出错"。
+**完成标准**：剩余每个元素被移除都会使回路变绿，最小复现和最后红灯证据已持久化。
 
-### 3. 复现与最小化
+### 3. 假设与单变量探针
 
-运行回路，确认它产生用户描述的故障模式。然后逐元素削减输入、调用者、配置和数据——每次削减后重新运行回路——只保留对故障有负载作用的部分。
+只有前两步完成后才加载 `<Path>{roots.workflows}/specdev/D-diagnose-bugs/hypothesis-and-instrumentation.md</Path>`。生成 3–5 个带预测的可证伪假设，先展示排名；用户 AFK 时保存 checkpoint 后继续。每个探针只检验一个预测，优先 debugger/REPL，其次定向日志；性能问题使用测量和分析器。
 
-**完成标准**：回路已复现用户症状。复现场景已最小化——每个剩余元素都有负载作用，移除任何一个都会使回路变绿。
+**完成标准**：根因由区分性实验确认，其他高排名候选有反证，所有临时探针有唯一清理标记。
 
-### 4. 提出诊断计划
+### 4. 写入修复契约
 
-委托给 `<Path>{roots.workflows}/specdev/D-diagnose-bugs/hypothesis-format.md</Path>`。生成 3-5 个排名假设，每个假设必须是可证伪的——陈述其预测。将排名列表作为诊断计划呈现给用户确认。用户可能拥有立即重排名的领域知识。如果用户 AFK，按排名继续。
+使用 `<Path>{roots.workflows}/specdev/D-diagnose-bugs/diagnosis-template.md</Path>` 写入 diagnosis：触发条件、失败机制、影响范围、漏检原因、必须改变、必须保持、正确 seam、回归测试、非目标、风险和回滚。
 
-**完成标准**：3-5 个可证伪假设已排名并作为诊断计划呈现给用户。用户已确认或 AFK 下按排名继续。
+存在正确 seam 时，把最小复现定义为 I 必须先观察红灯的回归测试合同；不存在正确 seam 时明确记录架构缺口并路由 R。D 不编写生产修复。
 
-### 5. 插桩验证
+### 5. 清理、验证与路由
 
-委托给 `<Path>{roots.workflows}/specdev/D-diagnose-bugs/instrumentation-rules.md</Path>`。每个探测映射到诊断计划中的一个具体预测。每次只改变一个变量。使用调试器/REPL 优先于日志。所有调试日志使用 `[DEBUG-xxxx]` 唯一前缀标记。
+重跑原始未最小化回路，确认当前诊断结论可解释症状；搜索唯一 `[DEBUG-...]` 前缀并删除临时插桩，无法删除项登记 owner 与删除条件。运行：
 
-**完成标准**：根因已通过插桩确认——某个假设的预测已验证，其他假设已排除。所有探测结果与诊断计划中的预测对应。
+```bash
+node <Path>{roots.workflows}/specdev/common/tools/validate-specdev.mjs</Path> \
+  --stage diagnosis \
+  <Path>{roots.state}/specdev/changes/{change}</Path>
+```
 
-### 6. 移交修复
+根因确认后将本 Work 加入 `works_run` 并清空 `current_work`，返回 diagnosis 和下一 Work：局部修复进入 Tickets/I，公共行为或高风险进入 S/Tickets，缺 seam 进入 R，仍无根因则保持 blocked 或进入 W。
 
-调用 `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>` 执行修复。移交以下信息：
+## 完成标准
 
-- **根因描述**——哪个假设被确认，通过什么探测验证
-- **最小复现场景**——阶段 3 产出的最小化复现，可直接转为回归测试
-- **建议的修复接缝**——在哪个模块/接口处修复最合适
-
-修复、回归测试编写和提交由 I-implement 完成。如果不存在正确的测试缝合点，将此发现记录到 `<Path>{roots.state}/specdev/changes/{change}/LOG.md</Path>` 并在步骤 7 的事后分析中提出架构改进建议。
-
-**完成标准**：I-implement 已启动，根因描述、最小复现、建议修复接缝已移交。
-
-### 7. 清理与复盘
-
-委托给 `<Path>{roots.workflows}/specdev/D-diagnose-bugs/cleanup-postmortem.md</Path>`。移除所有 `[DEBUG-xxxx]` 标记的插桩代码，删除一次性原型。在 `<Path>{roots.state}/specdev/changes/{change}/LOG.md</Path>` 中记录：被证实的假设、根因、修复提交。执行事后分析——什么本可以预防这个 bug？如果涉及架构变更，提出改进建议。
-
-**完成标准**：调试产物已清理（grep `[DEBUG-` 无残留），根因已记录到 LOG.md，预防建议已提出。
-
----
+- 红灯回路硬门有已执行证据；
+- 最小复现的剩余元素都有负载作用；
+- 假设有排名、预测和反证；
+- 根因解释触发、机制、漏检和影响；
+- 修复契约决策完备但未夹带生产修复；
+- debug 插桩已清理或有明确 owner；
+- diagnosis、状态、验证证据和下一 Work 路径一致。
 
 ## 子文件引用
 
-| 文件 | 内容 | 触发条件 |
-|------|------|---------|
-| `<Path>{roots.workflows}/specdev/D-diagnose-bugs/feedback-loop-techniques.md</Path>` | 10 种反馈回路构建技术、收紧回路、非确定性 bug 策略、无法构建回路时的升级路径、最小化协议 | 步骤 2「构建反馈回路」和步骤 3「复现与最小化」进入时 |
-| `<Path>{roots.workflows}/specdev/D-diagnose-bugs/hypothesis-format.md</Path>` | 可证伪假设格式模板、排名规则、用户 Plan 呈现模板、AFK 默认行为 | 步骤 4「提出诊断计划」进入时 |
-| `<Path>{roots.workflows}/specdev/D-diagnose-bugs/instrumentation-rules.md</Path>` | 探测映射规则、工具偏好、`[DEBUG-xxxx]` 标记约定、性能分支处理 | 步骤 5「插桩验证」进入时 |
-| `<Path>{roots.workflows}/specdev/D-diagnose-bugs/cleanup-postmortem.md</Path>` | 清理检查清单、事后分析问题、预防建议记录格式 | 步骤 7「清理与复盘」进入时 |
-
-## 依赖关系
-
-- 依赖 `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>` 执行修复——步骤 6 移交已确认的根因和最小复现
-- 依赖 `<Path>{roots.state}/specdev/changes/{change}/CONTEXT.md</Path>` 和 `<Path>{roots.state}/specdev/changes/{change}/ADR.md</Path>` 提供领域上下文——步骤 1 加载
+- 反馈回路：`<Path>{roots.workflows}/specdev/D-diagnose-bugs/feedback-loop.md</Path>`
+- 假设与插桩：`<Path>{roots.workflows}/specdev/D-diagnose-bugs/hypothesis-and-instrumentation.md</Path>`
+- 诊断模板：`<Path>{roots.workflows}/specdev/D-diagnose-bugs/diagnosis-template.md</Path>`
+- HITL 模板：`<Path>{roots.workflows}/specdev/D-diagnose-bugs/scripts/hitl-loop.template.sh</Path>`

@@ -3,130 +3,128 @@ id: specdev/init-setup
 type: workflow-entry
 workflow: specdev
 name: 初始化设置
-description: 为 specdev workflow 配置变更追踪、领域文档布局、状态标签和语言偏好。首次使用其他 specdev works 前运行一次。
-keywords: [初始化, 配置, 设置, setup]
+description: 初始化 SpecDev 的语言、配置、全局状态、本地 change 追踪、领域知识布局、验证命令和并发治理。
+keywords: [初始化, 配置, status, tracking, 验证命令]
 ---
 
 # 初始化设置
 
-为 specdev workflow 搭建本地持久化配置——变更追踪约定、领域文档布局、状态标签映射和交互语言偏好。这是一个提示驱动的入口，先探索，展示发现结果，与用户确认，然后写入。
+首次使用 SpecDev、状态根不存在或治理契约发生变化后运行。此 work 只初始化 SpecDev 的状态与配置，不修改项目业务代码。
 
-所有配置产物写入 `<Path>{roots.state}/specdev/</Path>` 下：
+## 规范输入
 
-- **变更追踪约定** → `<Path>{roots.state}/specdev/.config/tracking.md</Path>` —— 变更以本地 markdown 目录形式管理
-- **领域文档布局** → `<Path>{roots.state}/specdev/.config/domain-layout.md</Path>` —— 三文件模型（ADR/LOG/CONTEXT）的读写规则
-- **状态标签映射** → `<Path>{roots.state}/specdev/.config/status-labels.md</Path>` —— 五个标准 triage 角色的标签字符串
-- **语言与配置** → `<Path>{roots.state}/specdev/config.json</Path>` —— 交互语言、报告语言和持久化设置
-
-首次使用 specdev 的任意 work 之前运行一次。之后可直接编辑 `<Path>{roots.state}/specdev/.config/</Path>` 下的文件进行调整，无需重新运行。
+- 工作流总览：`<Path>{roots.workflows}/specdev/INDEX.md</Path>`
+- 路径引用契约：`<Path>{roots.workflows}/specdev/common/rules/path-reference-contract.md</Path>`
+- 配置模板：`<Path>{roots.workflows}/specdev/I-init-setup/config-template.json</Path>`
+- 配置 Schema：`<Path>{roots.workflows}/specdev/common/schemas/config.schema.json</Path>`
+- 全局状态模板：`<Path>{roots.workflows}/specdev/I-init-setup/status-template.json</Path>`
+- 全局状态 Schema：`<Path>{roots.workflows}/specdev/common/schemas/status.schema.json</Path>`
+- Change 状态模板：`<Path>{roots.workflows}/specdev/I-init-setup/change-status-template.json</Path>`
+- Change 状态 Schema：`<Path>{roots.workflows}/specdev/common/schemas/change-status.schema.json</Path>`
 
 ## 流程
 
-### 1. 探索
+### 1. 解析根目录
 
-查看当前仓库以了解 specdev 的初始配置状态。读取已有内容；不要假设：
+确认：
 
-- `<Path>{roots.state}/specdev/config.json</Path>` —— 全局配置文件是否已存在？若存在，读取其内容
-- `<Path>{roots.state}/specdev/.config/tracking.md</Path>` —— 变更追踪约定是否已配置？
-- `<Path>{roots.state}/specdev/.config/domain-layout.md</Path>` —— 领域文档布局是否已配置？
-- `<Path>{roots.state}/specdev/.config/status-labels.md</Path>` —— 状态标签映射是否已配置？
-- `<Path>{roots.state}/specdev/status.json</Path>` —— 当前是否有活跃变更？
-- `<Path>{roots.state}/specdev/changes/</Path>` —— 已有哪些变更目录？
-- `<Path>{roots.state}/specdev/archive/</Path>` —— 归档了哪些历史变更？
+- 工作流根可解析为 `<Path>{roots.workflows}/specdev/</Path>`；
+- 状态根可解析为 `<Path>{roots.state}/specdev/</Path>`；
+- 当前用户允许在状态根创建目录和工件。
 
-总结已存在的和缺失的内容。
+不得把真实绝对路径写回模板或治理文档；持久化引用继续使用根变量。
 
-**完成标准**：当前 `<Path>{roots.state}/specdev/</Path>` 和已有配置已摸底，已存在的和缺失的内容已明确。
+### 2. 探测项目事实
 
-然后进入配置阶段——**逐项**引导用户完成四项决策：展示一节，获得用户回答，然后进入下一节。不要一次抛出全部四项。每个配置阶段之前，简短解释它是什么、specdev 的 works 为什么需要它、选择不同会有什么变化。
+只读检查仓库根、包管理方式、构建脚本、测试脚本、静态检查、CI、默认分支、项目级 Agent 指令与 worktree 约定。能从仓库发现的事实直接记录，不询问用户。
 
-### 2. 变更追踪
+至少探测：
 
-specdev 的变更追踪使用**本地 markdown** 作为唯一选项。变更以目录形式存放在 `<Path>{roots.state}/specdev/changes/<YYYY-MM-DD>-<topic>/</Path>` 下，通过 `<Path>{roots.state}/specdev/status.json</Path>` 的 `active` 数组追踪当前活跃变更。
+- 项目测试、类型检查、lint 和构建命令；
+- 是否存在多包或多工作区结构；
+- 是否允许并行 worktree；
+- 共享高冲突路径的类型，例如根依赖清单、锁文件、全局导出、共享 schema、迁移索引和全局路由；
+- 项目中已有的提交、分支和发布约定。
 
-变更追踪是 specdev 记录工作进度的地方。当你运行 `S-spec`、`I-implement`、`G-grill-with-docs` 等 work 时，它们会将产物写入当前变更目录。与 GitHub Issues 或 Jira 不同，本地 markdown 方式让所有工作产物（需求文档、设计决策、实现记录）与代码存放在同一仓库中，无需网络连接，且完全由 git 版本控制。
+同时确认项目根 `.gitignore` 存在且包含 `specdev-worktree/`（`/specdev-worktree/` 视为等价）。该条目由 `speculo init` 单一维护；缺失时停止并提示用户以当前 Speculo 版本重新运行 `speculo init`，本 Work 不作为第二写入者修改它。
 
-确认用户理解此约定后，将详细规则写入 `<Path>{roots.state}/specdev/.config/tracking.md</Path>`。
+### 3. 询问不可发现偏好
 
-详细约定参见 `<Path>{roots.workflows}/specdev/I-init-setup/tracking-convention.md</Path>`。
+仅在上下文未提供时询问：
 
-**完成标准**：变更追踪约定已确认并写入 `<Path>{roots.state}/specdev/.config/tracking.md</Path>`。
+- 交互语言与持久化工件语言；
+- 是否允许自动提交；
+- 最大并发数；
+- Deep Ticket 的迁移、发布和不可逆操作是否必须人工批准；
 
-### 3. 领域文档布局
+不询问可由仓库事实回答的文件位置、脚本名或默认分支。
 
-specdev 使用**单上下文**布局。每个变更目录 `<Path>{roots.state}/specdev/changes/{change}/</Path>` 下维护三个文件：
+### 4. 写入配置
 
-- **CONTEXT.md** —— 项目领域术语与概念
-- **ADR.md** —— 架构决策记录（本变更相关的决策）
-- **LOG.md** —— 设计决策日志（按时间顺序记录每次设计调整）
+以 `<Path>{roots.workflows}/specdev/I-init-setup/config-template.json</Path>` 为模板写入 `<Path>{roots.state}/specdev/config.json</Path>`。
 
-部分 specdev work（如 `G-grill-with-docs`、`I-implement`）在探索代码库时会读取 CONTEXT.md 了解项目的领域语言，以及 ADR.md 了解过去的架构决策。单上下文意味着整个 specdev workflow 共享一套术语和决策记录，所有变更目录下的三文件模型均遵循相同约定。
+要求：
 
-确认用户理解此布局后，将消费方规则写入 `<Path>{roots.state}/specdev/.config/domain-layout.md</Path>`。
+- 字段满足 `<Path>{roots.workflows}/specdev/common/schemas/config.schema.json</Path>`；
+- 验证命令来自仓库事实或显式用户决定；
+- 未确认命令写 `null`，不得虚构；
+- 不写入令牌、凭据、Cookie、个人隐私或敏感环境变量值；
+- 自动提交默认关闭，除非用户明确授权。
 
-详细约定参见 `<Path>{roots.workflows}/specdev/I-init-setup/domain-layout.md</Path>`。
+### 5. 初始化目录与状态
 
-**完成标准**：领域文档布局已确认——三文件（ADR/LOG/CONTEXT）持久化到 `<Path>{roots.state}/specdev/changes/{change}/</Path>`，消费方规则已写入。
+创建或确认以下目录和文件：
 
-### 4. 状态标签
+- 以 `<Path>{roots.workflows}/specdev/I-init-setup/status-template.json</Path>` 生成 `<Path>{roots.state}/specdev/status.json</Path>`
+- `<Path>{roots.state}/specdev/.config/</Path>`
+- `<Path>{roots.state}/specdev/changes/</Path>`
+- `<Path>{roots.state}/specdev/adr/</Path>`
+- `<Path>{roots.state}/specdev/context/</Path>`
+- `<Path>{roots.state}/specdev/research/</Path>`
+- `<Path>{roots.state}/specdev/archive/</Path>`
 
-specdev 使用五个标准状态角色来追踪工作项的生命周期：
+若全局状态已存在，先检查 `schema_version`。版本未知、JSON 不可解析或状态与当前 workflow 契约不一致时，停止当前 Work，并提示用户重新运行 `speculo init` 刷新受 Speculo 管理的状态；不得在 Work 内迁移、兼容或猜测旧状态。只有状态不存在时才从 schema v4 模板创建。
 
-| 角色 | 默认标签 | 含义 |
-|------|---------|------|
-| `needs-triage` | `needs-triage` | 需要评估 |
-| `needs-info` | `needs-info` | 等待补充信息 |
-| `ready-for-agent` | `ready-for-agent` | 可执行（agent 无需额外人工上下文即可领取） |
-| `ready-for-human` | `ready-for-human` | 需人工处理 |
-| `wontfix` | `wontfix` | 不处理 |
+从模板生成：
 
-当 `T-tickets`、`W-wayfinder` 等 work 处理工作项时，它们会将工作项移过一个状态机——需要评估、等待补充、可供 agent 领取、需人工处理、或不予处理。状态标签是这些状态在持久化文件中的字符串表示。默认每个角色的标签等于其名称，如果你的项目已有不同命名习惯，可以在此映射。
+- `<Path>{roots.workflows}/specdev/I-init-setup/tracking-template.md</Path>` → `<Path>{roots.state}/specdev/.config/tracking.md</Path>`
+- `<Path>{roots.workflows}/specdev/I-init-setup/domain-layout-template.md</Path>` → `<Path>{roots.state}/specdev/.config/domain-layout.md</Path>`
 
-确认用户是否接受默认标签，或需要覆盖为自定义字符串。将映射写入 `<Path>{roots.state}/specdev/.config/status-labels.md</Path>`。
+已有永久知识不得被初始化过程清空。已有配置应先验证和展示差异，再按用户授权更新。
 
-详细约定参见 `<Path>{roots.workflows}/specdev/I-init-setup/status-labels.md</Path>`。
+### 6. 验证初始化结果
 
-**完成标准**：状态标签映射已确认并写入 `<Path>{roots.state}/specdev/.config/status-labels.md</Path>`。
+1. 解析 `<Path>{roots.state}/specdev/config.json</Path>` 和 `<Path>{roots.state}/specdev/status.json</Path>`；
+2. 对照 `<Path>{roots.workflows}/specdev/common/schemas/config.schema.json</Path>` 与 `<Path>{roots.workflows}/specdev/common/schemas/status.schema.json</Path>`；
+3. 确认 `<Path>{roots.workflows}/specdev/I-init-setup/change-status-template.json</Path>` 的字段与 `<Path>{roots.workflows}/specdev/common/schemas/change-status.schema.json</Path>` 对齐；实际创建 change 时替换模板占位符后再执行 Schema 验证；
+4. 确认所有必需目录存在；
+5. 确认两个配置文档均已从对应模板生成；
+6. 确认项目根 `.gitignore` 已忽略 `specdev-worktree/`；
+7. 运行：
 
-### 5. 语言与配置
-
-询问用户两项语言偏好：
-
-- **交互语言** —— specdev 与用户交互时使用的语言。选项：`zh-CN`（简体中文）、`en`（英文）。默认：`zh-CN`。
-- **报告语言** —— AI 生成产物（Markdown 文档、issue 正文、报告）的默认语言。默认与交互语言相同。
-
-specdev 使用 `<Path>{roots.state}/specdev/config.json</Path>` 存储全局配置。所有 specdev works 在启动时读取此文件以自动选择交互语言和确认策略，无需每次手动指定。
-
-将配置写入 `<Path>{roots.state}/specdev/config.json</Path>`：
-
-```jsonc
-{
-  "schema_version": 1,
-  "language": "<用户选择的交互语言>",
-  "persistence": {
-    "root_override": null
-  },
-  "defaults": {
-    "confirm_before_external_write": true,
-    "report_language": "<用户选择的报告语言>"
-  }
-}
+```bash
+node <Path>{roots.workflows}/specdev/common/tools/validate-specdev.mjs</Path> --self-check
 ```
 
-如果 `<Path>{roots.state}/specdev/config.json</Path>` 已存在，仅更新用户本次修改的字段，保留其他现有值。
+### 7. 更新状态并汇报
 
-**完成标准**：语言偏好和配置已写入 `<Path>{roots.state}/specdev/config.json</Path>`。
+若本 Work 由某个 active change 调用，开始时把该 entry 的 `current_work` 设为 `specdev/init-setup`，完成时将该 id 去重加入 `works_run` 并清空；纯工作流初始化没有 active change 时不创建虚假的 change。时间和验证结果写入本次回复或 change 自有 Evidence/LOG，不写入全局索引。向用户汇报：状态根、语言、验证命令、并发策略、人工批准策略和任何仍为 `null` 的配置项。
 
----
+## 完成标准
 
-配置完成后，提醒用户可以直接编辑 `<Path>{roots.state}/specdev/.config/</Path>` 下的文件进行调整。只有在需要从头重新配置时才需重新运行本入口。
+- `<Path>{roots.state}/specdev/config.json</Path>` 与 `<Path>{roots.state}/specdev/status.json</Path>` 可解析且满足 Schema；
+- 状态目录、永久知识目录和归档目录齐全；
+- 两个配置文档已就位；
+- 验证命令与并发规则有来源；
+- 项目根 `.gitignore` 已包含 `specdev-worktree/`；
+- 无敏感值被写入；
+- 包级自检无 error；
+- 存在调用 change 时，其 `works_run` 已包含本 work且 `current_work` 已清空；纯初始化时全局 active 保持真实为空。
 
 ## 子文件引用
 
-以下子文件包含各配置阶段的详细约定和消费方规则，仅在对应步骤进入时加载：
-
-| 文件 | 内容 | 触发条件 |
-|------|------|---------|
-| `<Path>{roots.workflows}/specdev/I-init-setup/tracking-convention.md</Path>` | 本地 markdown 变更追踪的读写约定 | 步骤 2「变更追踪」进入时 |
-| `<Path>{roots.workflows}/specdev/I-init-setup/domain-layout.md</Path>` | 单上下文三文件模型的路径解析和消费方规则 | 步骤 3「领域文档布局」进入时 |
-| `<Path>{roots.workflows}/specdev/I-init-setup/status-labels.md</Path>` | 五个标准状态角色的标签字符串映射 | 步骤 4「状态标签」进入时 |
+- `<Path>{roots.workflows}/specdev/I-init-setup/config-template.json</Path>`
+- `<Path>{roots.workflows}/specdev/I-init-setup/status-template.json</Path>`
+- `<Path>{roots.workflows}/specdev/I-init-setup/change-status-template.json</Path>`
+- `<Path>{roots.workflows}/specdev/I-init-setup/tracking-template.md</Path>`
+- `<Path>{roots.workflows}/specdev/I-init-setup/domain-layout-template.md</Path>`

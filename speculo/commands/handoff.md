@@ -1,6 +1,9 @@
 ---
+id: handoff
+type: command
 name: handoff
 description: 将当前对话压缩为一份交接文档，供另一个 agent 接手继续工作。
+keywords: [handoff, 交接, 移交, 上下文压缩]
 argument-hint: "下一个会话将用于什么？"
 disable-model-invocation: true
 ---
@@ -20,8 +23,7 @@ speculo/.speculo/commands/handoff/<YYYY-MM-DD>-<scope>-<topic>[-NN].md
 - **<topic>** — 从交接范围或用户主题提取，使用小写 kebab-case；无法判断时使用 `speculo`。
 - **[-NN]** — 同日同 scope 同 topic 的多份报告，从 `-01` 开始递增；仅首份可省略后缀。
 
-> [!CAUTION]
-> **禁止**将命令报告写入 `temp/`、系统临时目录或工作区内其他非规范位置。
+- 禁止将命令报告写入 `temp/`、系统临时目录或工作区内其他非规范位置。
 
 ## 内容要求
 
@@ -33,14 +35,16 @@ speculo/.speculo/commands/handoff/<YYYY-MM-DD>-<scope>-<topic>[-NN].md
 
 如果用户传入了参数，将其视为对下一个会话重点内容的描述，并据此定制文档。
 
+交接范围包含 SpecDev change 时，引用该 change 的 `source.md`、`triage.md`、`.status.json` 和当前 owning 工件，不复制正文。若 `external_action` 为 `pending-close` 或 `close-failed`，必须记录准确远程 locator、已完成步骤、授权状态和恢复入口 `T-triage`；不得把待关闭误报为本地未完成。
+
 ## 路径引用规范
 
 文档中所有文件/文件夹引用必须使用**项目根目录**的相对路径。
 
-- ✅ `cde-base/cde-modules/cde-gba/cde-gba-universal/`
-- ✅ `sql/current/other_domain.sql`
-- ✅ `speculo/.speculo/specdev/changes/2026-07-21-gba-info-json-extension/spec.md`
+- ✅ `src/modules/auth/`
+- ✅ `scripts/migrate/2024-add-index.sql`
+- ✅ `speculo/.speculo/specdev/changes/<YYYY-MM-DD>-<topic>/spec.md`
 - ❌ `../../specdev/changes/...` — 相对于 handoff 文件，脱离目录后不可定位
-- ❌ `cde-base` — 裸名，无法判断是目录/文件/子模块
+- ❌ `auth` — 裸名，无法判断是目录/文件/子模块
 
 例外：skills 名称属于逻辑标识而非文件路径，不适用此规则。
