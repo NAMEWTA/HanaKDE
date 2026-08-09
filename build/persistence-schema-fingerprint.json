@@ -634,7 +634,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:99d13ef4cdf36675d627cd9f017aae60de2a31b4c336e0bd5a85c34d1ef7dbf7",
+  "payloadFingerprint": "sha256:c306248ae7ea381f255987de08eb860ccbc166aa14682d3480df7a714823266a",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3103,8 +3103,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Retires only unshipped SessionManifest and Win32 migration descriptors; retained SessionManifestStore and operational checkpoints keep their on-disk contracts, so no data epoch transition is required.",
-    "payloadFingerprint": "sha256:99d13ef4cdf36675d627cd9f017aae60de2a31b4c336e0bd5a85c34d1ef7dbf7"
+    "compatibilityReason": "Registers two URL materialize temporary staging cleanup receipts only; persistent store registry, on-disk schemas, DATA_EPOCH, and data contracts are unchanged.",
+    "payloadFingerprint": "sha256:c306248ae7ea381f255987de08eb860ccbc166aa14682d3480df7a714823266a"
   },
   "schemas": [
     {
@@ -7872,6 +7872,22 @@
       "exemptionId": "url-provider-download-temp",
       "kind": "mkdir",
       "ordinal": 0,
+      "reason": "Writes a bounded network download to the caller-selected resource destination.",
+      "sourceFile": "lib/resource-io/providers/url-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "url-provider-download-temp",
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Writes a bounded network download to the caller-selected resource destination.",
+      "sourceFile": "lib/resource-io/providers/url-provider.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "url-provider-download-temp",
+      "kind": "remove-path",
+      "ordinal": 1,
       "reason": "Writes a bounded network download to the caller-selected resource destination.",
       "sourceFile": "lib/resource-io/providers/url-provider.ts",
       "storeId": null
