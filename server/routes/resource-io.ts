@@ -29,6 +29,7 @@ const MUTATION_AUTHORITY_FIELDS = new Set([
   "studioId",
   "owner",
   "ownerId",
+  "workspaceId",
   "scope",
   "scopes",
   "scopeToken",

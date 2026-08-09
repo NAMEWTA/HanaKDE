@@ -563,6 +563,49 @@ describe("ResourceIO transfer", () => {
     expect(listStagingArtifacts(targetRoot)).toEqual([]);
   });
 
+  it("rejects a pre-aborted transfer before the target provider creates staging", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let targetImportCalls = 0;
+    const sourceProvider = {
+      id: "resource",
+      capabilities: () => ({ exportTree: true }),
+      async *exportTree() {
+        yield {
+          kind: "file",
+          path: [],
+          sizeBytes: 1,
+          version: { size: 1 },
+          body: (async function* () { yield Uint8Array.of(1); })(),
+        } satisfies ResourceExportEntry;
+      },
+    } satisfies Partial<ResourceProvider>;
+    const targetProvider = {
+      id: "mount",
+      capabilities: () => ({ importTree: true }),
+      async importTreeAtomically() {
+        targetImportCalls += 1;
+        throw new Error("target staging should not start");
+      },
+    } satisfies Partial<ResourceProvider>;
+    const resourceIO = new ResourceIO({
+      providers: {
+        resource: sourceProvider as ResourceProvider,
+        mount: targetProvider as ResourceProvider,
+      },
+    });
+
+    await expect(resourceIO.transfer({
+      source: { kind: "resource", resourceId: "cancelled-source" },
+      targetDirectory: { kind: "mount", mountId: "target", path: "" },
+      targetName: "cancelled.bin",
+      signal: controller.signal,
+      operationId: OPERATION_ID,
+    }, { source: "api" })).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(targetImportCalls).toBe(0);
+  });
+
   it("revalidates a mount read scope after planning and before every lazy body read", async () => {
     const { sandbox, sourceRoot, targetRoot } = makeSandbox();
     const hanakoHome = path.join(sandbox, "hana-home");

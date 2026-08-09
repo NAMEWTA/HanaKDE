@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-10
 title: 收敛 Resource Kernel
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "ResourceIO、事件、Root Identity、Materialize、Transfer 与授权是跨系统公共核心接口并承载安全和数据完整性。"
 ready: true

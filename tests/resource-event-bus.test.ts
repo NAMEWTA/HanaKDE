@@ -77,4 +77,50 @@ describe("ResourceEventBus", () => {
     expect(second).toHaveBeenCalledTimes(2);
     expect(bus.latestSequence()).toBe(2);
   });
+
+  it("reports a stale cursor when retained events are unavailable", () => {
+    const bus = new ResourceEventBus({
+      emit: vi.fn(),
+      retentionSize: 0,
+    });
+
+    bus.changed({
+      changeType: "modified",
+      resourceKey: "local_fs:/repo/unretained.md",
+      resource: { kind: "local-file", path: "/repo/unretained.md" },
+      source: "api",
+      version: { sequence: 1 },
+    });
+
+    expect(bus.since(0)).toEqual({
+      stale: true,
+      latestSequence: 1,
+      events: [],
+    });
+  });
+
+  it("keeps a committed event observable when the fan-out emitter fails", () => {
+    const received = vi.fn();
+    const bus = new ResourceEventBus({
+      emit: () => {
+        throw new Error("fan-out unavailable");
+      },
+    });
+    bus.subscribe(received);
+
+    expect(() => bus.changed({
+      changeType: "modified",
+      resourceKey: "local_fs:/repo/committed.md",
+      resource: { kind: "local-file", path: "/repo/committed.md" },
+      source: "api",
+      version: { sequence: 1 },
+    })).not.toThrow();
+
+    expect(received).toHaveBeenCalledTimes(1);
+    expect(bus.since(0)).toMatchObject({
+      stale: false,
+      latestSequence: 1,
+      events: [expect.objectContaining({ resourceKey: "local_fs:/repo/committed.md" })],
+    });
+  });
 });

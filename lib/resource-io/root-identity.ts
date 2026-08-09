@@ -98,11 +98,16 @@ export class ProviderRootIdentityBroker {
         : "unknown";
     }
     if (a.identityNamespace !== "local_fs") return "unknown";
-    if (a.opaqueRootId === b.opaqueRootId) return "same";
 
     const aPrivate = localRootPrivate.get(a);
     const bPrivate = localRootPrivate.get(b);
     if (!aPrivate || !bPrivate) return "unknown";
+    if (
+      a.opaqueRootId === b.opaqueRootId
+      && a.scopeToken === b.scopeToken
+    ) {
+      return "same";
+    }
     const aPath = aPrivate.comparisonPath;
     const bPath = bPrivate.comparisonPath;
     if (isStrictAncestor(aPath, bPath)) return "ancestor";
