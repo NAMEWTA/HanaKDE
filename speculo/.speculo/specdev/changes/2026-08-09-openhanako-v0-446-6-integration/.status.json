@@ -104,13 +104,13 @@
     },
     {
       "ticket_id": "T-11",
-      "owner": "Worker-T-11",
+      "owner": "Worker-T-18",
       "provider": "git",
       "base_sha": "2018ce1dc671f0d9bb3c6f61f4078625c7863001",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-11",
       "workspace_ref": "specdev-worktree/T-11",
       "status": "review",
-      "updated_at": "2026-08-10T05:22:26+0800"
+      "updated_at": "2026-08-10T06:15:58+0800"
     }
   ]
 }
