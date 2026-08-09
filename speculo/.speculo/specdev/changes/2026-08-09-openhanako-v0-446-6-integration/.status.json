@@ -61,6 +61,16 @@
       "workspace_ref": "specdev-worktree/T-06",
       "status": "removed",
       "updated_at": "2026-08-09T23:00:12+08:00"
+    },
+    {
+      "ticket_id": "T-07",
+      "owner": "Worker-T-07 / Lead",
+      "provider": "git",
+      "base_sha": "acc44806c0fea126e2b664d50fd03c372aa4af39",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-07",
+      "workspace_ref": "specdev-worktree/T-07",
+      "status": "review",
+      "updated_at": "2026-08-10T00:11:42+08:00"
     }
   ]
 }

@@ -114,7 +114,7 @@ describe('mcp-api mutations', () => {
       transport: 'stdio',
       command: 'npx',
       env: { API_KEY: '********' },
-      autoStart: true,
+      enabled: true,
     });
 
     expect(hanaFetchMock).toHaveBeenCalledWith(
@@ -126,7 +126,7 @@ describe('mcp-api mutations', () => {
           transport: 'stdio',
           command: 'npx',
           env: { API_KEY: '********' },
-          autoStart: true,
+          enabled: true,
         }),
       }),
     );

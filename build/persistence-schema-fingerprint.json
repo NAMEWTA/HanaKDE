@@ -634,7 +634,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:135301ee9451b508485126fe9a75e0ef3e71cfa101818f69986804a830f116eb",
+  "payloadFingerprint": "sha256:8a4791104b917aaf0839d2ea9d724936b0eb655a88324b38eafe8e1b9aab8dcd",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3142,8 +3142,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "T-06 repins executable-source hashes for the v0.442.0 desktop, MCP, and session JSONL readers; DATA_EPOCH and all persisted record contracts remain unchanged. File History remains a dormant input and is omitted from production persistence, while the T-05 Win32 install ACL-heal descriptor is retained unchanged.",
-    "payloadFingerprint": "sha256:135301ee9451b508485126fe9a75e0ef3e71cfa101818f69986804a830f116eb"
+    "compatibilityReason": "T-07 preserves DATA_EPOCH and persisted record contracts while adopting strict canonical MCP normalization; File History and Document Extraction remain dormant and excluded from production persistence.",
+    "payloadFingerprint": "sha256:8a4791104b917aaf0839d2ea9d724936b0eb655a88324b38eafe8e1b9aab8dcd"
   },
   "schemas": [
     {
@@ -3225,7 +3225,7 @@
       "contract": "agent config and authored Markdown/image profile protocol",
       "kind": "directory-contract",
       "module": "core/agent-manager.ts",
-      "sourceHash": "sha256:1eb1515b94791b6ebaab1adbe7551ccbc754c05b04991f9ce9025d145c456c46",
+      "sourceHash": "sha256:a1f883d4596d7fd7abb1ceab44c099deb152351421511933436b765441a4dff2",
       "storeId": "agent-profile"
     },
     {
@@ -3340,7 +3340,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:b703c5ceab776ec2818f2c98963c22544024dba01571f9c5afce368ca89ffe28",
+      "sourceHash": "sha256:7849486d2bcd3c9fbe900b78a13e63063e53340f45c2f75c9eb7f5e31fa3e395",
       "storeId": "desktop-window-version-state"
     },
     {
@@ -3456,7 +3456,7 @@
       "contract": "normalizeMcpConfig accepts canonical connector fields and requires every current permission-policy field.",
       "kind": "runtime-contract",
       "module": "core/mcp/manager.ts",
-      "sourceHash": "sha256:f8e3e7e7a8d445b6adfae7b25f21fb175096648ac6cf35aeb246963bc2083451",
+      "sourceHash": "sha256:a89eeed6c152021a8c34977ee15fdcfef0d6a65b9273bf5c1b39d604e8d28072",
       "storeId": "mcp-config"
     },
     {

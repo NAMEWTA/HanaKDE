@@ -231,7 +231,7 @@ Lead 接收每个候选时必须读取 Dispatch、Ticket、Evidence、实际 dif
 ### Current Status
 
 ```text
-WAVE_STATUS wave=W1.6 ready=T-07 active=none done=T-01,T-02,T-03,T-04,T-05,T-06 blocked=none
+WAVE_STATUS wave=W1.6 ready=none active=none review=T-07 done=T-01,T-02,T-03,T-04,T-05,T-06 blocked=none
 GATE_STATUS gate=G0 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-01.md</Path> checkpoint=fabe31dd8f36313f05ec635a4ce30d890bb91bd3 risks=50-semantic-overlap-paths-for-W1
 GATE_STATUS gate=G1 state=open evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path> checkpoint=22a33e1b7cb4742cc456977455a11937c5bb064c risks=three-staged-checkpoints-remain
 DELIVERY ticket=T-04 state=integrated workspace=specdev-worktree/T-04 checkpoint=5dee75c3a1c88eddc02c2e890fd583e036c083a2 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-04.md</Path>
