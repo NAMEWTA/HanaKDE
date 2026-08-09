@@ -408,12 +408,12 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 - **Goal / observable result：** 从 T-08 到冻结 `v0.446.6@5f08a4f30203abb61dafac7dbb7ab92d11c23efa`，证明 target ancestry、上游关键功能和 HanaKDE contract union。
 - **Priority on conflict：** safety/data > Spec/ADR > frozen ancestry > contract union > speed。
 - **Implement / Ticket：** `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>`；`<Path>{roots.state}/specdev/changes/{change}/ticket/09-integrate-v0-446-6.md</Path>`。
-- **Authority / dependencies：** AC-001—AC-003、ADR-001、T-08 Evidence；只使用冻结 SHA，不跟随浮动分支。
-- **Wave / Gate / hard constraints：** W1.8/G1；Memory Dream/compaction/Markdown/settings/persistence/build 全盘吸收，HanaKDE Resource/Knowledge/Transfer/Workbench 不回退，无长期兼容壳。
+- **Authority / dependencies：** AC-001—AC-003、ADR-001/011、DEC-010、T-08 Evidence；只使用冻结 SHA，不跟随浮动分支。T-09 是未发布 legacy migration production owner 删除的唯一 owner。
+- **Wave / Gate / hard constraints：** W1.8/G1；Memory Dream/compaction/Markdown/settings/persistence/build 全盘吸收，HanaKDE Resource/Knowledge/Transfer/Workbench 不回退，无长期兼容壳；在 G1 关闭前删除 session-manifest legacy migration/startup wiring、marker/ledger/retry/checkpoint/rollback、Win32 legacy cleanup queue 与仅服务这些 owner 的脚本/manifest/closure/test 面，且不得新增迁移 marker 或兼容 retry。
 - **Writable / read-only / shared owner：** writable=`<Path>**</Path>` 仅 target release与最小适配；read-only=`none`；W1 可吸收上游 manifest原始增量，G1 后 package语义收敛由 T-21 独占。
 - **Baseline / branch / workspace or session locator / package hash：** base_sha=`T-08_INTEGRATED_SHA`；branch=`speculo/2026-08-09-openhanako-v0-446-6-integration/T-09`；workspace_ref=`specdev-worktree/T-09`；package hash=`n/a-local-git`。
 - **Preflight receipt：** `<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>` 不超过 10 行，记录 exact base/target、关键功能、overlap和最大安全风险。
-- **Verification / baseline / reverse check：** frozen ancestry、上游关键功能、HanaKDE核心合同、clean quality；错误 SHA、浮动 ref 或任一关键功能失败必须阻断 G1。
+- **Verification / baseline / reverse check：** frozen ancestry、上游关键功能、HanaKDE核心合同、clean quality，以及 legacy owner/marker/ledger/retry/checkpoint/rollback/Win32 queue 的 retained-owner reverse scan；错误 SHA、浮动 ref、任一关键功能失败或任何 retained owner 必须阻断 G1。
 - **Authorization / deviation / correction limit：** local changes/commit 与 Lead local merge/non-force cleanup 自动授权；未来 push/PR/deploy/release/archive 禁止；3 轮。
 - **Return：** 状态、Evidence、workspace、candidate commit、target/inventory/ledger、未验证项、Lead G1验收。
 

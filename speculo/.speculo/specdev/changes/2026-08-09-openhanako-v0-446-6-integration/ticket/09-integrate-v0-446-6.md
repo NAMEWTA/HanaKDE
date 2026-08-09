@@ -41,6 +41,7 @@ shared_path_owners: []
 - 只使用冻结 SHA，不追浮动分支。
 - Memory Dream、compaction、Markdown、settings、persistence、runtime、安全和 build 的正常迭代全盘接受。
 - HanaKDE Knowledge/Resource/Transfer/Workbench 保留；同用途基础设施在 T-10 以后一次性收敛，不保留长期兼容壳。
+- T-09 是删除未发布 legacy migration production owner 的唯一 owner：在 target merge 后移除 session-manifest legacy scan/startup migration、其 marker/ledger/retry/checkpoint/rollback 支撑面、Win32 legacy sandbox migration/cleanup queue 以及只服务这些 owner 的脚本、export/closure 条目和测试；当前 SessionManifest store/resolver、Resource 与 Win32 安全运行时仅在不承担 legacy migration 时保留。
 
 ### 已采用的低影响假设
 
@@ -54,7 +55,7 @@ shared_path_owners: []
 
 | IN（本 Ticket 构建） | REUSE（复用且不改变契约） | OUT（明确不做） |
 |---|---|---|
-| `v0.444.1..5f08a4f` merge、上游功能回归、target audit、最小语义适配 | T-08 checkpoint、现有 HanaKDE 合同 | T-10 以后架构收敛、最终平台/umbrella Gate、push/release |
+| `v0.444.1..5f08a4f` merge、上游功能回归、target audit、最小语义适配、未发布 legacy migration owner 删除 | T-08 checkpoint、现有 HanaKDE 合同 | T-10 以后架构收敛、最终平台/umbrella Gate、push/release、任何 legacy migration/compat 保留 |
 
 ## 4. 要构建什么
 
@@ -65,7 +66,7 @@ shared_path_owners: []
 - **入口或接缝：** 经授权 staged merge、target ancestry、上游 feature tests、HanaKDE contract union。
 - **输入与输出：** T-08 checkpoint + 冻结 SHA → target-integrated checkpoint。
 - **公共接口变化：** 接受冻结 target 的正常上游接口；Spec 锁定的 Resource/Workspace/Knowledge 外部语义不变。
-- **不变量：** target SHA 精确；无浮动分支；无生产双 owner；不删除 HanaKDE 产品/安全合同。
+- **不变量：** target SHA 精确；无浮动分支；无生产双 owner；无 legacy migration/marker/ledger/retry/checkpoint/rollback production owner；不删除 HanaKDE 产品/安全合同。
 - **状态或数据流：** verify target → merge → classify/adapt → regenerate → feature regression → target audit。
 - **错误与失败行为：** SHA/tag 不匹配、上游关键功能失败或 HanaKDE 回归时停止，不开放 T-10。
 - **兼容要求：** 不保留旧内部实现兼容壳；上游正常外部行为完整吸收。
@@ -76,9 +77,10 @@ shared_path_owners: []
 1. 复核 T-08 checkpoint 与 frozen target SHA，确认最终 merge 授权。
 2. staged merge target，冻结 overlap、generated、dependency 和 semantic conflict 清单。
 3. 按权威分类裁决，完整吸收正常上游功能并保护 HanaKDE 合同。
-4. 先解决 `<Path>package.json</Path>` 等源配置，再重建 lock/generated 输出并执行 clean install 验证。
-5. 运行 Memory Dream、compaction、Markdown、settings/persistence/build 与 HanaKDE 核心合同。
-6. 经 commit 授权形成 checkpoint，证明 target ancestry 并发布后续收敛输入 inventory。
+4. 在 target 代码已吸收后，删除未发布 legacy migration production owner 和仅服务其的 marker/ledger/retry/checkpoint/rollback、Win32 cleanup queue、脚本/manifest/closure 条目与测试；保留当前非迁移 SessionManifest/Resource/Win32 安全职责，并添加 retained-owner/marker 反向扫描。
+5. 先解决 `<Path>package.json</Path>` 等源配置，再重建 lock/generated 输出并执行 clean install 验证。
+6. 运行 Memory Dream、compaction、Markdown、settings/persistence/build、legacy-owner reverse scan 与 HanaKDE 核心合同。
+7. 经 commit 授权形成 checkpoint，证明 target ancestry 并发布后续收敛输入 inventory。
 
 ## 7. 路径访问契约
 
@@ -94,6 +96,7 @@ shared_path_owners: []
 |---|---|---|---|---|
 | 正常路径 | frozen ancestry/features | `git merge-base --is-ancestor 5f08a4f30203abb61dafac7dbb7ab92d11c23efa HEAD` 加上游定向测试 | target ancestor 且关键功能可用 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>` |
 | 失败路径 | target/feature gate | 检查 SHA mismatch、未裁决冲突、关键功能失败 | 任一存在即停止 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>` |
+| 失败路径 | legacy-owner reverse scan | 注入或保留 legacy migration import、marker、ledger、retry、checkpoint/rollback 或 Win32 cleanup queue | 任一 retained owner 必须失败 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>` |
 | 回归 | HanaKDE contract union | Resource、Knowledge、Transfer、安全、Workbench 与 open boundary gates | 二开能力无回退 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>` |
 
 ## 9. 发布、迁移与恢复
@@ -110,5 +113,6 @@ shared_path_owners: []
 - [ ] `AC-001`：冻结 target 是 checkpoint HEAD ancestor，staged audit 完整。
 - [ ] `AC-002`：Memory Dream、compaction、Markdown 与关联上游行为通过。
 - [ ] `AC-003`：HanaKDE Knowledge、Resource、Transfer、安全和 Workbench 无回退。
+- [ ] 未发布 legacy migration production owner、marker/ledger/retry/checkpoint/rollback 与 Win32 legacy cleanup queue 已删除，反向扫描为绿。
 - [ ] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>`。
 - [ ] 没有浮动 target、未批准 Git 副作用或长期兼容壳。
