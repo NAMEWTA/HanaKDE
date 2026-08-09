@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-18
 title: 融合 @ 搜索交互生命周期
-status: ready
+status: review
 planning_depth: standard
 planning_depth_reason: "跨 input menu、query provider 与 renderer state 的多文件 UI 切片，但不改变共享持久化、安全 authority 或数据 schema。"
 ready: true

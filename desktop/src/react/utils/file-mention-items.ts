@@ -16,6 +16,41 @@ export interface FileMentionItem {
   detail: string;
 }
 
+export interface FileMentionSearchRequest {
+  id: number;
+  signal: AbortSignal;
+  isCurrent: () => boolean;
+  cancel: () => void;
+}
+
+/** Owns one active UI search so retired results cannot update the menu. */
+export class FileMentionSearchLifecycle {
+  private nextId = 0;
+  private active: AbortController | null = null;
+
+  begin(): FileMentionSearchRequest {
+    this.cancel();
+    const controller = new AbortController();
+    const id = ++this.nextId;
+    this.active = controller;
+
+    return {
+      id,
+      signal: controller.signal,
+      isCurrent: () => this.active === controller && !controller.signal.aborted,
+      cancel: () => {
+        controller.abort();
+        if (this.active === controller) this.active = null;
+      },
+    };
+  }
+
+  cancel(): void {
+    this.active?.abort();
+    this.active = null;
+  }
+}
+
 interface BuildFileMentionItemsParams {
   query: string;
   attachedFiles: readonly AttachedFile[];

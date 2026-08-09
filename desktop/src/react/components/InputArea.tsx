@@ -40,6 +40,7 @@ import { SessionConfirmationPrompt } from './input/SessionConfirmationPrompt';
 import { serializeEditor } from '../utils/editor-serializer';
 import {
   buildFileMentionItems,
+  FileMentionSearchLifecycle,
   mergeEditorFileRefs,
   type FileMentionItem,
 } from '../utils/file-mention-items';
@@ -456,6 +457,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   const quotedSelections = useStore(s => s.quotedSelections);
   const deskFiles = useStore(s => s.deskFiles);
   const deskBasePath = useStore(s => s.deskBasePath);
+  const deskWorkspaceMountId = useStore(s => s.deskWorkspaceMountId);
   const previewItems = useStore(selectPreviewItems);
   const activeTabId = useStore(selectActiveTabId);
   const previewOpen = useStore(s => s.previewOpen);
@@ -525,7 +527,10 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   const slashBtnRef = useRef<HTMLButtonElement>(null);
   const browserFileInputRef = useRef<HTMLInputElement>(null);
   const slashDismissedTextRef = useRef<string | null>(null);
-  const fileMentionSearchSeqRef = useRef(0);
+  const fileMentionSearchLifecycleRef = useRef<FileMentionSearchLifecycle | null>(null);
+  if (!fileMentionSearchLifecycleRef.current) {
+    fileMentionSearchLifecycleRef.current = new FileMentionSearchLifecycle();
+  }
   const inputSurfaceRef = useRef<HTMLDivElement>(null);
   const inputCardRef = useRef<HTMLDivElement>(null);
   const focusFrameRef = useRef<number | null>(null);
@@ -893,37 +898,48 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   ]);
 
   useEffect(() => {
-    if (!fileMenuOpen) {
+    const lifecycle = fileMentionSearchLifecycleRef.current!;
+    lifecycle.cancel();
+
+    if (!fileMenuOpen || mentionTab !== 'files') {
       setFileMentionSearchResults([]);
       setFileMentionBusy(false);
       return;
     }
 
     const query = fileMentionQuery.trim();
-    const seq = ++fileMentionSearchSeqRef.current;
     if (!query) {
       setFileMentionSearchResults([]);
       setFileMentionBusy(false);
       return;
     }
 
+    const request = lifecycle.begin();
+
+    setFileMentionSearchResults([]);
     setFileMentionBusy(true);
     const timer = window.setTimeout(() => {
       searchDeskFiles(query)
         .then((results) => {
-          if (fileMentionSearchSeqRef.current === seq) setFileMentionSearchResults(results);
+          if (request.isCurrent()) setFileMentionSearchResults(results);
         })
         .catch((err: unknown) => {
-          if (fileMentionSearchSeqRef.current === seq) setFileMentionSearchResults([]);
+          if (!request.isCurrent()) return;
+          setFileMentionSearchResults([]);
           console.warn('[file-mention] search failed', err);
         })
         .finally(() => {
-          if (fileMentionSearchSeqRef.current === seq) setFileMentionBusy(false);
+          if (!request.isCurrent()) return;
+          setFileMentionBusy(false);
+          request.cancel();
         });
     }, 120);
 
-    return () => window.clearTimeout(timer);
-  }, [fileMentionQuery, fileMenuOpen]);
+    return () => {
+      window.clearTimeout(timer);
+      request.cancel();
+    };
+  }, [deskBasePath, deskWorkspaceMountId, fileMentionQuery, fileMenuOpen, mentionTab, selectedAgentId]);
 
   const sessionMentionItems = useMemo(() => buildSessionMentionItems({
     sessions,
