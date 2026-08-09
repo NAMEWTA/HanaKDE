@@ -231,15 +231,16 @@ Lead 接收每个候选时必须读取 Dispatch、Ticket、Evidence、实际 dif
 ### Current Status
 
 ```text
-WAVE_STATUS wave=W1.6 ready=T-07 active=none done=T-01,T-02,T-03,T-04,T-05,T-06 blocked=none
+WAVE_STATUS wave=W1.6 ready=none active=T-07 done=T-01,T-02,T-03,T-04,T-05,T-06 blocked=none
 GATE_STATUS gate=G0 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-01.md</Path> checkpoint=fabe31dd8f36313f05ec635a4ce30d890bb91bd3 risks=50-semantic-overlap-paths-for-W1
 GATE_STATUS gate=G1 state=open evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path> checkpoint=22a33e1b7cb4742cc456977455a11937c5bb064c risks=three-staged-checkpoints-remain
 DELIVERY ticket=T-04 state=integrated workspace=specdev-worktree/T-04 checkpoint=5dee75c3a1c88eddc02c2e890fd583e036c083a2 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-04.md</Path>
 DELIVERY ticket=T-05 state=integrated workspace=specdev-worktree/T-05 checkpoint=5aa3318bd83d75fdec70706f7a9f30ade8310868 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>
 DELIVERY ticket=T-06 state=integrated workspace=specdev-worktree/T-06 checkpoint=22a33e1b7cb4742cc456977455a11937c5bb064c evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>
+DELIVERY ticket=T-07 state=in_progress workspace=specdev-worktree/T-07 checkpoint=acc44806c0fea126e2b664d50fd03c372aa4af39 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>
 ```
 
-规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-06 已完成 Lead 独立验收，当前集成 checkpoint 为 `22a33e1b7cb4742cc456977455a11937c5bb064c`；T-02/T-03/T-04/T-05/T-06 worktree 与候选分支已非强制清理，T-07 已发布为 ready。
+规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-06 已完成 Lead 独立验收，当前集成 checkpoint 为 `22a33e1b7cb4742cc456977455a11937c5bb064c`；T-02/T-03/T-04/T-05/T-06 worktree 与候选分支已非强制清理，T-07 已从 cleanup checkpoint `acc44806c0fea126e2b664d50fd03c372aa4af39` 启动。
 
 ### Pending Decisions and Blockers
 
