@@ -950,6 +950,23 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     ],
   }),
   defineStore({
+    id: "mcp-config",
+    ownerModule: "core/mcp/manager.ts",
+    pathPatterns: ["mcp"],
+    pathKind: "tree",
+    format: "json",
+    schemaSource: runtimeSource(
+      "core/mcp/manager.ts",
+      "normalizeMcpConfig accepts canonical connector fields and requires every current permission-policy field.",
+    ),
+    openEntry: ["Engine constructor via McpManager"],
+    migrationEntry: [],
+    checkpointPolicy: "Single JSON config; checkpoint the whole file.",
+    restorePolicy: "Restore the whole canonical config file; incomplete connector records fail closed on read.",
+    identityContract: "core/mcp owns the HANA_HOME/mcp directory exclusively.",
+    siteRules: rules(["core/mcp/manager.ts"], "Sole writer of HANA_HOME/mcp/config.json."),
+  }),
+  defineStore({
     id: "plugin-runtime-data",
     ownerModule: "core/plugin-config.ts",
     pathPatterns: ["plugin-data/{pluginId}"],
@@ -978,7 +995,6 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
       "core/media/universal-media-manager.ts",
       "core/media-adapters/agnes.ts",
       "plugins/jimeng-cli/adapters/dreamina.ts",
-      "plugins/mcp/lib/mcp-runtime.ts",
     ], "Writes data within the active pluginId-scoped data directory."),
   }),
   defineStore({

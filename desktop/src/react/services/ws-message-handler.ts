@@ -655,7 +655,10 @@ export function handleServerMessage(msg: any): void {
           : prev?.thumbnailUrl ?? null
         : null;
       const thumbnailFresh = bRunning && hasFreshThumbnail;
-      setBrowserStateForPath(bsp, { running: bRunning, url: bUrl, thumbnail: bThumbnail, thumbnailCapturedAt, thumbnailUrl, thumbnailFresh });
+      // 卡片的"收起"是用户意图，状态更新不该把它抹掉；只有浏览器重新启用（running false→true）
+      // 才算新一轮会话，卡片回归。
+      const collapsed = bRunning && !prev?.running ? false : (prev?.collapsed ?? false);
+      setBrowserStateForPath(bsp, { running: bRunning, url: bUrl, thumbnail: bThumbnail, thumbnailCapturedAt, thumbnailUrl, thumbnailFresh, collapsed });
       break;
     }
 
@@ -880,8 +883,9 @@ export function handleServerMessage(msg: any): void {
       const metadata = msg.metadata && typeof msg.metadata === 'object' ? msg.metadata : {};
       if (!sp) { console.warn('[ws] event missing sessionPath:', msg.type); break; }
       const hasPinnedAt = Object.prototype.hasOwnProperty.call(metadata, 'pinnedAt');
+      const hasPinOrder = Object.prototype.hasOwnProperty.call(metadata, 'pinOrder');
       const hasProjectId = Object.prototype.hasOwnProperty.call(metadata, 'projectId');
-      if (hasPinnedAt || hasProjectId) {
+      if (hasPinnedAt || hasPinOrder || hasProjectId) {
         useStore.setState((s) => ({
           sessions: s.sessions.map((session) => {
             if (session.path !== sp && (!sid || session.sessionId !== sid)) return session;
@@ -889,6 +893,9 @@ export function handleServerMessage(msg: any): void {
               ...session,
               ...(hasPinnedAt
                 ? { pinnedAt: typeof metadata.pinnedAt === 'string' ? metadata.pinnedAt : null }
+                : {}),
+              ...(hasPinOrder
+                ? { pinOrder: typeof metadata.pinOrder === 'number' ? metadata.pinOrder : null }
                 : {}),
               ...(hasProjectId
                 ? { projectId: typeof metadata.projectId === 'string' && metadata.projectId.trim() ? metadata.projectId.trim() : null }

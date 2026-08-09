@@ -385,7 +385,7 @@ describe("session manifest legacy migration", () => {
     });
   });
 
-  it("preserves sessionId while repairing manifests misclassified by the previous legacy scan", () => {
+  it("does not reclassify an existing manifest through the retired legacy-scan repair path", () => {
     const directPath = writeJsonl(path.join(hanaHome, "agents", "hana", "subagent-sessions", "direct", "legacy-child.jsonl"));
     fs.writeFileSync(path.join(hanaHome, "subagent-threads.json"), JSON.stringify({
       schemaVersion: 1,
@@ -413,10 +413,10 @@ describe("session manifest legacy migration", () => {
     expect(second).toEqual({ scanned: 1, created: 0, existing: 1, skipped: 0, skippedDetails: [], skippedMetaSources: [] });
     expect(store.resolveByLocatorPath(directPath)).toMatchObject({
       sessionId: existing.sessionId,
-      ownerAgentId: "butter",
-      domain: "subagent",
-      kind: "subagent_child",
-      provenance: { legacyAgentId: "hana", createdBy: "subagent" },
+      ownerAgentId: "hana",
+      domain: "desktop",
+      kind: "chat",
+      provenance: { legacyAgentId: "hana" },
     });
     expect(store.list()).toHaveLength(1);
   });

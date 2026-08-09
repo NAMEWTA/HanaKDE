@@ -218,6 +218,8 @@ export interface Session {
   projectId?: string | null;
   permissionMode?: SessionPermissionMode | null;
   pinnedAt?: string | null;
+  // 置顶区的手动顺序（升序）。null 表示还没有固化顺序，读时退回按最近活动排。
+  pinOrder?: number | null;
   hasSummary?: boolean;
   agentDeleted?: boolean;
   readOnlyReason?: 'agent_deleted' | string | null;
@@ -512,6 +514,8 @@ export interface BrowserViewerUpdate {
   running?: boolean;
   reason?: string | null;
   sessionPath?: string | null;
+  /** 当前展示的会话标题（viewer 工具栏用；null = 未知） */
+  sessionTitle?: string | null;
   activeTabId?: string | null;
   tabs?: BrowserViewerTab[];
 }

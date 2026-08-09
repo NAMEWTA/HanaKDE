@@ -5,8 +5,8 @@ import {
   exchangeMcpOAuthCode,
   refreshMcpOAuthToken,
   registerMcpOAuthClient,
-} from "../plugins/mcp/lib/mcp-oauth.ts";
-import { McpHttpError } from "../plugins/mcp/lib/mcp-http-client.ts";
+} from "../core/mcp/clients/oauth.ts";
+import { McpHttpError } from "../core/mcp/clients/http-client.ts";
 
 function jsonResponse(body, { status = 200, headers = {} } = {}) {
   return new Response(JSON.stringify(body), {
@@ -129,7 +129,7 @@ describe("MCP OAuth helpers", () => {
           "MCP-Protocol-Version": "2024-11-05",
         },
       },
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       state: "state-123",
       codeVerifier: "verifier-123",
       codeChallenge: "challenge-123",
@@ -140,7 +140,7 @@ describe("MCP OAuth helpers", () => {
     expect(url.origin + url.pathname).toBe("https://auth.example.com/authorize");
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("client_id")).toBe("client-id");
-    expect(url.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3210/api/plugins/mcp/oauth/callback");
+    expect(url.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3210/api/mcp/oauth/callback");
     expect(url.searchParams.get("resource")).toBe("https://mcp.example.com/mcp");
     expect(url.searchParams.get("scope")).toBe("files:read");
     expect(url.searchParams.get("state")).toBe("state-123");
@@ -171,7 +171,7 @@ describe("MCP OAuth helpers", () => {
     const token = await exchangeMcpOAuthCode({
       tokenEndpoint: "https://auth.example.com/token",
       code: "code-123",
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       clientId: "client-id",
       clientSecret: "secret-123",
       codeVerifier: "verifier-123",
@@ -246,13 +246,13 @@ describe("MCP OAuth dynamic client registration (RFC 7591)", () => {
 
     const result = await registerMcpOAuthClient({
       registrationEndpoint: "https://auth.example.com/register",
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       scope: "files:read offline_access",
       fetchImpl,
     });
 
     const body = JSON.parse(String(fetchImpl.mock.calls[0][1].body));
-    expect(body.redirect_uris).toEqual(["http://127.0.0.1:3210/api/plugins/mcp/oauth/callback"]);
+    expect(body.redirect_uris).toEqual(["http://127.0.0.1:3210/api/mcp/oauth/callback"]);
     expect(body.grant_types).toEqual(["authorization_code", "refresh_token"]);
     expect(body.response_types).toEqual(["code"]);
     expect(body.token_endpoint_auth_method).toBe("none");
@@ -276,7 +276,7 @@ describe("MCP OAuth dynamic client registration (RFC 7591)", () => {
 
     await expect(registerMcpOAuthClient({
       registrationEndpoint: "https://auth.example.com/register",
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       fetchImpl,
     })).rejects.toThrow(/redirect not allowed/);
   });
@@ -289,7 +289,7 @@ describe("MCP OAuth dynamic client registration (RFC 7591)", () => {
 
     const err = await registerMcpOAuthClient({
       registrationEndpoint: "https://auth.example.com/register",
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       fetchImpl,
     }).catch((e) => e);
 
@@ -330,7 +330,7 @@ describe("MCP OAuth dynamic client registration (RFC 7591)", () => {
 
     const auth = await createMcpOAuthAuthorization({
       connector: { id: "notion", url: "https://mcp.example.com/mcp" },
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       state: "state-dcr",
       codeVerifier: "verifier-dcr",
       codeChallenge: "challenge-dcr",
@@ -372,7 +372,7 @@ describe("MCP OAuth dynamic client registration (RFC 7591)", () => {
 
     const auth = await createMcpOAuthAuthorization({
       connector: { id: "github", url: "https://mcp.example.com/mcp", oauthClientId: "manual-client" },
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       state: "state-manual",
       codeVerifier: "verifier-manual",
       codeChallenge: "challenge-manual",
@@ -410,7 +410,7 @@ describe("MCP OAuth dynamic client registration (RFC 7591)", () => {
 
     await expect(createMcpOAuthAuthorization({
       connector: { id: "nodcr", url: "https://mcp.example.com/mcp" },
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       fetchImpl,
     })).rejects.toThrow(/client/i);
   });
@@ -440,7 +440,7 @@ describe("MCP OAuth dynamic client registration (RFC 7591)", () => {
 
     const auth = await createMcpOAuthAuthorization({
       connector: { id: "github", url: "https://mcp.example.com/mcp", oauthClientId: "client-id" },
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       state: "state-scope",
       codeVerifier: "verifier-scope",
       codeChallenge: "challenge-scope",
@@ -580,7 +580,7 @@ describe("MCP OAuth token refresh (RFC 6749 §6)", () => {
     const err = await exchangeMcpOAuthCode({
       tokenEndpoint: "https://auth.example.com/token",
       code: "code-123",
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       clientId: "client-id",
       codeVerifier: "verifier-123",
       fetchImpl,

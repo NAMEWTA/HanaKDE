@@ -155,6 +155,18 @@ describe("persistent store registry", () => {
       "plugin-data/office/jobs",
       "plugin-data/office/generated",
     ]);
+    // MCP config is owned by the core module in its dedicated runtime directory.
+    const mcp = PERSISTENT_STORES.find((store) => store.id === "mcp-config")!;
+    expect(mcp.ownerModule).toBe("core/mcp/manager.ts");
+    expect(mcp.pathPatterns).toEqual(["mcp"]);
+    expect(mcp.pathExclusions).toEqual([]);
+    expect(mcp.migrationEntry).toEqual([]);
+    expect(mcp.identityContract).toContain("HANA_HOME/mcp");
+    expect(mcp.restorePolicy).toContain("fail closed");
+    expect(mcp.siteRules).toEqual([
+      expect.objectContaining({ reason: "Sole writer of HANA_HOME/mcp/config.json." }),
+    ]);
+    expect(mcp.schemaContract.kind).not.toBe("exempt");
     const office = PERSISTENT_STORES.find((store) => store.id === "office-render-jobs")!;
     expect(office.ownerModule).toBe("plugins/office/lib/html-to-pdf.ts");
     expect(office.pathPatterns).toEqual([
