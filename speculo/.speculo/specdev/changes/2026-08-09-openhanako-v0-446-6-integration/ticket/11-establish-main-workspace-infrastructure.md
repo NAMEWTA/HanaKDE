@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-11
 title: 建立 main Workspace 基础设施
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "唯一 main 生命周期、physical watcher、baseline observation、健康状态与 root authority 是跨消费者共享核心状态机。"
 ready: true
 risk: critical
 blocked_by: [T-10]
 contract_ids: [AC-004, AC-005, AC-009, AC-012, AC-013, AC-014, AC-025, AC-026]
-owner: unassigned
+owner: Worker-T-11
 expected_changes: ["<Path>core/workspace-runtime/**</Path>", "<Path>shared/workspace-*.ts</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>desktop/main.cjs</Path>", "<Path>tests/workspace-*.test.ts</Path>"]
 writable_paths: ["<Path>core/workspace-runtime/**</Path>", "<Path>shared/workspace-*.ts</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>desktop/main.cjs</Path>", "<Path>tests/workspace-*.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/engine.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]

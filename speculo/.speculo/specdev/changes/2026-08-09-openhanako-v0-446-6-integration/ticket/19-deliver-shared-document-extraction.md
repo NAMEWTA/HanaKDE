@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-19
 title: 交付共享 Document Extraction
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "多格式/native converter、50 MiB 预算、remote Materialize、安全授权与临时文件清理构成跨平台公共能力。"
 ready: true
 risk: critical
 blocked_by: [T-10]
 contract_ids: [AC-018, AC-019, AC-020, AC-022, AC-023, AC-026]
-owner: unassigned
+owner: Worker-T-19
 expected_changes: ["<Path>lib/document-extract/**</Path>", "<Path>lib/tools/file-tool.ts</Path>", "<Path>tests/document-extract-*.test.ts</Path>", "<Path>tests/fixtures/document-extract/**</Path>"]
 writable_paths: ["<Path>lib/document-extract/**</Path>", "<Path>lib/tools/file-tool.ts</Path>", "<Path>tests/document-extract-*.test.ts</Path>", "<Path>tests/fixtures/document-extract/**</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>plugins/office/**</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>package.json</Path>", "<Path>package-lock.json</Path>"]
