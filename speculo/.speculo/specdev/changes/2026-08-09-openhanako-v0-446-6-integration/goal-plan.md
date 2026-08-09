@@ -231,15 +231,17 @@ Lead 接收每个候选时必须读取 Dispatch、Ticket、Evidence、实际 dif
 ### Current Status
 
 ```text
-WAVE_STATUS wave=W1.8 ready=none active=T-09 review=none done=T-01,T-02,T-03,T-04,T-05,T-06,T-07,T-08 blocked=none
+WAVE_STATUS wave=G2 ready=T-10 active=none review=none done=T-01,T-02,T-03,T-04,T-05,T-06,T-07,T-08,T-09 blocked=none
 GATE_STATUS gate=G0 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-01.md</Path> checkpoint=fabe31dd8f36313f05ec635a4ce30d890bb91bd3 risks=50-semantic-overlap-paths-for-W1
-GATE_STATUS gate=G1 state=open evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-08.md</Path> checkpoint=2bc78b4599d79183c6a0a086f48c47385b914291 risks=one-staged-checkpoint-remains
+GATE_STATUS gate=G1 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path> checkpoint=c45d1e544f8f2611f92a459947b6a49e9b91239d risks=none
+GATE_STATUS gate=G2 state=open evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path> checkpoint=c45d1e544f8f2611f92a459947b6a49e9b91239d risks=resource-authority-event-materialize-convergence
 DELIVERY ticket=T-04 state=integrated workspace=specdev-worktree/T-04 checkpoint=5dee75c3a1c88eddc02c2e890fd583e036c083a2 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-04.md</Path>
 DELIVERY ticket=T-05 state=integrated workspace=specdev-worktree/T-05 checkpoint=5aa3318bd83d75fdec70706f7a9f30ade8310868 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>
 DELIVERY ticket=T-06 state=integrated workspace=specdev-worktree/T-06 checkpoint=22a33e1b7cb4742cc456977455a11937c5bb064c evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>
 DELIVERY ticket=T-07 state=integrated workspace=specdev-worktree/T-07 checkpoint=3c4c9fac68c99ed5bf6a771f84ddc0da6f7a9a44 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>
 DELIVERY ticket=T-08 state=integrated workspace=specdev-worktree/T-08 checkpoint=2bc78b4599d79183c6a0a086f48c47385b914291 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-08.md</Path>
-DISPATCH ticket=T-09 wave=W1.8 gate=G1 baseline=adda1f5806f125a9de7943ab782103c593311144 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-09 workspace=specdev-worktree/T-09
+DELIVERY ticket=T-09 state=integrated workspace=specdev-worktree/T-09 checkpoint=c45d1e544f8f2611f92a459947b6a49e9b91239d evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>
+NEXT ticket=T-10 wave=G2 gate=G2 baseline=G1-cleanup-checkpoint action=feature-placement-then-dispatch
 ```
 
 规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-08 已完成 Lead 独立验收，产品集成 checkpoint 为 `2bc78b4599d79183c6a0a086f48c47385b914291`，验收记录为 `0593aac16723d1cd518825e716180c23bf10cf97`；T-02/T-03/T-04/T-05/T-06/T-07/T-08 worktree 与候选分支已非强制清理，T-09 已从 cleanup checkpoint `adda1f5806f125a9de7943ab782103c593311144` 以独立 worktree 启动。
