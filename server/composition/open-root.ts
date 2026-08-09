@@ -57,6 +57,7 @@ import { createMobileStaticRoute, resolveMobileStaticRouteOptions } from "../rou
 import { createHtmlPreviewRoute } from "../routes/html-preview.ts";
 import { createAccessRoute } from "../routes/access.ts";
 import { createSpeechRecognitionRoute } from "../routes/speech-recognition.ts";
+import { createMemoryDreamRoute } from "../routes/memory-dream.ts";
 
 /**
  * `/mobile`、`/desktop` 网页客户端入口的供货模式，启动时决议一次 —— 见
@@ -112,6 +113,7 @@ export async function registerOpenRoutes(
   app.route("/api", createSessionProjectsRoute(engine));
   app.route("/api", createModelsRoute(engine));
   app.route("/api", createConfigRoute(engine));
+  app.route("/api", createMemoryDreamRoute(engine));
   app.route("/api", createUploadRoute(engine));
   app.route("/api", createProvidersRoute(engine));
   app.route("/api", createAgentsRoute(engine));

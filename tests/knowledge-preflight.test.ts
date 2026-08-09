@@ -52,7 +52,6 @@ const REMOVED_LEGACY_COMPATIBILITY_MARKERS = [
   ["core/preferences-manager.ts", "compareAndDeleteLegacyHardwareAccelerationPreference"],
   ["core/engine.ts", "compareAndDeleteLegacyHardwareAccelerationPreference"],
   ["core/session-manifest/store.ts", "repairLegacyScanMetadata"],
-  ["core/session-manifest/legacy-migration.ts", "repairLegacyScanMetadata"],
   ["core/desktop-session-submit.ts", "Compatibility for older embedders"],
   ["core/mcp/manager.ts", "Read-time compatibility: connectors saved before the permission policy"],
   ["core/mcp/manager.ts", "McpRuntime"],
@@ -235,7 +234,7 @@ describe("KW-RULE-PREFLIGHT executable repository contract", () => {
 
     expect(packageContract).toMatchObject({
       name: "hanako",
-      version: "0.441.3",
+      version: "0.446.6",
       scripts: {
         typecheck:
           "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",

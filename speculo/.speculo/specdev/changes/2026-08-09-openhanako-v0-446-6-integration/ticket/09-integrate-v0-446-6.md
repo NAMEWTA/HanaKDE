@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-09
 title: 整合冻结目标 v0.446.6
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "最终上游 checkpoint 约含 11 个提交、51 个文件和 18 个 overlap，并决定目标 SHA ancestry 与完整上游功能基线。"
 ready: true

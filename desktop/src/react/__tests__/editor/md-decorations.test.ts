@@ -18,6 +18,32 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+describe('markdown URL decorations', () => {
+  it('keeps bare URLs visible while concealing named link destinations', () => {
+    const parent = document.createElement('div');
+    document.body.appendChild(parent);
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc: [
+          'https://example.com/bare',
+          '[Example](https://example.com/hidden)',
+        ].join('\n'),
+        extensions: [
+          markdown({ base: markdownLanguage }),
+          markdownDecoPlugin,
+        ],
+      }),
+    });
+
+    expect(parent.textContent).toContain('https://example.com/bare');
+    expect(parent.textContent).toContain('Example');
+    expect(parent.textContent).not.toContain('https://example.com/hidden');
+
+    view.destroy();
+  });
+});
+
 describe('collectLivePreviewRanges', () => {
   it('collects Obsidian highlights and safe background spans', () => {
     const ranges = collectLivePreviewRanges([

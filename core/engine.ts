@@ -106,8 +106,6 @@ import { SessionCoordinator } from "./session-coordinator.ts";
 import { SessionManifestResolver } from "./session-manifest/resolver.ts";
 import { SessionManifestStore } from "./session-manifest/store.ts";
 import { ensureSessionRefForPath as establishSessionRefForPath } from "./session-manifest/ref.ts";
-import { ensureLegacySessionManifestMigration } from "./session-manifest/startup-migration.ts";
-import { listSkippedMetaSources } from "./session-manifest/legacy-migration.ts";
 import {
   moveSessionManifestDbFilesAside,
   sanitizeSessionManifestFileSuffix,
@@ -157,7 +155,6 @@ import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import { resourceKeyForRef } from "../lib/resource-io/resource-refs.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
 import { externalReadPathsFromSessionFiles } from "../lib/sandbox/win32-policy.ts";
-import { Win32LegacySandboxCleanupQueue } from "../lib/sandbox/win32-legacy-migration.ts";
 import { t } from "../lib/i18n.ts";
 import { CheckpointStore } from "../lib/checkpoint-store.ts";
 import {
@@ -249,7 +246,6 @@ import { assertValidAgentId, isValidAgentId } from "../shared/agent-id.ts";
 const moduleLog = createModuleLogger("engine");
 const mcpLog = createModuleLogger("mcp");
 const toolAvailabilityLog = createModuleLogger("tool-availability");
-const win32SandboxCleanupLog = createModuleLogger("win32-sandbox-cleanup");
 
 type KnowledgeEngineCopyOptions = ResourceOperationContext & {
   sourceRegistry: SourceRegistry;
@@ -347,7 +343,6 @@ export class HanaEngine {
   declare _sessionCoord: any;
   declare _sessionFiles: any;
   declare _sessionExecutions: any;
-  declare _sessionManifestMigration: any;
   declare _sessionManifestResolver: any;
   declare _sessionManifestStore: any;
   declare _sessionManifestStoreRecovery: any;
@@ -365,7 +360,6 @@ export class HanaEngine {
   declare _usageLedger: any;
   declare _videoStripNotified: any;
   declare _visionBridge: any;
-  declare _win32LegacySandboxCleanupQueue: any;
   declare agentsDir: any;
   declare appVersion: any;
   declare channelsDir: any;
@@ -420,7 +414,6 @@ export class HanaEngine {
     this._sessionManifestResolver = this._sessionManifestStore
       ? new SessionManifestResolver({ store: this._sessionManifestStore })
       : null;
-    this._sessionManifestMigration = this._runSessionManifestStartupMigration();
     this._currentTurnNativeMedia = createCurrentTurnNativeMediaStore();
     this._pluginInstallRecords = new PluginInstallRecords({ hanakoHome });
     this._automationSuggestionStore = new AutomationSuggestionStore();
@@ -780,12 +773,6 @@ export class HanaEngine {
     this._devLogsMax = 200;
 
     this._outboundProxyRuntime = null;
-    this._win32LegacySandboxCleanupQueue = process.platform === "win32"
-      ? new Win32LegacySandboxCleanupQueue({
-          hanakoHome: this.hanakoHome,
-          log: win32SandboxCleanupLog,
-        })
-      : null;
 
     // 设置起始 agentId
     this._agentMgr.activeAgentId = startId;
@@ -1709,37 +1696,9 @@ export class HanaEngine {
     }
   }
 
-  _runSessionManifestStartupMigration() {
-    if (!this._sessionManifestStore) {
-      return {
-        status: "unavailable",
-        error: this._sessionManifestStoreRecovery?.error || null,
-      };
-    }
-    try {
-      const result = ensureLegacySessionManifestMigration({
-        hanaHome: this.hanakoHome,
-        store: this._sessionManifestStore,
-        appVersion: this.appVersion,
-      });
-      if (result.status === "failed") {
-        moduleLog.warn(`Session manifest startup migration failed: ${result.error?.message || "unknown error"}`);
-      }
-      return result;
-    } catch (error) {
-      moduleLog.warn(`Session manifest startup migration crashed: ${error?.message || String(error)}`);
-      return {
-        status: "failed",
-        error,
-      };
-    }
-  }
   /**
-   * 聚合三路 session 元数据"待恢复"信号，供 /api/health 附块与侧边栏提示消费。
-   * 三源：① manifest store 本身不可用/被隔离重建（_sessionManifestStoreRecovery）
-   * ② 运行期发生过的 session-meta 隔离（_sessionCoord.listMetaQuarantines）
-   * ③ 迁移账本里全集的 too_large/parse_error legacy 源（listSkippedMetaSources）。
-   * 三源全空 → { degraded: false, reasons: [] }。纯读聚合，不产生副作用。
+   * 聚合 manifest store 与运行期 session-meta 隔离两路恢复信号，供 /api/health
+   * 附块与侧边栏提示消费。纯读聚合，不产生副作用。
    */
   getSessionMetadataRecoveryStatus() {
     const reasons: Array<{ kind: string; detail: string }> = [];
@@ -1753,10 +1712,6 @@ export class HanaEngine {
 
     for (const quarantine of this._sessionCoord?.listMetaQuarantines?.() || []) {
       reasons.push({ kind: "meta_quarantined", detail: describeMetaSourcePath(quarantine?.metaPath) });
-    }
-
-    for (const skipped of listSkippedMetaSources(this._sessionManifestStore)) {
-      reasons.push({ kind: "meta_skipped", detail: describeMetaSourcePath(skipped?.path) });
     }
 
     return { degraded: reasons.length > 0, reasons };
@@ -2177,9 +2132,6 @@ export class HanaEngine {
   setSessionThinkingLevel(sessionPath, level) { return this._sessionCoord.setSessionThinkingLevel(sessionPath, level); }
   getSandbox() { return this._prefs.getSandbox(); }
   setSandbox(v) { this._prefs.setSandbox(v); }
-  startWin32LegacySandboxMaintenance() {
-    this._win32LegacySandboxCleanupQueue?.enqueueProfileCleanup?.();
-  }
   getSandboxNetwork() {
     if (process.platform === "win32") return true;
     return this._prefs.getSandboxNetwork();
@@ -3334,7 +3286,6 @@ export class HanaEngine {
       getAgentId: () => agentId,
       resourceIO,
       emitEvent: (event, sessionPath) => this._emitEvent(event, sessionPath),
-      legacyCleanupQueue: this._win32LegacySandboxCleanupQueue,
     } as any);
     assertUniqueBuiltToolNames([
       { source: "Pi built-in tools", tools: result.tools },

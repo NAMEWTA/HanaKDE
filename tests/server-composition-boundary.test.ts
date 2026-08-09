@@ -67,6 +67,7 @@ const PRE_REFACTOR_MOUNT_CALLS = Object.freeze([
   // generic plugin route proxy, so it had no factory of its own here.
   '"/api" :: createMcpRoute',
   '"/api" :: createMediaRoute',
+  '"/api" :: createMemoryDreamRoute',
   '"/api" :: createMobileWorkbenchRoute',
   '"/api" :: createModelsRoute',
   '"/api" :: createPluginsRoute',

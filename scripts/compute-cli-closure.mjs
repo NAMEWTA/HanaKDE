@@ -300,16 +300,6 @@ export const DYNAMIC_CALL_ALLOWLIST = Object.freeze([
       + "executables under test, not an import target.",
   },
   {
-    file: "lib/sandbox/win32-legacy-migration.ts",
-    callee: "spawn",
-    argText: "helperPath",
-    reason:
-      "Spawns a bundled Windows sandbox migration helper native binary at "
-      + "helperPath. A native-binary process launch, not a reference to repo JS/TS "
-      + "source -- the helper binary itself is a desktop packaging asset, out of this "
-      + "CLI closure's scope.",
-  },
-  {
     file: "lib/shell/shell-utils.ts",
     callee: "spawn",
     argText: "executable",

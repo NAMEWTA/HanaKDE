@@ -473,8 +473,6 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     channelsDir: engine.channelsDir,
   });
 
-  if (process.platform === "win32") engine.startWin32LegacySandboxMaintenance();
-
   // ── 初始化 Hub（调度中枢，包装 engine） ──
   const hub = new Hub({ engine });
 
