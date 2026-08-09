@@ -1116,16 +1116,6 @@ export function migrateLegacySessions(opts: any = {}) {
         if (!existing.ownerAgentId && typeof opts.store.backfillOwnerAgentId === "function") {
           existing = opts.store.backfillOwnerAgentId(existing.sessionId, input.ownerAgentId);
         }
-        if (typeof opts.store.repairLegacyScanMetadata === "function") {
-          existing = opts.store.repairLegacyScanMetadata(existing.sessionId, {
-            ownerAgentId: input.ownerAgentId,
-            ownerAgentIdSource: row.ownerAgentIdSource,
-            domain: input.domain,
-            kind: input.kind,
-            provenance: input.provenance,
-            migration: input.migration,
-          });
-        }
         if (
           existing?.migration?.source === "legacy_scan"
           && existing.lifecycle !== input.lifecycle

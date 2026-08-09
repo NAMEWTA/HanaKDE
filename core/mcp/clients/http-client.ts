@@ -1,4 +1,4 @@
-import { MCP_PROTOCOL_VERSION } from "./mcp-stdio-client.ts";
+import { MCP_PROTOCOL_VERSION } from "./stdio-client.ts";
 import { getOutboundProxyConfig } from "../../../lib/net/outbound-proxy.ts";
 import {
   normalizeNetworkProxyConfig,
@@ -6,14 +6,192 @@ import {
   resolveProxyForUrl,
 } from "../../../shared/network-proxy.ts";
 import {
+  MCP_ERA_LEGACY,
+  MCP_ERA_MODERN,
+  MCP_META_CLIENT_CAPABILITIES,
+  MCP_META_CLIENT_INFO,
+  MCP_META_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_2026_07_28,
   MCP_PROTOCOL_VERSION_HEADER,
   headersWithoutMcpProtocolVersion,
+  mcpEraForProtocolVersion,
+  negotiateMcpProtocolVersion,
+  readDiscoverSupportedVersions,
   resolveInitialMcpProtocolVersion,
-} from "./mcp-protocol-version.ts";
+  resolvePinnedMcpProtocolVersion,
+} from "./protocol-version.ts";
+import {
+  isJsonRpcResponse,
+  isJsonRpcServerRequest,
+  methodNotFoundResponse,
+} from "./jsonrpc.ts";
 
 const STREAMABLE_ACCEPT = "application/json, text/event-stream";
 const SSE_ACCEPT = "text/event-stream";
 const FALLBACK_STATUSES = new Set([400, 404, 405]);
+
+const MCP_CLIENT_INFO = { name: "hana", title: "Hana", version: "0.1.0" };
+
+// Capabilities we advertise on every stateless request. A server may only ask
+// us for input of a kind we declared here, so this is what gates whether a tool
+// call can ever come back asking the user a question. Form elicitation is the
+// one interaction we can actually render; sampling, roots and URL-mode
+// elicitation stay undeclared until they have somewhere to go.
+const MODERN_CLIENT_CAPABILITIES = { elicitation: { form: {} } };
+
+// Attach the per-request protocol fields the stateless revision requires. The
+// header mirror of the protocol version must match this value exactly, so both
+// are derived from the same argument.
+function withModernRequestMeta(payload, protocolVersion, capabilities) {
+  const source = payload?.params && typeof payload.params === "object" && !Array.isArray(payload.params)
+    ? payload.params
+    : {};
+  return {
+    ...payload,
+    params: {
+      ...source,
+      _meta: {
+        ...(source as any)._meta,
+        [MCP_META_PROTOCOL_VERSION]: protocolVersion,
+        [MCP_META_CLIENT_INFO]: MCP_CLIENT_INFO,
+        [MCP_META_CLIENT_CAPABILITIES]: capabilities,
+      },
+    },
+  };
+}
+
+// The stateless revision lets a list response advertise how long it stays
+// fresh. We record the hint and nothing more: no polling, no expiry, no cache.
+// Absent hints read as null rather than as zero, so "not offered" never
+// masquerades as "expires immediately".
+function readToolListFreshness(result) {
+  const rawTtl = (result as any)?.ttlMs;
+  const ttlMs = typeof rawTtl === "number" && Number.isFinite(rawTtl) ? rawTtl : null;
+  const rawScope = (result as any)?.cacheScope;
+  const cacheScope = typeof rawScope === "string" && rawScope.trim() ? rawScope.trim() : null;
+  if (ttlMs === null && cacheScope === null) return null;
+  return { ttlMs, cacheScope, fetchedAt: Date.now() };
+}
+
+// Header mirroring is a property of the Streamable HTTP binding, not of the
+// protocol: stdio has no header layer, so none of this applies there.
+const MCP_NAME_METHODS = new Set(["tools/call", "resources/read", "prompts/get"]);
+const MCP_PARAM_TYPES = new Set(["string", "integer", "boolean"]);
+// RFC 9110 field-name token characters.
+const HEADER_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const BASE64_SENTINEL_PREFIX = "=?base64?";
+const BASE64_SENTINEL_SUFFIX = "?=";
+
+function isPlainHeaderValue(text) {
+  if (!text.length) return false;
+  if (text !== text.trim()) return false;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code < 0x20 || code > 0x7E) return false;
+  }
+  return true;
+}
+
+// Values that cannot travel as visible ASCII go base64 behind a sentinel. A
+// plain value that merely looks like the sentinel is encoded too, so the server
+// can never misread a literal as an encoding marker.
+function encodeMcpHeaderValue(text) {
+  const looksEncoded = text.startsWith(BASE64_SENTINEL_PREFIX) && text.endsWith(BASE64_SENTINEL_SUFFIX);
+  if (isPlainHeaderValue(text) && !looksEncoded) return text;
+  return `${BASE64_SENTINEL_PREFIX}${Buffer.from(text, "utf-8").toString("base64")}${BASE64_SENTINEL_SUFFIX}`;
+}
+
+function mcpParamValue(value) {
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  return null;
+}
+
+function readAtPath(root, path) {
+  let node = root;
+  for (const key of path) {
+    if (!node || typeof node !== "object") return undefined;
+    node = node[key];
+  }
+  return node;
+}
+
+// Every x-mcp-header occurrence anywhere in the schema, however it is nested.
+function collectAllAnnotations(node, out) {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectAllAnnotations(item, out);
+    return;
+  }
+  if (Object.prototype.hasOwnProperty.call(node, "x-mcp-header")) out.push(node);
+  for (const value of Object.values(node)) collectAllAnnotations(value, out);
+}
+
+// Only the annotations reachable by a chain made purely of `properties` keys.
+function collectReachableAnnotations(schema, path, out) {
+  const properties = schema?.properties;
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) return;
+  for (const [key, child] of Object.entries(properties)) {
+    if (!child || typeof child !== "object") continue;
+    const childPath = [...path, key];
+    if (Object.prototype.hasOwnProperty.call(child, "x-mcp-header")) {
+      out.push({ path: childPath, name: (child as any)["x-mcp-header"], type: (child as any).type });
+    }
+    collectReachableAnnotations(child, childPath, out);
+  }
+}
+
+// The mirrorable annotations of one tool, or null when the definition breaks a
+// constraint the spec requires clients to reject. Null means "drop this tool":
+// mirroring a malformed annotation would put a malformed header on the wire.
+export function collectMcpParamAnnotations(inputSchema) {
+  if (!inputSchema || typeof inputSchema !== "object" || Array.isArray(inputSchema)) return [];
+  const everywhere = [];
+  collectAllAnnotations(inputSchema, everywhere);
+  const reachable = [];
+  collectReachableAnnotations(inputSchema, [], reachable);
+  // An annotation that exists but is not statically reachable invalidates the
+  // whole definition, rather than being quietly ignored.
+  if (everywhere.length !== reachable.length) return null;
+
+  const seen = new Set();
+  for (const annotation of reachable) {
+    const name = annotation.name;
+    if (typeof name !== "string" || !name || !HEADER_TOKEN.test(name)) return null;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return null;
+    seen.add(key);
+    if (!MCP_PARAM_TYPES.has(annotation.type)) return null;
+  }
+  return reachable;
+}
+
+function modernRoutingHeaders(payload, annotationsByTool) {
+  const headers: any = {};
+  const method = typeof payload?.method === "string" ? payload.method : "";
+  if (!method) return headers;
+  headers["Mcp-Method"] = method;
+  if (!MCP_NAME_METHODS.has(method)) return headers;
+
+  const params = payload?.params && typeof payload.params === "object" ? payload.params : {};
+  const rawName = method === "resources/read" ? params.uri : params.name;
+  if (typeof rawName === "string" && rawName) headers["Mcp-Name"] = encodeMcpHeaderValue(rawName);
+  if (method !== "tools/call") return headers;
+
+  const annotations = annotationsByTool?.get?.(params.name);
+  if (!Array.isArray(annotations)) return headers;
+  const args = params.arguments && typeof params.arguments === "object" ? params.arguments : {};
+  for (const annotation of annotations) {
+    const value = readAtPath(args, annotation.path);
+    // Absent or null: the header is omitted and the server must not expect it.
+    if (value === undefined || value === null) continue;
+    const text = mcpParamValue(value);
+    if (text === null) continue;
+    headers[`Mcp-Param-${annotation.name}`] = encodeMcpHeaderValue(text);
+  }
+  return headers;
+}
 
 export class McpHttpError extends Error {
   declare body: any;
@@ -111,14 +289,6 @@ async function responseText(response) {
   }
 }
 
-function isJsonRpcResponse(message) {
-  if (!message || typeof message !== "object" || message.jsonrpc !== "2.0" || message.id == null) return false;
-  if (Object.prototype.hasOwnProperty.call(message, "method")) return false;
-  const hasResult = Object.prototype.hasOwnProperty.call(message, "result");
-  const hasError = Object.prototype.hasOwnProperty.call(message, "error");
-  return hasResult !== hasError;
-}
-
 function methodErrorMessage(status, body) {
   if (status === 401) return "MCP connector authentication failed or token expired";
   if (status === 403) return "MCP connector authorization failed or scopes are insufficient";
@@ -209,22 +379,27 @@ export class McpStreamableHttpClient {
   declare _initialized: any;
   declare _nextId: any;
   declare _stopping: any;
+  declare _toolParamAnnotations: any;
   declare endpoint: any;
   declare fetchImpl: any;
   declare getAuthToken: any;
+  declare era: any;
   declare initialProtocolVersion: any;
   declare log: any;
+  declare negotiatedProtocolVersion: any;
+  declare pinnedProtocolVersion: any;
   declare onClose: any;
   declare protocolVersion: any;
   declare refreshAuthToken: any;
   declare server: any;
   declare sessionId: any;
+  declare toolListFreshness: any;
   constructor(server, { fetchImpl = globalThis.fetch, log = console, onClose = null, getAuthToken = null, refreshAuthToken = null } = {}) {
     this.server = server;
     this.fetchImpl = fetchImpl;
     this.log = log;
     // onClose({ reason, expected, needsAuth }) reports an unexpected death of a
-    // previously-live session so McpRuntime can decide whether to reconnect.
+    // previously-live session so McpManager can decide whether to reconnect.
     // The inline 404 session refresh recovers in place and never reports here.
     this.onClose = typeof onClose === "function" ? onClose : null;
     // OAuth self-heal seams (#1286 ③a, 方案 A). The live client snapshots the
@@ -241,8 +416,25 @@ export class McpStreamableHttpClient {
     this._initialized = false;
     this._stopping = false;
     this.sessionId = "";
-    this.initialProtocolVersion = resolveInitialMcpProtocolVersion({ headers: connectorHeaders(server) });
+    const headers = connectorHeaders(server);
+    this.initialProtocolVersion = resolveInitialMcpProtocolVersion({
+      headers,
+      protocolVersion: server?.protocolVersion,
+    });
     this.protocolVersion = this.initialProtocolVersion;
+    // An operator-pinned version is an instruction, not a hint: it selects the
+    // track outright and suppresses the probe.
+    this.pinnedProtocolVersion = resolvePinnedMcpProtocolVersion({
+      headers,
+      protocolVersion: server?.protocolVersion,
+    });
+    // "" until proven. Determined once per client instance and then reused, so
+    // one connection never re-probes.
+    this.era = this.pinnedProtocolVersion ? mcpEraForProtocolVersion(this.pinnedProtocolVersion) : "";
+    this.negotiatedProtocolVersion = "";
+    // tool name -> mirrorable x-mcp-header annotations, learned from tools/list.
+    this._toolParamAnnotations = new Map();
+    this.toolListFreshness = null;
   }
 
   get running() {
@@ -255,12 +447,58 @@ export class McpStreamableHttpClient {
     this._closed = false;
     this._stopping = false;
     try {
-      await this.initialize();
+      await this._establish();
       this._initialized = true;
     } catch (err) {
       this._closed = true;
       this._initialized = false;
       throw err;
+    }
+  }
+
+  // Decide the era once, then connect accordingly. The stateless track has
+  // nothing to establish: no handshake, no session, so a successful probe is
+  // itself the whole connect.
+  async _establish() {
+    if (!this.era) this.era = await this._probeServerEra();
+    if (this.era === MCP_ERA_MODERN) {
+      this.protocolVersion = this._modernProtocolVersion();
+      this.sessionId = "";
+      return;
+    }
+    await this.initialize();
+  }
+
+  _modernProtocolVersion() {
+    return this.negotiatedProtocolVersion || this.pinnedProtocolVersion || MCP_PROTOCOL_VERSION_2026_07_28;
+  }
+
+  // Ask the server what it speaks. Only a well-formed DiscoverResult naming a
+  // version we implement proves a modern server; a transport failure, an odd
+  // shape, or a version list we cannot satisfy all mean "assume legacy and
+  // handshake". Guessing modern on a doubtful answer would strand the connector
+  // with no usable fallback, so the doubt always resolves toward the old path.
+  async _probeServerEra() {
+    try {
+      const result = await this._postJsonRpc({
+        jsonrpc: "2.0",
+        id: this._nextId++,
+        method: "server/discover",
+        params: {},
+      }, { era: MCP_ERA_MODERN });
+      const supported = readDiscoverSupportedVersions(result);
+      const negotiated = supported ? negotiateMcpProtocolVersion(supported) : "";
+      if (!negotiated) {
+        this.log.debug?.(
+          `[mcp:${this.server.id}] discovery did not establish a supported stateless version; using the handshake`,
+        );
+        return MCP_ERA_LEGACY;
+      }
+      this.negotiatedProtocolVersion = negotiated;
+      return MCP_ERA_MODERN;
+    } catch (err) {
+      this.log.debug?.(`[mcp:${this.server.id}] discovery probe failed (${err.message}); using the handshake`);
+      return MCP_ERA_LEGACY;
     }
   }
 
@@ -284,14 +522,41 @@ export class McpStreamableHttpClient {
 
   async listTools() {
     const result = await this.request("tools/list", {});
-    return Array.isArray(result?.tools) ? result.tools : [];
+    this.toolListFreshness = readToolListFreshness(result);
+    const tools = Array.isArray(result?.tools) ? result.tools : [];
+    // Parameter mirroring only exists on the stateless track, so only there do
+    // we hold tools to the annotation constraints.
+    if (this.era !== MCP_ERA_MODERN) return tools;
+
+    const usable = [];
+    const annotations = new Map();
+    for (const tool of tools) {
+      const parsed = collectMcpParamAnnotations(tool?.inputSchema);
+      if (parsed === null) {
+        this.log.warn?.(
+          `[mcp:${this.server.id}] dropped tool "${tool?.name}": its x-mcp-header annotations break the header-mirroring rules`,
+        );
+        continue;
+      }
+      usable.push(tool);
+      if (parsed.length) annotations.set(tool?.name, parsed);
+    }
+    this._toolParamAnnotations = annotations;
+    return usable;
   }
 
-  async callTool(name, args) {
-    return this.request("tools/call", {
-      name,
-      arguments: args || {},
-    });
+  // inputResponses/requestState carry a previous round's answers back to the
+  // server. The server keeps no state of its own between rounds, so the retry
+  // must repeat the original arguments and echo the opaque state verbatim.
+  async callTool(name, args, { inputResponses = null, requestState = "" }: any = {}) {
+    const params: any = { name, arguments: args || {} };
+    if (inputResponses) params.inputResponses = inputResponses;
+    if (requestState) params.requestState = requestState;
+    return this.request("tools/call", params);
+  }
+
+  async readResource(uri) {
+    return this.request("resources/read", { uri });
   }
 
   async request(method, params: any = {}, opts = {}) {
@@ -416,14 +681,26 @@ export class McpStreamableHttpClient {
     }
   }
 
-  async _headers({ sessionId = this.sessionId, includeJson = true, initializing = false }: any = {}) {
+  async _headers({
+    sessionId = this.sessionId,
+    includeJson = true,
+    initializing = false,
+    era = this.era,
+    payload = null,
+  }: any = {}) {
+    const modern = era === MCP_ERA_MODERN;
     const headers = {
       ...headersWithoutMcpProtocolVersion(connectorHeaders(this.server)),
       Accept: STREAMABLE_ACCEPT,
-      [MCP_PROTOCOL_VERSION_HEADER]: this.protocolVersion || this.initialProtocolVersion || MCP_PROTOCOL_VERSION,
+      [MCP_PROTOCOL_VERSION_HEADER]: modern
+        ? this._modernProtocolVersion()
+        : (this.protocolVersion || this.initialProtocolVersion || MCP_PROTOCOL_VERSION),
     };
     if (includeJson) headers["Content-Type"] = "application/json";
-    if (sessionId && !initializing) headers["MCP-Session-Id"] = sessionId;
+    // Sessions exist only on the legacy track; the stateless revision removed
+    // them outright, so a modern request must never carry one.
+    if (!modern && sessionId && !initializing) headers["MCP-Session-Id"] = sessionId;
+    if (modern && payload) Object.assign(headers, modernRoutingHeaders(payload, this._toolParamAnnotations));
     // Prefer the runtime's freshest token (handles near-expiry refresh out of
     // band); fall back to the connector snapshot when no callback is injected.
     const token = await requestAuthToken(this.server, this.getAuthToken);
@@ -431,12 +708,40 @@ export class McpStreamableHttpClient {
     return headers;
   }
 
-  async _postJsonRpc(payload, { initializing = false } = {}) {
+  // We implement no server-initiated methods, so answer with -32601 rather than
+  // leaving the server blocked on a reply. Best effort: this is a courtesy
+  // reply on a side channel, and its failure must not disturb the request whose
+  // stream carried it, so a failed delivery is logged and goes no further.
+  _rejectServerRequest(message) {
+    this.log.debug?.(
+      `[mcp:${this.server.id}] rejected unsupported server request "${message.method}" (id ${message.id})`,
+    );
+    const body = JSON.stringify(methodNotFoundResponse(message.id, message.method));
+    (async () => {
+      const headers = await this._headers();
+      await fetchWithTimeout(this.fetchImpl, this.endpoint, {
+        method: "POST",
+        headers,
+        body,
+      }, requestTimeoutMs(this.server));
+    })().catch((err) => {
+      this.log.debug?.(
+        `[mcp:${this.server.id}] could not deliver method-not-found for "${message.method}": ${err.message}`,
+      );
+    });
+  }
+
+  async _postJsonRpc(payload, { initializing = false, era = this.era } = {}) {
+    // Validate what the caller handed us, so a diagnostic points at the caller's
+    // own field path rather than at protocol metadata we added underneath.
     assertValidUnicodeBoundary(payload);
+    const body = era === MCP_ERA_MODERN
+      ? withModernRequestMeta(payload, this._modernProtocolVersion(), MODERN_CLIENT_CAPABILITIES)
+      : payload;
     const response = await fetchWithTimeout(this.fetchImpl, this.endpoint, {
       method: "POST",
-      headers: await this._headers({ initializing }),
-      body: JSON.stringify(payload),
+      headers: await this._headers({ initializing, era, payload: body }),
+      body: JSON.stringify(body),
     }, requestTimeoutMs(this.server));
     if (initializing) {
       const sessionId = responseHeader(response, "MCP-Session-Id");
@@ -459,6 +764,10 @@ export class McpStreamableHttpClient {
       for (const event of parseSseEvents(text)) {
         if (!event.data) continue;
         const message = JSON.parse(event.data);
+        if (isJsonRpcServerRequest(message)) {
+          this._rejectServerRequest(message);
+          continue;
+        }
         if (isJsonRpcResponse(message) && message.id === payload.id) return rpcResult(message);
       }
       throw new Error(`MCP response for "${payload.method}" was not found in SSE stream`);
@@ -553,6 +862,10 @@ export class McpLegacySseClient {
       name,
       arguments: args || {},
     });
+  }
+
+  async readResource(uri) {
+    return this.request("resources/read", { uri });
   }
 
   async request(method, params: any = {}, { timeout = 30_000 } = {}) {
@@ -726,6 +1039,10 @@ export class McpLegacySseClient {
       this.log.warn?.(`[mcp:${this.server.id}] ignored invalid SSE JSON: ${err.message}`);
       return;
     }
+    if (isJsonRpcServerRequest(message)) {
+      this._rejectServerRequest(message);
+      return;
+    }
     if (!isJsonRpcResponse(message)) return;
     const pending = this._pending.get(message.id);
     if (!pending) {
@@ -738,6 +1055,19 @@ export class McpLegacySseClient {
     } catch (err) {
       pending.reject(err);
     }
+  }
+
+  // See McpStreamableHttpClient._rejectServerRequest: answer -32601 instead of
+  // dropping the request, and never let the courtesy reply's failure escape.
+  _rejectServerRequest(message) {
+    this.log.debug?.(
+      `[mcp:${this.server.id}] rejected unsupported server request "${message.method}" (id ${message.id})`,
+    );
+    this._postMessage(methodNotFoundResponse(message.id, message.method)).catch((err) => {
+      this.log.debug?.(
+        `[mcp:${this.server.id}] could not deliver method-not-found for "${message.method}": ${err.message}`,
+      );
+    });
   }
 
   async _postMessage(payload) {
@@ -780,6 +1110,10 @@ export class McpAutoHttpClient {
     return this.client?.running === true;
   }
 
+  get toolListFreshness() {
+    return this.client?.toolListFreshness ?? null;
+  }
+
   async start() {
     const streamable = new McpStreamableHttpClient(this.server, this.opts);
     try {
@@ -799,8 +1133,12 @@ export class McpAutoHttpClient {
     return this.client.listTools();
   }
 
-  async callTool(name, args) {
-    return this.client.callTool(name, args);
+  async callTool(name, args, opts: any = {}) {
+    return this.client.callTool(name, args, opts);
+  }
+
+  async readResource(uri) {
+    return this.client.readResource(uri);
   }
 
   async stop() {

@@ -894,13 +894,13 @@ describe("session-coordinator tool snapshot (createSession)", () => {
   it("Case C: fresh sessions exclude plugin tools disabled by runtime agent config", async () => {
     const mcpTool = {
       ...makeTool("mcp_github_search"),
-      isEnabledForAgentConfig: (config) => config?.mcp?.servers?.github?.enabled === true,
+      isEnabledForAgentConfig: (config) => config?.mcp?.connectors?.github?.enabled === true,
     };
     coord._d.buildTools = () => ({
       tools: SDK_BUILTIN_OBJS,
       customTools: [...HANAKO_CUSTOM_OBJS, mcpTool],
     });
-    currentAgentConfig = { tools: { disabled: [] }, mcp: { servers: { github: { enabled: false } } } };
+    currentAgentConfig = { tools: { disabled: [] }, mcp: { connectors: { github: { enabled: false } } } };
 
     await coord.createSession(null, tmpDir, true);
 

@@ -17,7 +17,7 @@ describe('mcp connector config helpers', () => {
     })).toBe('API_KEY=********\nBASE_URL=https://example.com');
   });
 
-  it('converts Cherry and Claude style MCP JSON into Hana connector inputs', () => {
+  it('converts external MCP JSON into Hana connector inputs', () => {
     const connectors = connectorsFromMcpJson(JSON.stringify({
       mcpServers: {
         remote: {
@@ -25,7 +25,7 @@ describe('mcp connector config helpers', () => {
           url: 'https://mcp.example.com/mcp',
           headers: { Authorization: 'Bearer secret' },
           timeout: 45,
-          isActive: true,
+          autoStart: true,
         },
         local: {
           command: 'npx',
@@ -54,5 +54,25 @@ describe('mcp connector config helpers', () => {
         registryUrl: 'https://registry.npmmirror.com',
       },
     ]);
+  });
+
+  it('does not import removed baseUrl or isActive aliases', () => {
+    expect(() => connectorsFromMcpJson(JSON.stringify({
+      mcpServers: {
+        old: { baseUrl: 'https://mcp.example.com/mcp', transport: 'remote' },
+      },
+    }))).toThrow(/missing url/);
+
+    const [connector] = connectorsFromMcpJson(JSON.stringify({
+      mcpServers: {
+        current: {
+          url: 'https://mcp.example.com/mcp',
+          transport: 'remote',
+          isActive: true,
+        },
+      },
+    }));
+
+    expect(connector.autoStart).toBeUndefined();
   });
 });

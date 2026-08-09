@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { McpStdioClient } from "./mcp-stdio-client.ts";
+import { McpStdioClient } from "./clients/stdio-client.ts";
 import {
   McpAutoHttpClient,
   McpHttpError,
@@ -8,18 +8,40 @@ import {
   McpStreamableHttpClient,
   isAuthTerminalError,
   resolveMcpHttpProxyDiagnostics,
-} from "./mcp-http-client.ts";
+} from "./clients/http-client.ts";
 import {
   createMcpOAuthAuthorization,
   exchangeMcpOAuthCode,
   refreshMcpOAuthToken,
-} from "./mcp-oauth.ts";
-import { createSettingsUpdate } from "../../../lib/tools/settings-update-result.ts";
+} from "./clients/oauth.ts";
+import { createSettingsUpdate } from "../../lib/tools/settings-update-result.ts";
+import { normalizeToolRuntimeContext } from "../../lib/tools/tool-session.ts";
+import { createPluginConfigStore, normalizePluginConfigSchema } from "../plugin-config.ts";
+import { t } from "../../lib/i18n.ts";
+
+// A server that keeps asking without ever finishing is a loop, not a
+// conversation. Three rounds is generous for a real form flow.
+const MAX_INPUT_REQUIRED_ROUNDS = 3;
+const MCP_ELICITATION_TIMEOUT_MS = 10 * 60 * 1000;
+
+// Agent-facing tool names are namespaced with this prefix. It used to be applied
+// by the plugin host when MCP was a bundled plugin; the manager now owns it so
+// the names the model sees stay byte-identical after the move to core/mcp.
+export const MCP_TOOL_NAMESPACE = "mcp";
+
+// Config key inside the dedicated MCP runtime directory.
+const MCP_CONFIG_KEY = "mcp";
+
+// Deferred loading is enabled for a fresh MCP config and only engages once a
+// session would otherwise carry more than ten MCP tool schemas in its cacheable
+// prefix.
+const DEFAULT_DEFER_THRESHOLD = 10;
 
 const DEFAULT_CONFIG = {
   enabled: false,
+  deferEnabled: true,
+  deferThreshold: DEFAULT_DEFER_THRESHOLD,
   connectors: [],
-  servers: [],
 };
 
 const TRANSPORTS = new Set(["stdio", "remote", "streamable-http", "sse"]);
@@ -48,9 +70,13 @@ const STATUS_CONNECTING = "connecting";
 const STATUS_RECONNECTING = "reconnecting";
 const STATUS_NEEDS_AUTH = "needs-auth";
 
+// A tool with no declared visibility is offered to both the model and to app
+// surfaces; an explicit `_meta.ui.visibility` array narrows that.
+const DEFAULT_TOOL_VISIBILITY = Object.freeze(["model", "app"]);
+
 function normalizeTool(tool) {
   if (!tool || typeof tool.name !== "string" || !tool.name) return null;
-  return {
+  const normalized: any = {
     name: tool.name,
     title: typeof tool.title === "string" ? tool.title : tool.name,
     description: typeof tool.description === "string" ? tool.description : "",
@@ -58,10 +84,104 @@ function normalizeTool(tool) {
       ? tool.inputSchema
       : { type: "object", properties: {} },
   };
+  if (tool.outputSchema && typeof tool.outputSchema === "object") normalized.outputSchema = tool.outputSchema;
+  if (isPlainObject(tool._meta)) normalized._meta = tool._meta;
+  return normalized;
 }
 
-function normalizeConnector(connector, fallbackId = "") {
+// Per-connector permission policy. "review-all" is both the default and the
+// safe one: every tool invocation goes through review. "allowlist" opts the
+// connector into policy-driven silent approval, but only for tools the user
+// explicitly allowed, or that the server declares read-only while the user has
+// turned on trustReadOnlyHint.
+const PERMISSION_MODES = new Set(["review-all", "allowlist"]);
+const TOOL_PERMISSION_VALUES = new Set(["allow", "review"]);
+
+function normalizePermissionMode(value) {
+  return PERMISSION_MODES.has(value) ? value : "review-all";
+}
+
+// Unrecognized per-tool entries are dropped rather than coerced: a malformed
+// value must never widen access, and silently keeping it would leave a grant
+// nobody can read back out of the UI.
+function normalizeToolPermissions(value) {
+  if (!isPlainObject(value)) return {};
+  const normalized = {};
+  for (const [toolName, permission] of Object.entries(value)) {
+    if (!toolName) continue;
+    if (TOOL_PERMISSION_VALUES.has(permission as any)) normalized[toolName] = permission;
+  }
+  return normalized;
+}
+
+function hasCurrentPermissionPolicy(connector) {
+  return ["permissionMode", "toolPermissions", "trustReadOnlyHint"]
+    .every((field) => Object.prototype.hasOwnProperty.call(connector, field));
+}
+
+/**
+ * Decide the permission kind for a single MCP tool invocation.
+ *
+ * `policy` carries the connector's permission mode and read-only trust toggle
+ * plus this tool's own override. `liveAnnotations` is the tool's annotations as
+ * last reported by the running server, or undefined when no live tool listing
+ * has been seen for it in this process.
+ *
+ * The rules, in precedence order:
+ *   1. A server-declared destructive tool is never silently approved, even when
+ *      the user explicitly allowed it. Known danger outranks authorization.
+ *   2. An explicit user grant needs no evidence from the server, so an empty
+ *      annotation side table does not weaken it.
+ *   3. An implicit grant (trustReadOnlyHint) needs fresh evidence: it applies
+ *      only when the running server actually declared readOnlyHint. With no
+ *      live annotations this fails closed to review, because the alternative is
+ *      trusting a claim nobody made this run.
+ *
+ * Shared seam: the `mcp_call` bridge resolves a target tool at call time and
+ * must route its decision through this function rather than restating the
+ * rules, so the two paths cannot drift.
+ */
+export function resolveMcpToolPermissionKind(policy: any, liveAnnotations: any = undefined) {
+  if (normalizePermissionMode(policy?.permissionMode) !== "allowlist") return "review";
+
+  const annotations = isPlainObject(liveAnnotations) ? liveAnnotations : null;
+
+  // Rule 1: known-destructive is a hard veto over every grant below.
+  if (annotations?.destructiveHint === true) return "review";
+
+  // Rule 2: an explicit decision by the user, either direction, is honoured
+  // without consulting the server's self-description.
+  if (policy?.toolPermission === "allow") return "read";
+  if (policy?.toolPermission === "review") return "review";
+
+  // Rule 3: implicit trust requires a live read-only declaration.
+  if (policy?.trustReadOnlyHint === true && annotations?.readOnlyHint === true) return "read";
+
+  return "review";
+}
+
+// A pin keeps one tool in the prefix even when its connector is deferred.
+// Only an explicit `true` pins: anything else, including "yes" and 1, is
+// dropped so a malformed value cannot quietly enlarge the prefix.
+function normalizePinnedTools(value) {
+  if (!isPlainObject(value)) return {};
+  const normalized = {};
+  for (const [toolName, pinned] of Object.entries(value)) {
+    if (!toolName) continue;
+    if (pinned === true) normalized[toolName] = true;
+  }
+  return normalized;
+}
+
+function normalizeDeferThreshold(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : DEFAULT_DEFER_THRESHOLD;
+}
+
+function normalizeConnector(connector, fallbackId = "", { requireCurrentPermissionPolicy = false } = {}) {
   if (!connector || typeof connector !== "object") return null;
+  if (requireCurrentPermissionPolicy && !hasCurrentPermissionPolicy(connector)) return null;
   const id = sanitizeId(connector.id || fallbackId);
   if (!id) return null;
   const env = normalizeStringRecord(connector.env);
@@ -70,7 +190,7 @@ function normalizeConnector(connector, fallbackId = "") {
     ? connector.tools.map(normalizeTool).filter(Boolean)
     : [];
   const transport = normalizeTransport(connector);
-  const authorizationToken = stringOrEmpty(connector.authorizationToken || connector.authorization_token);
+  const authorizationToken = stringOrEmpty(connector.authorizationToken);
   const oauth = normalizeOAuthState(connector.oauth);
   const authType = normalizeAuthType(connector.authType, { authorizationToken, oauth, connector });
 
@@ -79,7 +199,7 @@ function normalizeConnector(connector, fallbackId = "") {
     name: stringOrEmpty(connector.name) || id,
     description: stringOrEmpty(connector.description),
     transport,
-    url: stringOrEmpty(connector.url || connector.baseUrl),
+    url: stringOrEmpty(connector.url),
     command: stringOrEmpty(connector.command),
     args: Array.isArray(connector.args) ? connector.args.filter((arg) => typeof arg === "string") : [],
     cwd: stringOrEmpty(connector.cwd),
@@ -89,22 +209,30 @@ function normalizeConnector(connector, fallbackId = "") {
     timeout: normalizeTimeoutSeconds(connector.timeout),
     authType,
     authorizationToken,
-    oauthClientId: stringOrEmpty(connector.oauthClientId || connector.clientId),
-    oauthClientSecret: stringOrEmpty(connector.oauthClientSecret || connector.clientSecret),
-    // Provenance of the OAuth client id, including read-time compatibility:
-    // "manual" = user-entered, "dcr" = obtained via RFC 7591 dynamic client
-    // registration. Old connectors predate this field — default to "manual"
-    // when a client id is already present, otherwise "" (unknown/unregistered).
+    oauthClientId: stringOrEmpty(connector.oauthClientId),
+    oauthClientSecret: stringOrEmpty(connector.oauthClientSecret),
     clientIdSource: normalizeClientIdSource(connector),
     oauth,
-    autoStart: connector.autoStart === true || connector.isActive === true,
-    // Read-time compatibility: connectors saved before auto-reconnect
-    // existed have no `autoReconnect` field; default them to true so existing
-    // users get keepalive without a migration script. Only an explicit `false`
-    // opts out of automatic reconnection.
-    autoReconnect: connector.autoReconnect !== false,
+    autoStart: connector.autoStart === true,
+    autoReconnect: connector.autoReconnect === true,
+    permissionMode: normalizePermissionMode(connector.permissionMode),
+    toolPermissions: normalizeToolPermissions(connector.toolPermissions),
+    // Only an explicit `true` opts in; a truthy non-boolean must not be
+    // coerced into an implicit grant.
+    trustReadOnlyHint: connector.trustReadOnlyHint === true,
+    pinnedTools: normalizePinnedTools(connector.pinnedTools),
     tools,
   };
+}
+
+// Creation is the one place where product defaults become durable config. A
+// missing persisted value is not treated as a request to reconnect.
+function normalizeNewConnector(input, id) {
+  return normalizeConnector({
+    ...input,
+    id,
+    autoReconnect: input?.autoReconnect === undefined ? true : input.autoReconnect,
+  }, id);
 }
 
 export function sanitizeId(value) {
@@ -119,31 +247,48 @@ export function toMcpToolId(serverId, toolName) {
   return sanitizeId(`${serverId}_${toolName}`);
 }
 
+/** One-line parameter digest for a catalog row, cheap enough to hold in memory. */
+export function summarizeToolParameters(inputSchema) {
+  const properties = isPlainObject(inputSchema?.properties) ? inputSchema.properties : {};
+  const required = new Set(
+    Array.isArray(inputSchema?.required)
+      ? inputSchema.required.filter((name) => typeof name === "string")
+      : [],
+  );
+  const names = Object.keys(properties);
+  if (names.length === 0) return "";
+  return names
+    .map((name) => {
+      const type = typeof properties[name]?.type === "string" ? properties[name].type : "any";
+      return `${name} (${type}${required.has(name) ? ", required" : ""})`;
+    })
+    .join(", ");
+}
+
 export function normalizeMcpConfig(value) {
   const input = value && typeof value === "object" ? value : {};
-  const rawConnectors = Array.isArray(input.connectors)
-    ? input.connectors
-    : (Array.isArray(input.servers) ? input.servers : []);
+  const rawConnectors = Array.isArray(input.connectors) ? input.connectors : [];
   const connectors = rawConnectors
-    .map((connector, index) => normalizeConnector(connector, `connector_${index + 1}`))
+    .map((connector, index) => normalizeConnector(connector, `connector_${index + 1}`, {
+      requireCurrentPermissionPolicy: true,
+    }))
     .filter(Boolean);
   return {
     ...DEFAULT_CONFIG,
     enabled: input.enabled === true,
+    deferEnabled: input.deferEnabled === false ? false : DEFAULT_CONFIG.deferEnabled,
+    deferThreshold: normalizeDeferThreshold(input.deferThreshold),
     connectors,
-    servers: connectors,
   };
 }
 
 export function normalizeAgentMcpConfig(agentConfig) {
   const mcp = agentConfig?.mcp && typeof agentConfig.mcp === "object" ? agentConfig.mcp : {};
-  const connectors = mcp.connectors && typeof mcp.connectors === "object"
-    ? mcp.connectors
-    : (mcp.servers && typeof mcp.servers === "object" ? mcp.servers : {});
+  const connectors = mcp.connectors && typeof mcp.connectors === "object" ? mcp.connectors : {};
+  const { servers: _servers, ...currentMcp } = mcp;
   return {
-    ...mcp,
+    ...currentMcp,
     connectors,
-    servers: connectors,
   };
 }
 
@@ -151,7 +296,7 @@ export function isMcpToolEnabledForAgentConfig(agentConfig, { globalEnabled, ser
   if (globalEnabled !== true) return false;
   const id = connectorId || serverId;
   const mcp = normalizeAgentMcpConfig(agentConfig);
-  const connector = mcp.connectors?.[id] || mcp.servers?.[id];
+  const connector = mcp.connectors?.[id];
   if (connector?.enabled !== true) return false;
   return connector?.tools?.[toolName] === true;
 }
@@ -319,8 +464,15 @@ export function createMcpToolDefinition({
   getGlobalEnabled,
   getAgentConfig,
   callTool,
+  app = null,
+  visibility = DEFAULT_TOOL_VISIBILITY,
   probeLiveAvailability = null,
-}) {
+  // Both are read at decision time, not at registration time, so a policy
+  // change in settings or a fresh tool listing takes effect without
+  // re-registering the tool. Absent both, the tool reviews every invocation.
+  getPermissionPolicy = () => ({}),
+  getLiveAnnotations = () => undefined,
+}: any) {
   const name = toMcpToolId(connectorId, toolName);
   return {
     name,
@@ -330,7 +482,7 @@ export function createMcpToolDefinition({
     sessionPermission: {
       resolveInvocation: () => ({
         action: "invoke",
-        kind: "review",
+        kind: resolveMcpToolPermissionKind(getPermissionPolicy(), getLiveAnnotations()),
         capability: `${name}.invoke`,
       }),
     },
@@ -343,15 +495,23 @@ export function createMcpToolDefinition({
         ? { reminderLiveAvailabilityProbe: probeLiveAvailability }
         : {}),
     },
-    isEnabledForAgentConfig: (agentConfig) => isMcpToolEnabledForAgentConfig(agentConfig, {
-      globalEnabled: getGlobalEnabled(),
-      connectorId,
-      serverId: connectorId,
-      toolName,
-    }),
-    execute: async (_toolCallId, params, runtimeCtx: any = {}) => {
+    isEnabledForAgentConfig: (agentConfig) => toolVisibilityIncludes(visibility, "model")
+      && isMcpToolEnabledForAgentConfig(agentConfig, {
+        globalEnabled: getGlobalEnabled(),
+        connectorId,
+        serverId: connectorId,
+        toolName,
+      }),
+    execute: async (toolCallId, params, runtimeCtx: any = {}) => {
       if (getGlobalEnabled() !== true) {
         return mcpToolError("MCP is disabled globally. Enable Connectors in Settings before calling this tool.", {
+          connectorId,
+          serverId: connectorId,
+          toolName,
+        });
+      }
+      if (!toolVisibilityIncludes(visibility, "model")) {
+        return mcpToolError(`MCP connector tool "${connectorId}/${toolName}" is not visible to the model.`, {
           connectorId,
           serverId: connectorId,
           toolName,
@@ -372,7 +532,16 @@ export function createMcpToolDefinition({
         });
       }
       try {
-        return normalizeMcpToolResult(await callTool(connectorId, toolName, params || {}));
+        const result = normalizeMcpToolResult(await callTool(connectorId, toolName, params || {}, runtimeCtx));
+        return app?.resourceUri ? appendMcpAppCard(result, {
+          ...app,
+          invocationId: stringOrEmpty(toolCallId),
+          toolCallId: stringOrEmpty(toolCallId),
+          launchInput: params || {},
+          sourceSessionPath: stringOrEmpty(runtimeCtx.sessionPath),
+          sourceSessionId: stringOrEmpty(runtimeCtx.sessionId),
+          sourceAgentId: stringOrEmpty(runtimeCtx.agentId),
+        }) : result;
       } catch (err) {
         return mcpToolError(`MCP connector tool "${connectorId}/${toolName}" failed: ${err.message}`, {
           connectorId,
@@ -384,22 +553,88 @@ export function createMcpToolDefinition({
   };
 }
 
-export class McpRuntime {
+type McpLogFn = (...args: unknown[]) => void;
+
+export interface McpLogger {
+  info: McpLogFn;
+  warn: McpLogFn;
+  error: McpLogFn;
+  debug?: McpLogFn;
+}
+
+export interface McpManagerDeps {
+  /**
+   * Absolute directory holding config.json. Production passes
+   * `{hanakoHome}/mcp`.
+   */
+  dataDir: string;
+  log: McpLogger;
+}
+
+interface McpManagerOptions {
+  Client?: any;
+  clientFactory?: any;
+  fetchImpl?: any;
+  /** Test seam: substitute the on-disk config store with an in-memory one. */
+  configStore?: any;
+  /** Confirm store for input_required rounds, injected directly (tests). */
+  confirmStore?: any;
+  /** Confirm store accessor, for owners that build it after this manager. */
+  getConfirmStore?: any;
+  /** Session event emitter used to surface the input prompt. */
+  emitEvent?: any;
+}
+
+export class McpManager {
   declare Client: any;
   declare clientErrors: any;
+  declare toolListFreshness: any;
+  declare _runtimeToolAnnotations: Map<string, Map<string, any>>;
+  declare _getConfirmStore: any;
+  declare _emitEvent: any;
   declare clientFactory: any;
   declare clients: any;
   declare connectorStatus: any;
-  declare ctx: any;
+  declare dataDir: string;
+  declare log: any;
   declare desiredStates: any;
   declare establishing: any;
   declare fetchImpl: any;
   declare oauthSessions: any;
   declare reconnectState: any;
   declare refreshInFlight: any;
-  declare toolDisposers: any;
-  constructor(ctx, { Client = null, clientFactory = null, fetchImpl = globalThis.fetch } = {}) {
-    this.ctx = ctx;
+  declare _bus: any;
+  declare _busDisposers: any;
+  declare _configStore: any;
+  declare _tools: any[];
+  constructor(deps: McpManagerDeps, {
+    Client = null,
+    clientFactory = null,
+    fetchImpl = globalThis.fetch,
+    configStore = null,
+    confirmStore = null,
+    getConfirmStore = null,
+    emitEvent = null,
+  }: McpManagerOptions = {}) {
+    // Optional seams for the input_required loop. Absent, a server asking for
+    // input is refused with a clear reason rather than hanging: we never
+    // pretend to have asked the user. The store is read through a getter
+    // because the engine builds this manager before the store exists.
+    this._getConfirmStore = getConfirmStore
+      || (confirmStore ? () => confirmStore : null);
+    this._emitEvent = typeof emitEvent === "function" ? emitEvent : null;
+    this.dataDir = deps.dataDir;
+    this.log = deps.log;
+    this._configStore = configStore || createPluginConfigStore({
+      dataDir: deps.dataDir,
+      schema: normalizePluginConfigSchema(MCP_TOOL_NAMESPACE, {}),
+    });
+    // The bus is injected by start(bus), never held at construction time: the
+    // engine builds this manager before the bus exists.
+    this._bus = null;
+    this._busDisposers = [];
+    // Agent-facing tool objects, rebuilt wholesale by registerCachedTools().
+    this._tools = [];
     this.Client = Client;
     this.fetchImpl = fetchImpl;
     this.clientFactory = clientFactory || ((connector, opts) => (
@@ -407,6 +642,23 @@ export class McpRuntime {
     ));
     this.clients = new Map();
     this.clientErrors = new Map();
+    // Per-connector tool-list caching hints from the last refresh. Deliberately
+    // in memory only: a hint describes one live response, so persisting it
+    // would let it outlive the answer it describes.
+    this.toolListFreshness = new Map();
+    // Per-connector tool annotations (readOnlyHint / destructiveHint / ...) as
+    // last reported by the running server, keyed connectorId -> toolName.
+    //
+    // Deliberately in memory only. These feed the decision to silently approve
+    // an invocation, so persisting them would make a locally writable file the
+    // trust input: a stale or hand-edited entry claiming readOnlyHint could
+    // authorize a tool that is no longer read-only. Keeping them live means an
+    // implicit grant must re-earn its evidence every process start.
+    //
+    // Not cleared on disconnect: within one process the last live values stay
+    // usable, which keeps a flapping connector from oscillating between
+    // policies. A restart starts empty, which fails closed.
+    this._runtimeToolAnnotations = new Map();
     // Explicit per-connector intent. The single source of truth for "does the
     // user want this connector running?" — never inferred from clients.has(id).
     // Only desiredStates.get(id) === "running" permits auto-reconnect.
@@ -421,28 +673,41 @@ export class McpRuntime {
     // authoritative writer; a transport's onClose firing during this window is
     // ignored so a death never gets handled twice (rejected promise + close).
     this.establishing = new Set();
-    this.toolDisposers = [];
     this.oauthSessions = new Map();
     // In-flight OAuth refresh promises keyed by connector id. Guarantees a single
     // refresh per connector even under concurrent near-expiry / 401 callers.
     this.refreshInFlight = new Map();
   }
 
+  /**
+   * Attach the manager to the message bus and bring cached connectors up.
+   * The bus is assigned before load() runs, because auto-start reaches back
+   * through the bus for agent config and capability-drift notifications.
+   */
+  async start(bus) {
+    this._bus = bus || null;
+    const disposeHandler = bus?.handle?.("mcp:settings-action", (payload) => this.handleSettingsAction(payload));
+    if (typeof disposeHandler === "function") this._busDisposers.push(disposeHandler);
+    await this.load();
+    return () => this.dispose();
+  }
+
   async load() {
-    fs.mkdirSync(this.ctx.dataDir, { recursive: true });
+    fs.mkdirSync(this.dataDir, { recursive: true });
     this.registerCachedTools();
     const config = this.getConfig();
     if (config.enabled) {
       for (const connector of config.connectors.filter((s) => s.autoStart)) {
         this.startConnector(connector.id, { retryInitialFailure: true }).catch((err) => {
-          this.ctx.log.warn(`auto-start failed for ${connector.id}: ${err.message}`);
+          this.log.warn(`auto-start failed for ${connector.id}: ${err.message}`);
         });
       }
     }
   }
 
   async dispose() {
-    for (const dispose of this.toolDisposers.splice(0)) {
+    this._tools = [];
+    for (const dispose of this._busDisposers.splice(0)) {
       try { dispose(); } catch {}
     }
     // Stop trying to reconnect anything: a runtime teardown is a deliberate
@@ -467,16 +732,47 @@ export class McpRuntime {
   }
 
   getConfig() {
-    return normalizeMcpConfig(this.ctx.config.get("mcp"));
+    return normalizeMcpConfig(this._configStore.get(MCP_CONFIG_KEY));
   }
 
   saveConfig(config) {
     const normalized = normalizeMcpConfig(config);
-    this.ctx.config.set("mcp", {
+    this._configStore.set(MCP_CONFIG_KEY, {
       enabled: normalized.enabled,
+      // The defer switch and threshold are written on every save, not only when
+      // they change. Omitting them here used to make every defer edit vanish on
+      // the next read, because getConfig() re-applies the defaults to whatever
+      // is on disk.
+      deferEnabled: normalized.deferEnabled,
+      deferThreshold: normalized.deferThreshold,
       connectors: normalized.connectors,
     });
     return normalized;
+  }
+
+  /**
+   * Persist the deferred-loading knobs the management center exposes.
+   *
+   * Both fields are optional so the caller can move one without restating the
+   * other. An out-of-range threshold is refused rather than silently coerced to
+   * the default: a rejected edit the user can see beats a saved value they did
+   * not choose.
+   */
+  async setDeferSettings({ deferEnabled, deferThreshold }: any = {}) {
+    const config = this.getConfig();
+    if (deferEnabled !== undefined) {
+      if (typeof deferEnabled !== "boolean") throw new Error("deferEnabled must be a boolean");
+      config.deferEnabled = deferEnabled;
+    }
+    if (deferThreshold !== undefined) {
+      if (typeof deferThreshold !== "number" || !Number.isSafeInteger(deferThreshold) || deferThreshold <= 0) {
+        throw new Error("deferThreshold must be a positive integer");
+      }
+      config.deferThreshold = deferThreshold;
+    }
+    const saved = this.saveConfig(config);
+    await this._markCapabilitySnapshotsStale?.({ reason: "mcp.defer.settings" });
+    return saved;
   }
 
   getState(agentConfig = null) {
@@ -485,11 +781,14 @@ export class McpRuntime {
       connector,
       status: this.connectorStatusFor(connector.id),
       error: this.clientErrors.get(connector.id) || "",
+      toolListFreshness: this.toolListFreshness.get(connector.id) || null,
+      toolAnnotations: this._runtimeToolAnnotations.get(connector.id) || null,
     }));
     return {
       enabled: config.enabled,
+      deferEnabled: config.deferEnabled,
+      deferThreshold: config.deferThreshold,
       connectors,
-      servers: connectors,
       agentConfig: normalizeAgentMcpConfig(agentConfig),
     };
   }
@@ -541,7 +840,7 @@ export class McpRuntime {
   addConnector(input) {
     const config = this.getConfig();
     const id = uniqueConnectorId(config.connectors, input?.id || input?.name || input?.url || input?.command || "connector");
-    const connector = normalizeConnector({ ...input, id }, id);
+    const connector = normalizeNewConnector(input, id);
     validateConnector(connector);
     config.connectors.push(connector);
     const saved = this.saveConfig(config);
@@ -549,8 +848,76 @@ export class McpRuntime {
     return saved.connectors.find((s) => s.id === id);
   }
 
-  addServer(input) {
-    return this.addConnector(input);
+  /**
+   * Add several connectors as one transaction.
+   *
+   * Every item is normalized and validated against the batch-in-progress before
+   * anything is written, so a malformed row late in an imported file cannot
+   * leave half an import on disk for the user to clean up by hand. Only schema
+   * problems are validation failures — reachability is not checked here, since a
+   * server being down is not a reason to refuse to save its address.
+   *
+   * On failure the thrown error carries `results`, one entry per input item, so
+   * the caller can point at the offending row instead of failing anonymously.
+   */
+  addConnectors(inputs) {
+    if (!Array.isArray(inputs)) throw new Error("connectors must be an array");
+    const config = this.getConfig();
+    const staged = [];
+    const results = [];
+    let failed = false;
+
+    for (const input of inputs) {
+      if (failed) {
+        results.push({ ok: false, error: "not attempted" });
+        continue;
+      }
+      try {
+        // Ids are allocated against the connectors already staged in this batch
+        // too, so two rows with the same name do not collide with each other.
+        const id = uniqueConnectorId([...config.connectors, ...staged], input?.id || input?.name || input?.url || input?.command || "connector");
+        const connector = normalizeNewConnector(input, id);
+        validateConnector(connector);
+        staged.push(connector);
+        results.push({ ok: true, id });
+      } catch (err) {
+        failed = true;
+        results.push({ ok: false, error: err?.message || String(err) });
+      }
+    }
+
+    if (failed) {
+      const index = results.findIndex((result) => result.ok === false);
+      const error: any = new Error(`connector ${index + 1}: ${results[index].error}`);
+      error.results = results.map((result) => (result.ok ? { ok: true } : result));
+      throw error;
+    }
+
+    config.connectors.push(...staged);
+    const saved = this.saveConfig(config);
+    this.registerCachedTools();
+    return results.map((result) => ({
+      ok: true,
+      id: saved.connectors.find((item) => item.id === result.id)?.id ?? result.id,
+    }));
+  }
+
+  /**
+   * Bring a just-added connector up without making the caller wait for it.
+   *
+   * A start can take seconds and can fail for reasons that say nothing about
+   * whether the connector was worth saving, so the failure is recorded as the
+   * connector's error (where the settings page already shows it) rather than
+   * thrown back at the add request.
+   */
+  async autoStartAfterAdd(id) {
+    if (this.getConfig().enabled !== true) return;
+    try {
+      await this.startConnector(id);
+    } catch {
+      // startConnector already recorded the message in clientErrors, which
+      // getState() surfaces as connector.error.
+    }
   }
 
   async updateConnector(id, patch) {
@@ -570,10 +937,6 @@ export class McpRuntime {
     return saved.connectors[index];
   }
 
-  async updateServer(id, patch) {
-    return this.updateConnector(id, patch);
-  }
-
   async removeConnector(id) {
     await this.stopConnector(id);
     const config = this.getConfig();
@@ -581,10 +944,6 @@ export class McpRuntime {
     const saved = this.saveConfig(config);
     this.registerCachedTools();
     return saved;
-  }
-
-  async removeServer(id) {
-    return this.removeConnector(id);
   }
 
   async startConnector(id, options: any = {}) {
@@ -647,7 +1006,7 @@ export class McpRuntime {
     const id = connector.id;
     const holder: any = {};
     holder.client = this.clientFactory(connector, {
-      log: this.ctx.log,
+      log: this.log,
       fetchImpl: this.fetchImpl,
       // OAuth self-heal seams (#1286 ③a, 方案 A). The client holds a connector
       // snapshot, so a refresh written to config never reaches it; these
@@ -681,6 +1040,8 @@ export class McpRuntime {
     if (!client) return;
     this.clients.delete(id);
     this.clientErrors.delete(id);
+    // The hint described that client's last response; it dies with the client.
+    this.toolListFreshness.delete(id);
     await client.stop();
   }
 
@@ -764,7 +1125,7 @@ export class McpRuntime {
   _canAutoReconnect(id) {
     if (!this._isDesiredLiveConnector(id)) return false;
     const connector = this.getConfig().connectors.find((s) => s.id === id);
-    return connector?.autoReconnect !== false;
+    return connector?.autoReconnect === true;
   }
 
   _scheduleReconnect(id) {
@@ -778,7 +1139,7 @@ export class McpRuntime {
     this.connectorStatus.set(id, STATUS_RECONNECTING);
     const timer = setTimeout(() => {
       this._attemptReconnect(id).catch((err) => {
-        this.ctx.log.warn?.(`mcp reconnect crashed for ${id}: ${err?.message || err}`);
+        this.log.warn?.(`mcp reconnect crashed for ${id}: ${err?.message || err}`);
       });
     }, delay);
     // Don't let a pending reconnect keep the process alive.
@@ -847,6 +1208,11 @@ export class McpRuntime {
     const client = this.clients.get(id);
     if (!client?.running) throw new Error(`MCP connector "${id}" is not running`);
     const tools = await client.listTools();
+    this.toolListFreshness.set(id, client.toolListFreshness ?? null);
+    // Capture annotations from the raw wire objects, before normalizeTool
+    // projects them away on the way to disk. This is the only point where the
+    // live, server-declared annotations exist.
+    this._captureRuntimeToolAnnotations(id, tools);
     const config = this.getConfig();
     const connector = config.connectors.find((s) => s.id === id);
     if (!connector) throw new Error(`MCP connector "${id}" not found`);
@@ -860,23 +1226,244 @@ export class McpRuntime {
     return connector.tools;
   }
 
-  async callTool(connectorId, toolName, args) {
+  /**
+   * Replace one connector's annotation side table from a live tool listing.
+   *
+   * Wholesale replacement is intended: a tool that no longer declares an
+   * annotation must lose the old one, otherwise a stale readOnlyHint would keep
+   * granting implicit approval after the server stopped claiming it.
+   */
+  _captureRuntimeToolAnnotations(connectorId, wireTools) {
+    const table = new Map();
+    for (const tool of Array.isArray(wireTools) ? wireTools : []) {
+      if (!tool || typeof tool.name !== "string" || !tool.name) continue;
+      if (isPlainObject(tool.annotations)) table.set(tool.name, tool.annotations);
+    }
+    this._runtimeToolAnnotations.set(connectorId, table);
+  }
+
+  /** Live annotations for one tool, or undefined when none have been seen. */
+  getRuntimeToolAnnotations(connectorId, toolName) {
+    return this._runtimeToolAnnotations.get(connectorId)?.get(toolName);
+  }
+
+  /** Every connector tool that exposes an app resource and is visible to apps. */
+  listApps({ connectorId = null }: any = {}) {
+    const config = this.getConfig();
+    return config.connectors
+      .filter((connector) => !connectorId || connector.id === connectorId)
+      .flatMap((connector) => appsForConnector(connector));
+  }
+
+  launchApp(connectorId, toolName, { launchInput = {} }: any = {}) {
+    if (!this.getConfig().enabled) throw new Error("MCP connectors are disabled globally");
+    const app = this._requireApp(connectorId, toolName);
+    return {
+      type: "mcp_app",
+      connectorId: app.connectorId,
+      serverId: app.connectorId,
+      toolName: app.toolName,
+      title: app.title,
+      description: app.description,
+      resourceUri: app.resourceUri,
+      visibility: app.visibility,
+      launchInput,
+      binding: {
+        kind: "mcp-app",
+        connectorId: app.connectorId,
+        serverId: app.connectorId,
+        toolName: app.toolName,
+        resourceUri: app.resourceUri,
+        resourceUrl: `/api/mcp/connectors/${encodeURIComponent(app.connectorId)}/resources?uri=${encodeURIComponent(app.resourceUri)}`,
+        callToolUrl: `/api/mcp/connectors/${encodeURIComponent(app.connectorId)}/app-tools/${encodeURIComponent(app.toolName)}/call`,
+      },
+      app,
+    };
+  }
+
+  async readResource(connectorId, uri) {
+    const resourceUri = stringOrEmpty(uri);
+    if (!isUiResourceUri(resourceUri)) throw new Error("MCP app resource uri must start with ui://");
+    const config = this.getConfig();
+    if (!config.enabled) throw new Error("MCP connectors are disabled globally");
+    if (!config.connectors.some((connector) => connector.id === connectorId)) {
+      throw new Error(`MCP connector "${connectorId}" not found`);
+    }
+    const client = this.clients.get(connectorId);
+    if (!client?.running) throw new Error(`MCP connector "${connectorId}" is not running`);
+    if (typeof client.readResource !== "function") {
+      throw new Error(`MCP connector "${connectorId}" does not support resources/read`);
+    }
+    return client.readResource(resourceUri);
+  }
+
+  async callAppTool(connectorId, toolName, args) {
+    this._requireAppVisibleTool(connectorId, toolName);
     const config = this.getConfig();
     if (!config.enabled) throw new Error("MCP connectors are disabled globally");
     const client = this.clients.get(connectorId);
     if (!client?.running) throw new Error(`MCP connector "${connectorId}" is not running`);
-    return client.callTool(toolName, args);
+    return client.callTool(toolName, args || {});
   }
 
-  registerCachedTools() {
-    for (const dispose of this.toolDisposers.splice(0)) {
-      try { dispose(); } catch {}
+  async callTool(connectorId, toolName, args, runtimeCtx: any = {}) {
+    const config = this.getConfig();
+    if (!config.enabled) throw new Error("MCP connectors are disabled globally");
+    const client = this.clients.get(connectorId);
+    if (!client?.running) throw new Error(`MCP connector "${connectorId}" is not running`);
+    const connector = config.connectors.find((entry) => entry.id === connectorId);
+    return this._callToolThroughInputRounds(client, {
+      connectorId,
+      connectorName: connector?.name || connectorId,
+      toolName,
+      args,
+      runtimeCtx,
+    });
+  }
+
+  // A server may answer a tool call by asking for more information instead of
+  // finishing. Each round gathers exactly what it asked for and replays the
+  // original call with the answer; the server carries its own state across in
+  // an opaque blob we echo back untouched.
+  async _callToolThroughInputRounds(client, { connectorId, connectorName, toolName, args, runtimeCtx }) {
+    let extra = null;
+    for (let round = 0; round <= MAX_INPUT_REQUIRED_ROUNDS; round += 1) {
+      const result = await client.callTool(toolName, args, extra || undefined);
+      if (result?.resultType !== "input_required") return result;
+      if (round === MAX_INPUT_REQUIRED_ROUNDS) {
+        throw new Error(
+          `MCP connector "${connectorName}" asked for more input too many times `
+          + `(${MAX_INPUT_REQUIRED_ROUNDS} rounds) without completing "${toolName}".`,
+        );
+      }
+      extra = await this._gatherInputResponses(result, { connectorId, connectorName, toolName, runtimeCtx });
+      // The user refused the form. The server is told so it can unwind its own
+      // pending work, and then the call fails with the same outcome the user
+      // chose — the decline round is a courtesy to the server, not a retry.
+      if (extra?.declined) {
+        await client
+          .callTool(toolName, args, extra.payload)
+          // Failing to deliver the "no" must not turn a refusal into a
+          // different-looking result. Swallow it and report the refusal.
+          .catch(() => {});
+        throw new Error(
+          `MCP connector "${connectorName}" needed input for "${toolName}", but the request ended as `
+          + `"rejected".`,
+        );
+      }
+      extra = extra?.payload ?? extra;
     }
+    // Unreachable: the loop either returns a result or throws above.
+    throw new Error(`MCP connector "${connectorName}" did not complete "${toolName}".`);
+  }
+
+  async _gatherInputResponses(result, { connectorId, connectorName, toolName, runtimeCtx }) {
+    const requestState = typeof result?.requestState === "string" ? result.requestState : "";
+    const inputRequests = result?.inputRequests;
+    // State but no questions: replay straight away, echoing the state back.
+    if (!inputRequests || typeof inputRequests !== "object" || Array.isArray(inputRequests)) {
+      return { payload: requestState ? { requestState } : {}, declined: false };
+    }
+
+    const inputResponses = {};
+    let declined = false;
+    for (const [key, request] of Object.entries(inputRequests)) {
+      const method = (request as any)?.method;
+      const params = (request as any)?.params || {};
+      // We only ever advertise form-mode elicitation, so anything else is a
+      // server ignoring our declared capabilities. Say so instead of guessing.
+      if (method !== "elicitation/create") {
+        throw new Error(
+          `MCP connector "${connectorName}" requested unsupported input of type "${method}" for "${toolName}".`,
+        );
+      }
+      if (params.mode && params.mode !== "form") {
+        throw new Error(
+          `MCP connector "${connectorName}" requested "${params.mode}" mode input for "${toolName}", which is not supported yet.`,
+        );
+      }
+      const response = await this._askUserForElicitation(params, {
+        connectorId,
+        connectorName,
+        toolName,
+        runtimeCtx,
+      });
+      inputResponses[key] = response;
+      if (response.action === "decline") declined = true;
+    }
+    return {
+      payload: requestState ? { inputResponses, requestState } : { inputResponses },
+      declined,
+    };
+  }
+
+  async _askUserForElicitation(params, { connectorId, connectorName, toolName, runtimeCtx }) {
+    const confirmStore = this._getConfirmStore?.() || null;
+    const sessionPath = runtimeCtx?.sessionPath || runtimeCtx?.sessionId || null;
+    if (!confirmStore || !sessionPath) {
+      throw new Error(
+        `MCP connector "${connectorName}" asked for input for "${toolName}", but there is no session available to ask in.`,
+      );
+    }
+
+    const message = stringOrEmpty(params?.message);
+    const requestedSchema = params?.requestedSchema || null;
+    const payload = { connectorId, connectorName, toolName, message, requestedSchema };
+    const { confirmId, promise } = confirmStore.create(
+      "mcp_elicitation",
+      payload,
+      sessionPath,
+      MCP_ELICITATION_TIMEOUT_MS,
+    );
+    this._emitEvent?.({
+      type: "session_confirmation",
+      request: {
+        type: "session_confirmation",
+        confirmId,
+        kind: "mcp_elicitation",
+        surface: "input",
+        status: "pending",
+        title: connectorName,
+        body: message,
+        subject: { label: connectorName, detail: toolName },
+        severity: "normal",
+        actions: {
+          confirmLabel: t("approval.confirm"),
+          rejectLabel: t("approval.reject"),
+        },
+        payload,
+      },
+    }, sessionPath);
+
+    const decision = await promise;
+    // An explicit refusal is a decision the protocol has a word for. It goes
+    // back to the server as a decline (no content: a decline submits nothing),
+    // and the caller still fails the tool call.
+    if (decision?.action === "rejected") return { action: "decline" };
+    if (decision?.action !== "confirmed") {
+      // Timing out and aborting are real outcomes the model must see, but they
+      // are not answers to relay. Never swallow them into a retry or an empty
+      // answer.
+      throw new Error(
+        `MCP connector "${connectorName}" needed input for "${toolName}", but the request ended as `
+        + `"${decision?.action || "unanswered"}".`,
+      );
+    }
+    return { action: "accept", content: decision?.value ?? {} };
+  }
+
+  /**
+   * Rebuild the agent-facing tool list from the cached connector config.
+   * The whole list is replaced at once: cached tools are a pure projection of
+   * config, so there is no incremental state to reconcile.
+   */
+  registerCachedTools() {
+    const tools = [];
     const statusDefinition = createMcpConnectorsStatusToolDefinition({
       getState: () => this.getState(),
       getGlobalEnabled: () => this.getConfig().enabled,
     });
-    this.toolDisposers.push(this.ctx.registerTool(statusDefinition));
+    tools.push(this._publishTool(statusDefinition));
     const config = this.getConfig();
     for (const connector of config.connectors) {
       for (const tool of connector.tools || []) {
@@ -886,23 +1473,123 @@ export class McpRuntime {
           toolName: tool.name,
           description: tool.description || `${connector.name}: ${tool.title || tool.name}`,
           inputSchema: tool.inputSchema,
+          app: appCardForConnectorTool(connector, tool),
+          visibility: toolVisibility(tool),
           getGlobalEnabled: () => this.getConfig().enabled,
           getAgentConfig: (agentId) => this.getAgentConfig(agentId),
-          callTool: (connectorId, toolName, args) => this.callTool(connectorId, toolName, args),
+          callTool: (connectorId, toolName, args, runtimeCtx) => this.callTool(connectorId, toolName, args, runtimeCtx),
           probeLiveAvailability: (agentConfig) => this.probeToolLiveAvailability(
             connector.id,
             tool.name,
             agentConfig,
           ),
+          // Re-read the connector from config on every decision so a policy
+          // edit in settings applies to already-registered tools.
+          getPermissionPolicy: () => {
+            const current = this.getConfig().connectors.find((item) => item.id === connector.id);
+            return {
+              permissionMode: current?.permissionMode,
+              toolPermission: current?.toolPermissions?.[tool.name],
+              trustReadOnlyHint: current?.trustReadOnlyHint,
+            };
+          },
+          getLiveAnnotations: () => this.getRuntimeToolAnnotations(connector.id, tool.name),
         });
-        this.toolDisposers.push(this.ctx.registerTool(definition));
+        tools.push(this._publishTool(definition));
       }
     }
+    this._tools = tools;
+  }
+
+  /** Snapshot of the agent-facing MCP tools. The engine composes these into buildTools. */
+  getAllTools() {
+    return [...this._tools];
+  }
+
+  /**
+   * One catalog row per connector tool.
+   *
+   * `name` matches the id the direct-load path uses, so a deferred tool keeps
+   * the same capability string and the same session grant it would have had if
+   * it were loaded. The full input schema stays behind `schemaRef`, so building
+   * a catalog never materializes the schemas it describes.
+   *
+   * The connectors_status tool is deliberately absent: it is a host diagnostic
+   * rather than a connector tool, and it is never deferred.
+   */
+  getCatalogEntries() {
+    const entries = [];
+    for (const connector of this.getConfig().connectors) {
+      for (const tool of connector.tools || []) {
+        if (!tool?.name) continue;
+        entries.push({
+          name: toMcpToolId(connector.id, tool.name),
+          toolName: tool.name,
+          description: tool.description || `${connector.name}: ${tool.title || tool.name}`,
+          paramsSummary: summarizeToolParameters(tool.inputSchema),
+          serverId: connector.id,
+          serverLabel: connector.name || connector.id,
+          // Only an explicit false opts a tool out of deferral.
+          deferrable: tool.deferrable !== false,
+          pinned: connector.pinnedTools?.[tool.name] === true,
+          schemaRef: () => tool.inputSchema || { type: "object", properties: {} },
+        });
+      }
+    }
+    return entries;
+  }
+
+  /**
+   * The permission kind for one tool, resolved the same way the direct-load
+   * path resolves it. The bridge routes through here so the two paths cannot
+   * drift apart.
+   */
+  resolveToolPermissionKind(connectorId, toolName) {
+    const connector = this.getConfig().connectors.find((item) => item.id === connectorId);
+    return resolveMcpToolPermissionKind({
+      permissionMode: connector?.permissionMode,
+      toolPermission: connector?.toolPermissions?.[toolName],
+      trustReadOnlyHint: connector?.trustReadOnlyHint,
+    }, this.getRuntimeToolAnnotations(connectorId, toolName));
+  }
+
+  /**
+   * Turn an MCP tool definition into the tool object the engine consumes.
+   *
+   * This reproduces what the plugin host used to do at registration time: it
+   * namespaces the name, keeps the `_pluginId` annotation that tool
+   * categorization and permission classification key off, and adapts the Pi SDK
+   * 5-argument execute convention down to the (toolCallId, params, ctx) shape
+   * the MCP definitions are written against — without that adaptation the third
+   * argument could be an AbortSignal rather than the runtime context.
+   */
+  _publishTool(definition) {
+    const origExecute = definition.execute;
+    const tool: any = {
+      name: `${MCP_TOOL_NAMESPACE}_${definition.name}`,
+      description: definition.description || "",
+      parameters: definition.parameters || { type: "object", properties: {} },
+      execute: async (toolCallId, params, signalOrRuntimeCtx, onUpdate, piCtx) => {
+        const { ctx: runtimeCtx } = normalizeToolRuntimeContext(signalOrRuntimeCtx, piCtx);
+        return normalizeMcpToolResult(await origExecute(toolCallId, params, runtimeCtx));
+      },
+      _pluginId: MCP_TOOL_NAMESPACE,
+    };
+    if (typeof definition.isEnabledForAgentConfig === "function") {
+      tool.isEnabledForAgentConfig = definition.isEnabledForAgentConfig;
+    }
+    if (definition.metadata && typeof definition.metadata === "object") {
+      tool.metadata = { ...definition.metadata };
+    }
+    if (definition.sessionPermission && typeof definition.sessionPermission === "object") {
+      tool.sessionPermission = definition.sessionPermission;
+    }
+    return tool;
   }
 
   async getAgentConfig(agentId) {
-    if (!agentId || !this.ctx.bus?.request) return {};
-    const result = await this.ctx.bus.request("agent:config", { agentId });
+    if (!agentId || !this._bus?.request) return {};
+    const result = await this._bus.request("agent:config", { agentId });
     if (result?.error) throw new Error(result.error);
     return result?.config || {};
   }
@@ -911,6 +1598,7 @@ export class McpRuntime {
     if (!agentId) throw new Error("agentId is required");
     const current = await this.getAgentConfig(agentId);
     const existingMcp = current.mcp && typeof current.mcp === "object" ? current.mcp : {};
+    const { servers: _servers, ...currentMcp } = existingMcp;
     const normalizedMcp = normalizeAgentMcpConfig(current);
     const connectors = normalizedMcp.connectors && typeof normalizedMcp.connectors === "object"
       ? { ...normalizedMcp.connectors }
@@ -925,26 +1613,22 @@ export class McpRuntime {
     };
     const partial = {
       mcp: {
-        ...existingMcp,
+        ...currentMcp,
         connectors,
         servers: null,
       },
     };
-    const result = await this.ctx.bus.request("agent:update-config", { agentId, partial });
+    const result = await this._bus.request("agent:update-config", { agentId, partial });
     if (result?.error) throw new Error(result.error);
     return result?.config || partial;
   }
 
-  async updateAgentMcpServer(agentId, serverId, patch) {
-    return this.updateAgentMcpConnector(agentId, serverId, patch);
-  }
-
   async _markCapabilitySnapshotsStale(payload: any = {}) {
-    if (!this.ctx.bus?.request) return null;
+    if (!this._bus?.request) return null;
     try {
-      return await this.ctx.bus.request("session:capability-drift:mark-stale", payload);
+      return await this._bus.request("session:capability-drift:mark-stale", payload);
     } catch (err) {
-      this.ctx.log.warn?.(`mcp capability drift mark skipped: ${err?.message || err}`);
+      this.log.warn?.(`mcp capability drift mark skipped: ${err?.message || err}`);
       return null;
     }
   }
@@ -1104,9 +1788,30 @@ export class McpRuntime {
     return { sessionId: session.state, url };
   }
 
+  /**
+   * Abandon whatever OAuth waits this connector has in flight.
+   *
+   * The user gave up on the browser round trip, so the wait ends here. The
+   * session is kept (rather than deleted) in the cancelled state: the redirect
+   * may still arrive afterwards, and completeOAuth must be able to tell "the
+   * user cancelled this" apart from "no such session".
+   */
+  cancelOAuth(connectorId) {
+    let cancelled = 0;
+    for (const session of this.oauthSessions.values()) {
+      if (session.connectorId !== connectorId) continue;
+      if (session.status !== "pending") continue;
+      session.status = "cancelled";
+      cancelled += 1;
+    }
+    return { cancelled };
+  }
+
   async completeOAuth({ state, code, error }) {
     const session = this.oauthSessions.get(state);
     if (!session) throw new Error("OAuth session not found");
+    // A late redirect must not reopen a wait the user already called off.
+    if (session.status === "cancelled") throw new Error("OAuth session was cancelled");
     if (error) {
       session.status = "error";
       session.error = error;
@@ -1148,6 +1853,7 @@ export class McpRuntime {
     if (!session) return { status: "missing" };
     if (session.status === "done") return { status: "done", result: session.result || null };
     if (session.status === "error") return { status: "error", error: session.error || "OAuth failed" };
+    if (session.status === "cancelled") return { status: "cancelled" };
     return { status: "pending" };
   }
 
@@ -1259,12 +1965,124 @@ export class McpRuntime {
     await this.stopConnector(connectorId);
     return saved.connectors.find((item) => item.id === connectorId);
   }
+
+  _requireApp(connectorId, toolName) {
+    const connector = this.getConfig().connectors.find((item) => item.id === connectorId);
+    if (!connector) throw new Error(`MCP connector "${connectorId}" not found`);
+    const tool = connector.tools.find((item) => item.name === toolName);
+    if (!tool) throw new Error(`MCP connector tool "${connectorId}/${toolName}" not found`);
+    const app = appForConnectorTool(connector, tool);
+    if (!app?.resourceUri) throw new Error(`MCP connector tool "${connectorId}/${toolName}" does not expose an app resource`);
+    if (!toolVisibilityIncludes(app.visibility, "app")) {
+      throw new Error(`MCP connector tool "${connectorId}/${toolName}" is not visible to apps`);
+    }
+    return app;
+  }
+
+  _requireAppVisibleTool(connectorId, toolName) {
+    const connector = this.getConfig().connectors.find((item) => item.id === connectorId);
+    if (!connector) throw new Error(`MCP connector "${connectorId}" not found`);
+    const tool = connector.tools.find((item) => item.name === toolName);
+    if (!tool) throw new Error(`MCP connector tool "${connectorId}/${toolName}" not found`);
+    const visibility = toolVisibility(tool);
+    if (!toolVisibilityIncludes(visibility, "app")) {
+      throw new Error(`MCP connector tool "${connectorId}/${toolName}" is not visible to apps`);
+    }
+    return tool;
+  }
 }
 
 function isPlainObject(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+// Attach the app card to a tool result so the caller can render the connector's
+// own UI resource alongside the textual result.
+function appendMcpAppCard(result, appCard) {
+  const existingDetails = result?.details;
+  const details = isPlainObject(existingDetails) ? { ...existingDetails } : {};
+  return {
+    ...result,
+    details: {
+      ...details,
+      mcpAppCard: {
+        type: "mcp_app",
+        connectorId: appCard.connectorId,
+        serverId: appCard.connectorId,
+        toolName: appCard.toolName,
+        resourceUri: appCard.resourceUri,
+        invocationId: appCard.invocationId || appCard.toolCallId || "",
+        toolCallId: appCard.toolCallId || appCard.invocationId || "",
+        launchInput: appCard.launchInput || {},
+        title: appCard.title || appCard.toolName,
+        description: appCard.description || "",
+        sourceSessionPath: appCard.sourceSessionPath || "",
+        sourceSessionId: appCard.sourceSessionId || "",
+        sourceAgentId: appCard.sourceAgentId || "",
+      },
+    },
+  };
+}
+
+function appsForConnector(connector) {
+  return (connector.tools || [])
+    .map((tool) => appForConnectorTool(connector, tool))
+    .filter((app) => app && toolVisibilityIncludes(app.visibility, "app"));
+}
+
+function appForConnectorTool(connector, tool) {
+  const resourceUri = toolResourceUri(tool);
+  if (!resourceUri) return null;
+  const visibility = toolVisibility(tool);
+  return {
+    connectorId: connector.id,
+    serverId: connector.id,
+    toolName: tool.name,
+    title: tool.title || tool.name,
+    description: tool.description || "",
+    resourceUri,
+    visibility,
+    inputSchema: tool.inputSchema || { type: "object", properties: {} },
+    ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+    ...(tool._meta ? { _meta: tool._meta } : {}),
+  };
+}
+
+function appCardForConnectorTool(connector, tool) {
+  const app = appForConnectorTool(connector, tool);
+  if (!app || !toolVisibilityIncludes(app.visibility, "app")) return null;
+  return app;
+}
+
+// Two dialects declare the same thing — the connector's own `_meta.ui.resourceUri`
+// and the `openai/outputTemplate` key — so both are accepted.
+function toolResourceUri(tool) {
+  const meta = isPlainObject(tool?._meta) ? tool._meta : {};
+  const ui = isPlainObject(meta.ui) ? meta.ui : {};
+  const uri = stringOrEmpty(ui.resourceUri) || stringOrEmpty(meta["openai/outputTemplate"]);
+  return isUiResourceUri(uri) ? uri : "";
+}
+
+// Only ui:// resources may be fetched through the app resource endpoint: it is
+// the boundary that keeps a connector from pointing the reader at arbitrary URIs.
+function isUiResourceUri(uri) {
+  return typeof uri === "string" && uri.startsWith("ui://");
+}
+
+function toolVisibility(tool) {
+  const meta = isPlainObject(tool?._meta) ? tool._meta : {};
+  const ui = isPlainObject(meta.ui) ? meta.ui : {};
+  if (!Object.prototype.hasOwnProperty.call(ui, "visibility")) return [...DEFAULT_TOOL_VISIBILITY];
+  const raw = ui.visibility;
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map((item) => stringOrEmpty(item)).filter(Boolean))];
+}
+
+function toolVisibilityIncludes(visibility, value) {
+  const normalized = Array.isArray(visibility) ? visibility : DEFAULT_TOOL_VISIBILITY;
+  return normalized.includes(value);
 }
 
 // Classify a reconnect/start error as auth-terminal (re-auth required, retrying
@@ -1306,6 +2124,12 @@ function omitKeys(source, keys) {
   );
 }
 
+// Transport and protocol era are orthogonal: this picks the transport only.
+// Which protocol revision gets spoken over that transport is settled inside the
+// client, by probing the server (or by an operator-pinned protocolVersion), so
+// naming a transport here never pins a connector to the legacy handshake. The
+// deprecated HTTP+SSE transport is the one exception — it predates the stateless
+// endpoint and has nothing to negotiate.
 function createDefaultClient(connector, opts) {
   if (connector.transport === "stdio") return new McpStdioClient(connector, opts);
   if (connector.transport === "streamable-http") return new McpStreamableHttpClient(connector, opts);
@@ -1314,11 +2138,11 @@ function createDefaultClient(connector, opts) {
 }
 
 function normalizeTransport(connector) {
-  const raw = stringOrEmpty(connector.transport || connector.type);
+  const raw = stringOrEmpty(connector.transport);
   if (raw === "http") return "remote";
   if (raw === "streamableHttp" || raw === "streamable-http") return "streamable-http";
   if (TRANSPORTS.has(raw)) return raw;
-  if (stringOrEmpty(connector.url || connector.baseUrl)) return "remote";
+  if (stringOrEmpty(connector.url)) return "remote";
   return "stdio";
 }
 
@@ -1326,14 +2150,14 @@ function normalizeAuthType(value, { authorizationToken, oauth, connector }) {
   const raw = stringOrEmpty(value);
   if (AUTH_TYPES.has(raw)) return raw;
   if (authorizationToken) return "bearer";
-  if (oauth.accessToken || connector.oauthClientId || connector.clientId) return "oauth";
+  if (oauth.accessToken || connector.oauthClientId) return "oauth";
   return "none";
 }
 
 function normalizeClientIdSource(connector) {
   const raw = stringOrEmpty(connector.clientIdSource);
   if (raw === "manual" || raw === "dcr") return raw;
-  return stringOrEmpty(connector.oauthClientId || connector.clientId) ? "manual" : "";
+  return "";
 }
 
 function normalizeOAuthState(value) {
@@ -1357,7 +2181,14 @@ function validateConnector(connector) {
     return;
   }
   if (!connector.url) throw new Error("url is required");
-  const url = new URL(connector.url);
+  let url;
+  try {
+    url = new URL(connector.url);
+  } catch {
+    // The platform's bare "Invalid URL" says nothing about which field or which
+    // value, and it used to reach the user verbatim in a toast.
+    throw new Error(`url "${connector.url}" is not a valid URL — include the scheme, e.g. https://example.com/mcp`);
+  }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("url must use http or https");
   }
@@ -1389,11 +2220,25 @@ function connectorClientFingerprint(connector) {
   });
 }
 
-function publicConnector({ connector, status, error = "" }) {
+function publicConnector({ connector, status, error = "", toolListFreshness = null, toolAnnotations = null }: any) {
   return {
     ...connector,
+    // Live annotations ride along the runtime view only, so surfaces can badge
+    // a tool read-only or destructive. They are never part of the persisted
+    // connector: saveConfig normalizes through normalizeTool, which drops them.
+    tools: (connector.tools || []).map((tool) => {
+      const annotations = toolAnnotations?.get(tool.name);
+      // The agent-facing identity travels with the tool so surfaces can match a
+      // pending invocation back to its connector without re-deriving the
+      // id-sanitizing rules. Two implementations of that rule would drift.
+      const qualifiedName = toMcpToolId(connector.id, tool.name);
+      const identified = { ...tool, qualifiedName, capability: `${qualifiedName}.invoke` };
+      return annotations ? { ...identified, annotations } : identified;
+    }),
     status,
     error,
+    toolListFreshness,
+    apps: appsForConnector(connector),
     env: redactRecord(connector.env),
     headers: redactRecord(connector.headers),
     authorizationToken: connector.authorizationToken ? "********" : "",

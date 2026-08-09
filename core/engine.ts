@@ -166,6 +166,45 @@ import {
 import { workspaceRootsForSandbox } from "../shared/workspace-scope.ts";
 import { wrapWithCheckpoint } from "../lib/checkpoint-wrapper.ts";
 import { wrapWithSessionPermission } from "../lib/tools/session-permission-wrapper.ts";
+import { createToolCatalog } from "./tool-catalog.ts";
+import { hashCacheContractValue } from "../lib/llm/cache-prefix-contract.ts";
+import { resolveReferenceBudgetTokens } from "./session-reminders.ts";
+import { createBridgeTools, registerBridgeCapabilityDelegates } from "./tool-catalog-bridge.ts";
+import { summarizeToolParameters } from "./mcp/manager.ts";
+
+/** Matches the MCP config default; used when no manager config is available. */
+const DEFAULT_TOOL_DEFER_THRESHOLD = 10;
+
+/**
+ * Snapshots the catalog listing for the session that is being built.
+ *
+ * The fingerprint covers the catalog's tool names, so a later refresh that adds
+ * or drops a tool produces a different value and the owning session can notice
+ * it has been holding a stale listing. It deliberately ignores descriptions and
+ * schemas: a reworded description is not news worth interrupting a session for.
+ */
+function buildToolCatalogManifestSnapshot(catalog, modelContextWindowTokens) {
+  // Only MCP-origin names are fingerprinted. Those are the ones a connector
+  // refresh can change underneath a running session; builtin rows move only
+  // when the application itself changes, and including them here would make a
+  // builtin-defer session look like it had lost every tool.
+  const names = catalog.all()
+    .filter((entry) => entry.origin === "mcp")
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+  const budgetTokens = resolveReferenceBudgetTokens(modelContextWindowTokens);
+  const { tier, text } = catalog.manifest(budgetTokens);
+  return {
+    text,
+    tier,
+    // Carried so the session renders against the budget the tier was chosen
+    // for, rather than re-deriving it from whatever model state is reachable
+    // at render time.
+    budgetTokens,
+    fingerprint: hashCacheContractValue(names),
+    names,
+  };
+}
 import { filterToolObjectsByAvailability } from "./tool-availability.ts";
 import { TaskRegistry } from "../lib/task-registry.ts";
 import { BrowserManager } from "../lib/browser/browser-manager.ts";
@@ -191,6 +230,7 @@ import { SessionCollabDraftStore } from "../lib/session-collab/draft-store.ts";
 import { NotificationService } from "../lib/notifications/notification-service.ts";
 import { SpeechRecognitionService } from "./speech-recognition-service.ts";
 import { UniversalMediaManager } from "./media/universal-media-manager.ts";
+import { McpManager } from "./mcp/manager.ts";
 import { createCurrentTurnNativeMediaStore } from "./current-turn-native-media.ts";
 import {
   getSkillNameTranslationCachePath,
@@ -206,6 +246,7 @@ import {
 import { assertValidAgentId, isValidAgentId } from "../shared/agent-id.ts";
 
 const moduleLog = createModuleLogger("engine");
+const mcpLog = createModuleLogger("mcp");
 const toolAvailabilityLog = createModuleLogger("tool-availability");
 const win32SandboxCleanupLog = createModuleLogger("win32-sandbox-cleanup");
 
@@ -281,6 +322,7 @@ export class HanaEngine {
   declare _imageStripNotified: any;
   declare _listeners: any;
   declare _media: any;
+  declare _mcp: any;
   declare _models: any;
   declare _notifications: any;
   declare _outboundProxyRuntime: any;
@@ -415,6 +457,15 @@ export class HanaEngine {
       onProviderChanged: () => this.onProviderChanged(),
       builtinAdapters: builtinMediaAdapters,
     });
+    this._mcp = new McpManager({
+      dataDir: path.join(this.hanakoHome, "mcp"),
+      log: mcpLog,
+    }, {
+      // A connector tool may come back asking the user a question. The store is
+      // read lazily because it is installed after this manager is built.
+      getConfirmStore: () => this._confirmStore,
+      emitEvent: (event, sessionPath) => this._emitEvent(event, sessionPath),
+    });
     this._sessionProjects = new SessionProjectCatalogStore({ userDir: this.userDir });
 
     // 确定启动时焦点 agent
@@ -483,6 +534,7 @@ export class HanaEngine {
       getResourceLoader: () => this._resourceLoader,
       getSkills: () => this._skills,
       buildTools: (cwd, ct, opts) => this.buildTools(cwd, ct, opts),
+      getLiveToolCatalogNames: () => this.getLiveToolCatalogNames(),
       emitEvent: (e, sp) => this._emitEvent(e, sp),
       emitDevLog: (t, l) => this.emitDevLog(t, l),
       getHomeCwd: (agentId) => this.getHomeCwd(agentId),
@@ -1040,6 +1092,7 @@ export class HanaEngine {
   }
   get speechRecognition() { return this._speechRecognition; }
   get media() { return this._media; }
+  get mcp() { return this._mcp; }
   get resources() { return this._resources; }
   getResourceService() {
     if (!this._resources) throw new Error("resource service is not initialized");
@@ -1616,7 +1669,6 @@ export class HanaEngine {
     return this._sessionCoord.consumeRenderedSessionReminderBlock(p, receipt);
   }
   consumeSessionReminderBlock(p) { return this._sessionCoord.consumeSessionReminderBlock(p); }
-  noteSessionTimeObserved(p, observedAt) { return this._sessionCoord.noteSessionTimeObserved(p, observedAt); }
   get focusSessionPath() { return this._sessionCoord.currentSessionPath; }
   getMessages(p) { return this._sessionCoord.getSessionByPath(p)?.messages ?? []; }
   getSessionWorkspaceFolders(p = this.currentSessionPath) {
@@ -1741,6 +1793,7 @@ export class HanaEngine {
   async saveSessionTitle(p, t) { return this._sessionCoord.saveSessionTitle(p, t); }
   async clearSessionTitle(p) { return this._sessionCoord.clearSessionTitle(p); }
   async setSessionPinned(p, pinned) { return this._sessionCoord.setSessionPinned(p, pinned); }
+  async setSessionPinOrder(orderedRefs) { return this._sessionCoord.setSessionPinOrder(orderedRefs); }
   async setSessionPluginMeta(p, patch) { return this._sessionCoord.setSessionPluginMeta(p, patch); }
   createSessionContext() { return this._sessionCoord.createSessionContext(); }
   async promoteActivitySession(f, agentId) { return this._sessionCoord.promoteActivitySession(f, agentId); }
@@ -1982,9 +2035,6 @@ export class HanaEngine {
   }
   getHardwareAcceleration() { return this._prefs.getHardwareAcceleration(); }
   setHardwareAcceleration(v) { this._prefs.setHardwareAcceleration(v); }
-  compareAndDeleteLegacyHardwareAccelerationPreference() {
-    return this._prefs.compareAndDeleteLegacyHardwareAccelerationPreference();
-  }
   getFileBackup() { return this._prefs.getFileBackup(); }
   setFileBackup(p) { this._prefs.setFileBackup(p); }
   listCheckpoints() { return this._checkpointStore.list(); }
@@ -2068,6 +2118,11 @@ export class HanaEngine {
   setSessionPermissionModeForSession(sessionPath, mode, options) { return this._sessionCoord.setSessionPermissionMode(sessionPath, mode, options); }
   setCurrentSessionPermissionMode(mode) { return this._sessionCoord.setCurrentSessionPermissionMode(mode); }
   setPendingSessionPermissionMode(mode) { return this._sessionCoord.setPendingPermissionMode(mode); }
+  allowSessionInvocationCapability(ref, capability) { return this._sessionCoord.allowInvocationCapability(ref, capability); }
+  // Read on every permission decision, including on engines built without a
+  // session coordinator. No coordinator means no session ever granted anything,
+  // so an empty list is the accurate answer and the fail-closed one.
+  getSessionAllowedInvocationCapabilities(sessionPath) { return this._sessionCoord?.getAllowedInvocationCapabilities(sessionPath) || []; }
   getSessionPermissionModeDefault() { return this._sessionCoord.getPermissionModeDefault(); }
   setSessionPermissionModeDefault(mode) { return this._sessionCoord.setPermissionModeDefault(mode); }
   get accessMode() { return this._sessionCoord.getAccessMode(); }
@@ -2665,6 +2720,7 @@ export class HanaEngine {
       this._pluginDevEventBusCleanup?.();
       this._pluginDevEventBusCleanup = null;
       this._media?.dispose?.();
+      await this._mcp?.dispose?.();
       this._skills?.unwatch();
       this._deferredResultCoordinator?.dispose?.();
       this._deferredResultCoordinator = null;
@@ -2693,6 +2749,7 @@ export class HanaEngine {
    */
   async initPlugins(bus) {
     this._media?.start?.(bus);
+    await this._mcp?.start?.(bus);
     const builtinPluginsDir = path.join(this.productDir, "..", "plugins");
     const userPluginsDir = path.join(this.hanakoHome, "plugins");
     const devPluginsDir = path.join(this.hanakoHome, "plugins-dev");
@@ -2814,6 +2871,115 @@ export class HanaEngine {
   //  工具构建
   // ════════════════════════════
 
+  /**
+   * Decide whether this tool set defers, and build the catalog if it does.
+   *
+   * Returns null for the ordinary case: few enough tools that loading them all
+   * costs less than the machinery to avoid it. The count is per tool across all
+   * servers, and excludes tools that cannot defer (pinned by the user, or
+   * declared non-deferrable), because those stay in the prefix either way.
+   *
+   * Deferral is all-or-nothing across servers on purpose. Deferring only the
+   * larger connectors would make a tool's availability depend on which company
+   * shipped it, which is exactly the kind of hidden ranking the catalog avoids.
+   */
+  _planDeferredToolAssembly(mcpTools, pluginTools) {
+    const config = this._mcp?.getConfig?.() || null;
+    const deferEnabled = config ? config.deferEnabled !== false : true;
+    if (!deferEnabled) return null;
+    const threshold = Number.isSafeInteger(config?.deferThreshold) && config.deferThreshold > 0
+      ? config.deferThreshold
+      : DEFAULT_TOOL_DEFER_THRESHOLD;
+
+    const liveMcpEntries = this._liveMcpCatalogEntries(mcpTools);
+
+    const builtinDeferEnabled = this._prefs?.getBuiltinToolDeferEnabled?.() === true;
+    const builtinEntries = builtinDeferEnabled
+      ? (pluginTools || [])
+        .filter((tool) => tool?.name && tool.deferrable !== false)
+        .map((tool) => ({
+          name: tool.name,
+          toolName: tool.name,
+          description: tool.description || "",
+          paramsSummary: summarizeToolParameters(tool.parameters),
+          serverId: tool._pluginId || "plugin",
+          serverLabel: tool._pluginId || "plugin",
+          origin: "builtin",
+          deferrable: true,
+          pinned: false,
+          schemaRef: () => tool.parameters || { type: "object", properties: {} },
+        }))
+      : [];
+
+    const deferrable = [...liveMcpEntries, ...builtinEntries]
+      .filter((entry) => entry.deferrable !== false && entry.pinned !== true);
+    if (deferrable.length <= threshold) return null;
+
+    const catalog = createToolCatalog();
+    // Pinned tools are registered too: the model should be able to see that
+    // they exist and read their schema, they simply also stay loaded.
+    if (liveMcpEntries.length > 0) catalog.registerSource("mcp", liveMcpEntries);
+    if (builtinEntries.length > 0) catalog.registerSource("builtin", builtinEntries);
+
+    const builtinToolsByName = new Map<string, any>(
+      (pluginTools || []).map((tool) => [tool?.name, tool] as [string, any]),
+    );
+    const bridgeTools = createBridgeTools({
+      catalog,
+      mcpCall: (serverId, toolName, args, ctx) => this._mcp.callTool(serverId, toolName, args, ctx),
+      resolveMcpPermission: (serverId, toolName) =>
+        this._mcp?.resolveToolPermissionKind?.(serverId, toolName) ?? "review",
+      // A deferred builtin keeps its own permission voice rather than being
+      // flattened into the MCP policy model.
+      resolveBuiltinInvocation: (name, params) => {
+        const target = builtinToolsByName.get(name);
+        const resolver = target?.sessionPermission?.resolveInvocation;
+        return typeof resolver === "function" ? resolver(params) : null;
+      },
+      builtinCall: (name, args, ctx) => {
+        const target = builtinToolsByName.get(name);
+        if (typeof target?.execute !== "function") {
+          throw new Error(`Deferred tool ${name} is no longer available`);
+        }
+        return target.execute(`bridge_${name}`, args, ctx, undefined, ctx);
+      },
+      log: toolAvailabilityLog,
+    });
+
+    const deferredToolNames = new Set(deferrable.map((entry) => (
+      entry.origin === "builtin" ? entry.name : `mcp_${entry.name}`
+    )));
+    return { catalog, bridgeTools, deferredToolNames };
+  }
+
+  /**
+   * Catalog rows for the MCP tools currently published. Only tools that are
+   * actually published can be deferred, so a row in config that never made it
+   * to a live listing is not a catalog entry.
+   */
+  _liveMcpCatalogEntries(mcpTools = null) {
+    const entries = typeof this._mcp?.getCatalogEntries === "function"
+      ? (this._mcp.getCatalogEntries() || [])
+      : [];
+    const published = new Set(
+      (Array.isArray(mcpTools) ? mcpTools : (this._mcp?.getAllTools?.() || []))
+        .map((tool) => tool?.name),
+    );
+    return entries.filter((entry) => published.has(`mcp_${entry.name}`));
+  }
+
+  /**
+   * The catalog's tool names as they stand right now, for a session to compare
+   * against the listing it was given. Returns null when there is no MCP manager
+   * to ask, which reads as "no basis to claim anything changed".
+   */
+  getLiveToolCatalogNames() {
+    if (!this._mcp) return null;
+    return this._liveMcpCatalogEntries()
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right));
+  }
+
   buildTools(cwd, customTools, opts: any = {}) {
     // Executable background runtimes bind one persisted identity snapshot at assembly time.
     // Desktop chat keeps the callback path until it moves into the same session factory.
@@ -2877,6 +3043,7 @@ export class HanaEngine {
 
     // Append plugin tools
     const pluginTools = this._pluginManager?.getAllTools() || [];
+    const mcpTools = this._mcp?.getAllTools() || [];
     const executionBoundary = this._runtimeContext
       ? this.createExecutionBoundary({ workbenchRoot: cwd })
       : null;
@@ -2910,31 +3077,33 @@ export class HanaEngine {
         },
       };
     };
+    // Deferred assembly is decided once, here, and never revisited for the life
+    // of this tool set. The session's cacheable prefix is the tool schemas plus
+    // the system prompt, and a running session asserts that prefix on every
+    // request, so a tool set that changed shape mid-session would break the
+    // cache and fail the contract. Everything dynamic goes through the
+    // conversation stream instead.
+    const deferPlan = this._planDeferredToolAssembly(mcpTools, pluginTools);
+    const directMcpTools = deferPlan
+      ? mcpTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
+      : mcpTools;
+    const directPluginTools = deferPlan
+      ? pluginTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
+      : pluginTools;
+    const bridgeTools = deferPlan ? deferPlan.bridgeTools : [];
+
     const runtimeCustomTools = ct.map(withRuntimeContext);
-    const wrappedPluginTools = pluginTools.map(t => ({
-      ...t,
-      execute: (toolCallId, params, signalOrRuntimeCtx, onUpdate, piCtx) => {
-        const { ctx: runtimeCtx } = normalizeToolRuntimeContext(signalOrRuntimeCtx, piCtx);
-        const runtimeSessionPath = runtimeCtx?.sessionPath
-          || getToolSessionPath(runtimeCtx)
-          || getSessionPath()
-          || null;
-        const sessionRef = resolveRuntimeSessionRef(runtimeCtx);
-        const sessionPath = runtimeSessionPath || sessionRef?.sessionPath || null;
-        const mergedCtx = {
-          ...runtimeCtx,
-          ...(sessionRef ? { sessionId: sessionRef.sessionId, sessionRef } : {}),
-          ...(sessionPath ? { sessionPath } : {}),
-          ...(opts.bridgeContext ? { bridgeContext: opts.bridgeContext } : {}),
-          ...(opts.notificationContext ? { notificationContext: opts.notificationContext } : {}),
-          allowHumanApproval,
-          approvalPolicy,
-          agentId,
-          ...executionScope,
-        };
-        return t.execute(toolCallId, params, signalOrRuntimeCtx, onUpdate, mergedCtx);
-      },
-    }));
+    // Plugin tools and MCP tools both need the same session context injection;
+    // withRuntimeContext is that wrapper, so neither gets its own copy of it.
+    const wrappedPluginTools = directPluginTools.map(withRuntimeContext);
+    const wrappedMcpTools = directMcpTools.map(withRuntimeContext);
+    const wrappedBridgeTools = bridgeTools.map(withRuntimeContext);
+    if (deferPlan) {
+      // withRuntimeContext returns copies, and the permission layer keys its
+      // delegation registry on object identity, so the objects that actually
+      // reach that layer are the ones that must be registered.
+      registerBridgeCapabilityDelegates(wrappedBridgeTools, { catalog: deferPlan.catalog });
+    }
     const pluginDevTools = this._pluginDevService && this._prefs.getPluginDevToolsEnabled?.() === true
       ? createPluginDevTools({
           pluginDevService: this._pluginDevService,
@@ -2944,11 +3113,13 @@ export class HanaEngine {
     assertUniqueBuiltToolNames([
       { source: "custom tools", tools: baseCustomTools },
       { source: "extra custom tools", tools: extraCustomTools },
-      { source: "plugin tools", tools: pluginTools },
+      { source: "plugin tools", tools: directPluginTools },
+      { source: "mcp tools", tools: directMcpTools },
+      { source: "mcp bridge tools", tools: bridgeTools },
       { source: "plugin development tools", tools: pluginDevTools },
     ]);
     const allTools = filterToolObjectsByAvailability(
-      [...runtimeCustomTools, ...wrappedPluginTools, ...pluginDevTools],
+      [...runtimeCustomTools, ...wrappedPluginTools, ...wrappedMcpTools, ...wrappedBridgeTools, ...pluginDevTools],
       toolAgent?.config || {},
       {
         agentId,
@@ -3080,7 +3251,19 @@ export class HanaEngine {
       ? opts.getPermissionMode
       : (sessionPath) => this.getSessionPermissionMode(sessionPath);
     // 拦截上下文（如 { isSubagent }）：classify 据此做与 mode 无关的固定边界（防自递归等）。
-    const permissionContext = opts.permissionContext || null;
+    //
+    // The session's capability grants are exposed as a getter rather than a
+    // snapshot: the permission wrapper spreads this object on every tool call,
+    // so a grant issued mid-session applies to the very next call without
+    // rebuilding the tool set. getSessionPath() resolves the session this tool
+    // set was built for, so a grant can never leak into another session.
+    const readSessionGrants = (sessionPath) => this.getSessionAllowedInvocationCapabilities(sessionPath);
+    const permissionContext = {
+      ...(opts.permissionContext || {}),
+      get preAuthorizedInvocationCapabilities() {
+        return readSessionGrants(getSessionPath());
+      },
+    };
     result = {
       ...result,
       tools: wrapWithSessionPermission(result.tools, {
@@ -3156,7 +3339,15 @@ export class HanaEngine {
         .filter(Boolean),
     ]);
 
-    return result;
+    // The manifest travels in the build result rather than being stashed here.
+    // The session that owns this tool set is the only thing that should hold it,
+    // and the engine has no business keeping a map from sessions to catalogs.
+    return {
+      ...result,
+      toolCatalogManifest: deferPlan
+        ? buildToolCatalogManifestSnapshot(deferPlan.catalog, opts.modelContextWindowTokens)
+        : null,
+    };
   }
 
   // ════════════════════════════

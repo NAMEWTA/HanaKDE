@@ -259,26 +259,6 @@ export class PreferencesManager {
     this.savePreferences(prefs);
   }
 
-  /**
-   * 只消费旧版 GPU 自动安全模式写下的 `false`。
-   *
-   * 该操作由 server 在数据版本闸门通过后调用。比较当前缓存值再删除，
-   * 避免桌面启动阶段持有的旧快照覆盖用户随后作出的新选择。
-   */
-  compareAndDeleteLegacyHardwareAccelerationPreference() {
-    if (!Object.prototype.hasOwnProperty.call(this._cache, "hardware_acceleration")) {
-      return { status: "already-absent" };
-    }
-    if (this._cache.hardware_acceleration !== false) {
-      return { status: "value-changed" };
-    }
-
-    const prefs = this._mutableCopy();
-    delete prefs.hardware_acceleration;
-    this.savePreferences(prefs);
-    return { status: "deleted" };
-  }
-
   /** 读取新会话默认权限模式。首次安装没有该字段时默认 auto。 */
   getSessionPermissionModeDefault() {
     return normalizeSessionPermissionMode({ permissionMode: this._cache.session_permission_mode_default });
@@ -733,6 +713,27 @@ export class PreferencesManager {
     };
     this.savePreferences(prefs);
     return prefs.plugin_dev_tools.enabled;
+  }
+
+  /**
+   * 读取内置/插件工具的延迟加载开关（全局，默认关闭）。
+   *
+   * 默认关闭是刻意的：内置工具是 Agent 的基本能力，把它们移出前缀会改变
+   * 每个 session 的既有行为。外部 MCP 工具默认延迟，内置工具需要显式 opt-in。
+   */
+  getBuiltinToolDeferEnabled() {
+    return this._cache.builtin_tool_defer?.enabled === true;
+  }
+
+  /** 保存内置/插件工具的延迟加载开关 */
+  setBuiltinToolDeferEnabled(value) {
+    const prefs = this._mutableCopy();
+    prefs.builtin_tool_defer = {
+      ...(prefs.builtin_tool_defer || {}),
+      enabled: value === true,
+    };
+    this.savePreferences(prefs);
+    return prefs.builtin_tool_defer.enabled;
   }
 
   /** 读取用户手动禁用的插件 ID 列表 */

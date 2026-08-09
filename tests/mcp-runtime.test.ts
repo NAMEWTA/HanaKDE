@@ -1,20 +1,75 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import YAML from "js-yaml";
 import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import {
-  McpRuntime,
+  McpManager,
   MCP_CONNECTORS_STATUS_TOOL_NAME,
   createMcpConnectorsStatusToolDefinition,
   createMcpToolDefinition,
   isMcpToolEnabledForAgentConfig,
   normalizeMcpConfig,
+  resolveMcpToolPermissionKind,
   toMcpToolId,
-} from "../plugins/mcp/lib/mcp-runtime.ts";
-import { McpHttpError } from "../plugins/mcp/lib/mcp-http-client.ts";
-import registerMcpRoutes from "../plugins/mcp/routes/api.ts";
+} from "../core/mcp/manager.ts";
+import { McpHttpError } from "../core/mcp/clients/http-client.ts";
+import { saveConfig } from "../lib/memory/config-loader.ts";
+import { createMcpRoute } from "../server/routes/mcp.ts";
+
+/**
+ * Build a manager with an in-memory config store. Production injects the
+ * on-disk store; these tests keep config in memory so they can assert exactly
+ * which writes happen.
+ */
+function createManager({ dataDir, config, log = console }: any = {}, options: any = {}) {
+  return new McpManager({ dataDir, log }, { configStore: config, ...options });
+}
+
+const CURRENT_CONNECTOR_POLICY = {
+  permissionMode: "review-all",
+  toolPermissions: {},
+  trustReadOnlyHint: false,
+};
 
 describe("MCP runtime policy", () => {
   it("uses stable sanitized tool ids for dynamic MCP tools", () => {
     expect(toMcpToolId("github.com", "search/repositories")).toBe("github_com_search_repositories");
+  });
+
+  it("publishes agent-facing tool names as the mcp namespace plus the sanitized tool id", () => {
+    const stored = {
+      enabled: true,
+      connectors: [{
+        id: "github.com",
+        name: "GitHub",
+        url: "https://mcp.github.com/mcp",
+        tools: [{ name: "search/repositories" }],
+        ...CURRENT_CONNECTOR_POLICY,
+      }],
+    };
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
+      config: { get: vi.fn(() => stored), set: vi.fn() },
+      log: console,
+    });
+
+    runtime.registerCachedTools();
+
+    // These are the exact names the model sees. They must not drift: the
+    // namespace prefix used to be applied by the plugin host, and the ids are
+    // persisted in per-agent enablement config.
+    expect(runtime.getAllTools().map((tool) => tool.name)).toEqual([
+      `mcp_${MCP_CONNECTORS_STATUS_TOOL_NAME}`,
+      `mcp_${toMcpToolId("github_com", "search/repositories")}`,
+    ]);
+    expect(runtime.getAllTools().map((tool) => tool.name)).toEqual([
+      "mcp_connectors_status",
+      "mcp_github_com_search_repositories",
+    ]);
+    // Tool categorization and permission classification both key off this.
+    expect(runtime.getAllTools().every((tool) => tool._pluginId === "mcp")).toBe(true);
   });
 
   it("marks MCP dynamic tools as legacy Pi-signature tools", () => {
@@ -71,7 +126,6 @@ describe("MCP runtime policy", () => {
   });
 
   it("reports ready MCP tools as live for Reminder preflight", () => {
-    const registeredTools = [];
     const stored = {
       enabled: true,
       connectors: [{
@@ -79,21 +133,17 @@ describe("MCP runtime policy", () => {
         name: "GitHub",
         url: "https://mcp.github.com/mcp",
         tools: [{ name: "search" }],
+        ...CURRENT_CONNECTOR_POLICY,
       }],
     };
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: { get: vi.fn(() => stored), set: vi.fn() },
-      registerTool: vi.fn((tool) => {
-        registeredTools.push(tool);
-        return () => {};
-      }),
-      bus: { request: vi.fn() },
       log: console,
     });
     runtime.clients.set("github", { running: true });
     runtime.registerCachedTools();
-    const tool = registeredTools.find((candidate) => candidate.name === "github_search");
+    const tool = runtime.getAllTools().find((candidate) => candidate.name === "mcp_github_search");
     const probe = tool.metadata.reminderLiveAvailabilityProbe;
     const agentConfig = {
       mcp: { connectors: { github: { enabled: true, tools: { search: true } } } },
@@ -103,7 +153,6 @@ describe("MCP runtime policy", () => {
   });
 
   it("reports stopped, needs-auth/revoked, removed, and unavailable transports without side effects", () => {
-    const registeredTools = [];
     let stored = {
       enabled: true,
       connectors: [{
@@ -111,21 +160,17 @@ describe("MCP runtime policy", () => {
         name: "GitHub",
         url: "https://mcp.github.com/mcp",
         tools: [{ name: "search" }],
+        ...CURRENT_CONNECTOR_POLICY,
       }],
     };
     const setConfig = vi.fn();
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: { get: vi.fn(() => stored), set: setConfig },
-      registerTool: vi.fn((tool) => {
-        registeredTools.push(tool);
-        return () => {};
-      }),
-      bus: { request: vi.fn() },
       log: console,
     });
     runtime.registerCachedTools();
-    const tool = registeredTools.find((candidate) => candidate.name === "github_search");
+    const tool = runtime.getAllTools().find((candidate) => candidate.name === "mcp_github_search");
     const probe = tool.metadata.reminderLiveAvailabilityProbe;
     const enabledAgent = {
       mcp: { connectors: { github: { enabled: true, tools: { search: true } } } },
@@ -166,7 +211,6 @@ describe("MCP runtime policy", () => {
   });
 
   it("reports global and agent MCP disablement through the read-only probe", () => {
-    const registeredTools = [];
     let stored = {
       enabled: true,
       connectors: [{
@@ -174,21 +218,17 @@ describe("MCP runtime policy", () => {
         name: "GitHub",
         url: "https://mcp.github.com/mcp",
         tools: [{ name: "search" }],
+        ...CURRENT_CONNECTOR_POLICY,
       }],
     };
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: { get: vi.fn(() => stored), set: vi.fn() },
-      registerTool: vi.fn((tool) => {
-        registeredTools.push(tool);
-        return () => {};
-      }),
-      bus: { request: vi.fn() },
       log: console,
     });
     runtime.clients.set("github", { running: true });
     runtime.registerCachedTools();
-    const probe = registeredTools.find((candidate) => candidate.name === "github_search")
+    const probe = runtime.getAllTools().find((candidate) => candidate.name === "mcp_github_search")
       .metadata.reminderLiveAvailabilityProbe;
 
     expect(probe({ mcp: { connectors: { github: { enabled: false, tools: { search: true } } } } }))
@@ -199,14 +239,106 @@ describe("MCP runtime policy", () => {
       .toMatchObject({ available: false, reason: "mcp_global_disabled" });
   });
 
-  it("keeps backward compatibility with the previous mcp.servers agent config shape", () => {
+  it("fails closed for the removed mcp.servers agent config shape", () => {
     expect(isMcpToolEnabledForAgentConfig({
       mcp: { servers: { github: { enabled: true, tools: { search: true } } } },
     }, {
       globalEnabled: true,
       serverId: "github",
       toolName: "search",
-    })).toBe(true);
+    })).toBe(false);
+  });
+
+  it("writes a servers tombstone through an agent connector update", async () => {
+    const request = vi.fn(async (type, payload) => {
+      if (type === "agent:config") {
+        return {
+          config: {
+            mcp: {
+              servers: { retired: { enabled: true } },
+              retainedSetting: "current",
+            },
+          },
+        };
+      }
+      if (type === "agent:update-config") return { config: payload.partial };
+      return {};
+    });
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-agent-canonical"),
+      config: { get: vi.fn(() => ({ enabled: true, connectors: [] })), set: vi.fn() },
+      log: console,
+    });
+    await runtime.start({ request });
+
+    await runtime.updateAgentMcpConnector("hana", "github", { enabled: true });
+
+    const update = request.mock.calls.find(([type]) => type === "agent:update-config");
+    expect(update[1]).toMatchObject({
+      agentId: "hana",
+      partial: {
+        mcp: {
+          retainedSetting: "current",
+          connectors: { github: { enabled: true } },
+          servers: null,
+        },
+      },
+    });
+    expect(update[1].partial.mcp).toHaveProperty("servers", null);
+    await runtime.dispose();
+  });
+
+  it("removes retired agent MCP servers from disk through the config writer tombstone", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-mcp-agent-tombstone-"));
+    const configPath = path.join(root, "agents", "hana", "config.yaml");
+    let runtime: McpManager | null = null;
+
+    try {
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, YAML.dump({
+        agent: { name: "Hana" },
+        mcp: {
+          servers: { retired: { enabled: true } },
+          retainedSetting: "current",
+          connectors: { existing: { enabled: false } },
+        },
+      }), "utf-8");
+
+      const readConfig = () => YAML.load(fs.readFileSync(configPath, "utf-8")) as Record<string, any>;
+      const request = vi.fn(async (type, payload) => {
+        if (type === "agent:config") return { config: readConfig() };
+        if (type === "agent:update-config") {
+          saveConfig(configPath, payload.partial);
+          return { config: readConfig() };
+        }
+        return {};
+      });
+      runtime = createManager({
+        dataDir: path.join(root, "mcp"),
+        config: { get: vi.fn(() => ({ enabled: false, connectors: [] })), set: vi.fn() },
+        log: console,
+      });
+      await runtime.start({ request });
+
+      await runtime.updateAgentMcpConnector("hana", "github", { enabled: true });
+
+      const update = request.mock.calls.find(([type]) => type === "agent:update-config");
+      expect(update[1].partial.mcp).toHaveProperty("servers", null);
+
+      const persistedYaml = fs.readFileSync(configPath, "utf-8");
+      const persisted = YAML.load(persistedYaml) as Record<string, any>;
+      expect(persisted.mcp).not.toHaveProperty("servers");
+      expect(persistedYaml).not.toMatch(/^\s*servers:\s*null\s*$/m);
+      expect(persistedYaml).not.toMatch(/^\s*servers:/m);
+      expect(persisted.mcp.retainedSetting).toBe("current");
+      expect(persisted.mcp.connectors).toMatchObject({
+        existing: { enabled: false },
+        github: { enabled: true },
+      });
+    } finally {
+      await runtime?.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("normalizes remote connectors as the primary config shape", () => {
@@ -220,6 +352,9 @@ describe("MCP runtime policy", () => {
           authType: "bearer",
           authorizationToken: "token-123",
           tools: [{ name: "search", description: "Search repositories" }],
+          permissionMode: "review-all",
+          toolPermissions: {},
+          trustReadOnlyHint: false,
         },
       ],
     });
@@ -233,62 +368,47 @@ describe("MCP runtime policy", () => {
       authType: "bearer",
       authorizationToken: "token-123",
     });
-    expect(config.servers).toEqual(config.connectors);
+    expect((config as any).servers).toBeUndefined();
   });
 
-  it("normalizes Cherry-style MCP server fields into Hana connectors", () => {
+  it("keeps the fresh MCP configuration defaults explicit", () => {
+    expect(normalizeMcpConfig(undefined)).toMatchObject({
+      enabled: false,
+      deferEnabled: true,
+      deferThreshold: 10,
+      connectors: [],
+    });
+  });
+
+  it("does not read removed connector field aliases", () => {
     const config = normalizeMcpConfig({
       enabled: true,
       connectors: [
         {
-          id: "cherry-http",
-          name: "Cherry HTTP",
-          type: "streamableHttp",
+          id: "retired-fields",
+          transport: "remote",
           baseUrl: "https://mcp.example.com/mcp",
-          description: "Remote MCP server",
-          headers: {
-            Authorization: "Bearer header-token",
-            "X-API-Key": "key-123",
-          },
-          timeout: "45",
+          authorization_token: "old-token",
+          clientId: "old-client-id",
+          clientSecret: "old-client-secret",
           isActive: true,
-        },
-        {
-          id: "cherry-stdio",
-          name: "Cherry Stdio",
-          type: "stdio",
-          command: "npx",
-          args: ["-y", "mcp-server-example"],
-          env: { API_KEY: "secret" },
-          registryUrl: "https://registry.npmmirror.com",
-          autoStart: true,
+          ...CURRENT_CONNECTOR_POLICY,
         },
       ],
     });
 
     expect(config.connectors[0]).toMatchObject({
-      id: "cherry-http",
-      transport: "streamable-http",
-      url: "https://mcp.example.com/mcp",
-      description: "Remote MCP server",
-      headers: {
-        Authorization: "Bearer header-token",
-        "X-API-Key": "key-123",
-      },
-      timeout: 45,
-      autoStart: true,
-    });
-    expect(config.connectors[1]).toMatchObject({
-      id: "cherry-stdio",
-      transport: "stdio",
-      command: "npx",
-      env: { API_KEY: "secret" },
-      registryUrl: "https://registry.npmmirror.com",
-      autoStart: true,
+      id: "retired-fields",
+      transport: "remote",
+      url: "",
+      authorizationToken: "",
+      oauthClientId: "",
+      oauthClientSecret: "",
+      autoStart: false,
     });
   });
 
-  it("migrates the earlier local server config into connectors", () => {
+  it("rejects the removed input.servers config shape", () => {
     const config = normalizeMcpConfig({
       servers: [
         {
@@ -299,16 +419,10 @@ describe("MCP runtime policy", () => {
       ],
     });
 
-    expect(config.connectors[0]).toMatchObject({
-      id: "local-github",
-      transport: "stdio",
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-github"],
-    });
-    expect(config.servers).toEqual(config.connectors);
+    expect(config.connectors).toEqual([]);
   });
 
-  it("returns connector state and a servers alias for API compatibility", () => {
+  it("returns connector-only state", () => {
     const stored = {
       enabled: true,
       connectors: [
@@ -317,17 +431,18 @@ describe("MCP runtime policy", () => {
           name: "GitHub",
           url: "https://mcp.github.com/mcp",
           tools: [{ name: "search" }],
+          permissionMode: "review-all",
+          toolPermissions: {},
+          trustReadOnlyHint: false,
         },
       ],
     };
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: {
         get: vi.fn(() => stored),
         set: vi.fn(),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: console,
     });
 
@@ -344,12 +459,9 @@ describe("MCP runtime policy", () => {
       transport: "remote",
       status: "stopped",
     });
-    expect(state.servers).toEqual(state.connectors);
+    expect((state as any).servers).toBeUndefined();
     expect(state.agentConfig).toEqual({
       connectors: {
-        github: { enabled: true, tools: { search: true } },
-      },
-      servers: {
         github: { enabled: true, tools: { search: true } },
       },
     });
@@ -373,17 +485,16 @@ describe("MCP runtime policy", () => {
           },
           authorizationToken: "token-123",
           oauthClientSecret: "client-secret",
+          ...CURRENT_CONNECTOR_POLICY,
         },
       ],
     };
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: {
         get: vi.fn(() => stored),
         set: vi.fn(),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: console,
     });
 
@@ -401,6 +512,315 @@ describe("MCP runtime policy", () => {
     expect(connector.oauthClientSecret).toBe("********");
   });
 
+  it("surfaces tool-list freshness hints in public state without persisting them", async () => {
+    async function stateAfterRefresh(toolListFreshness) {
+      const stored = {
+        enabled: true,
+        connectors: [{
+          id: "remote",
+          name: "Remote",
+          url: "https://mcp.example.com/mcp",
+          ...CURRENT_CONNECTOR_POLICY,
+        }],
+      };
+      const set = vi.fn();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
+        config: { get: vi.fn(() => stored), set },
+        log: console,
+      }, {
+        clientFactory: () => ({
+          running: true,
+          toolListFreshness,
+          start: vi.fn(async () => {}),
+          stop: vi.fn(async () => {}),
+          listTools: vi.fn(async () => [{ name: "search", inputSchema: { type: "object" } }]),
+        }),
+      });
+      await runtime.startConnector("remote");
+      await runtime.refreshTools("remote");
+      return { connector: runtime.getState().connectors[0], set };
+    }
+
+    const hints = { ttlMs: 300000, cacheScope: "public", fetchedAt: 1234 };
+    const { connector, set } = await stateAfterRefresh(hints);
+    expect(connector.toolListFreshness).toEqual(hints);
+
+    // A caching hint describes one live response, so it belongs in memory only.
+    // Persisting it would outlive the answer it describes.
+    for (const [, value] of set.mock.calls) {
+      expect(JSON.stringify(value)).not.toContain("toolListFreshness");
+    }
+
+    const { connector: bare } = await stateAfterRefresh(null);
+    expect(bare.toolListFreshness).toBeNull();
+  });
+
+  describe("input_required tool calls", () => {
+    const ELICIT_REQUEST = {
+      github_login: {
+        method: "elicitation/create",
+        params: {
+          mode: "form",
+          message: "Please provide your GitHub username",
+          requestedSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"],
+          },
+        },
+      },
+    };
+
+    // A confirm store stand-in that hands the test the decision knob, keeping
+    // the assertions on the manager rather than on real timers.
+    function fakeConfirmStore() {
+      const created = [];
+      let resolveCurrent = null;
+      const store = {
+        created,
+        create: vi.fn((kind, payload, sessionRef, timeoutMs) => {
+          created.push({ kind, payload, sessionRef, timeoutMs });
+          return {
+            confirmId: `confirm-${created.length}`,
+            promise: new Promise((resolve) => { resolveCurrent = resolve; }),
+          };
+        }),
+        settle: (decision) => resolveCurrent(decision),
+      };
+      return store;
+    }
+
+    function buildRuntime({ results, confirmStore, emitEvent }) {
+      const stored = {
+        enabled: true,
+        connectors: [{
+          id: "remote",
+          name: "Remote Service",
+          url: "https://mcp.example.com/mcp",
+          tools: [{ name: "deploy", inputSchema: { type: "object" } }],
+          ...CURRENT_CONNECTOR_POLICY,
+        }],
+      };
+      const calls = [];
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
+        config: { get: vi.fn(() => stored), set: vi.fn() },
+        log: console,
+      }, {
+        confirmStore,
+        emitEvent,
+        clientFactory: () => ({
+          running: true,
+          start: vi.fn(async () => {}),
+          stop: vi.fn(async () => {}),
+          listTools: vi.fn(async () => [{ name: "deploy", inputSchema: { type: "object" } }]),
+          callTool: vi.fn(async (toolName, args, opts) => {
+            calls.push({ toolName, args, opts });
+            return results[calls.length - 1];
+          }),
+        }),
+      });
+      return { runtime, calls };
+    }
+
+    it("asks the user for the requested input and replays the call with the answer", async () => {
+      const confirmStore = fakeConfirmStore();
+      const emitEvent = vi.fn();
+      const { runtime, calls } = buildRuntime({
+        confirmStore,
+        emitEvent,
+        results: [
+          { resultType: "input_required", inputRequests: ELICIT_REQUEST, requestState: "opaque-blob" },
+          { resultType: "complete", content: [{ type: "text", text: "deployed" }] },
+        ],
+      });
+      await runtime.startConnector("remote");
+
+      const pending = runtime.callTool("remote", "deploy", { env: "prod" }, {
+        sessionPath: "/tmp/session.jsonl",
+      });
+      await vi.waitFor(() => expect(confirmStore.create).toHaveBeenCalled());
+
+      // The waiting card carries what the server asked and why.
+      const [kind, payload, sessionRef, timeoutMs] = confirmStore.create.mock.calls[0];
+      expect(kind).toBe("mcp_elicitation");
+      expect(payload).toMatchObject({
+        toolName: "deploy",
+        message: "Please provide your GitHub username",
+        requestedSchema: ELICIT_REQUEST.github_login.params.requestedSchema,
+      });
+      expect(sessionRef).toBe("/tmp/session.jsonl");
+      expect(timeoutMs).toBe(10 * 60 * 1000);
+
+      const [event] = emitEvent.mock.calls[0];
+      expect(event.type).toBe("session_confirmation");
+      expect(event.request).toMatchObject({
+        kind: "mcp_elicitation",
+        surface: "input",
+      });
+      expect(JSON.stringify(event.request)).toContain("deploy");
+
+      confirmStore.settle({ action: "confirmed", value: { name: "octocat" } });
+      const result = await pending;
+
+      expect(result).toMatchObject({ resultType: "complete" });
+      // The retry repeats the original arguments and adds the answer plus the
+      // server's opaque state, echoed back untouched.
+      expect(calls[1].args).toEqual({ env: "prod" });
+      expect(calls[1].opts).toMatchObject({
+        requestState: "opaque-blob",
+        inputResponses: { github_login: { action: "accept", content: { name: "octocat" } } },
+      });
+    });
+
+    // A user who refuses the form made a decision the server is entitled to
+    // hear: the spec's ElicitResult has a "decline" action for exactly this, and
+    // relaying it lets the server unwind its own pending work. What the model
+    // sees is unchanged — the tool call still fails loudly, naming the server
+    // and the outcome.
+    it("relays the user's refusal to the server as a decline before failing the call", async () => {
+      const confirmStore = fakeConfirmStore();
+      const { runtime, calls } = buildRuntime({
+        confirmStore,
+        emitEvent: vi.fn(),
+        results: [
+          { resultType: "input_required", inputRequests: ELICIT_REQUEST, requestState: "opaque-blob" },
+          { resultType: "complete", content: [] },
+        ],
+      });
+      await runtime.startConnector("remote");
+
+      const pending = runtime.callTool("remote", "deploy", { env: "prod" }, { sessionPath: "/tmp/session.jsonl" });
+      await vi.waitFor(() => expect(confirmStore.create).toHaveBeenCalled());
+      confirmStore.settle({ action: "rejected" });
+
+      await expect(pending).rejects.toThrow(/Remote Service/);
+      await expect(pending).rejects.toThrow(/rejected/);
+
+      // The decline round goes out on the wire, repeating the original
+      // arguments and echoing the server's opaque state back untouched. No
+      // content rides along: a decline carries no submitted data.
+      expect(calls).toHaveLength(2);
+      expect(calls[1].args).toEqual({ env: "prod" });
+      expect(calls[1].opts).toMatchObject({
+        requestState: "opaque-blob",
+        inputResponses: { github_login: { action: "decline" } },
+      });
+      expect(calls[1].opts.inputResponses.github_login).not.toHaveProperty("content");
+      // The user is asked exactly once; the decline round is not another prompt.
+      expect(confirmStore.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("still fails the call when the decline round itself cannot be delivered", async () => {
+      const confirmStore = fakeConfirmStore();
+      const { runtime } = buildRuntime({
+        confirmStore,
+        emitEvent: vi.fn(),
+        results: [
+          { resultType: "input_required", inputRequests: ELICIT_REQUEST },
+          new Error("connection reset"),
+        ],
+      });
+      await runtime.startConnector("remote");
+
+      const pending = runtime.callTool("remote", "deploy", {}, { sessionPath: "/tmp/session.jsonl" });
+      await vi.waitFor(() => expect(confirmStore.create).toHaveBeenCalled());
+      confirmStore.settle({ action: "rejected" });
+
+      // A transport failure while telling the server "no" must not turn the
+      // refusal into a different-looking outcome.
+      await expect(pending).rejects.toThrow(/Remote Service/);
+      await expect(pending).rejects.toThrow(/rejected/);
+    });
+
+    for (const action of ["timeout", "aborted"]) {
+      it(`fails loudly with the server name and reason when the user answer is ${action}`, async () => {
+        const confirmStore = fakeConfirmStore();
+        const { runtime, calls } = buildRuntime({
+          confirmStore,
+          emitEvent: vi.fn(),
+          results: [
+            { resultType: "input_required", inputRequests: ELICIT_REQUEST },
+            { resultType: "complete", content: [] },
+          ],
+        });
+        await runtime.startConnector("remote");
+
+        const pending = runtime.callTool("remote", "deploy", {}, { sessionPath: "/tmp/session.jsonl" });
+        await vi.waitFor(() => expect(confirmStore.create).toHaveBeenCalled());
+        confirmStore.settle({ action });
+
+        await expect(pending).rejects.toThrow(/Remote Service/);
+        await expect(pending).rejects.toThrow(new RegExp(action));
+        // No silent retry: an unanswered prompt is not a decision to relay.
+        expect(calls).toHaveLength(1);
+      });
+    }
+
+    it("stops asking after three rounds instead of looping on a server that never settles", async () => {
+      const confirmStore = fakeConfirmStore();
+      const { runtime, calls } = buildRuntime({
+        confirmStore,
+        emitEvent: vi.fn(),
+        results: Array.from({ length: 10 }, () => ({
+          resultType: "input_required",
+          inputRequests: ELICIT_REQUEST,
+        })),
+      });
+      await runtime.startConnector("remote");
+
+      const pending = runtime.callTool("remote", "deploy", {}, { sessionPath: "/tmp/session.jsonl" });
+      const settleWhenAsked = async (times) => {
+        for (let i = 0; i < times; i += 1) {
+          await vi.waitFor(() => expect(confirmStore.create).toHaveBeenCalledTimes(i + 1));
+          confirmStore.settle({ action: "confirmed", value: { name: `round-${i}` } });
+        }
+      };
+      await settleWhenAsked(3);
+
+      await expect(pending).rejects.toThrow(/too many/i);
+      expect(confirmStore.create).toHaveBeenCalledTimes(3);
+      expect(calls.length).toBeLessThanOrEqual(4);
+    });
+
+    it("retries immediately when the server sends state but asks for nothing", async () => {
+      const confirmStore = fakeConfirmStore();
+      const { runtime, calls } = buildRuntime({
+        confirmStore,
+        emitEvent: vi.fn(),
+        results: [
+          { resultType: "input_required", requestState: "just-state" },
+          { resultType: "complete", content: [] },
+        ],
+      });
+      await runtime.startConnector("remote");
+
+      const result = await runtime.callTool("remote", "deploy", {}, { sessionPath: "/tmp/session.jsonl" });
+
+      expect(result).toMatchObject({ resultType: "complete" });
+      expect(confirmStore.create).not.toHaveBeenCalled();
+      expect(calls[1].opts).toMatchObject({ requestState: "just-state" });
+    });
+
+    it("refuses an input request of a kind it never advertised", async () => {
+      const confirmStore = fakeConfirmStore();
+      const { runtime } = buildRuntime({
+        confirmStore,
+        emitEvent: vi.fn(),
+        results: [{
+          resultType: "input_required",
+          inputRequests: { pick: { method: "sampling/createMessage", params: {} } },
+        }],
+      });
+      await runtime.startConnector("remote");
+
+      await expect(runtime.callTool("remote", "deploy", {}, { sessionPath: "/tmp/session.jsonl" }))
+        .rejects.toThrow(/sampling\/createMessage/);
+      expect(confirmStore.create).not.toHaveBeenCalled();
+    });
+  });
+
   it("surfaces connector start errors in public state", async () => {
     const stored = {
       enabled: true,
@@ -410,17 +830,16 @@ describe("MCP runtime policy", () => {
           name: "Local",
           command: "npx",
           args: ["-y", "broken-mcp"],
+          ...CURRENT_CONNECTOR_POLICY,
         },
       ],
     };
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: {
         get: vi.fn(() => stored),
         set: vi.fn(),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: console,
     }, {
       clientFactory: () => ({
@@ -443,16 +862,14 @@ describe("MCP runtime policy", () => {
 
   it("executes settings actions through the runtime and returns a settings update", async () => {
     let stored = { enabled: false, connectors: [] };
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: {
         get: vi.fn(() => stored),
         set: vi.fn((_key, value) => {
           stored = value;
         }),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: console,
     });
 
@@ -507,8 +924,8 @@ describe("MCP runtime policy", () => {
       }
       return {};
     });
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: {
         get: vi.fn(() => ({
           enabled: true,
@@ -516,10 +933,9 @@ describe("MCP runtime policy", () => {
         })),
         set: vi.fn(),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request },
       log: console,
     });
+    await runtime.start({ request });
 
     await runtime.handleSettingsAction({
       action: "mcp.agent.tool.enable",
@@ -545,22 +961,21 @@ describe("MCP runtime policy", () => {
       if (type === "session:capability-drift:mark-stale") return { ok: true, marked: 1 };
       return {};
     });
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: {
         get: vi.fn(() => stored),
         set: vi.fn((_key, value) => {
           stored = value;
         }),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request },
       log: console,
     });
+    await runtime.start({ request });
     const app = new Hono();
-    registerMcpRoutes(app, { _mcpRuntime: runtime, bus: { request }, log: console });
+    app.route("/api", createMcpRoute({ mcp: runtime } as any));
 
-    const res = await app.request("/settings/enabled", {
+    const res = await app.request("/api/mcp/settings/enabled", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: true }),
@@ -583,8 +998,8 @@ describe("MCP runtime policy", () => {
       if (type === "session:capability-drift:mark-stale") return { ok: true, marked: 1 };
       return {};
     });
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
       config: {
         get: vi.fn(() => ({
           enabled: true,
@@ -592,14 +1007,13 @@ describe("MCP runtime policy", () => {
         })),
         set: vi.fn(),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request },
       log: console,
     });
+    await runtime.start({ request });
     const app = new Hono();
-    registerMcpRoutes(app, { _mcpRuntime: runtime, bus: { request }, log: console });
+    app.route("/api", createMcpRoute({ mcp: runtime } as any));
 
-    const res = await app.request("/agents/hana/connectors/github", {
+    const res = await app.request("/api/mcp/agents/hana/connectors/github", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tools: { search: true } }),
@@ -674,32 +1088,153 @@ describe("MCP runtime policy", () => {
   });
 });
 
-describe("MCP connectors status tool", () => {
-  function createStoredRuntime(stored) {
-    const registered = [];
-    const disposed = [];
-    let counter = 0;
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-test",
-      config: {
-        get: vi.fn(() => stored),
-        set: vi.fn(),
-      },
-      registerTool: vi.fn((definition) => {
-        const id = counter++;
-        registered.push({ id, definition });
-        return () => { disposed.push(id); };
-      }),
-      bus: { request: vi.fn() },
+// App-capable connectors: a tool may carry a `ui://` resource that renders its
+// own interface, declared through either the native `_meta.ui` shape or the
+// `openai/outputTemplate` dialect.
+describe("MCP app resources", () => {
+  const APP_TOOL = {
+    name: "board",
+    title: "Board",
+    description: "Interactive board",
+    _meta: { ui: { resourceUri: "ui://board/main" } },
+  };
+
+  function managerWith(tools) {
+    const stored = {
+      enabled: true,
+      connectors: [{
+        id: "acme",
+        name: "Acme",
+        url: "https://mcp.acme.test/mcp",
+        tools,
+        ...CURRENT_CONNECTOR_POLICY,
+      }],
+    };
+    return createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-apps-test"),
+      config: { get: vi.fn(() => stored), set: vi.fn() },
       log: console,
     });
-    return { runtime, registered, disposed };
   }
 
-  function findStatusTool(registered) {
-    return registered
-      .map((entry) => entry.definition)
-      .find((definition) => definition.name === MCP_CONNECTORS_STATUS_TOOL_NAME);
+  it("passes a tool's _meta through to the published tool definition", () => {
+    const runtime = managerWith([APP_TOOL]);
+    runtime.registerCachedTools();
+
+    const [app] = runtime.listApps();
+    expect(app).toMatchObject({
+      connectorId: "acme",
+      toolName: "board",
+      resourceUri: "ui://board/main",
+      _meta: { ui: { resourceUri: "ui://board/main" } },
+    });
+  });
+
+  it("recognizes the openai/outputTemplate dialect as an app resource", () => {
+    const runtime = managerWith([{
+      name: "sheet",
+      _meta: { "openai/outputTemplate": "ui://sheet/main" },
+    }]);
+
+    expect(runtime.listApps()).toEqual([
+      expect.objectContaining({ toolName: "sheet", resourceUri: "ui://sheet/main" }),
+    ]);
+  });
+
+  it("ignores a resource uri that is not a ui:// resource", () => {
+    const runtime = managerWith([{
+      name: "sneaky",
+      _meta: { ui: { resourceUri: "file:///etc/passwd" } },
+    }]);
+
+    expect(runtime.listApps()).toEqual([]);
+  });
+
+  it("refuses to read a resource uri outside the ui:// scheme", async () => {
+    const runtime = managerWith([APP_TOOL]);
+    runtime.clients.set("acme", { running: true, readResource: vi.fn() });
+
+    await expect(runtime.readResource("acme", "https://evil.test/steal"))
+      .rejects.toThrow(/must start with ui:\/\//);
+  });
+
+  it("reads a ui:// resource through the connector client", async () => {
+    const runtime = managerWith([APP_TOOL]);
+    const readResource = vi.fn(async () => ({
+      contents: [{ uri: "ui://board/main", mimeType: "text/html", text: "<h1>board</h1>" }],
+    }));
+    runtime.clients.set("acme", { running: true, readResource });
+
+    const result = await runtime.readResource("acme", "ui://board/main");
+
+    expect(readResource).toHaveBeenCalledWith("ui://board/main");
+    expect(result.contents[0].text).toBe("<h1>board</h1>");
+  });
+
+  it("keeps a model-only tool out of the app list and refuses app tool calls", async () => {
+    const runtime = managerWith([{
+      name: "private",
+      _meta: { ui: { resourceUri: "ui://private/main", visibility: ["model"] } },
+    }]);
+
+    expect(runtime.listApps()).toEqual([]);
+    await expect(runtime.callAppTool("acme", "private", {}))
+      .rejects.toThrow(/not visible to apps/);
+  });
+
+  it("attaches an app card to the tool result of an app-capable tool", async () => {
+    const runtime = managerWith([APP_TOOL]);
+    const request = vi.fn(async (type) => (type === "agent:config"
+      ? { config: { mcp: { connectors: { acme: { enabled: true, tools: { board: true } } } } } }
+      : {}));
+    await runtime.start({ request });
+    runtime.clients.set("acme", {
+      running: true,
+      callTool: vi.fn(async () => ({ content: [{ type: "text", text: "done" }] })),
+    });
+    runtime.registerCachedTools();
+
+    const tool = runtime.getAllTools().find((item) => item.name === "mcp_acme_board");
+    const result = await tool.execute("call-7", { q: 1 }, null, undefined, {
+      agentId: "hana",
+      sessionId: "sess_1",
+    });
+
+    expect(result.details.mcpAppCard).toMatchObject({
+      type: "mcp_app",
+      connectorId: "acme",
+      toolName: "board",
+      resourceUri: "ui://board/main",
+      toolCallId: "call-7",
+      sourceAgentId: "hana",
+      sourceSessionId: "sess_1",
+    });
+  });
+});
+
+describe("MCP connectors status tool", () => {
+  // The agent-facing name: the manager namespaces every tool it publishes.
+  const STATUS_TOOL_PUBLIC_NAME = `mcp_${MCP_CONNECTORS_STATUS_TOOL_NAME}`;
+
+  function createStoredRuntime(stored) {
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-test"),
+      config: {
+        get: vi.fn(() => ({
+          ...stored,
+          connectors: Array.isArray(stored.connectors)
+            ? stored.connectors.map((connector) => ({ ...CURRENT_CONNECTOR_POLICY, ...connector }))
+            : [],
+        })),
+        set: vi.fn(),
+      },
+      log: console,
+    });
+    return { runtime };
+  }
+
+  function findStatusTool(runtime) {
+    return runtime.getAllTools().find((tool) => tool.name === STATUS_TOOL_PUBLIC_NAME);
   }
 
   it("registers a read-only connectors-status tool alongside cached tools", () => {
@@ -709,19 +1244,24 @@ describe("MCP connectors status tool", () => {
         { id: "github", name: "GitHub", url: "https://mcp.github.com/mcp", tools: [{ name: "search" }] },
       ],
     };
-    const { runtime, registered } = createStoredRuntime(stored);
+    const { runtime } = createStoredRuntime(stored);
 
     runtime.registerCachedTools();
 
-    const statusTool = findStatusTool(registered);
+    const statusTool = findStatusTool(runtime);
     expect(statusTool).toBeTruthy();
-    expect(statusTool.name).toBe(MCP_CONNECTORS_STATUS_TOOL_NAME);
+    expect(statusTool.name).toBe(STATUS_TOOL_PUBLIC_NAME);
     expect(statusTool.sessionPermission.resolveInvocation({})).toEqual({
       action: "read",
       kind: "read",
       capability: "connectors_status.read",
     });
-    expect(statusTool.invocationStyle).toBe("pi_tool");
+    // The definition still declares the legacy Pi signature; the manager bakes
+    // that calling convention into the published tool's execute wrapper.
+    expect(createMcpConnectorsStatusToolDefinition({
+      getState: () => ({}),
+      getGlobalEnabled: () => true,
+    }).invocationStyle).toBe("pi_tool");
     expect(statusTool.metadata).toMatchObject({ kind: "mcp", readOnly: true });
     // Diagnostic tool takes no input.
     expect(statusTool.parameters).toEqual({ type: "object", properties: {} });
@@ -735,9 +1275,9 @@ describe("MCP connectors status tool", () => {
         { id: "local", name: "Local", command: "npx", tools: [] },
       ],
     };
-    const { runtime, registered } = createStoredRuntime(stored);
+    const { runtime } = createStoredRuntime(stored);
     runtime.registerCachedTools();
-    const statusTool = findStatusTool(registered);
+    const statusTool = findStatusTool(runtime);
 
     const result = await statusTool.execute("call-1", {}, { agentId: "hana" });
     const payload = JSON.parse(result.content[0].text);
@@ -778,12 +1318,12 @@ describe("MCP connectors status tool", () => {
         },
       ],
     };
-    const { runtime, registered } = createStoredRuntime(stored);
+    const { runtime } = createStoredRuntime(stored);
     // Simulate a running client and a recorded error to prove status is sourced live.
     runtime.clients.set("private", { running: true });
     runtime.clientErrors.set("private", "spawn EACCES");
     runtime.registerCachedTools();
-    const statusTool = findStatusTool(registered);
+    const statusTool = findStatusTool(runtime);
 
     const result = await statusTool.execute("call-1", {}, { agentId: "hana" });
     const text = result.content[0].text;
@@ -809,9 +1349,9 @@ describe("MCP connectors status tool", () => {
         { id: "github", name: "GitHub", url: "https://mcp.github.com/mcp", tools: [{ name: "search" }] },
       ],
     };
-    const { runtime, registered } = createStoredRuntime(stored);
+    const { runtime } = createStoredRuntime(stored);
     runtime.registerCachedTools();
-    const statusTool = findStatusTool(registered);
+    const statusTool = findStatusTool(runtime);
 
     expect(statusTool.isEnabledForAgentConfig({})).toBe(false);
 
@@ -819,23 +1359,42 @@ describe("MCP connectors status tool", () => {
     expect(statusTool.isEnabledForAgentConfig({})).toBe(true);
   });
 
-  it("disposes the status tool together with cached tools", () => {
+  it("replaces the status tool on re-registration instead of accumulating duplicates", () => {
     const stored = {
       enabled: true,
       connectors: [
         { id: "github", name: "GitHub", url: "https://mcp.github.com/mcp", tools: [{ name: "search" }] },
       ],
     };
-    const { runtime, registered, disposed } = createStoredRuntime(stored);
+    const { runtime } = createStoredRuntime(stored);
     runtime.registerCachedTools();
 
-    const statusEntry = registered.find((entry) => entry.definition.name === MCP_CONNECTORS_STATUS_TOOL_NAME);
-    expect(statusEntry).toBeTruthy();
-    expect(disposed).not.toContain(statusEntry.id);
+    const firstStatusTool = findStatusTool(runtime);
+    expect(firstStatusTool).toBeTruthy();
+    const firstNames = runtime.getAllTools().map((tool) => tool.name);
+    expect(firstNames).toEqual([STATUS_TOOL_PUBLIC_NAME, "mcp_github_search"]);
 
-    // Re-registering must dispose the prior status tool disposer.
+    // Re-registering rebuilds the list: the stale tool objects are dropped
+    // rather than left behind alongside the fresh ones.
     runtime.registerCachedTools();
-    expect(disposed).toContain(statusEntry.id);
+    const secondNames = runtime.getAllTools().map((tool) => tool.name);
+    expect(secondNames).toEqual(firstNames);
+    expect(findStatusTool(runtime)).not.toBe(firstStatusTool);
+  });
+
+  it("drops every cached tool on dispose", async () => {
+    const stored = {
+      enabled: true,
+      connectors: [
+        { id: "github", name: "GitHub", url: "https://mcp.github.com/mcp", tools: [{ name: "search" }] },
+      ],
+    };
+    const { runtime } = createStoredRuntime(stored);
+    runtime.registerCachedTools();
+    expect(runtime.getAllTools()).not.toHaveLength(0);
+
+    await runtime.dispose();
+    expect(runtime.getAllTools()).toEqual([]);
   });
 
   it("builds a status definition decoupled from any specific connector", async () => {
@@ -885,14 +1444,12 @@ describe("MCP runtime OAuth token refresh", () => {
   function makeRefreshRuntime(connector, { fetchImpl }: any = {}) {
     let current = { enabled: true, connectors: [connector] };
     const setSpy = vi.fn((_key, value) => { current = { ...current, ...value }; });
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-refresh-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-refresh-test"),
       config: {
         get: vi.fn(() => current),
         set: setSpy,
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     }, { fetchImpl });
     return { runtime, setSpy, getConfig: () => current };
@@ -911,6 +1468,7 @@ describe("MCP runtime OAuth token refresh", () => {
     url: "https://mcp.example.com/mcp",
     authType: "oauth",
     oauthClientId: "client-id",
+    ...CURRENT_CONNECTOR_POLICY,
   };
 
   it("returns the existing access token when it is not near expiry", async () => {
@@ -1111,16 +1669,20 @@ describe("MCP runtime OAuth persistence", () => {
   it("persists DCR client id, secret, and source when completing OAuth", async () => {
     let current = {
       enabled: true,
-      connectors: [{ id: "notion", name: "Notion", url: "https://mcp.example.com/mcp", authType: "oauth" }],
+      connectors: [{
+        id: "notion",
+        name: "Notion",
+        url: "https://mcp.example.com/mcp",
+        authType: "oauth",
+        ...CURRENT_CONNECTOR_POLICY,
+      }],
     };
-    const runtime = new McpRuntime({
-      dataDir: "/tmp/mcp-dcr-test",
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-dcr-test"),
       config: {
         get: vi.fn(() => current),
         set: vi.fn((_key, value) => { current = { ...current, ...value }; }),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     });
 
@@ -1133,7 +1695,7 @@ describe("MCP runtime OAuth persistence", () => {
       clientId: "dcr-client",
       clientSecret: "dcr-secret",
       clientIdSource: "dcr",
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       codeVerifier: "verifier-1",
       tokenEndpoint: "https://auth.example.com/token",
       scope: "files:read offline_access",
@@ -1161,9 +1723,15 @@ describe("MCP runtime OAuth persistence", () => {
   it("fails OAuth completion when the saved connector cannot read back the token", async () => {
     let current = {
       enabled: true,
-      connectors: [{ id: "notion", name: "Notion", url: "https://mcp.example.com/mcp", authType: "oauth" }],
+      connectors: [{
+        id: "notion",
+        name: "Notion",
+        url: "https://mcp.example.com/mcp",
+        authType: "oauth",
+        ...CURRENT_CONNECTOR_POLICY,
+      }],
     };
-    const runtime = new McpRuntime({
+    const runtime = createManager({
       dataDir: "/tmp/mcp-readback-test",
       config: {
         get: vi.fn(() => current),
@@ -1178,8 +1746,6 @@ describe("MCP runtime OAuth persistence", () => {
           };
         }),
       },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     });
 
@@ -1191,7 +1757,7 @@ describe("MCP runtime OAuth persistence", () => {
       clientId: "dcr-client",
       clientSecret: "dcr-secret",
       clientIdSource: "dcr",
-      redirectUri: "http://127.0.0.1:3210/api/plugins/mcp/oauth/callback",
+      redirectUri: "http://127.0.0.1:3210/api/mcp/oauth/callback",
       codeVerifier: "verifier-1",
       tokenEndpoint: "https://auth.example.com/token",
       scope: "files:read offline_access",
@@ -1213,16 +1779,27 @@ describe("MCP runtime OAuth persistence", () => {
     });
   });
 
-  it("defaults clientIdSource to manual for legacy connectors that already have a client id", () => {
+  it("does not infer clientIdSource when no provenance was persisted", () => {
     const config = normalizeMcpConfig({
       enabled: true,
       connectors: [
-        { id: "legacy-oauth", url: "https://mcp.example.com/mcp", authType: "oauth", oauthClientId: "old-client" },
-        { id: "no-client", url: "https://mcp.example.com/mcp", authType: "oauth" },
+        {
+          id: "oauth-no-provenance",
+          url: "https://mcp.example.com/mcp",
+          authType: "oauth",
+          oauthClientId: "current-client",
+          ...CURRENT_CONNECTOR_POLICY,
+        },
+        {
+          id: "no-client",
+          url: "https://mcp.example.com/mcp",
+          authType: "oauth",
+          ...CURRENT_CONNECTOR_POLICY,
+        },
       ],
     });
 
-    expect(config.connectors[0].clientIdSource).toBe("manual");
+    expect(config.connectors[0].clientIdSource).toBe("");
     expect(config.connectors[1].clientIdSource).toBe("");
   });
 
@@ -1230,7 +1807,14 @@ describe("MCP runtime OAuth persistence", () => {
     const config = normalizeMcpConfig({
       enabled: true,
       connectors: [
-        { id: "auto", url: "https://mcp.example.com/mcp", authType: "oauth", oauthClientId: "auto-client", clientIdSource: "dcr" },
+        {
+          id: "auto",
+          url: "https://mcp.example.com/mcp",
+          authType: "oauth",
+          oauthClientId: "auto-client",
+          clientIdSource: "dcr",
+          ...CURRENT_CONNECTOR_POLICY,
+        },
       ],
     });
 
@@ -1248,6 +1832,7 @@ describe("MCP runtime OAuth persistence", () => {
         oauthClientId: "dcr-client",
         oauthClientSecret: "super-secret-dcr",
         clientIdSource: "dcr",
+        ...CURRENT_CONNECTOR_POLICY,
         oauth: {
           accessToken: "AT-do-not-leak",
           refreshToken: "RT-do-not-leak",
@@ -1257,11 +1842,9 @@ describe("MCP runtime OAuth persistence", () => {
         },
       }],
     };
-    const runtime = new McpRuntime({
+    const runtime = createManager({
       dataDir: "/tmp/mcp-leak-test",
       config: { get: vi.fn(() => stored), set: vi.fn() },
-      registerTool: vi.fn(() => () => {}),
-      bus: { request: vi.fn() },
       log: console,
     });
 
@@ -1279,6 +1862,615 @@ describe("MCP runtime OAuth persistence", () => {
       connected: true,
       scope: "files:read offline_access",
       expiresAt: stored.connectors[0].oauth.expiresAt,
+    });
+  });
+
+  describe("tool invocation permission resolution", () => {
+    // One row per decision-matrix line. `annotations: undefined` means the
+    // runtime side table has no live entry for this tool.
+    const MATRIX: Array<{
+      row: string;
+      policy: any;
+      annotations: any;
+      expected: string;
+    }> = [
+      {
+        row: "review-all reviews everything regardless of hints or overrides",
+        policy: { permissionMode: "review-all", toolPermission: "allow", trustReadOnlyHint: true },
+        annotations: { readOnlyHint: true, destructiveHint: false },
+        expected: "review",
+      },
+      {
+        row: "allowlist + explicit allow + non-destructive passes",
+        policy: { permissionMode: "allowlist", toolPermission: "allow" },
+        annotations: { destructiveHint: false },
+        expected: "read",
+      },
+      {
+        row: "allowlist + no override + untrusted read-only reviews",
+        policy: { permissionMode: "allowlist", trustReadOnlyHint: false },
+        annotations: { readOnlyHint: false },
+        expected: "review",
+      },
+      {
+        row: "allowlist + trusted read-only hint passes",
+        policy: { permissionMode: "allowlist", trustReadOnlyHint: true },
+        annotations: { readOnlyHint: true, destructiveHint: false },
+        expected: "read",
+      },
+      {
+        row: "allowlist + read-only hint but trust disabled reviews",
+        policy: { permissionMode: "allowlist", trustReadOnlyHint: false },
+        annotations: { readOnlyHint: true },
+        expected: "review",
+      },
+      {
+        row: "destructive vetoes an explicit allow",
+        policy: { permissionMode: "allowlist", toolPermission: "allow" },
+        annotations: { destructiveHint: true },
+        expected: "review",
+      },
+      // The three annotation-absence rows: explicit grants need no evidence,
+      // implicit ones need fresh evidence, known danger vetoes either.
+      {
+        row: "explicit allow still passes with an empty side table",
+        policy: { permissionMode: "allowlist", toolPermission: "allow" },
+        annotations: undefined,
+        expected: "read",
+      },
+      {
+        row: "trustReadOnlyHint fails closed with an empty side table",
+        policy: { permissionMode: "allowlist", trustReadOnlyHint: true },
+        annotations: undefined,
+        expected: "review",
+      },
+      {
+        row: "explicit allow is vetoed by a live destructive annotation",
+        policy: { permissionMode: "allowlist", toolPermission: "allow", trustReadOnlyHint: true },
+        annotations: { readOnlyHint: true, destructiveHint: true },
+        expected: "review",
+      },
+      {
+        row: "an explicit review override outranks the read-only trust toggle",
+        policy: { permissionMode: "allowlist", toolPermission: "review", trustReadOnlyHint: true },
+        annotations: { readOnlyHint: true, destructiveHint: false },
+        expected: "review",
+      },
+    ];
+
+    for (const { row, policy, annotations, expected } of MATRIX) {
+      it(row, () => {
+        expect(resolveMcpToolPermissionKind(policy, annotations)).toBe(expected);
+      });
+    }
+
+    it("defaults to review for an empty policy", () => {
+      expect(resolveMcpToolPermissionKind({}, undefined)).toBe("review");
+      expect(resolveMcpToolPermissionKind(undefined, undefined)).toBe("review");
+    });
+
+    it("keeps the diagnostics tool read-only regardless of connector policy", () => {
+      const definition = createMcpConnectorsStatusToolDefinition({
+        getState: () => ({ enabled: true, connectors: [] }),
+        getGlobalEnabled: () => true,
+      });
+      expect(definition.sessionPermission.resolveInvocation()).toEqual({
+        action: "read",
+        kind: "read",
+        capability: "connectors_status.read",
+      });
+    });
+
+    it("always carries the invoke capability on the descriptor", () => {
+      // Session-scoped pre-authorization keys off this string, so it must be
+      // present on every descriptor whatever the policy decides.
+      for (const policy of [
+        { permissionMode: "review-all" },
+        { permissionMode: "allowlist", toolPermission: "allow" },
+      ]) {
+        const definition = createMcpToolDefinition({
+          serverId: "acme",
+          connectorId: "acme",
+          toolName: "search",
+          inputSchema: { type: "object" },
+          getGlobalEnabled: () => true,
+          getAgentConfig: async () => ({}),
+          callTool: vi.fn(),
+          getPermissionPolicy: () => policy,
+          getLiveAnnotations: () => undefined,
+        });
+        expect(definition.sessionPermission.resolveInvocation()).toMatchObject({
+          action: "invoke",
+          capability: "acme_search.invoke",
+        });
+      }
+    });
+
+    it("defaults a definition built without a policy to review", () => {
+      const definition = createMcpToolDefinition({
+        serverId: "acme",
+        connectorId: "acme",
+        toolName: "search",
+        inputSchema: { type: "object" },
+        getGlobalEnabled: () => true,
+        getAgentConfig: async () => ({}),
+        callTool: vi.fn(),
+      });
+      expect(definition.sessionPermission.resolveInvocation().kind).toBe("review");
+    });
+
+    async function runtimeWithAnnotations({ connector, annotations }) {
+      let stored: any = {
+        enabled: true,
+        connectors: [{
+          id: "acme",
+          name: "Acme",
+          url: "https://mcp.example.com/mcp",
+          ...CURRENT_CONNECTOR_POLICY,
+          ...connector,
+        }],
+      };
+      const set = vi.fn();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-annotations"),
+        // Persist writes back so the refreshed tool list is visible to
+        // getConfig(), the way the on-disk store behaves in production.
+        config: {
+          get: vi.fn(() => stored),
+          set: (key, value) => {
+            stored = value;
+            set(key, value);
+          },
+        },
+        log: console,
+      }, {
+        clientFactory: () => ({
+          running: true,
+          start: vi.fn(async () => {}),
+          stop: vi.fn(async () => {}),
+          listTools: vi.fn(async () => [{
+            name: "search",
+            inputSchema: { type: "object" },
+            ...(annotations ? { annotations } : {}),
+          }]),
+        }),
+      });
+      await runtime.startConnector("acme");
+      await runtime.refreshTools("acme");
+      return { runtime, set };
+    }
+
+    function kindOf(runtime) {
+      const tool = runtime.getAllTools().find((item) => item.name === "mcp_acme_search");
+      return tool.sessionPermission.resolveInvocation().kind;
+    }
+
+    it("resolves live annotations through the manager side table", async () => {
+      const trusted = await runtimeWithAnnotations({
+        connector: { permissionMode: "allowlist", trustReadOnlyHint: true },
+        annotations: { readOnlyHint: true },
+      });
+      expect(kindOf(trusted.runtime)).toBe("read");
+
+      const destructive = await runtimeWithAnnotations({
+        connector: { permissionMode: "allowlist", toolPermissions: { search: "allow" } },
+        annotations: { destructiveHint: true },
+      });
+      expect(kindOf(destructive.runtime)).toBe("review");
+
+      // No live annotations at all: implicit trust has no evidence to lean on.
+      const bare = await runtimeWithAnnotations({
+        connector: { permissionMode: "allowlist", trustReadOnlyHint: true },
+        annotations: null,
+      });
+      expect(kindOf(bare.runtime)).toBe("review");
+    });
+
+    it("surfaces live annotations in public state without persisting them", async () => {
+      const { runtime, set } = await runtimeWithAnnotations({
+        connector: { permissionMode: "allowlist" },
+        annotations: { readOnlyHint: true, destructiveHint: false },
+      });
+
+      const [connector] = runtime.getState().connectors;
+      expect(connector.tools[0].annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
+
+      // Annotations describe one live listing. Persisting them would make a
+      // locally writable file the trust input for silent approval, so no write
+      // may ever contain them.
+      for (const [, value] of set.mock.calls) {
+        expect(JSON.stringify(value)).not.toContain("readOnlyHint");
+        expect(JSON.stringify(value)).not.toContain("annotations");
+      }
+
+      // Even feeding public state back through saveConfig strips them.
+      runtime.saveConfig({ enabled: true, connectors: runtime.getState().connectors });
+      expect(JSON.stringify(set.mock.calls.at(-1)[1])).not.toContain("readOnlyHint");
+    });
+  });
+
+  it("fails closed when a connector omits current permission policy fields", () => {
+    const config = normalizeMcpConfig({
+      enabled: true,
+      connectors: [
+        // An older connector is incomplete under the current policy contract.
+        { id: "legacy", url: "https://mcp.example.com/mcp" },
+        {
+          id: "explicit",
+          url: "https://mcp.example.com/mcp",
+          permissionMode: "allowlist",
+          toolPermissions: { search: "allow", write: "review" },
+          trustReadOnlyHint: true,
+        },
+        {
+          id: "invalid",
+          url: "https://mcp.example.com/mcp",
+          permissionMode: "yolo",
+          toolPermissions: { ok: "allow", bad: "sudo", worse: 1, nested: {} },
+          trustReadOnlyHint: "yes",
+        },
+      ],
+    });
+
+    expect(config.connectors.map((connector) => connector.id)).toEqual(["explicit", "invalid"]);
+
+    const [explicit, invalid] = config.connectors;
+
+    expect(explicit.permissionMode).toBe("allowlist");
+    expect(explicit.toolPermissions).toEqual({ search: "allow", write: "review" });
+    expect(explicit.trustReadOnlyHint).toBe(true);
+
+    // Explicit but malformed policy values still normalize to the safe current
+    // policy; an omitted policy is rejected instead of silently upgraded.
+    expect(invalid.permissionMode).toBe("review-all");
+    expect(invalid.toolPermissions).toEqual({ ok: "allow" });
+    expect(invalid.trustReadOnlyHint).toBe(false);
+  });
+
+  it("exposes the connector permission policy through public state", () => {
+    const stored = {
+      enabled: true,
+      connectors: [{
+        id: "notion",
+        url: "https://mcp.example.com/mcp",
+        permissionMode: "allowlist",
+        toolPermissions: { search: "allow" },
+        trustReadOnlyHint: true,
+      }],
+    };
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-policy-state"),
+      config: { get: vi.fn(() => stored), set: vi.fn() },
+      log: console,
+    });
+
+    const [connector] = runtime.getState().connectors;
+    expect(connector.permissionMode).toBe("allowlist");
+    expect(connector.toolPermissions).toEqual({ search: "allow" });
+    expect(connector.trustReadOnlyHint).toBe(true);
+  });
+
+  it("round-trips the connector permission policy through saveConfig", () => {
+    const set = vi.fn();
+    let stored: any = {
+      enabled: true,
+      connectors: [{
+        id: "notion",
+        url: "https://mcp.example.com/mcp",
+        ...CURRENT_CONNECTOR_POLICY,
+      }],
+    };
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-policy-roundtrip"),
+      config: { get: vi.fn(() => stored), set },
+      log: console,
+    });
+
+    const config = runtime.getConfig();
+    config.connectors[0].permissionMode = "allowlist";
+    config.connectors[0].toolPermissions = { search: "allow" };
+    config.connectors[0].trustReadOnlyHint = true;
+    runtime.saveConfig(config);
+
+    const written = set.mock.calls.at(-1)[1];
+    expect(written.connectors[0]).toMatchObject({
+      permissionMode: "allowlist",
+      toolPermissions: { search: "allow" },
+      trustReadOnlyHint: true,
+    });
+
+    // Reading the persisted shape back yields the identical policy.
+    stored = written;
+    expect(runtime.getConfig().connectors[0]).toMatchObject({
+      permissionMode: "allowlist",
+      toolPermissions: { search: "allow" },
+      trustReadOnlyHint: true,
+    });
+  });
+});
+
+describe("MCP management-center seams", () => {
+  function memoryStore(initial: any = { enabled: true, connectors: [] }) {
+    let value = initial;
+    return {
+      get: vi.fn(() => value),
+      set: vi.fn((_key, next) => { value = next; }),
+      read: () => value,
+    };
+  }
+
+  describe("bulk connector import", () => {
+    it("writes the whole batch in one save and returns an id per item", () => {
+      const store = memoryStore();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-bulk"),
+        config: store,
+        log: console,
+      });
+
+      const results = runtime.addConnectors([
+        { name: "Alpha", transport: "remote", url: "https://alpha.example.com/mcp" },
+        { name: "Beta", transport: "stdio", command: "npx" },
+      ]);
+
+      expect(results).toEqual([
+        { ok: true, id: "Alpha" },
+        { ok: true, id: "Beta" },
+      ]);
+      // One transaction, not one write per connector.
+      expect(store.set).toHaveBeenCalledTimes(1);
+      expect(store.read().connectors.map((c) => c.name)).toEqual(["Alpha", "Beta"]);
+    });
+
+    it("writes nothing at all when any item fails validation", () => {
+      const store = memoryStore();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-bulk-invalid"),
+        config: store,
+        log: console,
+      });
+
+      let thrown: any = null;
+      try {
+        runtime.addConnectors([
+          { name: "Alpha", transport: "remote", url: "https://alpha.example.com/mcp" },
+          { name: "Beta", transport: "remote" },
+        ]);
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeTruthy();
+      // Validate-then-write: a bad row anywhere leaves the config untouched, so
+      // the user never has to undo a half-applied import.
+      expect(store.set).not.toHaveBeenCalled();
+      expect(thrown.results).toEqual([
+        { ok: true },
+        { ok: false, error: expect.stringContaining("url") },
+      ]);
+    });
+
+    it("gives colliding names distinct ids inside one batch", () => {
+      const store = memoryStore();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-bulk-collide"),
+        config: store,
+        log: console,
+      });
+
+      const results = runtime.addConnectors([
+        { name: "Same", transport: "stdio", command: "a" },
+        { name: "Same", transport: "stdio", command: "b" },
+      ]);
+
+      expect(results.map((r: any) => r.id)).toEqual(["Same", "Same_2"]);
+    });
+
+    it("reports a clear message instead of a bare Invalid URL", () => {
+      const store = memoryStore();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-bad-url"),
+        config: store,
+        log: console,
+      });
+
+      expect(() => runtime.addConnector({ name: "NoScheme", transport: "remote", url: "example.com/mcp" }))
+        .toThrow(/example\.com\/mcp/);
+      expect(() => runtime.addConnector({ name: "NoScheme", transport: "remote", url: "example.com/mcp" }))
+        .not.toThrow(/^Invalid URL$/);
+    });
+  });
+
+  describe("cancellable OAuth waits", () => {
+    it("cancels the connector's pending session so the poll reports cancelled", async () => {
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-oauth-cancel"),
+        config: memoryStore(),
+        log: console,
+      });
+      runtime.oauthSessions.set("state-1", { status: "pending", connectorId: "github" });
+      runtime.oauthSessions.set("state-2", { status: "pending", connectorId: "other" });
+
+      expect(runtime.cancelOAuth("github")).toMatchObject({ cancelled: 1 });
+
+      expect(runtime.getOAuthStatus("state-1")).toEqual({ status: "cancelled" });
+      // Another connector's wait is untouched.
+      expect(runtime.getOAuthStatus("state-2")).toEqual({ status: "pending" });
+    });
+
+    it("leaves an already finished session alone", () => {
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-oauth-cancel-done"),
+        config: memoryStore(),
+        log: console,
+      });
+      runtime.oauthSessions.set("state-1", { status: "done", connectorId: "github", result: { connectorId: "github" } });
+
+      expect(runtime.cancelOAuth("github")).toMatchObject({ cancelled: 0 });
+      expect(runtime.getOAuthStatus("state-1")).toMatchObject({ status: "done" });
+    });
+
+    it("completing a cancelled session does not write a token", async () => {
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-oauth-cancel-race"),
+        config: memoryStore(),
+        log: console,
+      });
+      runtime.oauthSessions.set("state-1", { status: "pending", connectorId: "github" });
+      runtime.cancelOAuth("github");
+
+      // The browser tab may still come back after the user cancelled. A
+      // cancelled wait must not silently reopen into a granted connection.
+      await expect(runtime.completeOAuth({ state: "state-1", code: "code-1", error: "" }))
+        .rejects.toThrow(/cancel/i);
+      expect(runtime.getOAuthStatus("state-1")).toEqual({ status: "cancelled" });
+    });
+  });
+
+  describe("auto-start after add", () => {
+    it("starts the freshly added connector", async () => {
+      const store = memoryStore();
+      const start = vi.fn(async () => {});
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-autostart"),
+        config: store,
+        log: console,
+      }, {
+        clientFactory: () => ({
+          running: true,
+          start,
+          stop: vi.fn(async () => {}),
+          listTools: vi.fn(async () => [{ name: "search", inputSchema: { type: "object" } }]),
+        }),
+      });
+      const connector = runtime.addConnector({ name: "Alpha", transport: "stdio", command: "npx" });
+
+      await runtime.autoStartAfterAdd(connector.id);
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(runtime.getState().connectors[0]).toMatchObject({ status: "running" });
+    });
+
+    it("records a failed start as the connector's error instead of throwing", async () => {
+      const store = memoryStore();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-autostart-fail"),
+        config: store,
+        log: console,
+      }, {
+        clientFactory: () => ({
+          running: false,
+          start: vi.fn(async () => { throw new Error("spawn ENOENT"); }),
+          stop: vi.fn(async () => {}),
+        }),
+      });
+      const connector = runtime.addConnector({ name: "Alpha", transport: "stdio", command: "nope" });
+
+      // Adding succeeded; the connector simply is not up yet. The failure is
+      // reported where the user is looking, not thrown at the add request.
+      await expect(runtime.autoStartAfterAdd(connector.id)).resolves.toBeUndefined();
+      expect(runtime.getState().connectors[0]).toMatchObject({ error: "spawn ENOENT" });
+    });
+
+    it("does not try to start while MCP is globally disabled", async () => {
+      const store = memoryStore({ enabled: false, connectors: [] });
+      const start = vi.fn(async () => {});
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-autostart-disabled"),
+        config: store,
+        log: console,
+      }, {
+        clientFactory: () => ({ running: false, start, stop: vi.fn(async () => {}) }),
+      });
+      const connector = runtime.addConnector({ name: "Alpha", transport: "stdio", command: "npx" });
+
+      await runtime.autoStartAfterAdd(connector.id);
+
+      expect(start).not.toHaveBeenCalled();
+      expect(runtime.getState().connectors[0].error).toBe("");
+    });
+  });
+
+  describe("deferred loading settings", () => {
+    it("persists the switch and threshold across a save", async () => {
+      const store = memoryStore();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-defer-persist"),
+        config: store,
+        log: console,
+      });
+
+      await runtime.setDeferSettings({ deferEnabled: false, deferThreshold: 25 });
+
+      // Regression guard: saveConfig used to write only { enabled, connectors },
+      // so every defer edit was silently discarded on the next read.
+      expect(store.read()).toMatchObject({ deferEnabled: false, deferThreshold: 25 });
+      expect(runtime.getConfig()).toMatchObject({ deferEnabled: false, deferThreshold: 25 });
+    });
+
+    it("keeps defer settings when an unrelated connector edit saves the config", async () => {
+      const store = memoryStore();
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-defer-survives"),
+        config: store,
+        log: console,
+      });
+      await runtime.setDeferSettings({ deferEnabled: false, deferThreshold: 25 });
+
+      runtime.addConnector({ name: "Alpha", transport: "stdio", command: "npx" });
+
+      expect(runtime.getConfig()).toMatchObject({ deferEnabled: false, deferThreshold: 25 });
+    });
+
+    it("rejects a threshold that is not a positive integer", async () => {
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-defer-invalid"),
+        config: memoryStore(),
+        log: console,
+      });
+
+      for (const deferThreshold of [0, -1, 2.5, "ten"]) {
+        await expect(runtime.setDeferSettings({ deferThreshold })).rejects.toThrow(/threshold/i);
+      }
+    });
+
+    it("exposes the defer settings through getState so the settings page can read them", () => {
+      const runtime = createManager({
+        dataDir: path.join(os.tmpdir(), "hana-mcp-defer-state"),
+        config: memoryStore(),
+        log: console,
+      });
+
+      expect(runtime.getState()).toMatchObject({ deferEnabled: true, deferThreshold: 10 });
+    });
+  });
+
+  it("publishes each tool's agent-facing identity in state", () => {
+    const runtime = createManager({
+      dataDir: path.join(os.tmpdir(), "hana-mcp-qualified"),
+      config: {
+        get: vi.fn(() => ({
+          enabled: true,
+          connectors: [{
+            id: "github.com",
+            name: "GitHub",
+            url: "https://mcp.github.com/mcp",
+            tools: [{ name: "search/repositories" }],
+            ...CURRENT_CONNECTOR_POLICY,
+          }],
+        })),
+        set: vi.fn(),
+      },
+      log: console,
+    });
+
+    // The approval prompt needs to map a pending invocation back to a connector
+    // and tool without re-deriving the id-sanitizing rules in the renderer.
+    const [tool] = runtime.getState().connectors[0].tools;
+    expect(tool).toMatchObject({
+      name: "search/repositories",
+      qualifiedName: "github_com_search_repositories",
+      capability: "github_com_search_repositories.invoke",
     });
   });
 });

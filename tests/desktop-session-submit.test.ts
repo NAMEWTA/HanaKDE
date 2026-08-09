@@ -4,8 +4,8 @@ import {
   AGENT_REVIEW_RECORD_TYPE,
   MESSAGE_ORIGIN_RECORD_TYPE,
   MESSAGE_PRESENTATION_RECORD_TYPE,
-  submitDesktopSessionInterjection,
-  submitDesktopSessionMessage,
+  submitDesktopSessionInterjection as submitDesktopSessionInterjectionImplementation,
+  submitDesktopSessionMessage as submitDesktopSessionMessageImplementation,
 } from "../core/desktop-session-submit.ts";
 import fs from "fs";
 import os from "os";
@@ -49,6 +49,29 @@ function makeFakeSession({ replyText = "desktop reply", toolMedia = [], toolMedi
     }),
     model: null,
   };
+}
+
+function withRequiredPreflight(engine: any) {
+  if (typeof engine?.preflightSessionInput === "function") return engine;
+  const promptSession = engine?.promptSession;
+  return {
+    ...engine,
+    preflightSessionInput: vi.fn(),
+    promptSession: typeof promptSession === "function"
+      ? async (sessionPath: string, text: string, promptOptions: any, submitOptions: any) => {
+        submitOptions?.afterCachePreflight?.();
+        return promptSession(sessionPath, text, promptOptions);
+      }
+      : promptSession,
+  };
+}
+
+function submitDesktopSessionMessage(engine: any, opts: any) {
+  return submitDesktopSessionMessageImplementation(withRequiredPreflight(engine), opts);
+}
+
+function submitDesktopSessionInterjection(engine: any, opts: any) {
+  return submitDesktopSessionInterjectionImplementation(withRequiredPreflight(engine), opts);
 }
 
 function sessionFileMarker({ fileId, sessionPath, sessionId = undefined, label, kind = "attachment" }) {
@@ -1407,6 +1430,24 @@ describe("session reminder block injection", () => {
       "pi-prompt",
     ]);
     expect((session as any).sessionManager.appendCustomEntry).toHaveBeenCalled();
+  });
+
+  it("rejects an engine that lacks the required cache-preflight interface", async () => {
+    const session = makeFakeSession();
+    const engine = {
+      ensureSessionLoaded: vi.fn(async () => session),
+      promptSession: vi.fn(async (_sessionPath, text, opts) => session.prompt(text, opts)),
+      emitEvent: vi.fn(),
+      setUiContext: vi.fn(),
+    };
+
+    await expect(submitDesktopSessionMessageImplementation(engine, {
+      sessionPath: "/tmp/desk.jsonl",
+      text: "hello",
+      displayMessage: { text: "hello" },
+    })).rejects.toThrow("requires preflightSessionInput");
+
+    expect(engine.promptSession).not.toHaveBeenCalled();
   });
 
   it("leaves no prompt events, custom entries, or consumed receipt when preflight rejects", async () => {
