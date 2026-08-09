@@ -252,22 +252,6 @@ describe("SessionManifestStore", () => {
     expect((store as any).repairLegacyScanMetadata).toBeUndefined();
   });
 
-  it("persists migration state in the manifest database", () => {
-    expect(store.getState("legacy-session-manifest-scan-v1")).toBeNull();
-
-    store.setState("legacy-session-manifest-scan-v1", {
-      checkpointDirectory: path.join(tmpDir, "checkpoints", "one"),
-      completedAt: "2026-06-18T00:01:00.000Z",
-      result: { scanned: 1, created: 1, existing: 0, skipped: 0 },
-    });
-
-    expect(store.getState("legacy-session-manifest-scan-v1")).toEqual({
-      checkpointDirectory: path.join(tmpDir, "checkpoints", "one"),
-      completedAt: "2026-06-18T00:01:00.000Z",
-      result: { scanned: 1, created: 1, existing: 0, skipped: 0 },
-    });
-  });
-
   it("stores an explicit pin order alongside the pinned timestamp", () => {
     const sessionPath = createSessionFile("pin-order");
     const manifest = store.createForPath({ sessionPath, domain: "desktop", kind: "chat" });

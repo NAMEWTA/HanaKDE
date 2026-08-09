@@ -4,8 +4,6 @@ import path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HanaEngine } from "../core/engine.ts";
 import { SessionManifestResolver } from "../core/session-manifest/resolver.ts";
-import { LEGACY_SESSION_MANIFEST_MIGRATION_KEY } from "../core/session-manifest/startup-migration.ts";
-import { LEGACY_META_SCAN_LEDGER_KEY } from "../core/session-manifest/legacy-migration.ts";
 import { SessionManifestStore } from "../core/session-manifest/store.ts";
 import { SessionFileRegistry } from "../lib/session-files/session-file-registry.ts";
 
@@ -166,7 +164,7 @@ describe("HanaEngine session manifest facade", () => {
   });
 });
 
-describe("HanaEngine session manifest startup migration", () => {
+describe("HanaEngine session manifest store recovery", () => {
   let tmpDir;
   let engine;
 
@@ -175,44 +173,8 @@ describe("HanaEngine session manifest startup migration", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("migrates legacy session files during engine construction", () => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-session-manifest-engine-startup-"));
-    const sessionPath = path.join(tmpDir, "agents", "hana", "sessions", "alpha.jsonl");
-    fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
-    fs.writeFileSync(sessionPath, `${JSON.stringify({
-      type: "session",
-      id: "alpha",
-      timestamp: "2026-06-18T06:10:00.000Z",
-    })}\n`);
-
-    engine = new HanaEngine({
-      hanakoHome: tmpDir,
-      productDir: tmpDir,
-      agentId: "hana",
-      appVersion: "9.9.9",
-    } as any);
-
-    const sessionId = engine.getSessionIdForPath(sessionPath);
-    const migrationState = engine._sessionManifestStore.getState(LEGACY_SESSION_MANIFEST_MIGRATION_KEY);
-
-    expect(sessionId).toMatch(/^sess_/);
-    expect(engine._sessionManifestMigration.status).toBe("completed");
-    expect(migrationState).toMatchObject({
-      completedAt: expect.any(String),
-      result: { scanned: 1, created: 1, existing: 0, skipped: 0 },
-    });
-    expect(fs.existsSync(path.join(migrationState.checkpointDirectory, "checkpoint.json"))).toBe(true);
-  });
-
-  it("quarantines a corrupt manifest database and still starts with migrated legacy sessions", () => {
+  it("quarantines a corrupt manifest database and recreates a usable store", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-session-manifest-engine-corrupt-"));
-    const sessionPath = path.join(tmpDir, "agents", "hana", "sessions", "alpha.jsonl");
-    fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
-    fs.writeFileSync(sessionPath, `${JSON.stringify({
-      type: "session",
-      id: "alpha",
-      timestamp: "2026-06-18T06:10:00.000Z",
-    })}\n`);
     fs.writeFileSync(path.join(tmpDir, "session-manifest.db"), "not sqlite");
     fs.writeFileSync(path.join(tmpDir, "session-manifest.db-wal"), "bad wal");
 
@@ -223,8 +185,7 @@ describe("HanaEngine session manifest startup migration", () => {
       appVersion: "9.9.9",
     } as any);
 
-    expect(engine.getSessionIdForPath(sessionPath)).toMatch(/^sess_/);
-    expect(engine._sessionManifestMigration.status).toBe("completed");
+    expect(engine._sessionManifestStore).toBeTruthy();
     expect(fs.existsSync(path.join(tmpDir, "session-manifest.db"))).toBe(true);
     const manifestDbNames = fs.readdirSync(tmpDir);
     expect(manifestDbNames.some((name) => name.startsWith("session-manifest.db.quarantine-"))).toBe(true);
@@ -262,7 +223,7 @@ describe("HanaEngine getSessionMetadataRecoveryStatus", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("three sources empty → not degraded", () => {
+  it("two sources empty → not degraded", () => {
     expect(engine.getSessionMetadataRecoveryStatus()).toEqual({ degraded: false, reasons: [] });
   });
 
@@ -308,44 +269,7 @@ describe("HanaEngine getSessionMetadataRecoveryStatus", () => {
     ]);
   });
 
-  it("legacy scan ledger with too_large entries → degraded with meta_skipped reason", () => {
-    const skippedPath = path.join(tmpDir, "agents", "bob", "sessions", "session-meta.json");
-    store.setState(LEGACY_META_SCAN_LEDGER_KEY, {
-      [skippedPath]: { size: 999_999_999, mtimeMs: 1, status: "too_large", recordedAt: "2026-07-23T00:00:00.000Z" },
-    });
-
-    const result = engine.getSessionMetadataRecoveryStatus();
-
-    expect(result.degraded).toBe(true);
-    expect(result.reasons).toEqual([
-      { kind: "meta_skipped", detail: "bob/session-meta.json" },
-    ]);
-  });
-
-  it("all three sources firing at once → all reasons present", () => {
-    const quarantinedPath = path.join(tmpDir, "agents", "hana", "sessions", "session-meta.json");
-    const skippedPath = path.join(tmpDir, "agents", "bob", "sessions", "session-titles.json");
-    engine._sessionManifestStoreRecovery = { status: "unavailable", error: new Error("boom") };
-    engine._sessionCoord = {
-      listMetaQuarantines: () => [{
-        metaPath: quarantinedPath,
-        backupPath: `${quarantinedPath}.oversized.1.json`,
-        quarantinedAt: "2026-07-23T00:00:00.000Z",
-      }],
-    };
-    store.setState(LEGACY_META_SCAN_LEDGER_KEY, {
-      [skippedPath]: { size: 1, mtimeMs: 1, status: "parse_error", recordedAt: "2026-07-23T00:00:00.000Z" },
-    });
-
-    const result = engine.getSessionMetadataRecoveryStatus();
-
-    expect(result.degraded).toBe(true);
-    expect(result.reasons.map((r) => r.kind).sort()).toEqual(
-      ["meta_quarantined", "meta_skipped", "store_unavailable"].sort(),
-    );
-  });
-
-  it("getter throwing does not propagate — caller (server route) is responsible for its own fallback, this only proves listSkippedMetaSources tolerates a null store", () => {
+  it("allows no manifest store without changing the recovery result", () => {
     engine._sessionManifestStore = null;
     expect(engine.getSessionMetadataRecoveryStatus()).toEqual({ degraded: false, reasons: [] });
   });

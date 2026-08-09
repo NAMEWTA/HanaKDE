@@ -600,7 +600,7 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 |------|------|
 | `generate-persistence-schema-fingerprint.mjs` | 持久化 Schema 指纹生成 |
 | `scan-persistent-stores.mjs` | 持久化存储扫描 |
-| `session-manifest-audit.mjs` / `session-manifest-rollback.mjs` / `session-path-identity-audit.mjs` | 会话清单审计/回滚/路径身份审计 |
+| `session-path-identity-audit.mjs` | 会话路径身份审计 |
 
 #### 其他工具
 

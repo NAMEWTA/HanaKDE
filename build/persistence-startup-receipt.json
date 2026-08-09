@@ -693,16 +693,6 @@
       "breakingMigrationRequiresAccessMove": false
     },
     {
-      "id": "windows-sandbox-migration-state",
-      "firstPossibleOpenPhase": "engine_construct",
-      "firstPossibleWritePhase": "runtime_ready",
-      "opensBeforeFutureCoordinator": false,
-      "writesBeforeFutureCoordinator": false,
-      "bootstrapSafety": null,
-      "preCoordinatorReadProjection": null,
-      "breakingMigrationRequiresAccessMove": false
-    },
-    {
       "id": "workflow-state",
       "firstPossibleOpenPhase": "engine_construct",
       "firstPossibleWritePhase": "runtime_ready",

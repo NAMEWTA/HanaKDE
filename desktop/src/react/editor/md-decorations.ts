@@ -310,6 +310,22 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
             }
             return false; // prevent child URL/LinkMark from being concealed
           }
+          case 'URL': {
+            const parent = node.node.parent;
+            const parentName = parent?.name;
+            const isDestination = parentName === 'Link' || parentName === 'Image';
+            if (
+              isDestination
+              && parent
+              && selectionTouchesRange(view.state, parent.from, parent.to)
+            ) break;
+            ranges.push({
+              from: node.from,
+              to: node.to,
+              deco: isDestination ? hideMark : autolinkDeco,
+            });
+            break;
+          }
           case 'ListMark': {
             if (activeLines.has(line.number)) break;
             const markText = view.state.doc.sliceString(node.from, node.to);
@@ -327,7 +343,7 @@ export function buildMarkdownDecorations(view: EditorView): DecorationSet {
           }
           // conceal marks
           case 'HeaderMark': case 'EmphasisMark': case 'CodeMark':
-          case 'StrikethroughMark': case 'LinkMark': case 'URL': case 'QuoteMark': {
+          case 'StrikethroughMark': case 'LinkMark': case 'QuoteMark': {
             if (
               (node.name === 'HeaderMark' || node.name === 'QuoteMark')
                 ? activeLines.has(line.number)

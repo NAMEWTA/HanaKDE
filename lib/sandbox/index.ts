@@ -70,7 +70,6 @@ import {
  * @param {() => string} [opts.getAgentId]  当前 agent id
  * @param {object} [opts.resourceIO]  session 级 ResourceIO 内核；未传入时按 cwd 创建 local_fs 内核
  * @param {(event: object, sessionPath?: string|null) => void} [opts.emitEvent]  ResourceIO 事件出口
- * @param {object|null} [opts.legacyCleanupQueue] Windows 旧 ACL 清理队列
  * @returns {{ tools: object[], customTools: object[], permissionBoundary: object }}
  */
 export function createSandboxedTools(cwd, customTools, {
@@ -93,7 +92,6 @@ export function createSandboxedTools(cwd, customTools, {
   getAgentId,
   resourceIO: providedResourceIO,
   emitEvent,
-  legacyCleanupQueue = null,
 }) {
   // 始终按 standard 模式构建策略和 PathGuard，wrappers 在运行时动态 bypass
   const resolveAuthorizedFolders = () => {
@@ -263,7 +261,6 @@ export function createSandboxedTools(cwd, customTools, {
         hanakoHome,
         getExternalReadPaths,
         getSandboxNetworkEnabled: resolveSandboxNetworkEnabled,
-        legacyCleanupQueue,
       },
     })(command, execCwd, execOpts);
     const sandboxedBashTool = createBashTool(cwd, {
