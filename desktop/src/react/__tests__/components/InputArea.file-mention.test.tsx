@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import type { JSONContent } from '@tiptap/core';
@@ -47,6 +48,14 @@ function setMockEditorDocument(doc: ProseMirrorNode, cursor: number): void {
     doc,
     selection: TextSelection.create(doc, cursor),
   });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 vi.mock('@tiptap/react', () => ({
@@ -246,6 +255,7 @@ function seedInputState() {
 describe('InputArea file mention workspace search', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   beforeEach(() => {
@@ -295,5 +305,220 @@ describe('InputArea file mention workspace search', () => {
     }, { timeout: 500 });
 
     expect(screen.getByTestId('mention-menu').getAttribute('data-busy')).toBe('false');
+  });
+
+  it('invalidates an older workspace search when the active scope changes', async () => {
+    const oldScopeSearch = deferred<DeskSearchResult[]>();
+    const newScopeSearch = deferred<DeskSearchResult[]>();
+    mocks.searchDeskFiles
+      .mockReturnValueOnce(oldScopeSearch.promise)
+      .mockReturnValueOnce(newScopeSearch.promise);
+
+    const doc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@read')]),
+    ]);
+    setMockEditorDocument(doc, doc.content.size - 1);
+    render(React.createElement(InputArea));
+
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await waitFor(() => {
+      expect(mocks.searchDeskFiles).toHaveBeenCalledTimes(1);
+    }, { timeout: 500 });
+
+    act(() => {
+      useStore.setState({ deskBasePath: '/other-workspace' } as never);
+    });
+    await waitFor(() => {
+      expect(mocks.searchDeskFiles).toHaveBeenCalledTimes(2);
+    }, { timeout: 500 });
+
+    await act(async () => {
+      oldScopeSearch.resolve([{
+        name: 'old-read.ts',
+        relativePath: 'old-read.ts',
+        parentSubdir: '',
+        isDir: false,
+      }]);
+      await Promise.resolve();
+    });
+    expect(mocks.mentionMenuProps?.items.some(item => item.name === 'old-read.ts')).toBe(false);
+
+    await act(async () => {
+      newScopeSearch.resolve([{
+        name: 'new-read.ts',
+        relativePath: 'new-read.ts',
+        parentSubdir: '',
+        isDir: false,
+      }]);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(mocks.mentionMenuProps?.items.some(item => item.name === 'new-read.ts')).toBe(true);
+    });
+  });
+
+  it('renders only the latest result when consecutive queries resolve out of order', async () => {
+    const firstSearch = deferred<DeskSearchResult[]>();
+    const secondSearch = deferred<DeskSearchResult[]>();
+    mocks.searchDeskFiles
+      .mockReturnValueOnce(firstSearch.promise)
+      .mockReturnValueOnce(secondSearch.promise);
+
+    const firstDoc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@first')]),
+    ]);
+    setMockEditorDocument(firstDoc, firstDoc.content.size - 1);
+    render(React.createElement(InputArea));
+
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await waitFor(() => {
+      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('first');
+    }, { timeout: 500 });
+
+    const secondDoc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@second')]),
+    ]);
+    setMockEditorDocument(secondDoc, secondDoc.content.size - 1);
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await waitFor(() => {
+      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('second');
+    }, { timeout: 500 });
+
+    await act(async () => {
+      firstSearch.resolve([{
+        name: 'first-result.ts',
+        relativePath: 'first-result.ts',
+        parentSubdir: '',
+        isDir: false,
+      }]);
+      await Promise.resolve();
+    });
+    expect(mocks.mentionMenuProps?.items.some(item => item.name === 'first-result.ts')).toBe(false);
+
+    await act(async () => {
+      secondSearch.resolve([{
+        name: 'second-result.ts',
+        relativePath: 'second-result.ts',
+        parentSubdir: '',
+        isDir: false,
+      }]);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(mocks.mentionMenuProps?.items.some(item => item.name === 'second-result.ts')).toBe(true);
+      expect(screen.getByTestId('mention-menu')).toHaveAttribute('data-busy', 'false');
+    });
+  });
+
+  it('closes the menu and aborts a pending workspace search when the trigger is cleared', async () => {
+    const pendingSearch = deferred<DeskSearchResult[]>();
+    const abort = vi.spyOn(AbortController.prototype, 'abort');
+    mocks.searchDeskFiles.mockReturnValueOnce(pendingSearch.promise);
+
+    const queryDoc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@read')]),
+    ]);
+    setMockEditorDocument(queryDoc, queryDoc.content.size - 1);
+    render(React.createElement(InputArea));
+
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await waitFor(() => {
+      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('read');
+    }, { timeout: 500 });
+
+    const clearedDoc = mentionSchema.node('doc', null, [mentionSchema.node('paragraph')]);
+    setMockEditorDocument(clearedDoc, 1);
+    act(() => {
+      mocks.updateHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('mention-menu')).toBeNull();
+      expect(abort).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      pendingSearch.resolve([{
+        name: 'late-read.ts',
+        relativePath: 'late-read.ts',
+        parentSubdir: '',
+        isDir: false,
+      }]);
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId('mention-menu')).toBeNull();
+  });
+
+  it('cleans up a pending workspace search on unmount', async () => {
+    const pendingSearch = deferred<DeskSearchResult[]>();
+    const abort = vi.spyOn(AbortController.prototype, 'abort');
+    mocks.searchDeskFiles.mockReturnValueOnce(pendingSearch.promise);
+
+    const doc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@read')]),
+    ]);
+    setMockEditorDocument(doc, doc.content.size - 1);
+    const view = render(React.createElement(InputArea));
+
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await waitFor(() => {
+      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('read');
+    }, { timeout: 500 });
+
+    view.unmount();
+    expect(abort).toHaveBeenCalled();
+
+    await act(async () => {
+      pendingSearch.resolve([]);
+      await Promise.resolve();
+    });
+  });
+
+  it('returns to a stable empty state when the workspace provider rejects', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.searchDeskFiles.mockRejectedValueOnce(new Error('workspace unavailable'));
+
+    const doc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@unavailable')]),
+    ]);
+    setMockEditorDocument(doc, doc.content.size - 1);
+    render(React.createElement(InputArea));
+
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('unavailable');
+      expect(screen.getByTestId('mention-menu')).toHaveAttribute('data-busy', 'false');
+      expect(screen.getByTestId('mention-menu')).toHaveAttribute('data-item-count', '0');
+    }, { timeout: 500 });
+    expect(warn).toHaveBeenCalledWith('[file-mention] search failed', expect.any(Error));
   });
 });

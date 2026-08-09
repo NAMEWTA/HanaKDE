@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFileMentionItems,
+  FileMentionSearchLifecycle,
   mergeEditorFileRefs,
 } from '../../utils/file-mention-items';
 
@@ -131,5 +132,22 @@ describe('file mention items', () => {
         mimeType: 'image/png',
       },
     ]);
+  });
+
+  it('gives each workspace search a cancelable identity and retires it on close', () => {
+    const lifecycle = new FileMentionSearchLifecycle();
+    const first = lifecycle.begin();
+    const second = lifecycle.begin();
+
+    expect(first.id).not.toBe(second.id);
+    expect(first.signal.aborted).toBe(true);
+    expect(first.isCurrent()).toBe(false);
+    expect(second.signal.aborted).toBe(false);
+    expect(second.isCurrent()).toBe(true);
+
+    lifecycle.cancel();
+
+    expect(second.signal.aborted).toBe(true);
+    expect(second.isCurrent()).toBe(false);
   });
 });
