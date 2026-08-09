@@ -39,8 +39,8 @@
       "base_sha": "12ccbc02a919b08cac86a03b2b0ba5cfb4eeba26",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-04",
       "workspace_ref": "specdev-worktree/T-04",
-      "status": "active",
-      "updated_at": "2026-08-09T19:00:58+08:00"
+      "status": "integrated",
+      "updated_at": "2026-08-09T21:07:58+08:00"
     }
   ]
 }

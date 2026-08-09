@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-04
 title: 整合上游 v0.441.3 checkpoint
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "整仓 release checkpoint 约含 30 个提交、144 个文件和 25 个重叠路径，涉及共享 runtime 与产品表面。"
 ready: true
@@ -107,8 +107,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-001`：`v0.441.3` checkpoint 可审计。
-- [ ] `AC-002`：正常上游变化已吸收。
-- [ ] `AC-003`：HanaKDE 核心合同无回退。
-- [ ] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-04.md</Path>`。
-- [ ] 无未批准 Git 或范围偏差。
+- [x] `AC-001`：`v0.441.3` checkpoint 可审计。
+- [x] `AC-002`：正常上游变化已吸收。
+- [x] `AC-003`：HanaKDE 核心合同无回退。
+- [x] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-04.md</Path>`。
+- [x] 无未批准 Git 或范围偏差。
