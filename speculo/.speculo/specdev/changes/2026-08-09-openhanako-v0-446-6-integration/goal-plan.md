@@ -278,13 +278,26 @@ DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 b
 
 ### W3 Feature Placement Decisions
 
+本节由 `feature-placement` 判定门要求，属于 management-only 记录：不改变 W3 产品 Gate `2018ce1dc671f0d9bb3c6f61f4078625c7863001`，也不要求任何 W3 候选 rebase。
+
 #### 落点裁决：T-11 main Workspace 基础设施
 
 **功能本质**：消费 Resource Kernel 的 root proof，新增跨 History、Knowledge 与 UI 的常驻 main lifecycle、physical watcher、baseline 和 health 契约；产物为系统级共享观察事实。
 
 **落点**：HanaKDE 系统本体（`core/workspace-runtime/**`、`shared/workspace-*.ts`、`desktop/workspace-watch-registry.cjs`）。
 
-**关键判据**：破盒硬门 1、2、3 均命中：它定义 root-safe observer 与跨组件共享原语，且必须在任何 logical consumer 前常驻。删除会破坏核心调用者；插件贡献面和权限声明无法拥有 physical watcher。最强反方是可把单一 UI 订阅做成插件，但 T-11 定义的是被 UI 消费的系统契约，不能翻盘。
+**关键判据**
+- 支持该落点：破盒硬门 1 命中。main lifecycle、single watcher/baseline 和 root-safe watch lifecycle 是特权 root/watch 生命周期，插件只能消费而不能修改。
+- 支持该落点：破盒硬门 2 命中。WorkspaceWatchCoordinator、baseline 和 health 是 History、Knowledge 与 UI 都依赖的共享 observation primitive。
+- 支持该落点：破盒硬门 3 命中。它必须在任何 logical consumer 前作为 startup-resident 基础设施存在，不能等待按需 plugin activation。
+- 支持该落点：软门 4--7 全部破盒。删除会使核心调用者失效；没有可表达 physical watcher/baseline 的插件贡献 hook；系统 root authority 不可由插件权限自行拥有；产物是共享系统状态。
+- 反对该落点（最强反方）：consumer-specific History UI 可以是插件或上层可选消费方，但 coordinator 本身定义其所消费的契约，不能归入该插件。
+
+**边界风险**：判据一边倒，风险低。
+
+**落点建议**：所属层 `core/`、`desktop/` 与 `shared/`；具体接入点 `core/workspace-runtime/**`、`shared/workspace-*.ts`、`desktop/workspace-watch-registry.cjs`、`desktop/main.cjs`，向上层暴露 authorized main observation、health 与 release handle。
+
+**下游衔接**：系统本体 → 按 T-11 Ticket 在 W3 isolated proof 内实现，T-12 是唯一 production cutover owner。
 
 #### 落点裁决：T-18 @ 搜索交互生命周期
 
@@ -292,7 +305,17 @@ DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 b
 
 **落点**：HanaKDE 系统本体（`desktop/src/react/components/input/**` 与既有 mention utilities）。
 
-**关键判据**：三个硬门不命中，但软门 4、5 为破盒子：该行为嵌入不可整块删除的主应用 InputArea，且现有插件贡献面不能替换其 keyboard/ARIA/renderer state 接入。最强反方是可选 search widget；它不能接管已锁定的 InputArea lifecycle，故仍归 desktop core。
+**关键判据**
+- 支持插件的一面：破盒硬门 1、2 不命中；它不改特权服务、不定义共享契约。软门 4、6、7 也可装进盒子：状态短暂、可由已授权 provider 支持、无插件私有外的持久化产物。
+- 支持该落点：破盒硬门 3 命中。主应用 InputArea lifecycle 必须在每个 session 中存在，当前没有能替换或拦截该 host lifecycle 的插件贡献点。
+- 支持该落点：软门 5 破盒。实现必须编辑 host InputArea/FileMentionMenu、keyboard/ARIA 和 renderer state，不能完全由现有 tools/routes/page/widget/extension 表达。
+- 反对该落点（最强反方）：这是无持久化的 UI-only query lifecycle，本可成为可选 search widget；但 widget 无法接管锁定的 InputArea lifecycle，贡献面缺失和 always-on host lifecycle 决定归属。
+
+**边界风险**：接近插件边界；若未来出现可替换 InputArea lifecycle/mention contribution hook，应重新运行判定门。当前风险受既有 host-only 接入点约束，仍属 desktop core。
+
+**落点建议**：所属层 `desktop/` renderer host；具体接入点 `desktop/src/react/components/input/**`、`desktop/src/react/utils/file-mention-items.ts`、`desktop/src/react/utils/mention-items.ts`，继续消费既有 provider 与 ResourceRef，不暴露新 backend contract。
+
+**下游衔接**：系统本体 → 按 T-18 Ticket 在 W3 实现，并把 UI E2E 结果交 Lead 验收。
 
 #### 落点裁决：T-19 共享 Document Extraction
 
@@ -300,7 +323,17 @@ DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 b
 
 **落点**：HanaKDE 系统本体（`lib/document-extract/**` 与 `lib/tools/file-tool.ts`）。
 
-**关键判据**：破盒硬门 2 命中：Extraction interface、预算、稳定 failure 与 Materialize cleanup 将被多方消费。软门 4、5、7 同样破盒；最强反方是 Office-specific adapter 可作插件，但 T-19 不拥有该 adapter，只定义共享 core，故风险低。
+**关键判据**
+- 支持该落点：破盒硬门 2 命中。extraction interface、format/failure contract、50 MiB budget 和 Materialize cleanup 是 File Tool、Office 与 Knowledge 的共享服务原语。
+- 不适用：破盒硬门 1 不命中，因为 T-19 消费而不改写 ResourceIO authority；硬门 3 不命中，因为 converter 可以按需执行。
+- 支持该落点：软门 4、5、7 破盒。删除会让消费者缺少编译/运行依赖；File Tool/Office/Knowledge 需要直接的 core service 而非可选 contribution；derived result 属于共享系统而非插件私有数据。软门 6 可装进盒子，因为 ResourceIO 仍提供自洽授权。
+- 反对该落点（最强反方）：单一 converter 可以是 optional plugin tool；但它不能安全拥有多调用方共享的 extraction contract，Office-specific adapter 仍由后续 Ticket 保持为 adapter，而非 core owner。
+
+**边界风险**：判据明确偏向系统本体，风险低；新增 Office-specific presentation 仍必须消费而非重定义 extraction core。
+
+**落点建议**：所属层 `lib/` 与 `tools/`；具体接入点 `lib/document-extract/**`、`lib/tools/file-tool.ts`，对上层暴露 authorized ResourceRef input、derived Markdown/format/warnings 与稳定 failure，不接受 raw path。
+
+**下游衔接**：系统本体 → 按 T-19 Ticket 在 W3 实现；T-20 只适配 Office/Knowledge ingestion，T-21 统一 package owner。
 
 ### Resume Protocol
 
