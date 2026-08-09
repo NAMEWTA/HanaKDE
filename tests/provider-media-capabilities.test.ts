@@ -1,7 +1,6 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import YAML from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderRegistry } from "../core/provider-registry.ts";
 
@@ -15,13 +14,16 @@ afterEach(() => {
   fs.rmSync(tmpHome, { recursive: true, force: true });
 });
 
+function writeProviderCatalogFixture(data) {
+  fs.writeFileSync(
+    path.join(tmpHome, "provider-catalog.json"),
+    JSON.stringify({ catalogVersion: 2, capabilities: {}, meta: {}, ...data }, null, 2) + "\n",
+    "utf-8",
+  );
+}
+
 function readPersistedProviders() {
-  const catalogPath = path.join(tmpHome, "provider-catalog.json");
-  if (fs.existsSync(catalogPath)) {
-    return JSON.parse(fs.readFileSync(catalogPath, "utf-8")).providers || {};
-  }
-  const saved = YAML.load(fs.readFileSync(path.join(tmpHome, "added-models.yaml"), "utf-8"));
-  return saved?.providers || {};
+  return JSON.parse(fs.readFileSync(path.join(tmpHome, "provider-catalog.json"), "utf-8")).providers || {};
 }
 
 describe("ProviderRegistry media capabilities", () => {
@@ -308,7 +310,7 @@ describe("ProviderRegistry media capabilities", () => {
   });
 
   it("uses MiniMax Token Plan credentials as a MiniMax image generation lane", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "minimax-token-plan": {
           api_key: "token-plan-key",
@@ -316,7 +318,7 @@ describe("ProviderRegistry media capabilities", () => {
           api: "anthropic-messages",
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -414,7 +416,7 @@ describe("ProviderRegistry media capabilities", () => {
   });
 
   it("treats a configured Volcengine Coding Plan credential lane as usable for Volcengine image generation", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "volcengine-coding": {
           api_key: "coding-plan-key",
@@ -422,7 +424,7 @@ describe("ProviderRegistry media capabilities", () => {
           api: "openai-completions",
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -711,7 +713,7 @@ describe("ProviderRegistry media capabilities", () => {
 
 describe("custom provider image protocol inference (#1627)", () => {
   it("infers openai-images for image models on a custom provider with the default OpenAI-compatible api", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "my-proxy": {
           api_key: "proxy-key",
@@ -722,7 +724,7 @@ describe("custom provider image protocol inference (#1627)", () => {
           ],
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -739,7 +741,7 @@ describe("custom provider image protocol inference (#1627)", () => {
   });
 
   it("infers openai-images for media.image_generation models on a custom openai-responses provider", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "my-responses-proxy": {
           api_key: "proxy-key",
@@ -752,7 +754,7 @@ describe("custom provider image protocol inference (#1627)", () => {
           },
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -763,7 +765,7 @@ describe("custom provider image protocol inference (#1627)", () => {
   });
 
   it("keeps an explicit model protocolId instead of overwriting it with the inferred one", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "my-proxy": {
           api_key: "proxy-key",
@@ -775,7 +777,7 @@ describe("custom provider image protocol inference (#1627)", () => {
           },
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -786,7 +788,7 @@ describe("custom provider image protocol inference (#1627)", () => {
   });
 
   it("does not infer a protocol for custom providers speaking a non-OpenAI-compatible api", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "my-anthropic-proxy": {
           api_key: "proxy-key",
@@ -795,7 +797,7 @@ describe("custom provider image protocol inference (#1627)", () => {
           models: [{ id: "claude-image-x", type: "image" }],
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -806,14 +808,14 @@ describe("custom provider image protocol inference (#1627)", () => {
   });
 
   it("does not start inferring protocols for built-in providers without explicit rules", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         groq: {
           api_key: "groq-key",
           models: [{ id: "imaginary-image-model", type: "image" }],
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -824,14 +826,14 @@ describe("custom provider image protocol inference (#1627)", () => {
   });
 
   it("addMediaModel persists the inferred openai-images protocol for custom OpenAI-compatible providers", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "my-proxy": {
           api_key: "proxy-key",
           base_url: "https://proxy.example.com/v1",
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();
@@ -848,7 +850,7 @@ describe("custom provider image protocol inference (#1627)", () => {
   });
 
   it("addMediaModel still rejects models whose protocol cannot be determined", () => {
-    fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), YAML.dump({
+    writeProviderCatalogFixture({
       providers: {
         "my-anthropic-proxy": {
           api_key: "proxy-key",
@@ -856,7 +858,7 @@ describe("custom provider image protocol inference (#1627)", () => {
           api: "anthropic-messages",
         },
       },
-    }), "utf-8");
+    });
 
     const registry = new ProviderRegistry(tmpHome);
     registry.reload();

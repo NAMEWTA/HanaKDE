@@ -297,13 +297,6 @@ describe("session path identity audit", () => {
         return map.get(key) || (key !== sessionPath ? map.get(sessionPath) : null) || null;
         return map.has(key) || (key !== sessionPath && map.has(sessionPath));
       `,
-      "core/migrations.ts": `
-        function rememberChildSessionIdentity(sessionPath, identity, priority) {
-          if (!sessionPath || !identity) return;
-          childSessionCandidates.set(sessionPath, { identity, priority });
-        }
-        const sessionId = sessionIdFromFilename(path.basename(sessionPath));
-      `,
       "server/routes/chat.ts": `
         const key = sessionStateKey(sessionPath);
         if (key !== sessionPath && sessionState.has(sessionPath) && !sessionState.has(key)) {
@@ -447,7 +440,6 @@ describe("session path identity audit", () => {
     expect(risks.some((file: string) => file.endsWith("upload.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("engine.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("session-coordinator.ts"))).toBe(false);
-    expect(risks.some((file: string) => file.endsWith("migrations.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("chat.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("browser-tool.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("session-folders-tool.ts"))).toBe(false);
@@ -488,7 +480,6 @@ describe("session path identity audit", () => {
       expect.stringMatching(/upload\.ts$/),
       expect.stringMatching(/engine\.ts$/),
       expect.stringMatching(/session-coordinator\.ts$/),
-      expect.stringMatching(/migrations\.ts$/),
       expect.stringMatching(/chat\.ts$/),
       expect.stringMatching(/browser-tool\.ts$/),
       expect.stringMatching(/session-folders-tool\.ts$/),

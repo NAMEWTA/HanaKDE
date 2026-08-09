@@ -269,18 +269,13 @@ describe("server home guards — real spawn behavior (fast failure paths, before
     }
   }, 20000);
 
-  it("continues a stable-era upgrade when HANA_HOME is a linked directory without an epoch stamp", async () => {
+  it("continues current-baseline startup when HANA_HOME is a linked directory without an epoch stamp", async () => {
     const container = fs.mkdtempSync(path.join(os.tmpdir(), "hana-linked-stable-upgrade-test-"));
     const realHome = path.join(container, "real-home");
     const linkedHome = path.join(container, "linked-home");
     try {
       fs.mkdirSync(path.join(realHome, "user"), { recursive: true });
-      fs.writeFileSync(path.join(realHome, "user", "preferences.json"), JSON.stringify({
-        _dataVersion: 43,
-        _configScopeMigrated: true,
-        _defaultsRelaxedMigrated: true,
-      }, null, 2) + "\n", "utf-8");
-      fs.writeFileSync(path.join(realHome, "added-models.yaml"), "_migrated: true\nproviders: {}\n", "utf-8");
+      fs.writeFileSync(path.join(realHome, "user", "preferences.json"), "{}\n", "utf-8");
       fs.writeFileSync(path.join(realHome, "provider-catalog.json"), JSON.stringify({
         catalogVersion: 2,
         providers: {},
@@ -291,14 +286,16 @@ describe("server home guards — real spawn behavior (fast failure paths, before
 
       const child = spawnServerBootstrap(linkedHome);
       // The default marker only proves first-run seeding completed. Wait until
-      // engine initialization reaches the first post-migration phase so the
-      // registry has finished writing its per-step receipts before shutdown.
+      // engine initialization reaches its first post-bootstrap phase before shutdown.
       const result = await waitForStartupProgress(child, "[init] 1/5 Pi SDK 初始化...");
 
+      expect(result.stdout).toContain("[init] 1/5 Pi SDK 初始化...");
       expect(result.stderr).toContain("HANA_DATA_EPOCH_BASELINE_WARNING reason=ambiguous-unstamped-home");
       expect(result.stderr).not.toContain("HANA_DATA_EPOCH_TRANSITION_INCOMPLETE");
-      expect(JSON.parse(fs.readFileSync(path.join(realHome, "user", "preferences.json"), "utf-8"))._dataVersion)
-        .toBeGreaterThan(43);
+      const preferences = JSON.parse(fs.readFileSync(path.join(realHome, "user", "preferences.json"), "utf-8"));
+      expect(preferences).not.toHaveProperty("_dataVersion");
+      expect(preferences).not.toHaveProperty("_configScopeMigrated");
+      expect(preferences).not.toHaveProperty("_defaultsRelaxedMigrated");
     } finally {
       fs.rmSync(container, { recursive: true, force: true });
     }

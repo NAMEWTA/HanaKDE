@@ -8,6 +8,7 @@ export const EMPTY_MCP_STATE: McpState = {
   enabled: false,
   deferEnabled: true,
   deferThreshold: DEFAULT_DEFER_THRESHOLD,
+  builtinDeferEnabled: false,
   connectors: [],
   agentConfig: { connectors: {} },
 };
@@ -29,6 +30,9 @@ export async function loadMcpState(agentId: string): Promise<McpState> {
     deferThreshold: Number.isSafeInteger(data.deferThreshold) && data.deferThreshold > 0
       ? data.deferThreshold
       : DEFAULT_DEFER_THRESHOLD,
+    builtinDeferEnabled: data.builtinDeferEnabled === true,
+    // The first-class API is connector-only. A legacy `servers` response must
+    // not repopulate the retired state shape after T-03's config tombstone.
     connectors: Array.isArray(data.connectors) ? data.connectors : [],
     agentConfig: data.agentConfig || { connectors: {} },
   };
@@ -82,7 +86,7 @@ export async function addMcpConnectorsBulk(inputs: McpConnectorInput[]): Promise
 }
 
 export async function setMcpDeferSettings(
-  patch: { deferEnabled?: boolean; deferThreshold?: number },
+  patch: { deferEnabled?: boolean; deferThreshold?: number; builtinDeferEnabled?: boolean },
 ): Promise<void> {
   const res = await hanaFetch('/api/mcp/settings/defer', {
     method: 'PUT',

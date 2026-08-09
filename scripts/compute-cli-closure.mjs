@@ -368,8 +368,8 @@ export const RUNTIME_ASSETS = Object.freeze([
     path: "lib/default-models.json",
     kind: "file",
     reason:
-      "core/migrate-providers.ts:22 and core/provider-registry.ts:45 both read "
-      + "fromRoot(\"lib\", \"default-models.json\") via fs.readFileSync.",
+      "core/provider-registry.ts:45 reads fromRoot(\"lib\", \"default-models.json\") "
+      + "via fs.readFileSync.",
   },
   {
     path: "lib/config.example.yaml",

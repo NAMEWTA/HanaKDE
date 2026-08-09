@@ -10,7 +10,14 @@ vi.mock('../../api', () => ({
   hanaFetch: (...args: unknown[]) => hanaFetchMock(...args),
 }));
 
-import { addMcpConnector, removeMcpConnector, setMcpEnabled, updateMcpConnector } from './mcp-api';
+import {
+  addMcpConnector,
+  loadMcpState,
+  removeMcpConnector,
+  setMcpDeferSettings,
+  setMcpEnabled,
+  updateMcpConnector,
+} from './mcp-api';
 
 function jsonResponse(body: unknown): Response {
   return { json: async () => body } as Response;
@@ -26,6 +33,42 @@ afterEach(() => {
 });
 
 describe('mcp-api mutations', () => {
+  it('keeps state connector-only while accepting the built-in defer flag', async () => {
+    mockMcpResponses(jsonResponse({
+      enabled: true,
+      deferEnabled: true,
+      deferThreshold: 12,
+      builtinDeferEnabled: true,
+      connectors: [],
+      // A stale/retired response must not revive the removed client state.
+      servers: [{ id: 'retired-server' }],
+      agentConfig: { connectors: {} },
+    }));
+
+    const state = await loadMcpState('hanako');
+
+    expect(state).toMatchObject({
+      builtinDeferEnabled: true,
+      connectors: [],
+    });
+    expect(state).not.toHaveProperty('servers');
+    expect(hanaFetchMock).toHaveBeenCalledWith('/api/mcp/state?agentId=hanako');
+  });
+
+  it('sends the upstream built-in defer setting through the first-class route', async () => {
+    mockMcpResponses(jsonResponse({ ok: true }));
+
+    await setMcpDeferSettings({ builtinDeferEnabled: true });
+
+    expect(hanaFetchMock).toHaveBeenCalledWith(
+      '/api/mcp/settings/defer',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ builtinDeferEnabled: true }),
+      }),
+    );
+  });
+
   it('throws when the global enabled endpoint returns a JSON error', async () => {
     mockMcpResponses(jsonResponse({ error: 'save failed' }));
 

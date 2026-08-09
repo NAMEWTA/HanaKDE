@@ -1218,22 +1218,25 @@ describe("model sync related routes", () => {
     const { ProviderRegistry } = await import("../core/provider-registry.ts");
     const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "hana-provider-summary-"));
     try {
-      fs.writeFileSync(path.join(tmpHome, "added-models.yaml"), [
-        "providers:",
-        "  deepseek:",
-        "    api_key: sk-test",
-        "    base_url: https://api.deepseek.com",
-        "    api: openai-completions",
-        "    models:",
-        "      - deepseek-v4-pro",
-        "  my-provider:",
-        "    api_key: sk-test",
-        "    base_url: https://api.example.com/v1",
-        "    api: openai-completions",
-        "    models:",
-        "      - m1",
-        "",
-      ].join("\n"), "utf-8");
+      fs.writeFileSync(path.join(tmpHome, "provider-catalog.json"), JSON.stringify({
+        catalogVersion: 2,
+        providers: {
+          deepseek: {
+            api_key: "sk-test",
+            base_url: "https://api.deepseek.com",
+            api: "openai-completions",
+            models: ["deepseek-v4-pro"],
+          },
+          "my-provider": {
+            api_key: "sk-test",
+            base_url: "https://api.example.com/v1",
+            api: "openai-completions",
+            models: ["m1"],
+          },
+        },
+        capabilities: {},
+        meta: {},
+      }, null, 2) + "\n", "utf-8");
 
       const registry = new ProviderRegistry(tmpHome);
       const engine = {

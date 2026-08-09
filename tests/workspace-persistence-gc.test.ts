@@ -27,7 +27,6 @@ describe("workspace persistence GC", () => {
   function writePrefs(userDir, workspaceUiState) {
     fs.mkdirSync(userDir, { recursive: true });
     fs.writeFileSync(path.join(userDir, "preferences.json"), JSON.stringify({
-      _defaultsRelaxedMigrated: true,
       workspace_ui_state: workspaceUiState,
     }, null, 2), "utf-8");
   }

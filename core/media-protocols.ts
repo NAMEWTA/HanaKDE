@@ -39,7 +39,7 @@ const OPENAI_COMPATIBLE_APIS = new Set(["openai-completions", "openai-responses"
  * @param {{ api?: string, sourceKind?: string }} [provider] - provider 上下文：
  *   - api: provider 生效的 API 协议（ProviderEntry.api）
  *   - sourceKind: provider 来源（"builtin" | "plugin" | "user"）；"user" 表示
- *     added-models.yaml 里用户自定义、无插件声明的 provider。
+ *     provider catalog 里用户自定义、无插件声明的 provider。
  *   调用方掌握多少上下文就传多少：迁移层不知道来源时不传，
  *   依赖来源的规则（自定义 provider → openai-images）就不会触发。
  * @returns {string} 推断出的 protocolId；无法判定时返回 ""（调用方必须显式处理，不允许静默丢弃）

@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-04
 title: 整合上游 v0.441.3 checkpoint
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "整仓 release checkpoint 约含 30 个提交、144 个文件和 25 个重叠路径，涉及共享 runtime 与产品表面。"
 ready: true

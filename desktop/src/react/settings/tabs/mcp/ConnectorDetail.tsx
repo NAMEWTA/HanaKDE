@@ -20,8 +20,6 @@ import type {
 interface ConnectorDetailProps {
   connector: McpConnector;
   globalEnabled: boolean;
-  deferEnabled: boolean;
-  deferThreshold: number;
   busyKeys: ReadonlySet<string>;
   viewAgentId: string | null;
   agentConfig: {
@@ -38,7 +36,6 @@ interface ConnectorDetailProps {
   onToolPinnedChange: (connectorId: string, toolName: string, pinned: boolean) => void;
   onPermissionModeChange: (connectorId: string, mode: McpPermissionMode) => void;
   onTrustReadOnlyChange: (connectorId: string, trust: boolean) => void;
-  onDeferChange: (patch: { deferEnabled?: boolean; deferThreshold?: number }) => void;
   onOAuthStart: (connectorId: string) => void;
   onOAuthCancel: (connectorId: string) => void;
   onOAuthLogout: (connectorId: string) => void;
@@ -51,8 +48,6 @@ interface ConnectorDetailProps {
 export function ConnectorDetail({
   connector,
   globalEnabled,
-  deferEnabled,
-  deferThreshold,
   busyKeys,
   viewAgentId,
   agentConfig,
@@ -67,7 +62,6 @@ export function ConnectorDetail({
   onToolPinnedChange,
   onPermissionModeChange,
   onTrustReadOnlyChange,
-  onDeferChange,
   onOAuthStart,
   onOAuthCancel,
   onOAuthLogout,
@@ -202,13 +196,10 @@ export function ConnectorDetail({
       <SettingsSection title={t('settings.mcp.permissionTitle')}>
         <ConnectorPermissionZone
           connector={connector}
-          deferEnabled={deferEnabled}
-          deferThreshold={deferThreshold}
           disabled={!globalEnabled}
           busy={busy('policy')}
           onPermissionModeChange={(mode) => onPermissionModeChange(connector.id, mode)}
           onTrustReadOnlyChange={(trust) => onTrustReadOnlyChange(connector.id, trust)}
-          onDeferChange={onDeferChange}
         />
       </SettingsSection>
     </div>
