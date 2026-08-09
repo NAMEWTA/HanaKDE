@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-11
 title: 建立 main Workspace 基础设施
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "唯一 main 生命周期、physical watcher、baseline observation、健康状态与 root authority 是跨消费者共享核心状态机。"
 ready: true
@@ -85,7 +85,7 @@ shared_path_owners: []
 ## 7. 路径访问契约
 
 - **预计修改点：** frontmatter 中 workspace runtime、desktop registry、shared contract 和测试。
-- **继任修正（round 1 / 3）：** 保留原候选 checkpoint `c40b65c3590c5d81fb9f927d8ea7159f03cd82e0`，由 `Worker-T-18 / Lead` 在同一 `<Path>specdev-worktree/T-11</Path>`、同一 W3 base 上修正；不得 rebase 或重置候选。必须证明 last-release 后重新订阅会重新验证 root/scope 并执行一次 baseline、baseline 异步期间的 watcher 事件不会交错覆盖或重放 stale facts、以及每个普通 watcher change 在发布前都会重验证 root identity/scope 并在 replacement/unavailable 时 fail closed。
+- **D-T11-01：** Lead 批准 `t02_merge` / Worker-T-18 在既有 `<Path>core/workspace-runtime/**</Path>` 与 `<Path>tests/workspace-*.test.ts</Path>` 范围内进行 round 1/3 successor correction：恢复订阅前重验、把 baseline 与 watcher callback 串行化、并在每个普通事件及 baseline 完成时 fail closed 重验 root/scope；不扩大路径合同或接入 production owner。
 - **可写范围：** 仅 `writable_paths`；`<Path>core/engine.ts</Path>` 为 T-12 唯一生产 wiring owner。
 - **只读上下文：** Resource Kernel、Knowledge、History 与 engine。
 - **共享路径：** 无；本 Ticket 拥有 workspace infrastructure contract。
