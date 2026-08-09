@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-18
 title: 融合 @ 搜索交互生命周期
-status: review
+status: done
 planning_depth: standard
 planning_depth_reason: "跨 input menu、query provider 与 renderer state 的多文件 UI 切片，但不改变共享持久化、安全 authority 或数据 schema。"
 ready: true
@@ -108,8 +108,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-024`：`@` query/loading/cancel/stale response 修复在 HanaKDE providers 上成立。
-- [ ] keyboard、ARIA、localization、theme 与窄布局回归通过。
-- [ ] 不引入 Search backend 或 Resource truth duplication。
-- [ ] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-18.md</Path>`。
-- [ ] 修改范围未超出 `writable_paths`。
+- [x] `AC-024`：`@` query/loading/cancel/stale response 修复在 HanaKDE providers 上成立。
+- [x] keyboard、ARIA、localization、theme 与窄布局回归通过。
+- [x] 不引入 Search backend 或 Resource truth duplication。
+- [x] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-18.md</Path>`。
+- [x] 修改范围未超出 `writable_paths`。
