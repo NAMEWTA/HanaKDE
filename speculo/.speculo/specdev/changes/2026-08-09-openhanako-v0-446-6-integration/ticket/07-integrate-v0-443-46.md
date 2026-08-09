@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-07
 title: 整合上游 v0.443.46 checkpoint
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "约 49 个提交、94 个文件和 21 个 overlap，集中进入 Resource、History、Extraction 与 UI 相关增量。"
 ready: true
