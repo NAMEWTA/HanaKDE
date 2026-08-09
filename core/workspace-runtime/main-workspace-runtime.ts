@@ -98,16 +98,20 @@ export class WorkspaceWatchCoordinator implements MainWorkspaceRuntime {
       const proof = await this.#proveMain(root);
       if (this.#session) await this.#session.close();
 
-      let session!: MainWorkspaceSession;
-      session = new MainWorkspaceSession({
+      const session = new MainWorkspaceSession({
         proof,
         rootAuthority: this.#rootAuthority,
         watchAdapter: this.#watchAdapter,
-        requestGapRepair: () => void this.#withLock(async () => {
-          if (this.#session === session) await session.repair("event-gap");
+        requestGapRepair: (watcherGeneration) => void this.#withLock(async () => {
+          if (this.#session === session) await session.handleWatchGap(watcherGeneration);
         }),
-        requestWatchFailure: () => void this.#withLock(async () => {
-          if (this.#session === session) await session.markWatchFailure();
+        requestWatchFailure: (watcherGeneration) => void this.#withLock(async () => {
+          if (this.#session === session) await session.handleWatchFailure(watcherGeneration);
+        }),
+        requestWatchChange: (watcherGeneration, change) => void this.#withLock(async () => {
+          if (this.#session === session) {
+            await session.handleWatchChange(watcherGeneration, change);
+          }
         }),
       });
       this.#session = session;
@@ -191,15 +195,21 @@ export class WorkspaceWatchCoordinator implements MainWorkspaceRuntime {
 class MainWorkspaceSession {
   readonly #rootAuthority: MainWorkspaceRootAuthority;
   readonly #watchAdapter: WorkspaceWatchAdapter;
-  readonly #requestGapRepair: () => void;
-  readonly #requestWatchFailure: () => void;
+  readonly #requestGapRepair: (watcherGeneration: number) => void;
+  readonly #requestWatchFailure: (watcherGeneration: number) => void;
+  readonly #requestWatchChange: (
+    watcherGeneration: number,
+    change: WorkspaceWatchChange,
+  ) => void;
   readonly #consumers = new Map<number, WorkspaceConsumer>();
   readonly #baselineEntries = new Map<string, WorkspaceBaselineObservation>();
   #proof: MainWorkspaceRootProof;
   #watcher: WorkspaceWatchHandle | null = null;
+  #watcherGeneration = 0;
   #nextConsumerId = 1;
   #initialBaselineAttempted = false;
   #baselineComplete = false;
+  #requiresFreshObservation = false;
   #closed = false;
   #health: WorkspaceHealth = "RECONCILING";
   #cursor = 0;
@@ -211,18 +221,21 @@ class MainWorkspaceSession {
     watchAdapter,
     requestGapRepair,
     requestWatchFailure,
+    requestWatchChange,
   }: {
     proof: MainWorkspaceRootProof;
     rootAuthority: MainWorkspaceRootAuthority;
     watchAdapter: WorkspaceWatchAdapter;
-    requestGapRepair: () => void;
-    requestWatchFailure: () => void;
+    requestGapRepair: (watcherGeneration: number) => void;
+    requestWatchFailure: (watcherGeneration: number) => void;
+    requestWatchChange: (watcherGeneration: number, change: WorkspaceWatchChange) => void;
   }) {
     this.#proof = proof;
     this.#rootAuthority = rootAuthority;
     this.#watchAdapter = watchAdapter;
     this.#requestGapRepair = requestGapRepair;
     this.#requestWatchFailure = requestWatchFailure;
+    this.#requestWatchChange = requestWatchChange;
   }
 
   snapshot(): WorkspaceSnapshot {
@@ -251,11 +264,27 @@ class MainWorkspaceSession {
 
   async releaseConsumer(subscriptionId: number): Promise<void> {
     this.#consumers.delete(subscriptionId);
-    if (this.#consumers.size === 0) await this.#closeWatcher();
+    if (this.#consumers.size !== 0) return;
+    try {
+      await this.#closeWatcher();
+    } catch (error) {
+      this.#prepareForFreshObservation();
+      this.#setHealth("FAILED", "watch-error");
+      throw error;
+    }
+    this.#prepareForFreshObservation();
   }
 
   async ensureObserved(): Promise<void> {
     if (this.#closed || this.#health === "FAILED") return;
+    if (this.#requiresFreshObservation) {
+      const proof = await this.#revalidate();
+      if (!proof) {
+        await this.#closeAfterFailedRootProof();
+        return;
+      }
+      this.#requiresFreshObservation = false;
+    }
     if (!this.#watcher && !this.#startWatcher()) return;
     if (!this.#initialBaselineAttempted) {
       this.#initialBaselineAttempted = true;
@@ -268,11 +297,7 @@ class MainWorkspaceSession {
     this.#setHealth("DEGRADED", reason);
     const proof = await this.#revalidate();
     if (!proof) {
-      try {
-        await this.#closeWatcher();
-      } catch {
-        this.#setHealth("FAILED", "watch-error");
-      }
+      await this.#closeAfterFailedRootProof();
       return;
     }
     try {
@@ -295,6 +320,54 @@ class MainWorkspaceSession {
     }
   }
 
+  async handleWatchGap(watcherGeneration: number): Promise<void> {
+    if (!this.#isCurrentWatcher(watcherGeneration)) return;
+    await this.repair("event-gap");
+  }
+
+  async handleWatchFailure(watcherGeneration: number): Promise<void> {
+    if (!this.#isCurrentWatcher(watcherGeneration)) return;
+    await this.markWatchFailure();
+  }
+
+  async handleWatchChange(
+    watcherGeneration: number,
+    change: WorkspaceWatchChange,
+  ): Promise<void> {
+    if (!this.#isCurrentWatcher(watcherGeneration)) return;
+    if (!isValidWatchChange(change)) {
+      await this.repair("event-gap");
+      return;
+    }
+    if (!await this.#revalidate()) {
+      await this.#closeAfterFailedRootProof();
+      return;
+    }
+    if (!this.#isCurrentWatcher(watcherGeneration)) return;
+    this.#cursor += 1;
+    const observation = Object.freeze({
+      type: "workspace.changed" as const,
+      sourceKey: MAIN_WORKSPACE_SOURCE_KEY,
+      relativePath: change.relativePath,
+      changeType: change.changeType,
+      cursor: this.#cursor,
+      repairCycle: this.#repairCycle,
+    });
+    if (change.changeType === "deleted") {
+      this.#baselineEntries.delete(change.relativePath);
+    } else {
+      this.#baselineEntries.set(change.relativePath, Object.freeze({
+        type: "workspace.baseline" as const,
+        sourceKey: MAIN_WORKSPACE_SOURCE_KEY,
+        relativePath: change.relativePath,
+        entryKind: "file" as const,
+        cursor: this.#cursor,
+        repairCycle: this.#repairCycle,
+      }));
+    }
+    this.#publish(observation);
+  }
+
   async close(): Promise<void> {
     await this.#closeWatcher();
     this.#closed = true;
@@ -304,11 +377,13 @@ class MainWorkspaceSession {
   }
 
   #startWatcher(): boolean {
+    const watcherGeneration = this.#watcherGeneration + 1;
+    this.#watcherGeneration = watcherGeneration;
     try {
       const watcher = this.#watchAdapter.open(this.#proof, {
-        onChange: (change) => this.#handleChange(change),
-        onGap: this.#requestGapRepair,
-        onError: this.#requestWatchFailure,
+        onChange: (change) => this.#requestWatchChange(watcherGeneration, change),
+        onGap: () => this.#requestGapRepair(watcherGeneration),
+        onError: () => this.#requestWatchFailure(watcherGeneration),
       });
       if (!watcher || typeof watcher.close !== "function") throw new Error("invalid workspace watcher");
       this.#watcher = watcher;
@@ -322,8 +397,9 @@ class MainWorkspaceSession {
   async #closeWatcher(): Promise<void> {
     const watcher = this.#watcher;
     if (!watcher) return;
-    await watcher.close();
     this.#watcher = null;
+    this.#watcherGeneration += 1;
+    await watcher.close();
   }
 
   async #runBaseline(reason: WorkspaceHealthReason): Promise<void> {
@@ -344,9 +420,13 @@ class MainWorkspaceSession {
           repairCycle: this.#repairCycle,
         });
         this.#baselineEntries.set(entry.relativePath, observation);
-        this.#publish(observation);
+      }
+      if (!await this.#revalidate()) {
+        await this.#closeAfterFailedRootProof();
+        return;
       }
       this.#baselineComplete = true;
+      for (const observation of this.#baselineEntries.values()) this.#publish(observation);
       this.#setHealth("HEALTHY", reason);
     } catch {
       this.#baselineEntries.clear();
@@ -386,33 +466,26 @@ class MainWorkspaceSession {
     return proof;
   }
 
-  #handleChange(change: WorkspaceWatchChange): void {
-    if (this.#closed || !isValidWatchChange(change)) {
-      this.#requestGapRepair();
-      return;
+  async #closeAfterFailedRootProof(): Promise<void> {
+    try {
+      await this.#closeWatcher();
+    } catch {
+      this.#setHealth("FAILED", "watch-error");
     }
-    this.#cursor += 1;
-    const observation = Object.freeze({
-      type: "workspace.changed" as const,
-      sourceKey: MAIN_WORKSPACE_SOURCE_KEY,
-      relativePath: change.relativePath,
-      changeType: change.changeType,
-      cursor: this.#cursor,
-      repairCycle: this.#repairCycle,
-    });
-    if (change.changeType === "deleted") {
-      this.#baselineEntries.delete(change.relativePath);
-    } else {
-      this.#baselineEntries.set(change.relativePath, Object.freeze({
-        type: "workspace.baseline" as const,
-        sourceKey: MAIN_WORKSPACE_SOURCE_KEY,
-        relativePath: change.relativePath,
-        entryKind: "file" as const,
-        cursor: this.#cursor,
-        repairCycle: this.#repairCycle,
-      }));
-    }
-    this.#publish(observation);
+  }
+
+  #prepareForFreshObservation(): void {
+    this.#baselineEntries.clear();
+    this.#baselineComplete = false;
+    this.#initialBaselineAttempted = false;
+    this.#requiresFreshObservation = true;
+    this.#setHealth("RECONCILING", "initializing");
+  }
+
+  #isCurrentWatcher(watcherGeneration: number): boolean {
+    return !this.#closed
+      && this.#watcher !== null
+      && this.#watcherGeneration === watcherGeneration;
   }
 
   #setHealth(health: WorkspaceHealth, reason: WorkspaceHealthReason): void {

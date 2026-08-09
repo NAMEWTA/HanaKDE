@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMainWorkspaceRuntime } from "../core/workspace-runtime/main-workspace-runtime.ts";
+import {
+  createMainWorkspaceRuntime,
+  type WorkspaceWatchListener,
+} from "../core/workspace-runtime/main-workspace-runtime.ts";
 import { createResourceMainRootAuthority } from "../core/workspace-runtime/resource-main-root-authority.ts";
 import { MAIN_WORKSPACE_CUTOVER_DESCRIPTOR } from "../shared/workspace-observation.ts";
 
@@ -27,6 +30,14 @@ function proofFor(root: typeof mainRoot, suffix = root.path) {
   };
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe("main workspace runtime", () => {
   it("shares one physical watcher and one baseline until the last logical consumer releases", async () => {
     const rootAuthority = createRootAuthority();
@@ -51,6 +62,216 @@ describe("main workspace runtime", () => {
 
     await second.release();
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("revalidates and takes a fresh baseline when observation resumes after the last release", async () => {
+    const rootAuthority = createRootAuthority();
+    let baselineRound = 0;
+    const resumedBaselines: string[] = [];
+    const watchAdapter = {
+      open: vi.fn(() => ({ close: vi.fn() })),
+      baseline: vi.fn(async function* () {
+        baselineRound += 1;
+        yield {
+          relativePath: baselineRound === 1 ? "Notes/BeforeRelease.md" : "Notes/AfterRelease.md",
+          kind: "file" as const,
+        };
+      }),
+    };
+    const runtime = createMainWorkspaceRuntime({ rootAuthority, watchAdapter });
+
+    await runtime.switchMain(mainRoot);
+    const first = await runtime.subscribe(() => undefined);
+    await first.release();
+    rootAuthority.revalidateMain.mockClear();
+
+    await runtime.subscribe((observation) => {
+      if (observation.type === "workspace.baseline") resumedBaselines.push(observation.relativePath);
+    });
+
+    expect(rootAuthority.revalidateMain).toHaveBeenCalledTimes(2);
+    expect(watchAdapter.open).toHaveBeenCalledTimes(2);
+    expect(watchAdapter.baseline).toHaveBeenCalledTimes(2);
+    expect(resumedBaselines).toEqual(["Notes/AfterRelease.md"]);
+  });
+
+  it("does not emit stale HEALTHY or baseline facts while a post-release root proof fails", async () => {
+    const rootAuthority = createRootAuthority();
+    const replaced = proofFor(mainRoot, "replacement");
+    const health: string[] = [];
+    const baselines: string[] = [];
+    const watchAdapter = {
+      open: vi.fn(() => ({ close: vi.fn() })),
+      baseline: vi.fn(async function* () {
+        yield { relativePath: "Notes/BeforeRelease.md", kind: "file" as const };
+      }),
+    };
+    const runtime = createMainWorkspaceRuntime({ rootAuthority, watchAdapter });
+
+    await runtime.switchMain(mainRoot);
+    const first = await runtime.subscribe(() => undefined);
+    await first.release();
+    rootAuthority.revalidateMain.mockResolvedValue(replaced);
+
+    await runtime.subscribe((observation) => {
+      if (observation.type === "workspace.health") health.push(observation.health);
+      if (observation.type === "workspace.baseline") baselines.push(observation.relativePath);
+    });
+
+    expect(health).toEqual(["RECONCILING", "FAILED"]);
+    expect(baselines).toEqual([]);
+    expect(runtime.snapshot()).toMatchObject({ health: "FAILED", observing: false });
+  });
+
+  it("fails closed when the root is replaced while an async baseline is in flight", async () => {
+    const rootAuthority = createRootAuthority();
+    const replaced = proofFor(mainRoot, "replacement");
+    const baselineStarted = deferred();
+    const allowBaseline = deferred();
+    const baselines: string[] = [];
+    const close = vi.fn();
+    const watchAdapter = {
+      open: vi.fn(() => ({ close })),
+      baseline: vi.fn(async function* () {
+        baselineStarted.resolve();
+        await allowBaseline.promise;
+        yield { relativePath: "Notes/ShouldNotLeak.md", kind: "file" as const };
+      }),
+    };
+    const runtime = createMainWorkspaceRuntime({ rootAuthority, watchAdapter });
+
+    await runtime.switchMain(mainRoot);
+    const starting = runtime.subscribe((observation) => {
+      if (observation.type === "workspace.baseline") baselines.push(observation.relativePath);
+    });
+    await baselineStarted.promise;
+    rootAuthority.revalidateMain.mockResolvedValue(replaced);
+    allowBaseline.resolve();
+    await starting;
+
+    expect(runtime.snapshot()).toMatchObject({ health: "FAILED", observing: false });
+    expect(close).toHaveBeenCalledOnce();
+    expect(baselines).toEqual([]);
+  });
+
+  it("does not replay a deletion that raced an async baseline to a later consumer", async () => {
+    const rootAuthority = createRootAuthority();
+    const baselineStarted = deferred();
+    const allowBaseline = deferred();
+    const deletedPaths: string[] = [];
+    let listener: WorkspaceWatchListener | undefined;
+    const watchAdapter = {
+      open: vi.fn((_proof, nextListener: WorkspaceWatchListener) => {
+        listener = nextListener;
+        return { close: vi.fn() };
+      }),
+      baseline: vi.fn(async function* () {
+        baselineStarted.resolve();
+        await allowBaseline.promise;
+        yield { relativePath: "Notes/DeletedDuringScan.md", kind: "file" as const };
+      }),
+    };
+    const runtime = createMainWorkspaceRuntime({ rootAuthority, watchAdapter });
+
+    await runtime.switchMain(mainRoot);
+    const starting = runtime.subscribe((observation) => {
+      if (observation.type === "workspace.changed" && observation.changeType === "deleted") {
+        deletedPaths.push(observation.relativePath);
+      }
+    });
+    await baselineStarted.promise;
+    listener!.onChange({ relativePath: "Notes/DeletedDuringScan.md", changeType: "deleted" });
+    allowBaseline.resolve();
+    await starting;
+    await vi.waitFor(() => {
+      expect(deletedPaths).toEqual(["Notes/DeletedDuringScan.md"]);
+    });
+
+    const laterBaselines: string[] = [];
+    await runtime.subscribe((observation) => {
+      if (observation.type === "workspace.baseline") laterBaselines.push(observation.relativePath);
+    });
+
+    expect(laterBaselines).toEqual([]);
+  });
+
+  it("fails closed before publishing a watcher change whose root scope proof changed", async () => {
+    const rootAuthority = createRootAuthority();
+    const changedScope = proofFor(mainRoot);
+    changedScope.identity = {
+      ...changedScope.identity,
+      scopeToken: "scope:changed",
+    };
+    const close = vi.fn();
+    const observations: string[] = [];
+    let listener: WorkspaceWatchListener | undefined;
+    const watchAdapter = {
+      open: vi.fn((_proof, nextListener: WorkspaceWatchListener) => {
+        listener = nextListener;
+        return { close };
+      }),
+      baseline: vi.fn(async function* () {
+        yield { relativePath: "Notes/A.md", kind: "file" as const };
+      }),
+    };
+    const runtime = createMainWorkspaceRuntime({ rootAuthority, watchAdapter });
+
+    await runtime.switchMain(mainRoot);
+    await runtime.subscribe((observation) => {
+      if (observation.type === "workspace.changed") observations.push(observation.relativePath);
+    });
+    rootAuthority.revalidateMain.mockReset();
+    rootAuthority.revalidateMain.mockResolvedValue(changedScope);
+    listener!.onChange({ relativePath: "Notes/B.md", changeType: "modified" });
+
+    await vi.waitFor(() => {
+      expect(runtime.snapshot()).toMatchObject({ health: "FAILED", observing: false });
+    });
+    expect(rootAuthority.revalidateMain).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(observations).toEqual([]);
+
+    const replayedBaselines: string[] = [];
+    await runtime.subscribe((observation) => {
+      if (observation.type === "workspace.baseline") replayedBaselines.push(observation.relativePath);
+    });
+    expect(replayedBaselines).toEqual([]);
+  });
+
+  it("fails closed for an unavailable root proof before publishing a watcher event", async () => {
+    const rootAuthority = createRootAuthority();
+    const close = vi.fn();
+    const observations: string[] = [];
+    let listener: WorkspaceWatchListener | undefined;
+    const watchAdapter = {
+      open: vi.fn((_proof, nextListener: WorkspaceWatchListener) => {
+        listener = nextListener;
+        return { close };
+      }),
+      baseline: vi.fn(async function* () {
+        yield { relativePath: "Notes/A.md", kind: "file" as const };
+      }),
+    };
+    const runtime = createMainWorkspaceRuntime({ rootAuthority, watchAdapter });
+
+    await runtime.switchMain(mainRoot);
+    await runtime.subscribe((observation) => {
+      if (observation.type === "workspace.changed") observations.push(observation.relativePath);
+    });
+    rootAuthority.revalidateMain.mockResolvedValue(null);
+    listener!.onChange({ relativePath: "Notes/B.md", changeType: "created" });
+
+    await vi.waitFor(() => {
+      expect(runtime.snapshot()).toMatchObject({ health: "FAILED", observing: false });
+    });
+    expect(close).toHaveBeenCalledOnce();
+    expect(observations).toEqual([]);
+
+    const replayedBaselines: string[] = [];
+    await runtime.subscribe((observation) => {
+      if (observation.type === "workspace.baseline") replayedBaselines.push(observation.relativePath);
+    });
+    expect(replayedBaselines).toEqual([]);
   });
 
   it("closes the old main before opening a fresh lifecycle and never upgrades a mount", async () => {
