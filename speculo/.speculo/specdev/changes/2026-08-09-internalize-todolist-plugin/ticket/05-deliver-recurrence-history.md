@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: [T-04]
 contract_ids: [AC-014, AC-015, AC-016, AC-029]
-owner: unassigned
+owner: implementation-owner
 expected_changes: ["<Path>plugins/todolist/src/**</Path>", "<Path>plugins/todolist/assets/**</Path>", "<Path>plugins/todolist/tests/recurrence.test.ts</Path>", "<Path>plugins/todolist/tests/recurrence.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/todolist/**</Path>"]
 read_only_paths: ["<Path>temp/HanaKDE-TodoList-0.0.5-workbench-source-audited-final/tests/recurrence.test.ts</Path>", "<Path>temp/HanaKDE-TodoList-0.0.5-workbench-source-audited-final/src/**</Path>"]

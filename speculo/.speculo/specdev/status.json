@@ -4,11 +4,12 @@
   "active": [
     {
       "change": "2026-08-09-internalize-todolist-plugin",
-      "current_work": "specdev/goal-plan",
+      "current_work": null,
       "works_run": [
         "specdev/grill-with-docs",
         "specdev/spec",
-        "specdev/tickets"
+        "specdev/tickets",
+        "specdev/goal-plan"
       ]
     },
     {

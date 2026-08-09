@@ -511,3 +511,18 @@
 - **约束或不变量：** SpecDev 工件可位于 change 目录；任何产品实现、测试、fixture、Playwright 配置、构建资产和依赖声明仍只能位于 `<Path>plugins/todolist/</Path>`。
 - **后续：** 运行 `<Path>{roots.workflows}/specdev/P-goal-plan/P-goal-plan.md</Path>`；不得由 T-tickets 自动进入实现。
 - **替代/被替代：** 无
+
+## LOG-035 — 2026-08-09T16:15:06+08:00 — 普通 Goal Plan Ready 发布
+- **设计树节点：** D-001 至 D-025
+- **轮次与依赖：** P-goal-plan / ready Spec / T-01 至 T-10
+- **状态：** confirmed
+- **问题：** 如何在不并行写同一插件根、不引入严格角色委派的情况下治理十张 Ticket 的基线、迁移、安全 Gate、发布证据和恢复。
+- **事实与来源：** 用户选择普通 Goal Plan；Git 计划冻结点为 `5c281aae27eed87a0954c93b553ea7b2b255eef4`，`<Path>plugins/todolist/</Path>` 在规划时不存在；creator scaffold preflight 通过；仓库 test/typecheck/lint/build/seed 命令及 Vitest/Playwright 可用；宿主接缝 9 文件、89 测试通过；goal-plan stage 返回 0 error、0 warning。
+- **选项：** 利用 max_parallel=3 并行写同一插件；把所有检查推迟到发布；以 10 个串行 Wave、G0 至 G5 和 Evidence Gate 推进。
+- **推荐：** `implementation-owner` 顺序负责 T-01 至 T-09，`release-owner` 在 G4 关闭后负责 T-10；每个 Deep Ticket 服从人工批准，所有 owner 只写 `<Path>plugins/todolist/**</Path>`。
+- **结论：** Goal Plan 设置 `ready_for_execution: true`，采用 coordination、migration、high-assurance、reference-conformance；关键路径是 T-01 至 T-10，有效产品并发为 1，无 shared path owner。
+- **原因：** Ticket 共享同一私有 schema、application、Page 和 runtime，且每条边都有真实前置；串行 Evidence 交接比并行冲突治理更可信。
+- **影响工件：** goal-plan / ticket owner / tickets-map / status
+- **约束或不变量：** Plan Ready 不授权产品写入、提交、推送、合并、部署、发布、真实用户数据迁移、真实通知或真实 Agent 副作用；这些动作遵守 Goal Plan authorization matrix。
+- **后续：** 用户明确进入 `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>` 并授予适用 Deep Ticket 批准后，从 G0/W1/T-01 开始；不得由 P-goal-plan 自动执行。
+- **替代/被替代：** 无

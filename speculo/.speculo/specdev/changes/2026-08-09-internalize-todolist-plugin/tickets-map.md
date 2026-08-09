@@ -25,16 +25,16 @@ status: ready
 
 | ID | Ticket | 可观察产出 | Blocked By | Depth | Risk | Ready | Owner | Contract IDs | Wave/Gate | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T-01 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/01-establish-builtin-persistent-crud.md</Path>` | builtin Page 与 `todo_*` tools 同源持久 CRUD | — | deep | high | yes | unassigned | AC-001～004、029、033 | W1 / G1 根契约 | ready |
-| T-02 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/02-deliver-safe-deletion-lifecycle.md</Path>` | soft delete、Undo、Trash 与安全 confirm | T-01 | deep | high | yes | unassigned | AC-013、014、029 | W2 / G1 数据安全 | ready |
-| T-03 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/03-deliver-capture-and-organization.md</Path>` | Inbox/Project/tags 与可见继承 chip | T-02 | deep | medium | yes | unassigned | AC-006、007、029、031 | W3 / G2 日常任务 | ready |
-| T-04 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/04-deliver-typed-time-and-focus-views.md</Path>` | typed time、DST、Today/Upcoming/Calendar | T-03 | deep | high | yes | unassigned | AC-005、008、009、030、031 | W4 / G2 时间意图 | ready |
-| T-05 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/05-deliver-recurrence-history.md</Path>` | 两类周期、系列编辑与历史不可变 | T-04 | deep | high | yes | unassigned | AC-014～016、029 | W5 / G2 周期 | ready |
-| T-06 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/06-deliver-scheduler-readiness-and-reminders.md</Path>` | 有界 readiness、唯一 schedule 与提醒 handoff | T-05 | deep | high | yes | unassigned | AC-009～012、023、024、029 | W6 / G3 后台就绪 | ready |
-| T-07 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/07-deliver-isolated-agent-runs.md</Path>` | 每 Todo×occurrence 隔离 Run/Session/Attempt 与安全取消 | T-06 | deep | high | yes | unassigned | AC-009、012、017～020、022、026、029、033 | W7 / G3 自动化协议 | ready |
-| T-08 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/08-deliver-automation-operations-surface.md</Path>` | 可筛选、可诊断、可行动的 Automation Page | T-07 | standard | medium | yes | unassigned | AC-020～022、029、031 | W8 / G3 运营面 | ready |
-| T-09 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/09-deliver-import-export-review.md</Path>` | JSON preview/commit、显式导出与 Review | T-08 | deep | high | yes | unassigned | AC-022、027～031 | W9 / G4 数据交换 | ready |
-| T-10 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/10-release-complete-builtin-todo.md</Path>` | 构建/seed/视觉/a11y/路径/可移除发布证据 | T-09 | standard | high | yes | unassigned | AC-001、003、023、025、029、031～033 | W10 / G5 发布 | ready |
+| T-01 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/01-establish-builtin-persistent-crud.md</Path>` | builtin Page 与 `todo_*` tools 同源持久 CRUD | — | deep | high | yes | implementation-owner | AC-001～004、029、033 | W1 / G1 根契约 | ready |
+| T-02 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/02-deliver-safe-deletion-lifecycle.md</Path>` | soft delete、Undo、Trash 与安全 confirm | T-01 | deep | high | yes | implementation-owner | AC-013、014、029 | W2 / G1 数据安全 | ready |
+| T-03 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/03-deliver-capture-and-organization.md</Path>` | Inbox/Project/tags 与可见继承 chip | T-02 | deep | medium | yes | implementation-owner | AC-006、007、029、031 | W3 / G2 日常任务 | ready |
+| T-04 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/04-deliver-typed-time-and-focus-views.md</Path>` | typed time、DST、Today/Upcoming/Calendar | T-03 | deep | high | yes | implementation-owner | AC-005、008、009、030、031 | W4 / G2 时间意图 | ready |
+| T-05 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/05-deliver-recurrence-history.md</Path>` | 两类周期、系列编辑与历史不可变 | T-04 | deep | high | yes | implementation-owner | AC-014～016、029 | W5 / G2 周期 | ready |
+| T-06 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/06-deliver-scheduler-readiness-and-reminders.md</Path>` | 有界 readiness、唯一 schedule 与提醒 handoff | T-05 | deep | high | yes | implementation-owner | AC-009～012、023、024、029 | W6 / G3 后台就绪 | ready |
+| T-07 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/07-deliver-isolated-agent-runs.md</Path>` | 每 Todo×occurrence 隔离 Run/Session/Attempt 与安全取消 | T-06 | deep | high | yes | implementation-owner | AC-009、012、017～020、022、026、029、033 | W7 / G3 自动化协议 | ready |
+| T-08 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/08-deliver-automation-operations-surface.md</Path>` | 可筛选、可诊断、可行动的 Automation Page | T-07 | standard | medium | yes | implementation-owner | AC-020～022、029、031 | W8 / G3 运营面 | ready |
+| T-09 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/09-deliver-import-export-review.md</Path>` | JSON preview/commit、显式导出与 Review | T-08 | deep | high | yes | implementation-owner | AC-022、027～031 | W9 / G4 数据交换 | ready |
+| T-10 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/10-release-complete-builtin-todo.md</Path>` | 构建/seed/视觉/a11y/路径/可移除发布证据 | T-09 | standard | high | yes | release-owner | AC-001、003、023、025、029、031～033 | W10 / G5 发布 | ready |
 
 Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；本表是同步投影，不得独立修改出另一套真相。W1～W10 是顺序候选 Wave，不表示并行；正式 Gate、owner 和发布编排由 Goal Plan 决定。
 
@@ -100,6 +100,7 @@ T-01 [READY, root CRUD contract]
 - 最大并发来自 `<Path>{roots.state}/specdev/config.json</Path>`，但本 change 不以可用并发上限覆盖真实数据和接口依赖。
 - 所有 Ticket 的唯一产品写入授权均为 `<Path>plugins/todolist/**</Path>`，且 DAG 中任意两票均存在传递依赖，因此不会形成 concurrent Ready writable overlap。
 - `shared_paths` 与 `shared_path_owners` 全部为空；每个阶段仅当前 Ticket 是插件根写入 owner。
+- T-01～T-09 的正式 owner 为 `implementation-owner`；T-10 的正式 owner 为 `release-owner`。owner 只能在前序 Evidence 完整并同步状态后接管插件根。
 - 宿主、公共测试、构建脚本和参考插件均为只读；不存在“由最后一票修宿主”或“最终解决合并冲突”的授权。
 
 | Ticket A | Ticket B | Writable 交集 | 真实依赖 | 处理 |
@@ -108,13 +109,14 @@ T-01 [READY, root CRUD contract]
 
 ## 6. Gate、Wave 与集成点
 
+- **G0 基线与插件盒门：** 实施前冻结 Git/命令/SDK 接缝，运行 creator preflight 和宿主基线，并获得适用 Deep Ticket 人工批准。
 - **G1 根契约/数据安全：** T-01～T-02；CRUD、version、store、Trash 与 confirmation 成为后续 mutation 基线。
 - **G2 日常任务/时间/周期：** T-03～T-05；完成用户可见任务管理和 stable occurrence identity。
 - **G3 后台与自动化：** T-06～T-08；先证明 TaskRegistry readiness/提醒，再开放 Agent Run 和运营 UI。
 - **G4 数据交换：** T-09；在完整 schema 后冻结 exchange v1、Review 与隐私红线。
 - **G5 产品发布：** T-10；构建、seed、产物、E2E、路径和可移除性汇合。
 
-由于 Ticket 数量为 10、包含多个 Deep/迁移/高风险 Gate，下一步必须使用 `<Path>{roots.workflows}/specdev/P-goal-plan/P-goal-plan.md</Path>` 正式编排。当前 Map 不预设 Lead/Worker；Goal Plan 决定当前执行/集成 owner、基线、命令顺序和恢复点。
+正式编排由 `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/goal-plan.md</Path>` 负责；其基线、开始条件、Gate 证据、授权和恢复规则是本 Map 的执行权威。
 
 ## 7. 横切契约与风险
 

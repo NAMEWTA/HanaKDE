@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: []
 contract_ids: [AC-001, AC-002, AC-003, AC-004, AC-029, AC-033]
-owner: unassigned
+owner: implementation-owner
 expected_changes: ["<Path>plugins/todolist/manifest.json</Path>", "<Path>plugins/todolist/package.json</Path>", "<Path>plugins/todolist/routes/**</Path>", "<Path>plugins/todolist/src/**</Path>", "<Path>plugins/todolist/assets/**</Path>", "<Path>plugins/todolist/tests/plugin-crud.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/todolist/**</Path>"]
 read_only_paths: ["<Path>core/plugin-manager.ts</Path>", "<Path>core/plugin-context.ts</Path>", "<Path>lib/tools/todo.ts</Path>", "<Path>lib/tools/todo-constants.ts</Path>", "<Path>plugins/beautify/**</Path>", "<Path>skills2set/hana-plugin-creator/**</Path>", "<Path>temp/HanaKDE-TodoList-0.0.5-workbench-source-audited-final/**</Path>"]

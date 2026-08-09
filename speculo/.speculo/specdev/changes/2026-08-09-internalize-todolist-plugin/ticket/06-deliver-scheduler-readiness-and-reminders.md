@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: [T-05]
 contract_ids: [AC-009, AC-010, AC-011, AC-012, AC-023, AC-024, AC-029]
-owner: unassigned
+owner: implementation-owner
 expected_changes: ["<Path>plugins/todolist/src/**</Path>", "<Path>plugins/todolist/routes/**</Path>", "<Path>plugins/todolist/assets/**</Path>", "<Path>plugins/todolist/tests/scheduler-reminder.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/todolist/**</Path>"]
 read_only_paths: ["<Path>lib/task-registry.ts</Path>", "<Path>server/task-bus-handlers.ts</Path>", "<Path>core/plugin-context.ts</Path>", "<Path>server/routes/chat.ts</Path>", "<Path>lib/notifications/notification-service.ts</Path>", "<Path>tests/task-registry.test.ts</Path>", "<Path>tests/event-bus-capabilities.test.ts</Path>"]

@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: [T-01]
 contract_ids: [AC-013, AC-014, AC-029]
-owner: unassigned
+owner: implementation-owner
 expected_changes: ["<Path>plugins/todolist/src/**</Path>", "<Path>plugins/todolist/assets/**</Path>", "<Path>plugins/todolist/tests/todo-lifecycle.integration.test.ts</Path>", "<Path>plugins/todolist/tests/e2e/todo-lifecycle.spec.ts</Path>"]
 writable_paths: ["<Path>plugins/todolist/**</Path>"]
 read_only_paths: ["<Path>core/plugin-route-request-context.ts</Path>", "<Path>lib/tools/**</Path>", "<Path>temp/HanaKDE-TodoList-0.0.5-workbench-source-audited-final/**</Path>"]

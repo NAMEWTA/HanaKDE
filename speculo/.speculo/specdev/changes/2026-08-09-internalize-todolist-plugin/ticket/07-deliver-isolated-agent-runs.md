@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: [T-06]
 contract_ids: [AC-009, AC-012, AC-017, AC-018, AC-019, AC-020, AC-022, AC-026, AC-029, AC-033]
-owner: unassigned
+owner: implementation-owner
 expected_changes: ["<Path>plugins/todolist/src/**</Path>", "<Path>plugins/todolist/routes/**</Path>", "<Path>plugins/todolist/tests/automation-run.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/todolist/**</Path>"]
 read_only_paths: ["<Path>lib/task-registry.ts</Path>", "<Path>core/plugin-context.ts</Path>", "<Path>core/plugin-route-request-context.ts</Path>", "<Path>server/task-bus-handlers.ts</Path>", "<Path>tests/hub-plugin-session-agent-capabilities.test.ts</Path>", "<Path>tests/plugin-ui-capabilities.test.ts</Path>"]

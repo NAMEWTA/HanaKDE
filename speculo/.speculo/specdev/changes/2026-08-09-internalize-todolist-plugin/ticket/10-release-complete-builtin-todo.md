@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: [T-09]
 contract_ids: [AC-001, AC-003, AC-023, AC-025, AC-029, AC-031, AC-032, AC-033]
-owner: unassigned
+owner: release-owner
 expected_changes: ["<Path>plugins/todolist/**</Path>"]
 writable_paths: ["<Path>plugins/todolist/**</Path>"]
 read_only_paths: ["<Path>package.json</Path>", "<Path>scripts/build-server.mjs</Path>", "<Path>scripts/build-server-plugin-runtime-deps.mjs</Path>", "<Path>scripts/**</Path>", "<Path>tests/**</Path>", "<Path>core/plugin-manager.ts</Path>", "<Path>desktop/**</Path>"]
