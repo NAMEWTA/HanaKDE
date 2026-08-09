@@ -240,7 +240,7 @@ DELIVERY ticket=T-05 state=integrated workspace=specdev-worktree/T-05 checkpoint
 DELIVERY ticket=T-06 state=integrated workspace=specdev-worktree/T-06 checkpoint=22a33e1b7cb4742cc456977455a11937c5bb064c evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>
 DELIVERY ticket=T-07 state=integrated workspace=specdev-worktree/T-07 checkpoint=3c4c9fac68c99ed5bf6a771f84ddc0da6f7a9a44 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>
 DELIVERY ticket=T-08 state=integrated workspace=specdev-worktree/T-08 checkpoint=2bc78b4599d79183c6a0a086f48c47385b914291 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-08.md</Path>
-DELIVERY ticket=T-09 state=integrated workspace=specdev-worktree/T-09 checkpoint=c45d1e544f8f2611f92a459947b6a49e9b91239d evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>
+DELIVERY ticket=T-09 state=removed workspace=specdev-worktree/T-09 checkpoint=c45d1e544f8f2611f92a459947b6a49e9b91239d evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>
 NEXT ticket=T-10 wave=G2 gate=G2 baseline=G1-cleanup-checkpoint action=feature-placement-then-dispatch
 ```
 
