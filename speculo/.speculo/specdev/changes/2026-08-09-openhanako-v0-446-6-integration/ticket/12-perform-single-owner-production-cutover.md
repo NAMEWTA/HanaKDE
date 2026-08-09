@@ -9,14 +9,14 @@ planning_depth: deep
 planning_depth_reason: "生产 watcher、mutation fan-out 与 baseline owner 的一次性 stop-then-start 切换具有全局事故半径且禁止双运行。"
 ready: true
 risk: critical
-blocked_by: [T-10, T-11]
+blocked_by: [T-10, T-11, T-19]
 contract_ids: [AC-009, AC-010, AC-011, AC-012, AC-013]
 owner: unassigned
 expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
 writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>desktop/main.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
-shared_paths: []
-shared_path_owners: []
+shared_paths: ["<Path>core/engine.ts</Path>"]
+shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File Tool injection until W3 integration; T-12 owns later production cutover work"]
 ---
 
 # Ticket T-12: 执行单 owner 生产切换
@@ -84,6 +84,7 @@ shared_path_owners: []
 ## 7. 路径访问契约
 
 - **预计修改点：** Engine/server composition、event bridge 和 lifecycle tests。
+- **D-T19-02 接口交接：** T-19 在 W3 先以 object-identity 方式为内建 File Tool 注入 session-scoped sandbox `resourceIO`，并在 `<Path>tests/engine-build-tools.test.ts</Path>` 证明非 File Tool 不会得到该对象。T-12 不重做或扩大该 injection；在 W3 integrated 后继续拥有 `<Path>core/engine.ts</Path>` 的 production cutover 变更。
 - **可写范围：** 仅 frontmatter `writable_paths`；Kernel/Workspace 实现为只读消费者契约。
 - **只读上下文：** Resource Kernel、workspace coordinator、Desktop main 与下游 consumers。
 - **共享路径：** 无；T-12 是 production assembly/cutover 唯一 owner。
