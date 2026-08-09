@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-08
 title: 整合上游 v0.443.54 至 v0.444.1 checkpoints
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "两个紧邻 release 子 checkpoint 共约 15 个提交，后段含 52 个文件与 17 个 overlap，需分别留存可恢复审计点。"
 ready: true
