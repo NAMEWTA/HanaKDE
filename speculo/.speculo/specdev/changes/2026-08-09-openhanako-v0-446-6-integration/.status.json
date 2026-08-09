@@ -1,0 +1,15 @@
+{
+  "schema_version": 3,
+  "artifact": "change-status",
+  "change": "2026-08-09-openhanako-v0-446-6-integration",
+  "change_status": "active",
+  "current_work": "specdev/goal-plan",
+  "created_at": "2026-08-09T10:08:37+08:00",
+  "updated_at": "2026-08-09T15:35:42+08:00",
+  "completed_at": null,
+  "archived": false,
+  "archive_path": null,
+  "blockers": [],
+  "deviations": [],
+  "worktrees": []
+}

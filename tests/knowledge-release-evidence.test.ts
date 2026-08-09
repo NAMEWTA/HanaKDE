@@ -1,12 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveOpenHanakoKnowledgeArtifacts } from './helpers/openhanako-knowledge-artifacts.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const CHANGE = path.join(
-  ROOT,
-  'speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace',
-);
+const CHANGE = resolveOpenHanakoKnowledgeArtifacts(ROOT);
 
 function read(relativePath: string): string {
   return fs.readFileSync(path.join(CHANGE, relativePath), 'utf8');

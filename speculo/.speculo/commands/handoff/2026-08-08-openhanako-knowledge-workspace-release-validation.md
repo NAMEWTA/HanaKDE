@@ -4,11 +4,11 @@
 
 Continue the implementation and release audit defined by:
 
-- `speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/goal-plan.md`
-- `speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/spec.md`
-- `speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/rules.md`
-- `speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/release-checklist.md`
-- `speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/release-evidence.md`
+- `speculo/.speculo/specdev/archive/2026-07/2026-07-24-openhanako-knowledge-workspace/goal-plan.md`
+- `speculo/.speculo/specdev/archive/2026-07/2026-07-24-openhanako-knowledge-workspace/spec.md`
+- `speculo/.speculo/specdev/archive/2026-07/2026-07-24-openhanako-knowledge-workspace/rules.md`
+- `speculo/.speculo/specdev/archive/2026-07/2026-07-24-openhanako-knowledge-workspace/release-checklist.md`
+- `speculo/.speculo/specdev/archive/2026-07/2026-07-24-openhanako-knowledge-workspace/release-evidence.md`
 
 Credential persistence is settled and must remain unchanged: HanaKDE uses its
 existing `HANA_HOME` managed files. Do not add macOS Keychain, `keytar`,

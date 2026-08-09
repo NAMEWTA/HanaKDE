@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "artifact": "design-tree",
+  "change": "2026-08-09-openhanako-v0-446-6-integration",
+  "status": "consensus",
+  "round": 6,
+  "nodes": [
+    {
+      "id": "D-001",
+      "title": "指定集成计划的设计权威级别",
+      "question": "这份标记为 Final Design / Implementation Blueprint 的集成计划，在本 change 中应被视为已经确认的设计基线，还是只作为待逐项重审的候选方案？",
+      "depends_on": [],
+      "recommendation": "把计划中的明确目标、invariants、non-goals、模块所有权与验收要求作为已接受基线；G 只重新质询仓库事实已经推翻的内容、与既有合同冲突的内容，以及计划没有决定的迁移和交付问题。这样保留文档价值，也不会把过时假设伪装成事实。",
+      "status": "answered",
+      "round": 1,
+      "answer": "采用推荐方案：原 v0.444.1 计划中的明确目标、架构不变量、non-goals、模块所有权与验收要求作为设计来源；同时必须认真审核并以当前 hanakde 仓库事实、既有合同、冻结的最新 v0.446.6 tag 实现和真实验证能力校正。任何冲突或过时内容不得静默照抄，必须进入设计树或 LOG 裁决。",
+      "log_ref": "LOG-004"
+    },
+    {
+      "id": "D-002",
+      "title": "Change 与交付批次边界",
+      "question": "当前差异跨 747 个 HanaKDE 变更文件、645 个上游变更文件且有 48 个真实 overlap；11 个实施 Phase 应作为一个 SpecDev umbrella change 的统一合同推进并在内部拆 Ticket/Wave，还是拆成多个可独立完成和归档的 change？",
+      "depends_on": ["D-001"],
+      "recommendation": "保留一个 umbrella change 来承载跨层不变量和最终 ancestry 验收，使用 Deep Spec、多个垂直 Tickets 与 Goal Plan 分 Wave；只有可单独发布且不破坏一致性闭环的工作才拆为后续 change。",
+      "status": "answered",
+      "round": 2,
+      "answer": "采用一个 umbrella change，统一承载上游 ancestry、正常迭代吸收与跨层融合；内部使用 Deep Spec、多个纵向 Ticket 和 Goal Plan 分 Wave。",
+      "log_ref": "LOG-007"
+    },
+    {
+      "id": "D-003",
+      "title": "工作目录切换与 Workspace relocation 语义",
+      "question": "如何裁决既有“切换工作目录即打开全新 workspace”合同、新计划“显式 relocation 时保持 workspaceId”，以及当前仓库已经按规范化 path 持久化 Workspace UI state 的现实？",
+      "depends_on": ["D-001"],
+      "recommendation": "保留普通目录切换创建新 workspace 的旧行为，另设显式、经重校验且可回滚的 relocation 动作；只有 relocation 保持 workspaceId、History 与 Knowledge 逻辑归属。",
+      "status": "answered",
+      "round": 2,
+      "answer": "不新增 Workspace relocation 产品语义。工作目录就是唯一主 Workspace main，切换工作目录就是切换主 Workspace；额外目录只作为挂载/链接。HanaKDE 的文件资源管理与编辑器增强继续在该模型上融合上游。",
+      "log_ref": "LOG-008"
+    },
+    {
+      "id": "D-004",
+      "title": "上游 Git 整合拓扑",
+      "question": "用户把上游目标更新为官方 v0.446.6。是否冻结精确 commit 5f08a4f30203abb61dafac7dbb7ab92d11c23efa，按本地 overlap/行为密度选择 release checkpoint 做可审计 staged merge，最终保证 v0.446.6 成为 ancestry？",
+      "depends_on": ["D-001"],
+      "recommendation": "冻结官方 v0.446.6 commit 并采用 staged merge；原 v0.444.1 checkpoint 链继续作为中间审计来源，新增 v0.444.1..v0.446.6 的 Memory/Editor/Build 切片，最终 v0.446.6 必须成为 ancestor。",
+      "status": "answered",
+      "round": 2,
+      "answer": "以上游官方 v0.446.6 为准，冻结 commit 5f08a4f30203abb61dafac7dbb7ab92d11c23efa；继续采用可审计 staged merge，最终该 commit 必须成为 HEAD ancestor。",
+      "log_ref": "LOG-009"
+    },
+    {
+      "id": "D-005",
+      "title": "基础设施切换与双运行边界",
+      "question": "现有后端 ResourceWatchRegistry/ResourceEventBus/Knowledge pipeline、Electron legacy file/workspace watcher 与上游 FileHistory 私有 watcher 收敛时，允许怎样的过渡运行方式和回滚门禁？",
+      "depends_on": ["D-002", "D-004"],
+      "recommendation": "测试/影子比对可短暂双读，但生产 mutation、物理 watcher 和完整 baseline walk 在每个 root 上始终只有一个 owner；每次切换必须能按 Wave 回滚且不能长期双写。",
+      "status": "answered",
+      "round": 3,
+      "answer": "不允许临时双运行，采用一步到位的单 owner 直接切换。新路径只能先在不接入同一真实 root 的隔离测试中验证；正式切换时必须先停止旧 owner，再启用新 owner。回滚也必须先停止当前 owner，再恢复旧 owner，任何时刻都不得双 watcher、双 mutation 或双 baseline walk。",
+      "log_ref": "LOG-015"
+    },
+    {
+      "id": "D-006",
+      "title": "Workspace 逻辑身份模型",
+      "question": "既然 main 是唯一主 Workspace、切换时无需 relocation，是否还需要原计划提出的全新长期 workspaceId；还是直接复用当前 main ResourceRef/sourceKey、ProviderRootIdentity 与现有工作目录状态，只为 File History 增加必要的内部稳定存储键？",
+      "depends_on": ["D-003", "D-008"],
+      "recommendation": "不引入用户可见或 relocation 导向的新 workspaceId。main 继续由现有 Workspace/Knowledge 生命周期表达，ResourceRef 定位、sourceKey=main 路由、ProviderRootIdentity 做物理身份与安全证明；File History 只增加最小内部 storage key，并避免把 raw path hash 提升为跨功能公共身份。",
+      "status": "answered",
+      "round": 3,
+      "answer": "不引入新的长期或用户可见 workspaceId。main 继续复用现有 Workspace/Knowledge 生命周期、sourceKey=main、ResourceRef 与 ProviderRootIdentity；File History 只使用必要的私有存储键，该键不成为跨功能公共身份。",
+      "log_ref": "LOG-016"
+    },
+    {
+      "id": "D-007",
+      "title": "真实持久化数据的迁移边界",
+      "question": "本轮不新增 workspaceId，且当前 HanaKDE 尚未发布 Workspace File History 数据。是否确认只为真实存在、已发布且本轮确实改变 schema 的持久化数据设计幂等迁移；不为不存在的旧 File History 库制造兼容层，也不因本功能改写现有 path-keyed Workspace UI/Profile/Knowledge 数据？",
+      "depends_on": ["D-006"],
+      "recommendation": "确认。只迁移仓库审计证明真实可达且 schema 被本轮改变的数据；当前不存在的旧 File History DB 不造迁移，现有 Workspace UI/Profile/Knowledge 数据若合同不变则原样保留。任何真实迁移必须幂等、先备份、失败不覆盖原数据，清理由后续显式 change 负责。",
+      "status": "answered",
+      "round": 4,
+      "answer": "最新裁决：本次是未发布 HanaKDE 的颠覆性基线更新，不设计任何 legacy 数据迁移、兼容窗口、迁移回滚或旧数据清理流程。新 schema 和基础设施直接成为唯一基线；先前“只迁移真实数据”的保守结论被本裁决进一步收紧为完全无迁移。",
+      "log_ref": "LOG-020"
+    },
+    {
+      "id": "D-008",
+      "title": "File History 首期来源范围",
+      "question": "当前 Knowledge Workspace 同时包含 main 和零个或多个挂载来源。本轮 File History 是只覆盖 main，还是覆盖所有已授权且可写的本地内容来源？remote/non-local provider 是否只保留扩展点而不承诺历史行为？",
+      "depends_on": ["D-001"],
+      "recommendation": "覆盖 main 与所有已授权、可写、本地的活动来源，使挂载来源与 main 的编辑能力保持一致；按来源隔离 history policy 与地址空间。remote/non-local provider 本轮不承诺 File History，只保留 capability 扩展点。",
+      "status": "answered",
+      "round": 2,
+      "answer": "Workspace File History 只包含 main。main 是唯一真正工作空间，其他目录只是额外挂载，不建立 Workspace File History。",
+      "log_ref": "LOG-010"
+    },
+    {
+      "id": "D-009",
+      "title": "History 产品入口",
+      "question": "当前 HanaKDE 有独立 Knowledge Workspace 主界面和 Chat/Desk Preview。上游 History timeline、diff、restore 与 deleted-files 应以哪个入口呈现，是否允许保留上游按 agentId 打开的独立 FileHistory modal？",
+      "depends_on": ["D-001"],
+      "recommendation": "以 Knowledge Workspace 的资源上下文/侧栏作为完整主入口，Chat/Desk Preview 提供上下文动作并打开同一共享 History experience；不长期保留按 agentId 绑定的第二套上游 modal 或文件壳。",
+      "status": "answered",
+      "round": 2,
+      "answer": "Workspace File History 与 Agent 对话文件变更历史不冲突：保留各自产品 scope 和入口，但系统底层 ResourceIO、事件、版本、快照、diff、restore 与物理观察应尽可能统一复用，不能形成重复事实源。",
+      "log_ref": "LOG-011"
+    },
+    {
+      "id": "D-010",
+      "title": "发布与平台阻断门禁",
+      "question": "哪些平台与构建结果必须阻止整合进入 hanakde，哪些允许作为有 owner 的发布后跟进？",
+      "depends_on": ["D-002", "D-008", "D-009"],
+      "recommendation": "Windows、macOS、Linux 的安全/监听关键合同以及 production build/native extraction packaging 全部阻断；只允许不影响已声明支持面的附加压力测试作为后续跟进。",
+      "status": "answered",
+      "round": 3,
+      "answer": "发布阻断平台只要求 Windows 和 macOS。两者的安全边界、文件监听关键合同、production build 与 native document-extraction packaging 必须通过；Linux 验证不阻断本 umbrella change 完成。",
+      "log_ref": "LOG-017"
+    },
+    {
+      "id": "D-011",
+      "title": "Document Extraction、Office 插件与 OCR 边界",
+      "question": "当前隐藏内置 Office 插件已用 mammoth/ExcelJS/PDF parser 提供 text/html/json 读取，上游 extractor 则为更多格式提供 Markdown。两者应如何分工；是否锁定 extracted Markdown 只作为版本化派生表示、不自动写入 workspace，并把 OCR 排除在本轮？",
+      "depends_on": ["D-001"],
+      "recommendation": "系统 DocumentExtractionService 拥有授权后资源到 canonical derived Markdown 的共享契约，供 File Tool 与 Knowledge 使用；Office 插件保留用户/Agent 所需的 text/html/json 专用呈现并在可行处消费共享服务，验证语义等价后删除重复 parser。Derived Markdown 不自动落盘；scanned-pdf 保留结构化失败，OCR 由未来 provider/plugin 承担。",
+      "status": "answered",
+      "round": 2,
+      "answer": "完整接受上游 Document Extraction 变化，把它作为 Office 插件和 Knowledge ingestion 的正常升级优化；语义重叠的旧 parser 迁移后删除，只保留真实差异能力。Derived Markdown 与 OCR 边界采用推荐方案。",
+      "log_ref": "LOG-012"
+    },
+    {
+      "id": "D-012",
+      "title": "History 与 Knowledge 的一致性边界",
+      "question": "当前 Knowledge 已通过 ResourceEventBus 增量更新，但自己的 rebuild 仍会扫描来源。是否确认 History 与 Knowledge 共享 ResourceEvent/资源版本及 workspace baseline observation，消费者只做各自 scoped repair；同时 persistence、retention、policy 和恢复语义保持独立？",
+      "depends_on": ["D-001"],
+      "recommendation": "确认；磁盘资源是持久内容事实，History 保存物理版本，Knowledge 保存可重建语义派生状态，restore 只能经 ResourceIO 触发两者重新收敛。",
+      "status": "answered",
+      "round": 2,
+      "answer": "同意：History 与 Knowledge 共享 ResourceEvent、资源版本、Root Identity 和 main baseline observation，各自执行 scoped repair；持久化、retention、policy、索引和恢复语义保持独立。",
+      "log_ref": "LOG-013"
+    },
+    {
+      "id": "D-013",
+      "title": "最终一致性与失败可见性",
+      "question": "Watcher 降级、事件 gap、reconciliation 失败和 Knowledge 重索引滞后时，对用户和运维应承诺什么状态与恢复行为？",
+      "depends_on": ["D-005", "D-012"],
+      "recommendation": "明确 HEALTHY/DEGRADED/RECONCILING/FAILED 状态；不得把 degraded 伪装 healthy，reconciliation 可重试且按 workspace/resource scope 收敛，失败不静默丢失。",
+      "status": "answered",
+      "round": 4,
+      "answer": "确认采用 HEALTHY、DEGRADED、RECONCILING、FAILED 四态模型。事件缺口、监听降级、reconciliation 失败和 Knowledge 重索引滞后必须真实可见；允许按 Workspace/Resource 范围重试收敛，不得伪装正常或静默丢失。只要求必要状态与错误反馈，不新增复杂运维界面。",
+      "log_ref": "LOG-019"
+    },
+    {
+      "id": "D-014",
+      "title": "迁移失败与用户处置",
+      "question": "Root identity 可疑、真实持久化数据迁移校验失败或新 File History 存储初始化失败时，系统应自动回退、只读降级还是要求用户显式选择？",
+      "depends_on": ["D-005", "D-007"],
+      "recommendation": "Root Identity 或授权范围不确定时，对受影响 root fail closed 并要求重新授权/附加；真实迁移失败时保留原数据和备份，只禁用受影响的写入/restore；全新 File History 初始化失败不阻断普通 Workspace 文件与 Knowledge 使用，但 History 标记 FAILED、禁止 restore，并提供显式重试。任何情况都不自动破坏性重建。",
+      "status": "answered",
+      "round": 5,
+      "answer": "HanaKDE 当前尚未发布，本次更新是颠覆性基线更新，因此无需设计迁移失败处置、legacy fallback 或旧版本兼容。Root Identity 异常继续按既有安全合同 fail closed；File History 新库初始化失败按 D-013 标记 FAILED 并允许 scoped retry，这些属于正常运行时错误，不是迁移流程。",
+      "log_ref": "LOG-021"
+    },
+    {
+      "id": "D-015",
+      "title": "整合完成的发布合同",
+      "question": "最终是否以原计划经本轮裁决校正后的 15 项 Definition of Done 为统一完成门：目标更新为 v0.446.6，平台门限于 Windows/macOS，并删除旧 Profile 迁移与 migration 回滚两项；每项必须绑定可重复 Evidence，削减范围必须先修改 Spec？",
+      "depends_on": ["D-010", "D-011", "D-013", "D-014"],
+      "recommendation": "确认校正后的 15 项完成门：v0.446.6 ancestry、HanaKDE 二开无回退、File History、Document Extraction、Office→Knowledge、Materialize/Transfer、Root Identity、单 watcher、ResourceEventBus、单 baseline、restore 全链一致、Windows/macOS 门禁、production/native packaging、删除重复基础设施、架构与 upstream sync ledger。逐项映射 Ticket/Evidence，任何削减走 SpecDev deviation control。",
+      "status": "answered",
+      "round": 6,
+      "answer": "确认以校正后的 15 项 Definition of Done 作为 umbrella change 的统一完成门。每项必须映射到 Ticket 和可重复 Evidence；任何范围削减必须先修改 Spec 并走 SpecDev deviation control，不得在 merge、冲突解决或实施中静默延后。",
+      "log_ref": "LOG-022"
+    },
+    {
+      "id": "D-016",
+      "title": "上游跟随、语义融合与去冗余总原则",
+      "question": "上游正常迭代、HanaKDE 二开影响面与同类重复实现之间采用什么默认裁决？",
+      "depends_on": ["D-001"],
+      "recommendation": "上游正常功能、修复和优化默认完整吸收；只有与 HanaKDE 已确认产品、安全、数据或开放边界合同冲突时做语义融合。同类型 primitive 迁移到单一 owner 后删除重复实现，不为旧 fork 内部结构保留长期兼容壳。",
+      "status": "answered",
+      "round": 2,
+      "answer": "确认。本轮是 fork 跟随上游的迭代更新，应尽可能融合到当前架构；正常升级优化可以全盘接受，只有真实二开合同影响才做语义融合，同类功能或代码不得冗余、重复设计或堆叠过多兼容。",
+      "log_ref": "LOG-014"
+    }
+  ]
+}

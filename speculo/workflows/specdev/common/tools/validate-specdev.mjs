@@ -1626,19 +1626,21 @@ function validateChange(change, stage = null) {
 
   if (spec) {
     const declaredContracts = new Set(spec.body.match(/\bAC-\d+\b/g) ?? []);
-    const coveredContracts = new Set(
-      [...tickets.values()].flatMap((artifact) =>
-        (artifact.meta.contract_ids ?? []).map(String),
-      ),
-    );
-    let uncovered = [...declaredContracts].filter((id) => !coveredContracts.has(id)).sort();
-    if (ticketsMap) {
-      uncovered = uncovered.filter(
-        (id) => !new RegExp(`${escapeRegExp(id)}.*\\bdeferred\\b`, "i").test(ticketsMap.body),
+    if (ticketsRequired || tickets.size > 0 || ticketsMap) {
+      const coveredContracts = new Set(
+        [...tickets.values()].flatMap((artifact) =>
+          (artifact.meta.contract_ids ?? []).map(String),
+        ),
       );
-    }
-    if (uncovered.length) {
-      errors.push(`Spec acceptance contracts are not covered by Tickets: ${JSON.stringify(uncovered)}`);
+      let uncovered = [...declaredContracts].filter((id) => !coveredContracts.has(id)).sort();
+      if (ticketsMap) {
+        uncovered = uncovered.filter(
+          (id) => !new RegExp(`${escapeRegExp(id)}.*\\bdeferred\\b`, "i").test(ticketsMap.body),
+        );
+      }
+      if (uncovered.length) {
+        errors.push(`Spec acceptance contracts are not covered by Tickets: ${JSON.stringify(uncovered)}`);
+      }
     }
     if (spec.meta.ready_for_tickets === true && !declaredContracts.size) {
       errors.push("ready Spec must define at least one AC-### acceptance contract");
@@ -1754,10 +1756,22 @@ function validateChange(change, stage = null) {
       errors.push("change_status is completed while planned Tickets remain unfinished");
     }
     if (changeStatus.change_status === "archived") {
-      warnings.push("validating an archived change in place; normally it lives under the archive root");
+      const changeName = basename(change);
+      const archiveMonth = changeName.slice(0, 7);
+      const archiveMonthDirectory = dirname(change);
+      const archiveRoot = dirname(archiveMonthDirectory);
+      const isCanonicalArchivePath =
+        basename(archiveMonthDirectory) === archiveMonth &&
+        basename(archiveRoot) === "archive";
+      if (!isCanonicalArchivePath) {
+        warnings.push("validating an archived change outside its canonical archive path");
+      }
     }
-    if (stage === "complete" && changeStatus.change_status !== "completed") {
-      errors.push("complete stage requires change_status=completed");
+    if (
+      stage === "complete" &&
+      !new Set(["completed", "archived"]).has(changeStatus.change_status)
+    ) {
+      errors.push("complete stage requires change_status=completed or archived");
     }
   }
   if (

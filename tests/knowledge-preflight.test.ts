@@ -4,12 +4,10 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { resolveOpenHanakoKnowledgeArtifacts } from "./helpers/openhanako-knowledge-artifacts.ts";
 
 const repositoryRoot = process.cwd();
-const changeRoot = path.join(
-  repositoryRoot,
-  "speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace",
-);
+const changeRoot = resolveOpenHanakoKnowledgeArtifacts(repositoryRoot);
 const implementationBaselinePath = path.join(
   changeRoot,
   "implementation-baseline.md",

@@ -16,12 +16,10 @@ import { createResourceIoRoute } from "../server/routes/resource-io.ts";
 import { installNativeDialogStub } from "./knowledge-workspace-e2e/fixtures/native-fixture.ts";
 import { createKnowledgeLaunchConfig } from "./knowledge-workspace-e2e/fixtures/server-fixture.ts";
 import { createKnowledgeWorkspaceSandbox } from "./knowledge-workspace-e2e/fixtures/workspace-fixture.ts";
+import { resolveOpenHanakoKnowledgeArtifacts } from "./helpers/openhanako-knowledge-artifacts.ts";
 
 const repositoryRoot = process.cwd();
-const changeRoot = path.join(
-  repositoryRoot,
-  "speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace",
-);
+const changeRoot = resolveOpenHanakoKnowledgeArtifacts(repositoryRoot);
 
 function setHonoContext(
   context: unknown,

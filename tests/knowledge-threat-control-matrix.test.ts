@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { resolveOpenHanakoKnowledgeArtifacts } from "./helpers/openhanako-knowledge-artifacts.ts";
 
-const THREAT_MODEL_PATH = path.resolve(
-  "speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/threat-model.md",
+const THREAT_MODEL_PATH = path.join(
+  resolveOpenHanakoKnowledgeArtifacts(path.resolve(import.meta.dirname, "..")),
+  "threat-model.md",
 );
 
 type ThreatRow = {

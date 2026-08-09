@@ -1,0 +1,48 @@
+{
+  "schema_version": 3,
+  "artifact": "change-status",
+  "change": "2026-07-24-openhanako-knowledge-workspace",
+  "change_status": "archived",
+  "current_work": null,
+  "created_at": "2026-07-24T23:09:36+08:00",
+  "updated_at": "2026-08-09T11:18:24+08:00",
+  "completed_at": "2026-08-01T00:00:00+08:00",
+  "archived": true,
+  "archive_path": "<Path>{roots.state}/specdev/archive/2026-07/2026-07-24-openhanako-knowledge-workspace/</Path>",
+  "archived_at": "2026-08-09T11:18:24+08:00",
+  "promotion_summary": {
+    "adr_created": 24,
+    "context_terms_promoted": 66,
+    "research_created": 7,
+    "granular_adr_retained": 270,
+    "detailed_context_terms_retained": 318,
+    "ticket_evidence_retained": 57
+  },
+  "blockers": [],
+  "deviations": [],
+  "worktrees": [
+    {
+      "ticket_id": "T-12",
+      "owner": "historical-implementer",
+      "provider": "git",
+      "base_sha": "e5b3e1d7b8e73530e83b45f0fec343cce7ac0dd6",
+      "branch": "speculo/specdev/2026-07-24-openhanako-knowledge-workspace-12",
+      "workspace_ref": "specdev-worktree/T-12",
+      "status": "removed",
+      "integrated_sha": "bf4c6ee57891324fe686f63780092f5240e61bec",
+      "updated_at": "2026-08-09T10:27:19+08:00"
+    },
+    {
+      "ticket_id": "T-23",
+      "owner": "historical-implementer",
+      "provider": "git",
+      "base_sha": "4934e09f690e57f0fd4fc4922e88f365f9a6aea1",
+      "branch": "speculo/specdev/2026-07-24-openhanako-knowledge-workspace-23",
+      "workspace_ref": "specdev-worktree/T-23",
+      "status": "removed",
+      "integrated_sha": "e5b3e1d7b8e73530e83b45f0fec343cce7ac0dd6",
+      "updated_at": "2026-08-09T10:27:19+08:00"
+    }
+  ],
+  "completion_note": "Ticket 57 acceptance was explicitly confirmed by the user on 2026-08-09; release commands were not rerun during archive repair."
+}

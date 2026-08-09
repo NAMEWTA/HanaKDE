@@ -1,0 +1,109 @@
+---
+schema_version: 3
+artifact: ticket
+change: 2026-07-24-openhanako-knowledge-workspace
+id: T-14
+title: "建立威胁模型与恶意工作区门禁"
+status: done
+planning_depth: standard
+planning_depth_reason: "历史完成 Ticket 的 SpecDev v3 兼容迁移；保留既有实现、验证与验收记录。"
+ready: false
+risk: medium
+blocked_by: ["T-03","T-04","T-05"]
+contract_ids: ["KW-US-171","KW-RULE-SEC","KW-RULE-TEST"]
+owner: historical-implementer
+expected_changes: ["<Path>{roots.state}/specdev/changes/2026-07-24-openhanako-knowledge-workspace/ticket/14-establish-malicious-workspace-tests.md</Path>"]
+writable_paths: []
+read_only_paths: []
+shared_paths: []
+shared_path_owners: []
+---
+# Ticket 14: 建立威胁模型与恶意工作区门禁
+
+- **被阻塞于：** [`03-freeze-open-knowledge-contract.md`](./03-freeze-open-knowledge-contract.md)、[`04-define-errors-and-diagnostics.md`](./04-define-errors-and-diagnostics.md)、[`05-adapt-workspace-source-registry.md`](./05-adapt-workspace-source-registry.md)
+- **状态：** 已完成
+
+## 战略与背景
+
+- **战略：** 覆盖 symlink/junction、TOCTOU、SVG/HTML、URI、控制字符、Unicode、UNC、循环和日志泄露。
+- **需求追踪：** KW-US-171, KW-RULE-SEC, KW-RULE-TEST
+- **当前现状：** 当前实现接缝位于 `lib/resource-io/`、`server/routes/resource-io.ts`、`desktop/src/react/utils/markdown-html-sanitizer.ts`；本 ticket 只扩展这些公开边界。
+- **用户可验证结果：** 完成本 ticket 后，验收者能够通过公开 API、真实临时 workspace 或可交互 UI 验证本标题声明的单一能力。
+
+## 范围边界
+
+| IN | REUSE | OUT |
+|---|---|---|
+| 覆盖 symlink/junction、TOCTOU、SVG/HTML、URI、控制字符、Unicode、UNC、循环和日志泄露。 | `lib/resource-io/`<br>`server/routes/resource-io.ts`<br>`desktop/src/react/utils/markdown-html-sanitizer.ts` | 未列入本 ticket 的后续功能；修改生成 bundle；创建平行文件系统、编辑器内核或私有 route 捷径 |
+
+## 交付物
+
+> 以下仅列主要交付物，不构成文件白名单或完整清单；为满足本 ticket 验收而新增/修改的同范围实现、类型、schema、fixture、测试、i18n 与文档同属交付物。
+
+- `threat-model.md`
+- `tests/knowledge-malicious-workspace.test.ts`
+
+## 实施时需阅读的文件
+
+> 以下列出本 ticket 的具体代码接缝；实施前还必须按 [`README.md`](../README.md) 的文档权威关系读取 accepted [`LOG.md`](../LOG.md)、[`ADR.md`](../ADR.md)、[`CONTEXT.md`](../CONTEXT.md)、[`spec.md`](../spec.md) 及本 ticket 的固定实施契约，不能因本节或交付物未逐项复写而遗漏已确认结论。
+
+- `lib/resource-io/`
+- `server/routes/resource-io.ts`
+- `desktop/src/react/utils/markdown-html-sanitizer.ts`
+
+## 固定实施契约
+
+- [`threat-model.md`](../threat-model.md)
+- [`test-strategy.md`](../test-strategy.md)
+
+## 实施顺序
+
+1. 先以当前真实文件和公开契约建立失败测试，不访问 Engine 私有字段。
+2. 实现本 ticket 的最小垂直切片，复用 ResourceIO、共享 IR、coordinator 或既有 UI 接缝。
+3. 补齐取消、冲突、权限/不可用、外部变化和清理路径。
+4. 运行精确自动化、相关回归、typecheck 与 boundary 检查并记录实际结果。
+
+## 实现约束
+
+1. 普通资源访问必须经现有 ResourceIO/provider；复合 mutation 必须经公开 coordinator 和 Operation Journal。
+2. Renderer 不访问 Node 文件系统；远程 DTO、日志和 release evidence 不含绝对路径、正文或凭证。
+3. 测试使用隔离临时 HANA_HOME、workspace、来源和端口，不依赖开发机固定路径或网络。
+4. 实现不得引入未在 ADR/实施契约冻结的新存储引擎、IPC path surface、恢复状态或 E2E 框架。
+5. 威胁矩阵必须覆盖客户端伪造 principal/user/studio、普通 server token 调 Main-only route、错误/重放 native credential、跨 provider 大文件/半目录 transfer，以及 stat 前误读超限内容。
+5. 本 ticket 新增 UI 同时交付 zh-CN、zh-TW、en、ja、ko、键盘、ARIA、focus、亮暗主题和窄布局。
+
+## 自动化证据
+
+**Primary ownership：** KW-US-171
+
+**必须创建或更新：**
+
+- `tests/knowledge-malicious-workspace.test.ts`
+- `tests/knowledge-threat-control-matrix.test.ts`
+
+**Playwright 用户流程：** 不适用；本 ticket 使用上述 Vitest，不运行 Playwright。
+
+**发布级关联场景：** E2E-KW-022（仅追踪，不作为本 ticket Playwright 门禁）
+
+## 验收标准
+
+- [x] 所有越界与主动内容默认拒绝；LAN 响应不泄露本机路径；安全用例纳入后续相关 ticket。
+- [x] 本 ticket 拥有的每个 `KW-US-*` 都由上列精确测试直接证明；不存在范围兜底或 Ticket 57 代实现。
+- [x] 本 ticket 拥有的每个 `KW-RULE-*` 都满足对应契约文档，并有正常、取消/冲突、权限/不可用和故障注入覆盖。
+- [x] 相关既有回归、`npm run typecheck` 和 `npm run lint:boundary` 通过；涉及 composition、Renderer、preload/main 时运行相应 build。
+- [x] ticket 交付记录只填写实际执行命令、平台和结果；普通执行结果不写入 `LOG.md`。
+- [x] 交付物没有未决的“可能”“按需”“A 或 B”、未选框架、未选 schema 或未定义恢复语义。
+
+## 实现交接摘要
+
+- **主线实现提交：** `8766d2a1`。
+- **平台：** macOS 26.5（Darwin 25.5.0，arm64，APFS）、Node `v24.16.0`、npm `11.13.0`。
+- **文件访问门禁：** Knowledge address 读取先 `stat`，在任何正文读取前校验文件类型、10 MiB 上限和可用版本，再以 `expectedVersion` 调用 `openRead`；流大小漂移、取消、无版本和 TOCTOU 均 fail-closed。ResourceRef route 在 provider 调用前拒绝伪造 principal/user/studio/owner/scope/native credential/token/window 字段。
+- **渲染门禁：** Markdown 链接仅允许 `http/https`；图片默认拒绝，仅放行当前文档上下文解析出的精确本地 URL，并再次校验协议；Mermaid 固定 strict 配置、禁用 HTML label、丢弃交互绑定并对 SVG 做元素/属性/URI allowlist 消毒，过期异步结果不会覆盖新内容。
+- **真实恶意夹具：** 当前 macOS runner 实际执行 symlink 越界、循环、TOCTOU、原生 case/Unicode 行为、控制字符/盘符/UNC、伪造身份、错误与日志脱敏、stat-before-read 超限、版本绑定、HTML/SVG/URI、图片和 Mermaid 主动内容。Windows junction 分支已固化，但未在本平台冒充执行。
+- **精确自动化：** `npx vitest run tests/knowledge-malicious-workspace.test.ts tests/knowledge-threat-control-matrix.test.ts`，2 files、13/13。
+- **相关回归：** ResourceIO provider/route/transfer/workspace、Markdown、Mermaid 与共享 surface 共 10 files、192/192。
+- **整体验证：** 全仓 Vitest 1016 files passed、1 skipped，10211 tests passed、6 skipped；`npm run typecheck`、`npm run lint:boundary`、目标 ESLint、`npm run build:renderer`、`git diff --check` 均通过。
+- **质量与规格检查：** 工程质量轴和规格符合轴均无未决问题；没有新增 trust boundary、私有 route、平行文件系统或 Renderer→Node 依赖。
+- **证据边界：** 本票证明 macOS 上的恶意工作区基线和可移植门禁，不把 Windows/Linux、后续 trash/index/native/import/refactor 产品流程或 E2E-KW-022 登记为已执行。
+- **交接：** `speculo/.speculo/commands/handoff/2026-07-28-openhanako-knowledge-workspace-implementation-14.md`。

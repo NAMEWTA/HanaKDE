@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "artifact": "design-tree",
+  "change": "2026-08-09-internalize-todolist-plugin",
+  "status": "consensus",
+  "round": 7,
+  "nodes": [
+    {
+      "id": "D-001",
+      "title": "功能落点",
+      "question": "TodoList 的领域能力应落在内置插件还是 HanaKDE 系统本体？",
+      "depends_on": [],
+      "recommendation": "落到 plugins/todo/，只消费宿主的 Task、Session、Notification 与 ResourceIO 契约；缺失的通用宿主契约作为独立系统本体前置能力补齐。",
+      "status": "answered",
+      "round": 1,
+      "answer": "采用 HanaKDE 内置插件。Todo 领域、私有持久化、Page、routes、tools、后台 handler 均属于 plugins/todo/；不得把 Todo 专用表或 Todo 专用调度器焊入 Core。",
+      "log_ref": "LOG-001"
+    },
+    {
+      "id": "D-002",
+      "title": "内化策略",
+      "question": "新内置插件应直接迁入参考 0.0.5 后逐项修补，还是以当前 HanaKDE 契约重新设计并只选择性复用已验证的领域算法、schema 思路与测试用例？",
+      "depends_on": [],
+      "recommendation": "采用契约优先的重新设计：以 hana-plugin-creator 的 professional-react/full 形态建立 plugins/todo/，复用经过复核的纯领域算法、迁移思路和测试意图，不整体复制 17K 行实现；宿主适配、调度、通知、巡查完成协议与 UI 按当前 SDK 重写。",
+      "status": "answered",
+      "round": 1,
+      "answer": "采用契约优先重建。以 hana-plugin-creator professional-react/full 形态建立 plugins/todo/，只选择性复用经复核的领域算法、迁移思路与测试意图；宿主适配、调度、通知、巡查协议和 UI 按当前 SDK 重写。",
+      "log_ref": "LOG-007"
+    },
+    {
+      "id": "D-003",
+      "title": "目标范围与交付节奏",
+      "question": "本 change 是一次性达到参考功能全量后才交付，还是锁定完整目标但按可独立验收的垂直里程碑推进？",
+      "depends_on": [],
+      "recommendation": "锁定完整目标、分里程碑交付：先完成可靠 CRUD/查询/数据迁移与 Page+Agent tools，再接统一提醒通知，最后接自动巡查、周期、导入导出与报告；每个里程碑都能独立回归。",
+      "status": "answered",
+      "round": 1,
+      "answer": "锁定完整目标并按可独立验收的垂直里程碑交付；先可靠 CRUD、查询、数据迁移与 Page+Agent tools，再接统一提醒通知，最后接自动化、周期、导入导出与报告，每阶段均可独立回归。",
+      "log_ref": "LOG-008"
+    },
+    {
+      "id": "D-004",
+      "title": "Agent 巡查权限边界",
+      "question": "Todo 是否应显式区分 manual、reminder、agent_execute 三种执行模式，其中只有 agent_execute 且已选择 Agent、执行说明与授权策略时才允许后台调用工具？",
+      "depends_on": [],
+      "recommendation": "显式三分：manual 只进入清单，reminder 只通知，agent_execute 才创建自动化运行；新 Todo 默认 manual，用户主动配置提醒或 Agent 执行。Agent 运行继续受会话权限/reviewer 约束，绝不把到期时间本身当作执行授权。",
+      "status": "answered",
+      "round": 1,
+      "answer": "显式采用 manual、reminder、agent_execute 三种执行模式；新 Todo 默认 manual，到期时间不构成执行授权。只有明确选择 agent_execute、Agent、执行说明与授权策略后才可创建自动化运行，并继续受会话权限与 reviewer 约束。",
+      "log_ref": "LOG-009"
+    },
+    {
+      "id": "D-005",
+      "title": "Todo 状态模型",
+      "question": "Todo 的业务状态是否继续只有 pending/completed，并把领取、执行中、等待用户、失败重试等作为正交自动化状态；还是把这些都升级为 Todo 主状态？",
+      "depends_on": [],
+      "recommendation": "主状态保持 pending/completed；自动化使用独立 Run/Hold 状态机。用户任务生命周期与某次 Agent 执行生命周期不能混为一体。",
+      "status": "answered",
+      "round": 1,
+      "answer": "Todo 主状态保持 pending/completed；领取、运行、等待用户、失败重试等属于独立 AutomationRun/AutomationHold 状态，不与用户任务生命周期混合。",
+      "log_ref": "LOG-010"
+    },
+    {
+      "id": "D-006",
+      "title": "时间语义",
+      "question": "精确时间 Todo 是否需要显式时区并保存可调度 instant，同时让纯日期 Todo 保持浮动日期；还是沿用参考实现仅保存本地日期字符串？",
+      "depends_on": [],
+      "recommendation": "精确时间保存 local value + IANA timezone + derived instant，纯日期只保存 date；明确 DST、跨时区和系统时区变化行为，避免字符串比较承担调度语义。",
+      "status": "answered",
+      "round": 1,
+      "answer": "精确时间保存 local value、IANA timezone 与 derived instant；纯日期只保存浮动 date。DST、跨时区与系统时区变化按明确合同处理，不使用本地日期字符串比较承担调度语义。",
+      "log_ref": "LOG-011"
+    },
+    {
+      "id": "D-007",
+      "title": "删除与恢复",
+      "question": "普通 UI 删除是否进入可撤销回收站，而 Agent/批量/永久删除才要求二次确认；还是所有入口都沿用参考实现的 prepare/confirm 两阶段删除？",
+      "depends_on": [],
+      "recommendation": "普通 UI 软删除并提供短期撤销；Agent、批量和永久清除使用绑定版本与会话的确认令牌；保留恢复、审计和并发冲突语义。",
+      "status": "answered",
+      "round": 1,
+      "answer": "普通 UI 删除进入软删除回收站并提供短期撤销；Agent、批量删除与永久清除必须使用绑定资源版本和会话的确认令牌，并保留恢复、审计与并发冲突语义。",
+      "log_ref": "LOG-012"
+    },
+    {
+      "id": "D-008",
+      "title": "通知路由默认值",
+      "question": "提醒默认只发桌面通知，Bridge/社交渠道必须由用户为 Todo 显式选择；还是自动发现 assigned Agent 的 Bridge 并默认同步发送？",
+      "depends_on": [],
+      "recommendation": "桌面默认；Bridge 显式 opt-in 并保存稳定的宿主 notification route，而不是解析 Agent 公开配置猜测渠道。",
+      "status": "answered",
+      "round": 1,
+      "answer": "提醒默认只发桌面通知；Bridge/社交渠道必须显式 opt-in，并保存宿主定义的稳定 notification route，不通过 Agent 公开配置猜测渠道。",
+      "log_ref": "LOG-013"
+    },
+    {
+      "id": "D-009",
+      "title": "已有数据兼容",
+      "question": "是否存在必须迁移的 TodoList 0.0.5 真实用户数据；若存在，新插件应支持其版本化 JSON 导出导入，还是必须直接兼容旧 SQLite 文件？",
+      "depends_on": [],
+      "recommendation": "不直接接管旧 SQLite；若有真实数据，提供一次性、可验证、可回滚的版本化 JSON importer，并在导入后执行引用与完整性检查。",
+      "status": "answered",
+      "round": 1,
+      "answer": "不以存在真实旧数据为前提，也不直接接管旧 SQLite。若后续发现需要迁移的真实数据，则提供一次性、可验证、可回滚的版本化 JSON importer，并在导入后检查引用和完整性。",
+      "log_ref": "LOG-014"
+    },
+    {
+      "id": "D-010",
+      "title": "首发交互表面",
+      "question": "首发是否以完整 Todo Page 与 Agent tools 为两套同等能力入口，暂不恢复聊天 Card；还是要求 Page、tools、Card 从首版完全对等？",
+      "depends_on": [],
+      "recommendation": "首发 Page + Agent tools 共用同一 application service；Card 只有在明确交互价值和稳定 hydration 协议后再加入，避免先复制参考实现的第三套 UI 状态。",
+      "status": "answered",
+      "round": 1,
+      "answer": "首发以完整 Todo Page 与 Agent tools 为同等能力入口，并共用同一 application service；暂不加入聊天 Card，待交互价值与 hydration 协议明确后再评估。",
+      "log_ref": "LOG-015"
+    },
+    {
+      "id": "D-011",
+      "title": "通用通知宿主契约",
+      "question": "是否允许本 change 在系统本体增加一个最小、通用、受权限约束的插件通知 EventBus capability，把 core 已有 NotificationService 暴露给 Todo 插件，而不是让 Todo 猜测 notification:notify / notification:send 兼容别名？",
+      "depends_on": [],
+      "recommendation": "允许。系统本体定义稳定输入、逐渠道回执、幂等和权限；Todo 插件只消费契约并持久化 reminder×channel delivery。",
+      "status": "answered",
+      "round": 1,
+      "answer": "允许系统本体增加最小、通用、受权限约束的插件通知 EventBus capability；它定义稳定输入、逐渠道回执、幂等与权限，Todo 只消费契约并记录 reminder×channel delivery。",
+      "log_ref": "LOG-016"
+    },
+    {
+      "id": "D-012",
+      "title": "巡查记录权威与报告",
+      "question": "Agent 巡查的完整对话和报告以什么为权威：插件复制所有消息并默认写工作台 Markdown，还是 Hana Session 保存完整对话、插件只保存 sessionRef 与逐 Todo 结果，报告按需导出？",
+      "depends_on": [],
+      "recommendation": "Hana Session 是完整对话权威；插件保存运行元数据、sessionRef、逐 Todo 结果和错误诊断。Markdown 报告仅在用户显式开启时生成，避免隐私重复、路径风险与双份数据漂移。",
+      "status": "answered",
+      "round": 1,
+      "answer": "Hana Session 是 Agent 巡查完整对话的唯一权威；Todo 插件只保存运行元数据、sessionRef、逐 Todo 结果与错误诊断。Markdown 报告仅在用户显式开启或导出时生成。",
+      "log_ref": "LOG-017"
+    },
+    {
+      "id": "D-013",
+      "title": "内置插件开关",
+      "question": "Todo 内置插件是否默认显示 Page 并保持 CRUD 服务可用，同时让提醒和 Agent 自动巡查拥有独立总开关？",
+      "depends_on": [],
+      "recommendation": "是。Page 与 CRUD 默认可用；提醒、Agent 自动巡查分别可关闭，关闭时必须取消对应 schedule。首版不为隐藏 Page 扩大宿主贡献面。",
+      "status": "answered",
+      "round": 1,
+      "answer": "Todo Page 与 CRUD 默认可用；提醒和 Agent 自动巡查分别拥有独立全局开关，关闭时必须取消对应 schedule。首版不额外支持隐藏 Page。",
+      "log_ref": "LOG-018"
+    },
+    {
+      "id": "D-014",
+      "title": "时间意图模型",
+      "question": "Todo 是否要把计划开始/出现时间、硬截止时间、提醒时间和 Agent 自动执行触发时间建模为不同字段，而不是继续由一个 dueAtLocal 同时承担四种语义？",
+      "depends_on": [],
+      "recommendation": "分离。首版至少区分 plannedFor（用户计划处理）、deadline（必须完成）与 triggers（提醒或 Agent 执行）；纯日期和精确 instant 各自保留类型。市场产品普遍把计划/截止/提醒拆开，而 Agent 执行更不能复用模糊的 due 字段。",
+      "status": "answered",
+      "round": 1,
+      "answer": "分离 plannedFor、deadline 与 triggers；plannedFor 表示计划处理，deadline 表示完成约束，trigger 明确属于提醒或 Agent 执行。纯日期和带时区精确 instant 保持不同类型，触发时间不隐含执行授权。",
+      "log_ref": "LOG-019"
+    },
+    {
+      "id": "D-015",
+      "title": "组织模型",
+      "question": "首发是否加入一个可选 Project/List 归属并保留 tags 作为横向分类，同时继续不做团队协作和多层子任务？",
+      "depends_on": [],
+      "recommendation": "加入单层 Project/List + 多 tags：Inbox 表示尚未归档到 Project 的捕获项，Project 表示持续目标或领域，tags 只做横向筛选；首发不做层层嵌套、团队和复杂依赖。仅有 tags 会让任务规模稍大后缺少稳定归属。",
+      "status": "answered",
+      "round": 1,
+      "answer": "首发采用可选的单层 Project/List 稳定归属与多 tags 横向分类；Inbox 表示尚未归档到 Project。首发不做团队协作、多层子任务、复杂依赖或层层嵌套。",
+      "log_ref": "LOG-020"
+    },
+    {
+      "id": "D-016",
+      "title": "页面信息架构",
+      "question": "Todo Page 的一级导航应采用 Today、Inbox、Upcoming、Projects、All 这组面向行动的稳定入口，并把 Calendar、Completed、Automation、Review 降为二级视图吗？",
+      "depends_on": [
+        "D-015"
+      ],
+      "recommendation": "采用。0.0.5 的 Day Todo、最近待办、日程概览、待办箱、数据复盘混合了时间、数据源和分析维度，用户难以预测任务会出现在哪里；一级导航应回答现在做什么、刚捕获什么、未来有什么、属于哪个目标。",
+      "status": "answered",
+      "round": 2,
+      "answer": "Todo Page 一级导航采用 Today、Inbox、Upcoming、Projects、All；Calendar、Completed、Automation、Review 作为二级视图。一级入口围绕捕获、当前执行、未来规划和稳定归属组织。",
+      "log_ref": "LOG-022"
+    },
+    {
+      "id": "D-017",
+      "title": "快速捕获语义",
+      "question": "快速输入是否默认进入 Inbox，仅在 Today、某个 Project 或明确日期上下文中继承可见目标，并在自然语言识别日期/标签/提醒后先显示可撤销预览？",
+      "depends_on": [
+        "D-014",
+        "D-015",
+        "D-016"
+      ],
+      "recommendation": "是。快速捕获必须低摩擦但不可暗中套用旧 selectedDate；Today/Project/日期页可继承当前上下文，其它页面默认 Inbox。自然语言解析应展示 token/chip 并允许一键撤销，不直接用不可见规则改写字段。",
+      "status": "answered",
+      "round": 3,
+      "answer": "全局快速输入默认进入 Inbox；仅在 Today、具体 Project 或明确日期页面继承当前可见上下文。自然语言识别出的日期、Project、tag、提醒和执行模式必须显示为可移除的 chip/预览，不得静默套用历史 selectedDate 或改写字段。",
+      "log_ref": "LOG-024"
+    },
+    {
+      "id": "D-018",
+      "title": "自动化运行粒度",
+      "question": "Agent 自动化是否应为每个 Todo × 每次 trigger occurrence 创建一个持久化 AutomationRun 和一个 Session，而不是把同一 Agent 当前全部到期 Todo 合并进一次巡查？",
+      "depends_on": [
+        "D-004",
+        "D-005"
+      ],
+      "recommendation": "每 Todo × occurrence 独立运行；同一 occurrence 的重试归属同一 Run，并记录独立 attempt。这样权限、工作区范围、取消、幂等、成本和结果都可单独解释；调度器可以批量 claim，但不应把不同任务塞进同一 Agent 对话。将来只有 policy、workspace 和副作用边界完全相同的只读任务才可显式合批。",
+      "status": "answered",
+      "round": 2,
+      "answer": "每个 Todo × 每次 trigger occurrence 创建独立的持久化 AutomationRun 与 Hana Session；同一 occurrence 的重试作为同一 Run 下的独立 attempt。调度器可以批量 claim，但不同 Todo 不进入同一 Agent 会话。",
+      "log_ref": "LOG-023"
+    },
+    {
+      "id": "D-019",
+      "title": "自动化可视化",
+      "question": "Page 是否应提供独立 Automation 视图展示 scheduled、running、needs_action、failed、succeeded/cancelled，并让 Todo 详情只显示摘要与跳转，而不是内嵌完整会话和报告正文？",
+      "depends_on": [
+        "D-004",
+        "D-012",
+        "D-018"
+      ],
+      "recommendation": "是。Automation 视图负责运行队列、失败原因、权限待办、重试/取消与 Session 跳转；Todo 详情保留最近结果摘要。完整对话由 Hana Session 承担，避免编辑弹窗膨胀成调试控制台。",
+      "status": "answered",
+      "round": 3,
+      "answer": "Page 提供独立二级 Automation 视图，集中展示 scheduled、running、needs_action、failed、succeeded、cancelled，并提供重试、取消、处理权限待办和跳转 Hana Session。Todo 详情只显示最近运行摘要、状态和跳转，不嵌入完整对话或报告正文。",
+      "log_ref": "LOG-025"
+    },
+    {
+      "id": "D-020",
+      "title": "通用任务宿主契约",
+      "question": "是否允许本 change 在系统本体修正 TaskRegistry EventBus handler 的启动顺序，并要求 Todo 只使用一个宿主 schedule 权威、移除常驻 setInterval 兜底？",
+      "depends_on": [],
+      "recommendation": "允许。当前 server 在 initPlugins 之后才注册 task:* handler，导致 onStartup 插件首次注册 handler 与 schedule 必然失败；应把通用 task capability 提前就绪。Todo 使用 TaskRegistry 的持久化 one-shot/interval schedule，并通过启动恢复补偿漏跑，不保留第二套并发定时器。",
+      "status": "answered",
+      "round": 1,
+      "answer": "允许系统本体提前注册 TaskRegistry EventBus handler，使插件 onStartup 时 task capability 已可用；Todo 只使用 TaskRegistry 的单一持久化 schedule 权威，通过启动恢复补偿漏跑，不保留 setInterval 第二调度器。",
+      "log_ref": "LOG-021"
+    },
+    {
+      "id": "D-021",
+      "title": "周期锚点语义",
+      "question": "周期 Todo 是否应同时支持固定日历锚点与完成后锚点，并让每个 occurrence 成为独立 Todo，而不是继续只预生成固定日历 occurrence？",
+      "depends_on": [
+        "D-006",
+        "D-014"
+      ],
+      "recommendation": "同时支持两种明确模式：calendar 按本地日历规则生成，适合每周一、每月末等固定承诺；after_completion 只在当前 occurrence 完成后按间隔生成下一条，适合复习、维护等节奏。周期规则是权威，calendar 只物化 Upcoming 所需的有界窗口，after_completion 同时只保留一个活动 occurrence；每个 occurrence 拥有稳定键、独立状态、提醒和 AutomationRun。",
+      "status": "answered",
+      "round": 4,
+      "answer": "同时支持 calendar 与 after_completion 两种明确周期锚点。RecurrenceRule 是权威；calendar 只物化 Upcoming 所需的有界窗口，after_completion 在当前 occurrence 完成后生成下一条且同时只保留一个活动 occurrence。每个 occurrence 是拥有稳定键、独立状态、提醒和 AutomationRun 的 Todo。",
+      "log_ref": "LOG-027"
+    },
+    {
+      "id": "D-022",
+      "title": "Today 与 Upcoming 成员规则",
+      "question": "在 plannedFor 与 deadline 分离后，Today/Upcoming 是否应按二者中较早的非空日期派生 attentionDate，并继续让行动视图与 Inbox/Project 归属视图重叠？",
+      "depends_on": [
+        "D-014",
+        "D-016"
+      ],
+      "recommendation": "采用派生聚合视图：attentionDate 是按用户显示时区计算的 min(plannedFor, deadline)，不是新的持久化字段。Today 显示 pending 且 attentionDate <= today，并分为 Overdue/Today；Upcoming 只显示 attentionDate > today 的 pending Todo，按 attentionDate 分组，较晚 deadline 作为约束标识，不重复任务。无时间 Todo 留在 Inbox/Project/All。Inbox/Project 是归属维度，同一 Todo 可同时出现在 Inbox 与 Today；在 Today 快速创建会显式写 plannedFor=today。",
+      "status": "answered",
+      "round": 4,
+      "answer": "Today/Upcoming 使用按用户显示时区派生的 attentionDate=min(plannedFor, deadline)，不持久化该值。Today 显示 pending 且 attentionDate<=today，并区分 Overdue/Today；Upcoming 只显示未来 attentionDate 并去重分组。无时间 Todo 留在归属/All 视图；Inbox/Project 可与行动视图重叠；Today 快速创建显式写 plannedFor=today。",
+      "log_ref": "LOG-028"
+    },
+    {
+      "id": "D-023",
+      "title": "周期系列编辑边界",
+      "question": "周期 occurrence 的编辑、跳过、删除与规则变更应如何影响单次、未来和历史实例？",
+      "depends_on": [
+        "D-021"
+      ],
+      "recommendation": "提供本次与本次及未来两个明确作用域：编辑本次形成保留规则来源的 occurrence override，未来不受影响；编辑本次及未来在该 occurrence 边界版本化/分叉规则，只替换边界之后尚未完成的已物化 occurrence，历史和已完成项永不重写。跳过/删除本次执行软删除并保存稳定 suppression key，避免再次物化；暂停规则只停止新增 occurrence，已有项保持可见；结束/删除系列停止规则并软删除边界之后尚未完成的已物化 occurrence，不级联历史。所有批量破坏性变更继续使用 D-007 的确认令牌。",
+      "status": "answered",
+      "round": 5,
+      "answer": "周期系列提供仅本次与本次及未来两个作用域。仅本次形成保留规则来源的 occurrence override；本次及未来从当前边界版本化规则，只替换边界后未完成的已物化 occurrence，历史和已完成项不可变。跳过/删除本次保存 suppression key；暂停只停止新增；结束系列软删除边界后未完成 occurrence。批量破坏性操作使用绑定版本与会话的确认令牌。",
+      "log_ref": "LOG-029"
+    },
+    {
+      "id": "D-024",
+      "title": "自动化安全取消策略",
+      "question": "关闭 Agent 自动化、完成/删除 Todo 或退出 agent_execute 模式时，应如何处理未来与正在运行的 AutomationRun？",
+      "depends_on": [
+        "D-004",
+        "D-005",
+        "D-013",
+        "D-018"
+      ],
+      "recommendation": "取消未来 schedule 和 queued Run，并请求取消 running Run 对应的 TaskRegistry task 与 Hana Session；先进入 cancel_requested，只有宿主确认终止后才进入 cancelled。取消失败保持可见诊断且不自动重试。重新启用、恢复 Todo 或重新切回 agent_execute 不复活旧 Run，只允许新 trigger occurrence 或显式重试创建执行。提醒关闭只阻止尚未投递项，已交付宿主的通知不可撤回并保留真实回执。",
+      "status": "answered",
+      "round": 6,
+      "answer": "采用 fail-closed 安全取消。关闭 Agent 自动化、完成/删除 Todo 或退出 agent_execute 时，取消未来 schedule/queued Run，并请求终止 running TaskRegistry task 与 Hana Session；先标记 cancel_requested，宿主确认后才标记 cancelled，失败保持诊断且不自动重试。重新启用或恢复不复活旧 Run。提醒关闭只阻止未投递项，已交付通知保留真实回执。",
+      "log_ref": "LOG-031"
+    },
+    {
+      "id": "D-025",
+      "title": "单一插件目录写入边界",
+      "question": "本 change 是否必须把全部产品实现、测试与构建资产严格封闭在 plugins/todolist/，并取消此前允许的通知 capability 与 TaskRegistry 启动顺序宿主改动？",
+      "depends_on": [
+        "D-001",
+        "D-006",
+        "D-020"
+      ],
+      "recommendation": "是。plugins/todolist/ 是唯一产品写入根；只消费当前宿主能力。TaskRegistry 晚就绪由插件内有限 readiness retry 适配，桌面提醒使用已有 notification event 并只记录 handoff，不承诺 Bridge 或送达回执。",
+      "status": "answered",
+      "round": 7,
+      "answer": "用户明确要求这是纯内置插件目录变更。全部产品代码、测试、fixture、构建资产和依赖声明只能位于 plugins/todolist/；不得修改任何其它产品路径。D-025 取代 D-001 的跨层前置边界，并取代 D-006、D-020 的宿主改动授权。",
+      "log_ref": "LOG-033"
+    }
+  ]
+}

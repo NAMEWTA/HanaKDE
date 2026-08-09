@@ -7,12 +7,10 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { resolveOpenHanakoKnowledgeArtifacts } from "./helpers/openhanako-knowledge-artifacts.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
-const changeRoot = path.join(
-  repoRoot,
-  "speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace",
-);
+const changeRoot = resolveOpenHanakoKnowledgeArtifacts(repoRoot);
 const matrixPath = path.join(changeRoot, "silverbullet-reference-matrix.md");
 
 function resolveReferenceRoot(): string {
@@ -402,7 +400,7 @@ describe("SilverBullet reference integrity", () => {
     expect(notice).toContain("Copyright 2022 Zef Hemel");
     expect(notice).toContain("silverbullet/LICENSE.md");
     expect(notice).toContain(
-      "speculo/.speculo/specdev/changes/2026-07-24-openhanako-knowledge-workspace/silverbullet-reference-matrix.md",
+      "speculo/.speculo/specdev/archive/2026-07/2026-07-24-openhanako-knowledge-workspace/silverbullet-reference-matrix.md",
     );
     expect(notice).toContain("未作为运行依赖");
     expect(notice).toContain("禁止整体移植");
