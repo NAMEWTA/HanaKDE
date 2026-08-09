@@ -1010,6 +1010,7 @@ describe("resource-io route", () => {
     "studioId",
     "owner",
     "ownerId",
+    "workspaceId",
     "scope",
     "scopeToken",
     "sessionId",
@@ -1434,7 +1435,7 @@ describe("resource-io route", () => {
       resourceIO: { [endpoint]: handler },
     }));
 
-    for (const field of ["principal", "userId", "studioId", "owner", "scopeToken", "resolvedPath"]) {
+    for (const field of ["principal", "userId", "studioId", "owner", "workspaceId", "scopeToken", "resolvedPath"]) {
       const res = await app.request(`/api/resource-io/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

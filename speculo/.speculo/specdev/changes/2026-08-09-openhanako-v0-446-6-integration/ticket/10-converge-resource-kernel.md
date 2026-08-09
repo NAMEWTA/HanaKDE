@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-10
 title: 收敛 Resource Kernel
-status: in_progress
+status: done
 planning_depth: deep
 planning_depth_reason: "ResourceIO、事件、Root Identity、Materialize、Transfer 与授权是跨系统公共核心接口并承载安全和数据完整性。"
 ready: true
@@ -12,8 +12,8 @@ risk: critical
 blocked_by: [T-09]
 contract_ids: [AC-011, AC-014, AC-020, AC-023, AC-026]
 owner: Worker-T-10 / Lead
-expected_changes: ["<Path>lib/resource-io/**</Path>", "<Path>lib/file-ref/resource-io.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>server/http/resource-operation-context.ts</Path>", "<Path>tests/resource-*.test.ts</Path>"]
-writable_paths: ["<Path>lib/resource-io/**</Path>", "<Path>lib/file-ref/resource-io.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>server/http/resource-operation-context.ts</Path>", "<Path>tests/resource-*.test.ts</Path>"]
+expected_changes: ["<Path>lib/resource-io/**</Path>", "<Path>lib/file-ref/resource-io.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>server/http/resource-operation-context.ts</Path>", "<Path>tests/resource-*.test.ts</Path>", "<Path>build/persistence-store-inventory.json</Path>", "<Path>build/persistence-schema-fingerprint.json</Path>"]
+writable_paths: ["<Path>lib/resource-io/**</Path>", "<Path>lib/file-ref/resource-io.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>server/http/resource-operation-context.ts</Path>", "<Path>tests/resource-*.test.ts</Path>", "<Path>build/persistence-store-inventory.json</Path>", "<Path>build/persistence-schema-fingerprint.json</Path>"]
 read_only_paths: ["<Path>core/engine.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>", "<Path>lib/document-extract/**</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -87,6 +87,8 @@ shared_path_owners: []
 - **可写范围：** 仅 `writable_paths`；`<Path>core/engine.ts</Path>` 的生产 wiring 留给 T-12。
 - **只读上下文：** History、Knowledge、Extraction 与 engine 消费者。
 - **共享路径：** 无；本 Ticket 是 Resource Kernel 唯一 owner，消费者只读。
+- **D-T10-01（Lead 于 2026-08-10 批准）：** 仅 `<Path>build/persistence-store-inventory.json</Path>` 作为生成 receipt 可写；T-10 新增的两个 URL materialize staging `fs.rmSync` 站点必须由 `<Path>scripts/scan-persistent-stores.mjs</Path>` 登记。此授权不包含 `<Path>build/persistence-startup-receipt.json</Path>`、任何其他 `<Path>build/**</Path>` 文件或扫描器逻辑。
+- **D-T10-02（ticket；Lead 于 2026-08-10 批准）：** D-T10-01 使持久化 site mapping 从 756 增至 758，导致已提交 fingerprint 与官方生成 payload 不匹配。批准仅通过 `<Path>scripts/generate-persistence-schema-fingerprint.mjs</Path>` 以 `compatible` review 写入 `<Path>build/persistence-schema-fingerprint.json</Path>`；原因是两个 URL materialize 临时 staging cleanup receipt，不改变 persistent store registry、on-disk schema、`DATA_EPOCH` 或数据合同。不得修改 `<Path>build/persistence-startup-receipt.json</Path>`、扫描器或任何其他 `<Path>build/**</Path>` 文件。
 - **保留或不动：** Knowledge DB、History DB、Workspace UI 和 plugin ownership。
 
 ## 8. 验证矩阵

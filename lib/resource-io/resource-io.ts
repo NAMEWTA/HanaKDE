@@ -14,6 +14,7 @@ import {
   guardedTransferEntries,
   isTransferNameSegment,
   processTransferBudget,
+  throwIfTransferAborted,
   transferEntryUnsupported,
 } from "./transfer.ts";
 import type {
@@ -188,6 +189,22 @@ export class ResourceIO {
     return result;
   }
 
+  async withMaterialized<T>(
+    input: unknown,
+    use: (materialized: MaterializeResult) => T | Promise<T>,
+    options: ResourceOperationContext = {},
+  ): Promise<T> {
+    if (typeof use !== "function") {
+      throw new TypeError("ResourceIO withMaterialized requires a callback");
+    }
+    const materialized = await this.materialize(input, options);
+    try {
+      return await use(materialized);
+    } finally {
+      await releaseMaterialized(materialized);
+    }
+  }
+
   resolveWatchTarget(input: unknown, options: ResourceOperationContext = {}) {
     const ref = normalizeResourceRef(input);
     const provider = this.providerFor(ref);
@@ -234,6 +251,7 @@ export class ResourceIO {
     const transferAbort = createTransferAbort(request.signal);
 
     try {
+      throwIfTransferAborted(transferAbort.signal);
       assertTransferProviderCapability(
         sourceProvider,
         request.source,
@@ -686,4 +704,16 @@ function safeDeniedMessage(operation: ResourceProviderCapability, providerId: Re
     return (err as any).safeMessage;
   }
   return `ResourceIO ${operation} denied by provider ${providerId}`;
+}
+
+async function releaseMaterialized(materialized: MaterializeResult): Promise<void> {
+  if (typeof materialized.cleanup !== "function") return;
+  try {
+    await materialized.cleanup();
+  } catch {
+    throw new ResourceIOError("Materialized resource cleanup failed", {
+      code: "materialize_cleanup_failed",
+      status: 500,
+    });
+  }
 }

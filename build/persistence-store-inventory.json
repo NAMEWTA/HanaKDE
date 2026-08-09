@@ -7198,6 +7198,24 @@
     },
     {
       "sourceFile": "lib/resource-io/providers/url-provider.ts",
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(stageDir, { recursive: true, force: true })",
+      "reason": "Writes a bounded network download to the caller-selected resource destination.",
+      "storeId": null,
+      "exemptionId": "url-provider-download-temp",
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/url-provider.ts",
+      "kind": "remove-path",
+      "excerpt": "fs.rmSync(stageDir, { recursive: true, force: true })",
+      "reason": "Writes a bounded network download to the caller-selected resource destination.",
+      "storeId": null,
+      "exemptionId": "url-provider-download-temp",
+      "ordinal": 1
+    },
+    {
+      "sourceFile": "lib/resource-io/providers/url-provider.ts",
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(filePath, read.content)",
       "reason": "Writes a bounded network download to the caller-selected resource destination.",

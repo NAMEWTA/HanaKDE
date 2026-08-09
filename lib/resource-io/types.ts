@@ -288,6 +288,7 @@ export type MaterializeResult = {
   filePath: string;
   version?: ResourceVersion;
   isDirectory?: boolean;
+  cleanup?: () => void | Promise<void>;
 };
 
 export type ResourceExportDirectoryEntry = {

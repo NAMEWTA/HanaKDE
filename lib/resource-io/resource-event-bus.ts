@@ -6,8 +6,8 @@ import type {
   ResourceRenamedEvent,
 } from "./types.ts";
 
-type EventEmit = (event: ResourceEvent, sessionPath?: string | null) => void;
-type EventSubscriber = (event: ResourceEvent) => void;
+type EventEmit = (event: ResourceEvent, sessionPath?: string | null) => unknown;
+type EventSubscriber = (event: ResourceEvent) => unknown;
 
 type ResourceEventBusOptions = {
   emit: EventEmit;
@@ -67,7 +67,7 @@ export class ResourceEventBus {
     };
     this._rememberEvent(event);
     this._notifySubscribers(event);
-    this._emit(event, input.sessionPath ?? null);
+    this._emitSafely(event, input.sessionPath ?? null);
     return event;
   }
 
@@ -80,7 +80,7 @@ export class ResourceEventBus {
     };
     this._rememberEvent(event);
     this._notifySubscribers(event);
-    this._emit(event, input.sessionPath ?? null);
+    this._emitSafely(event, input.sessionPath ?? null);
     return event;
   }
 
@@ -93,7 +93,7 @@ export class ResourceEventBus {
     };
     this._rememberEvent(event);
     this._notifySubscribers(event);
-    this._emit(event, input.sessionPath ?? null);
+    this._emitSafely(event, input.sessionPath ?? null);
     return event;
   }
 
@@ -101,7 +101,11 @@ export class ResourceEventBus {
     const cursor = Number.isFinite(Number(sequence)) ? Math.max(0, Math.floor(Number(sequence))) : 0;
     const latestSequence = this._sequence;
     if (!this._recentEvents.length) {
-      return { stale: false, latestSequence, events: [] };
+      return {
+        stale: cursor < latestSequence,
+        latestSequence,
+        events: [],
+      };
     }
 
     const oldestSequence = this._recentEvents[0]?.sequence || latestSequence;
@@ -141,11 +145,32 @@ export class ResourceEventBus {
   _notifySubscribers(event: ResourceEvent): void {
     for (const subscriber of this._subscribers) {
       try {
-        subscriber(event);
+        this._consumeThenable(subscriber(event));
       } catch {
         // Runtime projections observe committed resource mutations. Their
         // failures must not turn the producer operation into a false failure.
       }
+    }
+  }
+
+  _emitSafely(event: ResourceEvent, sessionPath: string | null): void {
+    try {
+      this._consumeThenable(this._emit(event, sessionPath));
+    } catch {
+      // The committed event stays available through this ordered fact source
+      // even when one downstream fan-out path is temporarily unavailable.
+    }
+  }
+
+  _consumeThenable(value: unknown): void {
+    if (!value || (typeof value !== "object" && typeof value !== "function")) return;
+    try {
+      if (typeof (value as PromiseLike<unknown>).then !== "function") return;
+      void Promise.resolve(value).catch(() => {
+        // Runtime projections cannot roll back a committed resource event.
+      });
+    } catch {
+      // A broken thenable is isolated like any other projection failure.
     }
   }
 }
