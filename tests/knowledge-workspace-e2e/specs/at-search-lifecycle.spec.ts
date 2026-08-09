@@ -6,7 +6,7 @@ test('T-18 selects an active workspace resource through @ search and closes it f
   knowledgeApp,
   workspaceSandbox,
 }) => {
-  test.skip(knowledgeApp.runtime !== 'web-open', 'T-18 direct @ search runs against the web-open workspace provider');
+  test.skip(knowledgeApp.runtime !== 'web-full', 'T-18 direct @ search uses the full runtime because Desk search is closed-product only');
 
   const fileName = 'at-search-lifecycle-token.md';
   await fs.writeFile(
