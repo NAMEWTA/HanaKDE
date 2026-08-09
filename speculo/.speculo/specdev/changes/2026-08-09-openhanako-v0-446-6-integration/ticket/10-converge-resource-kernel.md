@@ -110,9 +110,9 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-011`：事件顺序、来源、去重、isolation 和 `since()` 合同通过。
-- [ ] `AC-014`：ProviderRootIdentity 关系与恶意 workspace 测试 fail closed。
-- [ ] `AC-020`：授权 read/materialize、稳定失败和 staging cleanup 通过。
-- [ ] `AC-023`：copy/transfer/materialize 生命周期与 fixed budgets 分离。
-- [ ] `AC-026`：route/event 不接受 raw root/公共 workspaceId 且不泄漏绝对路径。
-- [ ] 验证和结构 scan 记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>`。
+- [x] `AC-011`：事件顺序、来源、去重、isolation 和 `since()` 合同通过。
+- [x] `AC-014`：ProviderRootIdentity 关系与恶意 workspace 测试 fail closed。
+- [x] `AC-020`：授权 read/materialize、稳定失败和 staging cleanup 通过。
+- [x] `AC-023`：copy/transfer/materialize 生命周期与 fixed budgets 分离。
+- [x] `AC-026`：route/event 不接受 raw root/公共 workspaceId 且不泄漏绝对路径。
+- [x] 验证和结构 scan 记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>`。

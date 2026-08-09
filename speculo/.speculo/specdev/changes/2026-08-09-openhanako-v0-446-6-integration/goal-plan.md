@@ -231,20 +231,21 @@ Lead 接收每个候选时必须读取 Dispatch、Ticket、Evidence、实际 dif
 ### Current Status
 
 ```text
-WAVE_STATUS wave=G2 ready=none active=T-10 review=none done=T-01,T-02,T-03,T-04,T-05,T-06,T-07,T-08,T-09 blocked=none
+WAVE_STATUS wave=W3 ready=T-11,T-18,T-19 active=none review=none done=T-01,T-02,T-03,T-04,T-05,T-06,T-07,T-08,T-09,T-10 blocked=none
 GATE_STATUS gate=G0 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-01.md</Path> checkpoint=fabe31dd8f36313f05ec635a4ce30d890bb91bd3 risks=50-semantic-overlap-paths-for-W1
 GATE_STATUS gate=G1 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path> checkpoint=c45d1e544f8f2611f92a459947b6a49e9b91239d risks=none
-GATE_STATUS gate=G2 state=open evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path> checkpoint=589a3c0810a472ed4ab12e93e6c1d7195da5017c risks=resource-authority-event-materialize-convergence
+GATE_STATUS gate=G2 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path> checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 risks=none
 DELIVERY ticket=T-04 state=integrated workspace=specdev-worktree/T-04 checkpoint=5dee75c3a1c88eddc02c2e890fd583e036c083a2 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-04.md</Path>
 DELIVERY ticket=T-05 state=integrated workspace=specdev-worktree/T-05 checkpoint=5aa3318bd83d75fdec70706f7a9f30ade8310868 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>
 DELIVERY ticket=T-06 state=integrated workspace=specdev-worktree/T-06 checkpoint=22a33e1b7cb4742cc456977455a11937c5bb064c evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>
 DELIVERY ticket=T-07 state=integrated workspace=specdev-worktree/T-07 checkpoint=3c4c9fac68c99ed5bf6a771f84ddc0da6f7a9a44 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>
 DELIVERY ticket=T-08 state=integrated workspace=specdev-worktree/T-08 checkpoint=2bc78b4599d79183c6a0a086f48c47385b914291 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-08.md</Path>
 DELIVERY ticket=T-09 state=removed workspace=specdev-worktree/T-09 checkpoint=c45d1e544f8f2611f92a459947b6a49e9b91239d evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-09.md</Path>
-DISPATCH ticket=T-10 wave=G2 gate=G2 baseline=589a3c0810a472ed4ab12e93e6c1d7195da5017c branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-10 workspace=specdev-worktree/T-10
+DELIVERY ticket=T-10 state=removed workspace=specdev-worktree/T-10 checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>
+W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-11,T-18,T-19
 ```
 
-规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-08 已完成 Lead 独立验收，产品集成 checkpoint 为 `2bc78b4599d79183c6a0a086f48c47385b914291`，验收记录为 `0593aac16723d1cd518825e716180c23bf10cf97`；T-02/T-03/T-04/T-05/T-06/T-07/T-08 worktree 与候选分支已非强制清理，T-09 已从 cleanup checkpoint `adda1f5806f125a9de7943ab782103c593311144` 以独立 worktree 启动。
+规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-08 已完成 Lead 独立验收，产品集成 checkpoint 为 `2bc78b4599d79183c6a0a086f48c47385b914291`，验收记录为 `0593aac16723d1cd518825e716180c23bf10cf97`；T-02/T-03/T-04/T-05/T-06/T-07/T-08 worktree 与候选分支已非强制清理，T-09 已从 cleanup checkpoint `adda1f5806f125a9de7943ab782103c593311144` 以独立 worktree 启动。T-10 已由 Lead 合入 `2018ce1dc671f0d9bb3c6f61f4078625c7863001`，完成独立 Resource/persistence 回归与 Node 24.16.0 typecheck；T-10 worktree/branch 已非强制清理，该 SHA 是 W3 三个并行 Ticket 的唯一 dispatch base。
 
 ### Pending Decisions and Blockers
 
@@ -270,6 +271,32 @@ DISPATCH ticket=T-10 wave=G2 gate=G2 baseline=589a3c0810a472ed4ab12e93e6c1d7195d
 **落点建议**：所属层 `lib/` 与 `server/`；具体接入点 `lib/resource-io/**`、`lib/file-ref/resource-io.ts`、`server/routes/resource-io.ts` 和 `server/http/resource-operation-context.ts`。对上层仅暴露经授权的 ResourceRef、typed operation/result/event 和 opaque root relation，不暴露 raw root、公共 workspaceId 或绝对路径。
 
 **下游衔接**：系统本体 → 按既有 SpecDev T-10 Ticket、G2 Gate 和唯一 Resource Kernel owner 执行。
+
+### W3 Feature Placement Decisions
+
+#### 落点裁决：T-11 main Workspace 基础设施
+
+**功能本质**：消费 Resource Kernel 的 root proof，新增跨 History、Knowledge 与 UI 的常驻 main lifecycle、physical watcher、baseline 和 health 契约；产物为系统级共享观察事实。
+
+**落点**：HanaKDE 系统本体（`core/workspace-runtime/**`、`shared/workspace-*.ts`、`desktop/workspace-watch-registry.cjs`）。
+
+**关键判据**：破盒硬门 1、2、3 均命中：它定义 root-safe observer 与跨组件共享原语，且必须在任何 logical consumer 前常驻。删除会破坏核心调用者；插件贡献面和权限声明无法拥有 physical watcher。最强反方是可把单一 UI 订阅做成插件，但 T-11 定义的是被 UI 消费的系统契约，不能翻盘。
+
+#### 落点裁决：T-18 @ 搜索交互生命周期
+
+**功能本质**：消费现有 Search/Knowledge/Resource provider，更新核心 InputArea 的 query/abort/stale-result UI lifecycle；不新增持久化或特权服务，产物为主应用输入体验。
+
+**落点**：HanaKDE 系统本体（`desktop/src/react/components/input/**` 与既有 mention utilities）。
+
+**关键判据**：三个硬门不命中，但软门 4、5 为破盒子：该行为嵌入不可整块删除的主应用 InputArea，且现有插件贡献面不能替换其 keyboard/ARIA/renderer state 接入。最强反方是可选 search widget；它不能接管已锁定的 InputArea lifecycle，故仍归 desktop core。
+
+#### 落点裁决：T-19 共享 Document Extraction
+
+**功能本质**：消费已授权 ResourceIO read/Materialize，新增 File Tool、Office/Knowledge 后续消费者共享的 bounded extraction contract；产物为系统级 derived Markdown/result，而非插件私有文件。
+
+**落点**：HanaKDE 系统本体（`lib/document-extract/**` 与 `lib/tools/file-tool.ts`）。
+
+**关键判据**：破盒硬门 2 命中：Extraction interface、预算、稳定 failure 与 Materialize cleanup 将被多方消费。软门 4、5、7 同样破盒；最强反方是 Office-specific adapter 可作插件，但 T-19 不拥有该 adapter，只定义共享 core，故风险低。
 
 ### Resume Protocol
 
