@@ -39,6 +39,9 @@ export function createMobileWorkbenchRoute(engine) {
       locale: engine.getLocale?.() || engine.config?.locale || "zh-CN",
       agentName: engine.agentName || "Hanako",
       userName: engine.userName || "User",
+      // @ui-focus-ok: this is the phone's first-load handshake. It reports which
+      // agent the server is currently on so the phone can open there; the phone
+      // names an agent explicitly on every request after this one.
       currentAgentId: engine.currentAgentId || null,
       agentYuan: engine.agent?.config?.agent?.yuan || "hanako",
       homeFolder: disclosePaths ? engine.homeCwd || null : null,
@@ -51,7 +54,7 @@ export function createMobileWorkbenchRoute(engine) {
       editor: engine.config?.editor || {},
       avatars: readAvatarAvailability(engine),
       agents: typeof engine.listAgents === "function"
-        ? sanitizeAgents(engine.listAgents(), disclosePaths)
+        ? sanitizeAgents(engine.listAgents(), engine, disclosePaths)
         : [],
       appearance: engine.getAppearance?.() || {},
     });
@@ -201,7 +204,7 @@ function readAvatarAvailability(engine) {
   return avatars;
 }
 
-function sanitizeAgents(agents, disclosePaths = false) {
+function sanitizeAgents(agents, engine, disclosePaths = false) {
   if (!Array.isArray(agents)) return [];
   return agents.map((agent) => ({
     id: agent.id,
@@ -212,6 +215,9 @@ function sanitizeAgents(agents, disclosePaths = false) {
     hasAvatar: !!agent.hasAvatar,
     chatModel: agent.chatModel || null,
     homeFolder: disclosePaths ? agent.homeFolder || null : null,
+    effectiveHomeFolder: disclosePaths
+      ? engine.getHomeCwd?.(agent.id) || agent.homeFolder || null
+      : null,
     memoryMasterEnabled: agent.memoryMasterEnabled !== false,
   }));
 }
@@ -371,7 +377,11 @@ async function writeActionResponse(c, engine, action, auth, mountId, operation) 
       hanakoHome: engine?.hanakoHome,
       requestContext: auth?.requestContext,
       decision: auth?.decision,
-      agentId: engine?.currentAgentId || "mobile_workbench",
+      // The mobile workbench writes files as a subsystem: no agent asked for
+      // this and no agent owns the result. Both identity fields name the
+      // subsystem, so the audit trail says what actually performed the write
+      // rather than whichever agent the server was focused on at the time.
+      agentId: "mobile_workbench",
       sessionId: "mobile_workbench",
       resourceIds: [mountId || "default"],
       mountId: mountId && mountId !== "default" ? mountId : null,
