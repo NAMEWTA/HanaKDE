@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import YAML from "js-yaml";
 
 // mock known-models 词典查询：provider + model 二级结构，未命中时再查通用 fallback
 const KNOWN_MODELS = {
@@ -297,6 +296,14 @@ async function loadSync() {
 
 function readProviderCatalogProviders() {
   return JSON.parse(fs.readFileSync(path.join(tmpDir, "provider-catalog.json"), "utf-8")).providers || {};
+}
+
+function writeProviderCatalogProviders(providers) {
+  fs.writeFileSync(
+    path.join(tmpDir, "provider-catalog.json"),
+    JSON.stringify({ catalogVersion: 2, providers, capabilities: {}, meta: {} }, null, 2) + "\n",
+    "utf-8",
+  );
 }
 
 describe("syncModels", () => {
@@ -1731,15 +1738,13 @@ describe("syncModels", () => {
 
   it("derives no-auth policy from ProviderRegistry for existing Ollama configs", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), [
-      "providers:",
-      "  ollama:",
-      "    base_url: http://192.168.1.20:11434/v1",
-      "    api: openai-completions",
-      "    models:",
-      "      - llama3",
-      "",
-    ].join("\n"), "utf-8");
+    writeProviderCatalogProviders({
+      ollama: {
+        base_url: "http://192.168.1.20:11434/v1",
+        api: "openai-completions",
+        models: ["llama3"],
+      },
+    });
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm._modelRegistry = {
@@ -1759,7 +1764,7 @@ describe("syncModels", () => {
 
   it("stores model thinking defaults without narrowing builtin provider model availability", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), "providers: {}\n", "utf-8");
+    writeProviderCatalogProviders({});
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm._modelRegistry = {
@@ -1785,18 +1790,16 @@ describe("syncModels", () => {
 
   it("ignores malformed provider records without breaking valid model projection", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), [
-      "providers:",
-      "  deepseek:",
-      "    base_url: https://api.deepseek.com/v1",
-      "    api: openai-completions",
-      "    api_key: sk-deep",
-      "    models:",
-      "      - deepseek-chat",
-      "  dashscope-coding:",
-      "  string-provider: broken",
-      "",
-    ].join("\n"), "utf-8");
+    writeProviderCatalogProviders({
+      deepseek: {
+        base_url: "https://api.deepseek.com/v1",
+        api: "openai-completions",
+        api_key: "sk-deep",
+        models: ["deepseek-chat"],
+      },
+      "dashscope-coding": null,
+      "string-provider": "broken",
+    });
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm._modelRegistry = {
@@ -1818,7 +1821,7 @@ describe("syncModels", () => {
 
   it("keeps SDK-auth alias providers available without a provider model allow list", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), "providers: {}\n", "utf-8");
+    writeProviderCatalogProviders({});
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm.providerRegistry.register({

@@ -9,24 +9,21 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import YAML from "js-yaml";
 import { ProviderRegistry } from "../core/provider-registry.ts";
 
 const tmpDir = path.join(os.tmpdir(), "hana-test-pr-crud-" + Date.now());
 
-function writeAddedModels(providers) {
-  const ymlPath = path.join(tmpDir, "added-models.yaml");
-  fs.writeFileSync(ymlPath, YAML.dump({ providers }), "utf-8");
+function writeProviderCatalogProviders(providers) {
+  writeProviderCatalog({
+    catalogVersion: 2,
+    providers,
+    capabilities: {},
+    meta: {},
+  });
 }
 
-function readAddedModels() {
-  const catalogPath = path.join(tmpDir, "provider-catalog.json");
-  if (fs.existsSync(catalogPath)) {
-    return readProviderCatalog().providers || {};
-  }
-  const ymlPath = path.join(tmpDir, "added-models.yaml");
-  const raw = YAML.load(fs.readFileSync(ymlPath, "utf-8"));
-  return raw?.providers || {};
+function readProviderCatalogProviders() {
+  return readProviderCatalog().providers || {};
 }
 
 function readProviderCatalog() {
@@ -96,8 +93,8 @@ afterEach(() => {
 // ── getCredentials ───────────────────────────────────────────────────────────
 
 describe("getCredentials", () => {
-  it("migrates legacy added-models.yaml to provider-catalog.json and uses v2 as the live provider source", () => {
-    writeAddedModels({
+  it("reads and updates provider-catalog.json as the live provider source", () => {
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-test-123",
         base_url: "https://custom.api.com/v1",
@@ -105,9 +102,6 @@ describe("getCredentials", () => {
         models: ["model-a"],
       },
     });
-    const legacyPath = path.join(tmpDir, "added-models.yaml");
-    const legacyBefore = fs.readFileSync(legacyPath, "utf-8");
-
     const reg = makeRegistry();
 
     expect(reg.getCredentials("test-provider")).toMatchObject({
@@ -119,7 +113,6 @@ describe("getCredentials", () => {
 
     reg.updateModelEntry("test-provider", "model-a", { image: true });
 
-    expect(fs.readFileSync(legacyPath, "utf-8")).toBe(legacyBefore);
     expect(readProviderCatalog().providers["test-provider"].models[0]).toMatchObject({
       id: "model-a",
       image: true,
@@ -127,7 +120,7 @@ describe("getCredentials", () => {
   });
 
   it("keeps MiniMax Token Plan as a distinct Anthropic-compatible provider boundary", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
 
     const minimax = reg.get("minimax");
@@ -153,7 +146,7 @@ describe("getCredentials", () => {
   });
 
   it("registers GLM Coding Plan as a fixed-list Zhipu OpenAI-compatible provider", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
 
     const entry = reg.get("zhipu-coding");
@@ -175,7 +168,7 @@ describe("getCredentials", () => {
   });
 
   it("返回已配置 provider 的 apiKey/baseUrl/api", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-test-123",
         base_url: "https://custom.api.com/v1",
@@ -192,14 +185,14 @@ describe("getCredentials", () => {
   });
 
   it("未配置的 provider 返回 null", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = makeRegistry();
     const creds = reg.getCredentials("nonexistent");
     expect(creds).toBeNull();
   });
 
-  it("added-models.yaml 未设置 baseUrl/api 时，从插件默认值回退", () => {
-    writeAddedModels({
+  it("provider catalog 未设置 baseUrl/api 时，从插件默认值回退", () => {
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-fallback",
       },
@@ -223,7 +216,7 @@ describe("getCredentials", () => {
       },
     }), "utf-8");
 
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-oauth": {
         models: [{ id: "model-a" }],
       },
@@ -258,7 +251,7 @@ describe("getCredentials", () => {
       },
     }), "utf-8");
 
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-oauth": {
         models: [{ id: "model-a" }],
       },
@@ -294,7 +287,7 @@ describe("getCredentials", () => {
       },
     }), "utf-8");
 
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-oauth": {
         api: "openai-completions",
         models: [{ id: "model-a" }],
@@ -327,7 +320,7 @@ describe("getCredentials", () => {
       "test-provider": { access: "should-not-use-this" },
     }), "utf-8");
 
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-real-key",
       },
@@ -344,7 +337,7 @@ describe("getCredentials", () => {
       "test-provider": { access: "leaked-token" },
     }), "utf-8");
 
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         // 没有 api_key
         models: ["m1"],
@@ -361,7 +354,7 @@ describe("getCredentials", () => {
     const authPath = path.join(tmpDir, "auth.json");
     fs.writeFileSync(authPath, JSON.stringify({}), "utf-8");
 
-    writeAddedModels({ "test-oauth": { models: ["m1"] } });
+    writeProviderCatalogProviders({ "test-oauth": { models: ["m1"] } });
 
     const reg = new ProviderRegistry(tmpDir);
     reg._plugins.clear();
@@ -379,7 +372,7 @@ describe("getCredentials", () => {
     expect(creds.apiKey).toBe("");
   });
 
-  it("OAuth-only provider 没有 added-models 条目时仍能从 auth.json 读取凭证", () => {
+  it("OAuth-only provider 没有 provider catalog 条目时仍能从 auth.json 读取凭证", () => {
     const authPath = path.join(tmpDir, "auth.json");
     fs.writeFileSync(authPath, JSON.stringify({
       "test-oauth": {
@@ -389,7 +382,7 @@ describe("getCredentials", () => {
       },
     }), "utf-8");
 
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
 
     const reg = new ProviderRegistry(tmpDir);
     reg._plugins.clear();
@@ -416,8 +409,8 @@ describe("getCredentials", () => {
 // ── auth policy ──────────────────────────────────────────────────────────────
 
 describe("auth policy", () => {
-  it("从内置 Ollama 声明推导无 key 策略，兼容旧 YAML 没有 auth_type 的数据", () => {
-    writeAddedModels({
+  it("从内置 Ollama 声明推导无 key 策略，即使目录条目没有 auth_type", () => {
+    writeProviderCatalogProviders({
       ollama: {
         base_url: "http://192.168.1.20:11434/v1",
         api: "openai-completions",
@@ -432,7 +425,7 @@ describe("auth policy", () => {
   });
 
   it("api-key provider 在远程地址仍然要求 key", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         base_url: "https://api.test.com/v1",
         api: "openai-completions",
@@ -451,7 +444,7 @@ describe("auth policy", () => {
 
 describe("builtin default models", () => {
   it("uses the official OpenAI-compatible endpoint for Kimi Coding Plan", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
     expect(reg.get("kimi-coding")).toMatchObject({
       baseUrl: "https://api.kimi.com/coding/v1",
@@ -460,13 +453,13 @@ describe("builtin default models", () => {
   });
 
   it("uses the stable Kimi for Coding model ID for Kimi Coding Plan", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
     expect(reg.getDefaultModels("kimi-coding")[0]).toBe("kimi-for-coding");
   });
 
   it("keeps DeepSeek defaults aligned with the V4 API endpoint and model family", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
     expect(reg.get("deepseek").baseUrl).toBe("https://api.deepseek.com");
     expect(reg.getDefaultModels("deepseek")).toEqual([
@@ -476,7 +469,7 @@ describe("builtin default models", () => {
   });
 
   it("uses the native Google Gemini API as the built-in Gemini contract", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
     expect(reg.get("gemini").baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta");
     expect(reg.get("gemini").api).toBe("google-generative-ai");
@@ -491,7 +484,7 @@ describe("builtin default models", () => {
 
 describe("getProviderModels", () => {
   it("返回字符串格式的模型 ID 列表", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: ["model-a", "model-b", "model-c"],
@@ -503,7 +496,7 @@ describe("getProviderModels", () => {
   });
 
   it("处理对象格式的模型条目（提取 id）", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: [
@@ -519,7 +512,7 @@ describe("getProviderModels", () => {
   });
 
   it("未配置 models 时返回空数组", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": { api_key: "sk-x" },
     });
     const reg = makeRegistry();
@@ -528,7 +521,7 @@ describe("getProviderModels", () => {
   });
 
   it("不存在的 provider 返回空数组", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = makeRegistry();
     const models = reg.getProviderModels("nonexistent");
     expect(models).toEqual([]);
@@ -538,7 +531,7 @@ describe("getProviderModels", () => {
 // ── getAllProvidersRaw ────────────────────────────────────────────────────────
 
 describe("getAllProvidersRaw", () => {
-  it("返回 added-models.yaml 原始数据", () => {
+  it("返回 provider catalog 原始数据", () => {
     const data = {
       "test-provider": {
         api_key: "sk-x",
@@ -549,7 +542,7 @@ describe("getAllProvidersRaw", () => {
         api_key: "sk-y",
       },
     };
-    writeAddedModels(data);
+    writeProviderCatalogProviders(data);
     const reg = makeRegistry();
     const raw = reg.getAllProvidersRaw();
     expect(raw["test-provider"].api_key).toBe("sk-x");
@@ -557,7 +550,7 @@ describe("getAllProvidersRaw", () => {
     expect(raw["test-provider"].models).toEqual(["model-a"]);
   });
 
-  it("added-models.yaml 不存在时返回空对象", () => {
+  it("provider catalog 不存在时返回空对象", () => {
     // 不写文件
     const reg = makeRegistry();
     const raw = reg.getAllProvidersRaw();
@@ -565,7 +558,7 @@ describe("getAllProvidersRaw", () => {
   });
 
   it("returns snapshots so callers cannot mutate the registry cache", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: ["model-a"],
@@ -586,24 +579,18 @@ describe("getAllProvidersRaw", () => {
   });
 
   it("normalizes malformed provider records to empty configs at the registry boundary", () => {
-    const ymlPath = path.join(tmpDir, "added-models.yaml");
-    fs.writeFileSync(ymlPath, [
-      "providers:",
-      "  test-provider:",
-      "    api_key: sk-x",
-      "    models:",
-      "      - model-a",
-      "  empty-coding:",
-      "  string-provider: broken",
-      "  array-provider:",
-      "    - nope",
-      "  invalid-models:",
-      "    models:",
-      "      -",
-      "      - id:",
-      "      - id: model-b",
-      "",
-    ].join("\n"), "utf-8");
+    writeProviderCatalog({
+      catalogVersion: 2,
+      providers: {
+        "test-provider": { api_key: "sk-x", models: ["model-a"] },
+        "empty-coding": null,
+        "string-provider": "broken",
+        "array-provider": ["nope"],
+        "invalid-models": { models: [null, { id: "" }, { id: "model-b" }] },
+      },
+      capabilities: {},
+      meta: {},
+    });
 
     const reg = makeRegistry();
     const raw = reg.getAllProvidersRaw();
@@ -655,7 +642,7 @@ describe("provider catalog capabilities", () => {
 
 describe("model defaults", () => {
   it("stores thinking defaults without creating a chat model allow list", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
       },
@@ -664,7 +651,7 @@ describe("model defaults", () => {
 
     reg.setModelDefaultThinkingLevel("test-provider", "model-a", "high");
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].models).toBeUndefined();
     expect(persisted["test-provider"].model_defaults).toEqual({
       "model-a": { thinking_level: "high" },
@@ -677,7 +664,7 @@ describe("model defaults", () => {
 
 describe("addModel", () => {
   it("向已有 provider 添加模型并持久化", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: ["model-a"],
@@ -691,12 +678,12 @@ describe("addModel", () => {
     expect(models).toContain("model-b");
 
     // 验证持久化
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].models).toContain("model-b");
   });
 
   it("不会添加重复模型", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: ["model-a"],
@@ -705,7 +692,7 @@ describe("addModel", () => {
     const reg = makeRegistry();
     reg.addModel("test-provider", "model-a");
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     const count = persisted["test-provider"].models.filter(
       (m) => m === "model-a",
     ).length;
@@ -713,24 +700,24 @@ describe("addModel", () => {
   });
 
   it("provider 没有 models 字段时创建之", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": { api_key: "sk-x" },
     });
     const reg = makeRegistry();
     reg.addModel("test-provider", "new-model");
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].models).toEqual(["new-model"]);
   });
 
   it("支持添加对象格式的模型", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": { api_key: "sk-x", models: [] },
     });
     const reg = makeRegistry();
     reg.addModel("test-provider", { id: "model-obj", name: "Model Obj", context: 32000 });
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     const entry = persisted["test-provider"].models.find(
       (m) => (typeof m === "object" ? m.id : m) === "model-obj",
     );
@@ -738,13 +725,13 @@ describe("addModel", () => {
   });
 
   it("对象格式模型不与同 id 的已有条目重复", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": { api_key: "sk-x", models: ["model-obj"] },
     });
     const reg = makeRegistry();
     reg.addModel("test-provider", { id: "model-obj", name: "Model Obj" });
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].models).toHaveLength(1);
   });
 });
@@ -753,7 +740,7 @@ describe("addModel", () => {
 
 describe("removeModel", () => {
   it("移除模型并持久化", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: ["model-a", "model-b", "model-c"],
@@ -765,12 +752,12 @@ describe("removeModel", () => {
     const models = reg.getProviderModels("test-provider");
     expect(models).toEqual(["model-a", "model-c"]);
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].models).toEqual(["model-a", "model-c"]);
   });
 
   it("移除对象格式的模型条目（按 id 匹配）", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: [
@@ -782,12 +769,12 @@ describe("removeModel", () => {
     const reg = makeRegistry();
     reg.removeModel("test-provider", "model-b");
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].models).toEqual(["model-a"]);
   });
 
   it("移除不存在的模型不会报错", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-x",
         models: ["model-a"],
@@ -795,7 +782,7 @@ describe("removeModel", () => {
     });
     const reg = makeRegistry();
     expect(() => reg.removeModel("test-provider", "nonexistent")).not.toThrow();
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].models).toEqual(["model-a"]);
   });
 });
@@ -804,7 +791,7 @@ describe("removeModel", () => {
 
 describe("saveProvider", () => {
   it("创建新的 provider 条目", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = makeRegistry();
     reg.saveProvider("new-provider", {
       api_key: "sk-new",
@@ -812,13 +799,13 @@ describe("saveProvider", () => {
       api: "openai-completions",
     });
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["new-provider"]).toBeDefined();
     expect(persisted["new-provider"].api_key).toBe("sk-new");
   });
 
   it("把新增自定义 provider 保存成本地 Provider Plugin，密钥只留在 catalog overlay", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = makeRegistry();
 
     reg.saveProvider("new-provider", {
@@ -880,107 +867,37 @@ describe("saveProvider", () => {
     });
   });
 
-  it("把旧 catalog-only 自定义 provider 一次性迁移成本地 Provider Plugin", () => {
-    writeProviderCatalog({
-      catalogVersion: 2,
-      providers: {
-        "custom-old": {
-          display_name: "Custom Old",
-          auth_type: "api-key",
-          api_key: "sk-old",
-          headers: { Authorization: "Bearer old" },
-          base_url: "https://old.example/v1",
-          api: "openai-completions",
-          models: ["old-chat"],
-        },
+  it("keeps catalog-only custom providers catalog-backed without creating a local plugin", () => {
+    writeProviderCatalogProviders({
+      "custom-old": {
+        display_name: "Custom Old",
+        auth_type: "api-key",
+        api_key: "sk-old",
+        base_url: "https://old.example/v1",
+        api: "openai-completions",
+        models: ["old-chat"],
       },
-      capabilities: {},
-      meta: {},
     });
 
     const reg = new ProviderRegistry(tmpDir);
-    const entry = reg.get("custom-old");
 
-    expect(entry).toMatchObject({
+    expect(reg.get("custom-old")).toMatchObject({
       id: "custom-old",
       displayName: "Custom Old",
       baseUrl: "https://old.example/v1",
       api: "openai-completions",
-      source: { kind: "local-provider-plugin" },
+      source: { kind: "user" },
     });
-    expect(readLocalProviderPlugin("custom-old")).toMatchObject({
-      id: "custom-old",
-      displayName: "Custom Old",
-      defaultBaseUrl: "https://old.example/v1",
-      defaultApi: "openai-completions",
-      models: ["old-chat"],
-    });
-    expect(readProviderCatalog().providers["custom-old"]).toEqual({
+    expect(fs.existsSync(path.join(tmpDir, "provider-plugins", "custom-old"))).toBe(false);
+    expect(readProviderCatalogProviders()["custom-old"]).toMatchObject({
       api_key: "sk-old",
-      headers: { Authorization: "Bearer old" },
-    });
-    expect(reg.getAllProvidersRaw()["custom-old"]).toMatchObject({
-      api_key: "sk-old",
-      base_url: "https://old.example/v1",
-      api: "openai-completions",
       models: ["old-chat"],
     });
   });
 
-  it("把中文名旧 catalog-only provider 迁移到 safe storage slug 且保留 provider id", () => {
-    const providerId = "硅基流动";
-    writeProviderCatalog({
-      catalogVersion: 2,
-      providers: {
-        [providerId]: {
-          display_name: "硅基流动",
-          auth_type: "api-key",
-          api_key: "sk-silicon",
-          base_url: "https://api.siliconflow.cn/v1",
-          api: "openai-completions",
-          models: ["deepseek-ai/DeepSeek-V3.2"],
-        },
-      },
-      capabilities: {},
-      meta: {},
-    });
-
-    const reg = new ProviderRegistry(tmpDir);
-    const entry = reg.get(providerId);
-
-    expect(entry).toMatchObject({
-      id: providerId,
-      displayName: "硅基流动",
-      baseUrl: "https://api.siliconflow.cn/v1",
-      api: "openai-completions",
-      source: { kind: "local-provider-plugin" },
-    });
-
-    const storageId = readOnlyLocalProviderPluginDir();
-    expect(storageId).toMatch(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
-    expect(storageId).not.toBe(providerId);
-
-    const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, "provider-plugins", storageId, "manifest.json"), "utf-8"));
-    expect(manifest).toMatchObject({
-      id: storageId,
-      provider: providerId,
-    });
-    const providerFile = JSON.parse(fs.readFileSync(
-      path.join(tmpDir, "provider-plugins", storageId, "providers", `${storageId}.json`),
-      "utf-8",
-    ));
-    expect(providerFile).toMatchObject({
-      id: providerId,
-      displayName: "硅基流动",
-      defaultBaseUrl: "https://api.siliconflow.cn/v1",
-    });
-    expect(readProviderCatalog().providers[providerId]).toEqual({
-      api_key: "sk-silicon",
-    });
-  });
 
   it("merges local provider plugin model metadata when catalog overlay only has bare ids", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
 
     reg.saveProvider("custom-vl", {
@@ -1020,7 +937,7 @@ describe("saveProvider", () => {
   });
 
   it("replaces local provider plugin models when an explicit model list is saved", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
 
     reg.saveProvider("custom-local", {
@@ -1046,7 +963,7 @@ describe("saveProvider", () => {
   });
 
   it("removes local provider plugin models without resurrecting them after reload", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
 
     reg.saveProvider("custom-local", {
@@ -1072,7 +989,7 @@ describe("saveProvider", () => {
   });
 
   it("更新已有 provider 的配置（合并）", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "sk-old",
         base_url: "https://old.api.com/v1",
@@ -1085,7 +1002,7 @@ describe("saveProvider", () => {
       base_url: "https://new.api.com/v1",
     });
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"].api_key).toBe("sk-new");
     expect(persisted["test-provider"].base_url).toBe("https://new.api.com/v1");
     // 原有的 models 保留
@@ -1093,7 +1010,7 @@ describe("saveProvider", () => {
   });
 
   it("写入后缓存失效，下次 get() 反映新值", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = makeRegistry();
     reg.saveProvider("test-provider", {
       api_key: "sk-saved",
@@ -1106,7 +1023,7 @@ describe("saveProvider", () => {
   });
 
   it("拒绝把官方 DeepSeek provider id 保存成模型", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       deepseek: {
         base_url: "https://api.deepseek.com/v1",
         api: "openai-completions",
@@ -1119,12 +1036,12 @@ describe("saveProvider", () => {
     expect(() => reg.saveProvider("deepseek", { models: ["deepseek"] }))
       .toThrow(/deepseek.*provider.*model/i);
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted.deepseek.models).toEqual(["deepseek-v4-pro"]);
   });
 
   it("内置 provider 首次保存空 models 时填充默认模型列表", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
 
     reg.saveProvider("mimo", {
@@ -1134,7 +1051,7 @@ describe("saveProvider", () => {
       seed_default_models: true,
     });
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted.mimo.models).toEqual(reg.getDefaultModels("mimo"));
     expect(persisted.mimo.models).toEqual(expect.arrayContaining([
       "mimo-v2.5-pro",
@@ -1147,7 +1064,7 @@ describe("saveProvider", () => {
   });
 
   it("MiMo Token Plan 首次保存空 models 时填充独立默认模型列表", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = new ProviderRegistry(tmpDir);
 
     reg.saveProvider("mimo-token-plan", {
@@ -1157,7 +1074,7 @@ describe("saveProvider", () => {
       seed_default_models: true,
     });
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["mimo-token-plan"].models).toEqual(reg.getDefaultModels("mimo-token-plan"));
     expect(persisted["mimo-token-plan"].models).toEqual(expect.arrayContaining([
       "mimo-v2.5-pro",
@@ -1168,7 +1085,7 @@ describe("saveProvider", () => {
   });
 
   it("已有 provider 显式保存空 models 时保留用户选择", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       mimo: {
         api_key: "sk-mimo",
         base_url: "https://api.xiaomimimo.com/v1",
@@ -1180,7 +1097,7 @@ describe("saveProvider", () => {
 
     reg.saveProvider("mimo", { models: [] });
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted.mimo.models).toEqual([]);
   });
 });
@@ -1189,7 +1106,7 @@ describe("saveProvider", () => {
 
 describe("updateModelEntry type field", () => {
   it("accepts type in updateModelEntry whitelist", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: ["model-a"],
@@ -1198,7 +1115,7 @@ describe("updateModelEntry type field", () => {
     const reg = makeRegistry();
     reg.updateModelEntry("test-provider", "model-a", { type: "image" });
 
-    const raw = readAddedModels();
+    const raw = readProviderCatalogProviders();
     const entry = raw["test-provider"].models.find(
       m => (typeof m === "object" ? m.id : m) === "model-a"
     );
@@ -1206,7 +1123,7 @@ describe("updateModelEntry type field", () => {
   });
 
   it("persists audio and normalizes context/max output aliases in updateModelEntry", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: ["model-a"],
@@ -1219,7 +1136,7 @@ describe("updateModelEntry type field", () => {
       maxTokens: 8192,
     });
 
-    const raw = readAddedModels();
+    const raw = readProviderCatalogProviders();
     const entry = raw["test-provider"].models.find(
       m => (typeof m === "object" ? m.id : m) === "model-a"
     );
@@ -1232,7 +1149,7 @@ describe("updateModelEntry type field", () => {
   });
 
   it("persists controlled protocol capabilities and filters unknown compat fields", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: [{ id: "model-a", compat: { hanaVideoInput: true } }],
@@ -1257,7 +1174,7 @@ describe("updateModelEntry type field", () => {
       },
     });
 
-    const raw = readAddedModels();
+    const raw = readProviderCatalogProviders();
     const entry = raw["test-provider"].models.find(
       m => (typeof m === "object" ? m.id : m) === "model-a"
     );
@@ -1278,7 +1195,7 @@ describe("updateModelEntry type field", () => {
   });
 
   it("persists an explicit tool use contract as model metadata", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: ["tool-model"],
@@ -1298,7 +1215,7 @@ describe("updateModelEntry type field", () => {
       },
     });
 
-    const raw = readAddedModels();
+    const raw = readProviderCatalogProviders();
     const entry = raw["test-provider"].models.find(
       m => (typeof m === "object" ? m.id : m) === "tool-model"
     );
@@ -1313,7 +1230,7 @@ describe("updateModelEntry type field", () => {
   });
 
   it("rejects malformed tool use contracts instead of applying a default dialect", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: ["tool-model"],
@@ -1335,7 +1252,7 @@ describe("updateModelEntry type field", () => {
 
 describe("media model CRUD", () => {
   it("adds image models to media.image_generation instead of chat models", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: ["chat-model"],
@@ -1358,7 +1275,7 @@ describe("media model CRUD", () => {
       protocolId: "test-images",
     });
 
-    const raw = readAddedModels();
+    const raw = readProviderCatalogProviders();
     expect(raw["test-provider"].models).toEqual(["chat-model"]);
     expect(raw["test-provider"].media.image_generation.models).toEqual([
       { id: "image-model", displayName: "Image Model", protocolId: "test-images" },
@@ -1366,7 +1283,7 @@ describe("media model CRUD", () => {
   });
 
   it("updates and removes image models from media.image_generation", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: ["chat-model"],
@@ -1392,7 +1309,7 @@ describe("media model CRUD", () => {
       displayName: "Renamed Image Model",
       inputs: ["text", "image"],
     });
-    expect(readAddedModels()["test-provider"].media.image_generation.models).toEqual([
+    expect(readProviderCatalogProviders()["test-provider"].media.image_generation.models).toEqual([
       {
         id: "image-model",
         protocolId: "test-images",
@@ -1402,11 +1319,11 @@ describe("media model CRUD", () => {
     ]);
 
     reg.removeMediaModel("test-provider", "image_generation", "image-model");
-    expect(readAddedModels()["test-provider"].media.image_generation.models).toEqual([]);
+    expect(readProviderCatalogProviders()["test-provider"].media.image_generation.models).toEqual([]);
   });
 
   it("infers the media protocol for custom model ids added from settings", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       dashscope: {
         api_key: "dash-key",
       },
@@ -1417,7 +1334,7 @@ describe("media model CRUD", () => {
       id: "qwen-image-2.0-pro",
     });
 
-    expect(readAddedModels().dashscope.media.image_generation.models).toEqual([
+    expect(readProviderCatalogProviders().dashscope.media.image_generation.models).toEqual([
       { id: "qwen-image-2.0-pro", displayName: "qwen-image-2.0-pro", protocolId: "dashscope-qwen-multimodal-image" },
     ]);
   });
@@ -1427,7 +1344,7 @@ describe("media model CRUD", () => {
 
 describe("getModelsByType", () => {
   it("returns only image models for a provider", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: [
@@ -1443,7 +1360,7 @@ describe("getModelsByType", () => {
   });
 
   it("returns empty array for provider with no image models", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-123",
         models: ["chat-model"],
@@ -1458,7 +1375,7 @@ describe("getModelsByType", () => {
 
 describe("getAllModelsByType", () => {
   it("aggregates image models across providers", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": {
         api_key: "key-a",
         models: [{ id: "img-a", type: "image" }],
@@ -1485,20 +1402,20 @@ describe("getAllModelsByType", () => {
 
 describe("removeProvider", () => {
   it("删除 provider 条目", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": { api_key: "sk-x" },
       "keep-me": { api_key: "sk-y" },
     });
     const reg = makeRegistry();
     reg.removeProvider("test-provider");
 
-    const persisted = readAddedModels();
+    const persisted = readProviderCatalogProviders();
     expect(persisted["test-provider"]).toBeUndefined();
     expect(persisted["keep-me"]).toBeDefined();
   });
 
   it("records an explicit deletion tombstone and clears it when provider is saved again", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "test-provider": { api_key: "sk-x" },
     });
     const reg = makeRegistry();
@@ -1508,11 +1425,11 @@ describe("removeProvider", () => {
 
     reg.saveProvider("test-provider", { api_key: "sk-new" });
     expect(readProviderCatalogMeta().deletedProviders || []).not.toContain("test-provider");
-    expect(readAddedModels()["test-provider"].api_key).toBe("sk-new");
+    expect(readProviderCatalogProviders()["test-provider"].api_key).toBe("sk-new");
   });
 
   it("删除不存在的 provider 不报错", () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     const reg = makeRegistry();
     expect(() => reg.removeProvider("nonexistent")).not.toThrow();
   });

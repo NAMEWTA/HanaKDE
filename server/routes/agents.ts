@@ -599,7 +599,7 @@ export function createAgentsRoute(engine) {
         engine[setter](value);
       }
 
-      // providers 块 → 全局 added-models.yaml
+      // providers 块 → 全局 provider catalog
       let providersChanged = false;
       if (agentPartial.providers) {
         const rawProviders = engine.providerRegistry.getAllProvidersRaw?.() || {};
@@ -618,7 +618,7 @@ export function createAgentsRoute(engine) {
         providersChanged = true;
       }
 
-      // 内联 API 凭证 → 全局 added-models.yaml 对应条目
+      // 内联 API 凭证 → 全局 provider catalog 对应条目
       for (const blockName of ["api", "embedding_api", "utility_api"]) {
         const block = agentPartial[blockName];
         if (hasInlineProviderCredentialPatch(block)) {

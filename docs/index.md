@@ -131,13 +131,12 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 | `model-manager.ts` / `model-sync.ts` / `model-execution-config.ts` | 模型注册、发现、同步、执行配置 |
 | `llm-client.ts` / `llm-request-policy.ts` / `llm-utils.ts` | LLM API 客户端与请求策略 |
 | `plugin-manager.ts` / `plugin-config.ts` / `plugin-context.ts` | 插件系统：加载、配置、开发工具、iframe/surface session 托管 |
-| `provider-*.ts` (6 文件) | Provider 注册表、目录、认证迁移、媒体配置/序列化、提示词补丁 |
+| `provider-*.ts` | Provider 注册表、目录、兼容/序列化、提示词补丁 |
 | `config-coordinator.ts` / `preferences-manager.ts` | 配置和偏好管理 |
 | `skill-manager.ts` | Skill 注册/同步 |
 | `bridge-session-manager.ts` | 外部平台桥接会话管理 |
 | `channel-manager.ts` | 频道 CRUD |
 | `first-run.ts` | 首次运行初始化 |
-| `migrations.ts` / `migrate-providers.ts` | 数据与 Provider 迁移 |
 | `platform-prompt.ts` | 平台特定系统提示词 |
 | `vision-*.ts` (5 文件) | 视觉/视觉上下文管线、桥接、准备、注入器、辅助策略 |
 | `yuan-registry.ts` | Yuan（Agent 角色/人格）注册表 |

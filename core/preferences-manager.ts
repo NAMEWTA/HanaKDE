@@ -95,7 +95,6 @@ export class PreferencesManager {
       log.warn(`automatic preference maintenance skipped because the source is unreadable: ${this._path}`);
     } else {
       this._runConstructorMaintenance("retired experiments", () => this._migrateRetiredExperiments());
-      this._runConstructorMaintenance("legacy defaults", () => this._migrateLegacyDefaults());
       this._runConstructorMaintenance("workspace state gc", () => this.gcWorkspaceUiState());
     }
   }
@@ -111,25 +110,6 @@ export class PreferencesManager {
   _migrateRetiredExperiments() {
     const next = stripRetiredExperimentValues(this._cache);
     if (next === this._cache) return;
-    this.savePreferences(next);
-  }
-
-  /**
-   * 一次性迁移：把历史版本"无脑写入"的旧默认值回退到"未表达偏好"。
-   *
-   * 51ecc435 把 sandbox_network 的 default 从关改成开（!== false），
-   * 但老用户 preferences.json 里仍有 `sandbox_network: false` —— 这是早期
-   * 默认时无脑写入的，不是用户的显式选择。本 migration 把它清掉一次，
-   * 让 getter 走新默认（开）。带 marker 防止重跑：用户之后显式关掉时
-   * 不会再被覆盖。
-   *
-   * @private
-   */
-  _migrateLegacyDefaults() {
-    if (this._cache._defaultsRelaxedMigrated) return;
-    const next = { ...this._cache };
-    if (next.sandbox_network === false) delete next.sandbox_network;
-    next._defaultsRelaxedMigrated = true;
     this.savePreferences(next);
   }
 

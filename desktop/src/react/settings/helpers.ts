@@ -39,7 +39,7 @@ export function lookupModelMeta(modelId: string, provider?: string): any {
   if (!modelId) return null;
   const reference = lookupReferenceModelMeta(modelId, provider);
 
-  // 从 provider summaries 提取用户在 added-models.yaml 中设置的模型元数据
+  // 从 provider summaries 提取用户在 provider catalog 中设置的模型元数据
   const { providersSummary, settingsConfig } = useSettingsStore.getState();
   let userEntry: Record<string, any> | null = null;
   if (providersSummary) {

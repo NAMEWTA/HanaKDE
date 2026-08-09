@@ -13,7 +13,7 @@
 import fs from "fs";
 import path from "path";
 import YAML from "js-yaml";
-import { atomicWriteSync } from "../shared/safe-fs.ts";
+import { writeSecretFileSync } from "../shared/secret-fs.ts";
 import { fromRoot } from "../shared/hana-root.ts";
 import { lookupKnown } from "../shared/known-models.ts";
 import {
@@ -371,6 +371,7 @@ import { agnesPlugin } from "../lib/providers/agnes.ts";
 import { openaiPlugin } from "../lib/providers/openai.ts";
 import { anthropicPlugin } from "../lib/providers/anthropic.ts";
 import { deepseekPlugin } from "../lib/providers/deepseek.ts";
+import { deepseekResponsesPlugin } from "../lib/providers/deepseek-responses.ts";
 import { geminiPlugin } from "../lib/providers/gemini.ts";
 import { openrouterPlugin } from "../lib/providers/openrouter.ts";
 import { opencodePlugin } from "../lib/providers/opencode.ts";
@@ -414,6 +415,7 @@ const BUILTIN_PLUGINS = [
   openaiPlugin,
   anthropicPlugin,
   deepseekPlugin,
+  deepseekResponsesPlugin,
   geminiPlugin,
   openrouterPlugin,
   opencodePlugin,
@@ -485,8 +487,8 @@ const BUILTIN_PLUGINS = [
 // ── ProviderRegistry ─────────────────────────────────────────────────────────
 
 export class ProviderRegistry {
-  declare _addedModelsCache: any;
-  declare _addedModelsMtime: any;
+  declare _catalogCache: any;
+  declare _catalogMtime: any;
   declare _authJsonCache: any;
   declare _authJsonMtime: any;
   declare _builtinPlugins: any;
@@ -518,8 +520,8 @@ export class ProviderRegistry {
     this._runtimeMediaRefreshes = new Map();
 
     // mtime 缓存：避免热路径上重复读盘解析 YAML/JSON
-    /** @private */ this._addedModelsCache = null;
-    /** @private */ this._addedModelsMtime = 0;
+    /** @private */ this._catalogCache = null;
+    /** @private */ this._catalogMtime = 0;
     /** @private */ this._authJsonCache = null;
     /** @private */ this._authJsonMtime = 0;
 
@@ -570,23 +572,6 @@ export class ProviderRegistry {
     const saved = this._localProviderPlugins.writeProvider(providerId, plugin);
     this._plugins.set(providerId, saved);
     return overlay;
-  }
-
-  _migrateCatalogOnlyProvidersToLocalPlugins(userConfig) {
-    let changed = false;
-    const nextConfig = cloneData(userConfig || {});
-    for (const [providerId, config] of Object.entries(userConfig || {}) as [string, any][]) {
-      if (this._plugins.has(providerId)) continue;
-      if (!isSafeLocalProviderPluginProviderId(providerId)) continue;
-      if (!providerConfigHasLocalDefinition(config)) continue;
-      nextConfig[providerId] = this._writeLocalProviderPlugin(providerId, config, null);
-      changed = true;
-    }
-    if (!changed) return userConfig;
-    this._saveAddedModels(nextConfig, {
-      localProviderPluginsMigratedAt: new Date().toISOString(),
-    });
-    return this._loadAddedModels();
   }
 
   /**
@@ -739,133 +724,28 @@ export class ProviderRegistry {
     }
   }
 
-  /**
-   * 一次性迁移：将 agent config.models.overrides 的模型能力字段迁移到 Provider Catalog
-   * @param {string} agentsDir - agents 目录
-   * @param {Function} [log] - 日志函数
-   */
-  migrateOverridesToAddedModels(agentsDir, log: (...args: any[]) => void = () => {}) {
-    // 能力字段白名单：image 是新标准名；vision 是旧名，读到时转写为 image
-    const CAPABILITY_KEYS = ["context", "maxOutput", "image", "video", "reasoning"];
-    // Migration code must distinguish an unreadable catalog from an empty
-    // one. Runtime reads may degrade to an empty view, but cleanup must not.
-    const userConfig = normalizeProviderUserConfigMap(this._catalog.load().providers);
-    let changed = false;
-    const pendingConfigWrites = [];
-    const sourceErrors: string[] = [];
-
-    // 扫描所有 agent 的 config.yaml
-    let agentDirs;
-    try { agentDirs = fs.readdirSync(agentsDir, { withFileTypes: true }).filter(d => d.isDirectory()); }
-    catch (err) {
-      if (err?.code === "ENOENT") return;
-      throw err;
-    }
-
-    for (const dir of agentDirs) {
-      const cfgPath = path.join(agentsDir, dir.name, "config.yaml");
-      let cfg;
-      try {
-        cfg = YAML.load(fs.readFileSync(cfgPath, "utf-8"));
-        if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) {
-          throw new Error("config root must be an object");
-        }
-      } catch (err) {
-        if (err?.code !== "ENOENT") sourceErrors.push(`${dir.name}/config.yaml: ${err.message}`);
-        continue;
-      }
-      if (!cfg?.models?.overrides) continue;
-
-      const overrides = cfg.models.overrides;
-      let cfgChanged = false;
-
-      for (const [modelId, ov] of Object.entries(overrides) as [string, any][]) {
-        if (!ov || typeof ov !== "object") continue;
-        const meta: any = {};
-        for (const key of CAPABILITY_KEYS) {
-          const value = key === "image" && ov.image === undefined ? ov.vision : ov[key];
-          if (value !== undefined) meta[key] = value;
-        }
-        if (Object.keys(meta).length === 0) continue;
-
-        // Only clean the source after finding a durable destination. Unknown
-        // model overrides remain valid user intent and must stay untouched.
-        let target = null;
-        for (const [provName, prov] of Object.entries(userConfig) as [string, any][]) {
-          if (!prov.models || !Array.isArray(prov.models)) continue;
-          const idx = prov.models.findIndex(m => (typeof m === "object" ? m.id : m) === modelId);
-          if (idx === -1) continue;
-          target = { provName, prov, idx };
-          break;
-        }
-        if (!target) {
-          log(`[migrate] override ${modelId}: no provider model destination; source preserved`);
-          continue;
-        }
-
-        const existing = typeof target.prov.models[target.idx] === "object"
-          ? target.prov.models[target.idx]
-          : { id: modelId };
-        target.prov.models[target.idx] = { ...existing, ...meta };
-        changed = true;
-        delete ov.vision;
-        for (const key of CAPABILITY_KEYS) delete ov[key];
-        cfgChanged = true;
-        log(`[migrate] override ${modelId}: ${Object.keys(meta).join(",")} → Provider Catalog`);
-      }
-
-      // 清理空的 override 条目，保存 config.yaml
-      if (cfgChanged) {
-        for (const [modelId, ov] of Object.entries(overrides)) {
-          if (ov && typeof ov === "object" && Object.keys(ov).length === 0) {
-            delete overrides[modelId];
-          }
-        }
-        if (Object.keys(overrides).length === 0) {
-          delete cfg.models.overrides;
-        }
-        pendingConfigWrites.push({ cfgPath, cfg });
-      }
-    }
-
-    if (changed) {
-      // Copy to the destination before cleaning any agent source. A failed
-      // catalog write therefore leaves every override available for retry.
-      this._saveAddedModels(userConfig);
-      const header = "# HanaAgent 助手配置\n# 由设置页面管理，手动编辑也可以\n\n";
-      for (const { cfgPath, cfg } of pendingConfigWrites) {
-        const yamlStr = header + YAML.dump(cfg, { indent: 2, lineWidth: -1, sortKeys: false, quotingType: '"', forceQuotes: false });
-        atomicWriteSync(cfgPath, yamlStr);
-      }
-      log("[migrate] model overrides migrated to Provider Catalog");
-    }
-    if (sourceErrors.length > 0) {
-      throw new Error(`Unreadable agent config prevents override migration completion: ${sourceErrors.join("; ")}`);
-    }
-  }
-
   /** 从 Provider Catalog v2 读取用户 provider 配置（mtime 缓存，文件未变时跳过磁盘读取） */
-  _loadAddedModels() {
+  _loadProviderCatalog() {
     try {
       const catalog = this._catalog.load();
       const mtime = fs.statSync(this._catalog.catalogPath).mtimeMs;
-      if (this._addedModelsCache && mtime === this._addedModelsMtime) {
-        return cloneData(this._addedModelsCache);
+      if (this._catalogCache && mtime === this._catalogMtime) {
+        return cloneData(this._catalogCache);
       }
-      this._addedModelsCache = normalizeProviderUserConfigMap(catalog.providers);
-      this._addedModelsMtime = mtime;
-      return cloneData(this._addedModelsCache);
+      this._catalogCache = normalizeProviderUserConfigMap(catalog.providers);
+      this._catalogMtime = mtime;
+      return cloneData(this._catalogCache);
     } catch {
       return {};
     }
   }
 
   /** 将 providers 对象写入 Provider Catalog v2 */
-  _saveAddedModels(providers, meta: any = {}) {
+  _saveProviderCatalog(providers, meta: any = {}) {
     this._catalog.saveProviders(stripProviderRuntimeMetaMap(providers), meta);
-    // 写入后失效缓存，下次 _loadAddedModels 会重读
-    this._addedModelsCache = null;
-    this._addedModelsMtime = 0;
+    // 写入后失效缓存，下次 _loadProviderCatalog 会重读
+    this._catalogCache = null;
+    this._catalogMtime = 0;
   }
 
   /**
@@ -875,7 +755,7 @@ export class ProviderRegistry {
   reload() {
     this._entries.clear();
     this._reloadLocalProviderPlugins();
-    const userConfig = this._migrateCatalogOnlyProvidersToLocalPlugins(this._loadAddedModels());
+    const userConfig = this._loadProviderCatalog();
 
     // 1. 先处理所有已注册插件（内置 + 外部注册的）
     for (const [id, plugin] of this._plugins) {
@@ -1431,7 +1311,7 @@ export class ProviderRegistry {
    * @param {string} providerId
    */
   remove(providerId) {
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const plugin = this._plugins.get(providerId);
     const hasCatalogEntry = Object.prototype.hasOwnProperty.call(userConfig, providerId);
     const hasLocalPlugin = isLocalProviderPlugin(plugin);
@@ -1443,7 +1323,7 @@ export class ProviderRegistry {
     }
     const deletedProviders = this._catalog.getDeletedProviders();
     if (!deletedProviders.includes(providerId)) deletedProviders.push(providerId);
-    this._saveAddedModels(userConfig, { deletedProviders });
+    this._saveProviderCatalog(userConfig, { deletedProviders });
     this._entries.delete(providerId);
     // 如果有内置插件声明，以默认值重建 entry
     if (this._plugins.has(providerId)) {
@@ -1494,7 +1374,7 @@ export class ProviderRegistry {
    * @returns {{ apiKey: string, baseUrl: string, api: string, headers?: Record<string, string>, accountId?: string } | null}
    */
   getCredentials(providerId) {
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const entry = this.get(providerId);
     const candidateIds = [];
     const addCandidate = (id) => {
@@ -1591,7 +1471,7 @@ export class ProviderRegistry {
    * @returns {Record<string, any>}
    */
   getAllProvidersRaw() {
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const raw = cloneData(userConfig);
     for (const [providerId, plugin] of this._plugins) {
       if (!isLocalProviderPlugin(plugin)) continue;
@@ -1620,7 +1500,7 @@ export class ProviderRegistry {
 
   getModelDefaultThinkingLevel(providerId, modelId) {
     if (!providerId || !modelId) return null;
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const entry = this.get(providerId);
     const providerIds = [
       providerId,
@@ -1641,7 +1521,7 @@ export class ProviderRegistry {
     if (typeof level !== "string" || !THINKING_LEVEL_VALUES.has(level)) {
       throw new Error(`invalid thinking level: ${level}`);
     }
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const ownerProviderId = this._providerConfigIdForModelDefaults(providerId);
     if (!userConfig[ownerProviderId]) userConfig[ownerProviderId] = {};
     const defaults = isPlainObject(userConfig[ownerProviderId].model_defaults)
@@ -1650,7 +1530,7 @@ export class ProviderRegistry {
     const existing = isPlainObject(defaults[modelId]) ? defaults[modelId] : {};
     defaults[modelId] = { ...existing, thinking_level: level };
     userConfig[ownerProviderId].model_defaults = normalizeModelDefaults(defaults);
-    this._saveAddedModels(userConfig);
+    this._saveProviderCatalog(userConfig);
     this._entries.clear();
     return { provider: ownerProviderId, modelId, thinkingLevel: level };
   }
@@ -1777,7 +1657,7 @@ export class ProviderRegistry {
 
   addMediaModel(providerId, capability, model) {
     this._assertMediaModelCatalogMutable(providerId);
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const modelId = getModelId(model);
     if (!modelId) throw new Error("media model id is required");
     const mediaConfig = this._ensureMediaConfig(userConfig, providerId, capability);
@@ -1790,14 +1670,14 @@ export class ProviderRegistry {
       throw new Error(`Media model "${providerId}/${modelId}" missing protocolId`);
     }
     mediaConfig.models = [...mediaConfig.models, normalized];
-    this._saveAddedModels(userConfig);
+    this._saveProviderCatalog(userConfig);
     this._entries.clear();
   }
 
   updateMediaModelEntry(providerId, capability, modelId, patch) {
     this._assertMediaModelCatalogMutable(providerId);
     if (!modelId) throw new Error("media model id is required");
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const mediaConfig = this._ensureMediaConfig(userConfig, providerId, capability);
     const fallback = this._mediaModelFallback(providerId, capability, modelId);
     const safePatch = omitUndefined(patch);
@@ -1819,19 +1699,19 @@ export class ProviderRegistry {
       }
       mediaConfig.models.push(normalized);
     }
-    this._saveAddedModels(userConfig);
+    this._saveProviderCatalog(userConfig);
     this._entries.clear();
   }
 
   removeMediaModel(providerId, capability, modelId) {
     this._assertMediaModelCatalogMutable(providerId);
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const provider = userConfig[providerId];
     const mediaKey = mediaUserConfigKey(capability);
     const mediaConfig = provider?.media?.[mediaKey];
     if (!Array.isArray(mediaConfig?.models)) return;
     mediaConfig.models = mediaConfig.models.filter((item) => getModelId(item) !== modelId);
-    this._saveAddedModels(userConfig);
+    this._saveProviderCatalog(userConfig);
     this._entries.clear();
   }
 
@@ -1841,7 +1721,7 @@ export class ProviderRegistry {
    * @param {Record<string, any>} data - 要写入的字段（api_key, base_url, api, models 等）
    */
   saveProvider(providerId, data) {
-    const userConfig = this._loadAddedModels();
+    const userConfig = this._loadProviderCatalog();
     const { seed_default_models: seedDefaultModels, ...providerData } = data || {};
     if (Object.prototype.hasOwnProperty.call(providerData, "headers")) {
       providerData.headers = normalizeProviderHeaders(providerData.headers);
@@ -1871,7 +1751,7 @@ export class ProviderRegistry {
     }
     const deletedProviders = this._catalog.getDeletedProviders()
       .filter((id) => id !== providerId);
-    this._saveAddedModels(userConfig, { deletedProviders });
+    this._saveProviderCatalog(userConfig, { deletedProviders });
     this._entries.clear();
   }
 

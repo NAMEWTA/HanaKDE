@@ -814,25 +814,27 @@ function hasExistingConfig() {
   return false;
 }
 
-function hasLegacyProviderConfig() {
-  // 判断依据：added-models.yaml 存在且含有真实 api_key → 老用户配置过 provider。
+function hasProviderCatalogConfig() {
+  // A seeded agent config alone is not enough to skip onboarding. Only an
+  // explicit provider catalog credential establishes prior setup.
   // 不能只看 agents/*/config.yaml 是否存在，因为 ensureFirstRun 会为全新用户
   // 播种默认 agent（含 config.yaml），导致新用户被误判为老用户而跳过 onboarding。
   try {
-    const modelsPath = path.join(hanakoHome, "added-models.yaml");
-    if (!fs.existsSync(modelsPath)) return false;
-    const content = fs.readFileSync(modelsPath, "utf-8");
-    return /api_key:\s*["']?[^"'\s]+/.test(content);
+    const catalogPath = path.join(hanakoHome, "provider-catalog.json");
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf-8"));
+    return Object.values(catalog?.providers || {}).some((provider) => (
+      typeof provider?.api_key === "string" && provider.api_key.trim().length > 0
+    ));
   } catch {
     return false;
   }
 }
 
-async function migrateSetupCompleteViaServerIfNeeded() {
+async function completeOnboardingForExistingProviderConfigIfNeeded() {
   if (isSetupComplete()) return false;
-  if (!hasLegacyProviderConfig()) return false;
+  if (!hasProviderCatalogConfig()) return false;
   await submitOnboardingCompleteIntent({ serverPort, serverToken });
-  console.log("[desktop] 检测到老用户（已有 agent 配置），已通过 server 标记 setupComplete");
+  console.log("[desktop] 检测到已配置 provider catalog，已通过 server 标记 setupComplete");
   return true;
 }
 
@@ -2197,7 +2199,8 @@ function writeCrashLog(errorMessage) {
   // 写入文件（best effort）
   try {
     const crashLogPath = path.join(hanakoHome, "crash.log");
-    fs.mkdirSync(hanakoHome, { recursive: true });
+    // 数据目录存放凭证，只对当前用户开放（Windows 上 NTFS 忽略该位，由用户目录 ACL 兜底）
+    fs.mkdirSync(hanakoHome, { recursive: true, mode: 0o700 });
     fs.writeFileSync(crashLogPath, content, "utf-8");
   } catch (e) {
     console.error("[desktop] 写入 crash.log 失败:", e.message);
@@ -6219,8 +6222,8 @@ app.whenReady().then(async () => {
     }
 
     // 4. 检测是否需要 onboarding
-    const migratedSetupComplete = await migrateSetupCompleteViaServerIfNeeded();
-    if (isSetupComplete() || migratedSetupComplete) {
+    const completedExistingProviderSetup = await completeOnboardingForExistingProviderConfigIfNeeded();
+    if (isSetupComplete() || completedExistingProviderSetup) {
       // 已完成配置：直接创建主窗口
       if (process.platform === "win32") {
         markGpuStartupPhase({

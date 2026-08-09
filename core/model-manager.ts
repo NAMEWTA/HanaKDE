@@ -25,7 +25,6 @@ import { normalizeProviderHeaders, stripCredentialHeaders } from "../shared/prov
 import { syncModels } from "./model-sync.ts";
 import { enrichModelFromKnownMetadata } from "./model-known-enrichment.ts";
 import { lookupKnownProvider } from "../shared/known-models.ts";
-import { migrateLegacyApiKeyAuthToProviders } from "./provider-auth-migration.ts";
 import {
   normalizePiSdkThinkingLevel,
   normalizeSessionThinkingLevel,
@@ -367,10 +366,6 @@ export class ModelManager {
    */
   _removeApiKeyProviderAuthEntries() {
     if (!this._authStorage || !this.providerRegistry) return;
-    migrateLegacyApiKeyAuthToProviders({
-      hanakoHome: this._hanakoHome,
-      providerRegistry: this.providerRegistry,
-    });
     this._authStorage.reload?.();
 
     const entries = [...this.providerRegistry.getAll().values()];

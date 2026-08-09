@@ -319,7 +319,7 @@ export function createConfigRoute(engine: any) {
         engine[setter](value);
       }
 
-      // providers 块 → 全局 added-models.yaml
+      // providers 块 → 全局 provider catalog
       let providersChanged = false;
       if (agentPartial.providers) {
         const rawProviders = engine.providerRegistry.getAllProvidersRaw?.() || {};
