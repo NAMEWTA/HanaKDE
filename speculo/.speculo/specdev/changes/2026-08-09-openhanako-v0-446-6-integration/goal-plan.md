@@ -250,6 +250,27 @@ NEXT ticket=T-10 wave=G2 gate=G2 baseline=G1-cleanup-checkpoint action=feature-p
 
 无未决产品决定或启动 blocker。未来只有超出本计划授权边界、或无法在三轮修正和 owning artifact 内收敛的 Spec/architecture/security/release 偏差才需要用户裁决。
 
+### T-10 Feature Placement Decision
+
+#### 落点裁决：T-10 Resource Kernel 收敛
+
+**功能本质**：该工作消费现有 Provider 与 Transfer 能力，新增 ResourceIO、ResourceEventBus、ProviderRootIdentity 和 route authority 的统一安全契约；它产生归系统共享的 mutation/event/root-authority 状态，而非某个插件的私有交付物。
+
+**落点**：HanaKDE 系统本体
+
+**关键判据**
+- 支持该落点：破盒硬门 1 命中。T-10 修改 ResourceIO 的 effect 前授权、Root Identity 和 server request authority context，这些是特权安全与执行边界，插件只能消费，不能定义。
+- 支持该落点：破盒硬门 2 命中。ResourceEventBus、materialize 生命周期和 Root Identity 是 Workspace、History、Knowledge、Extraction 与 route 都依赖的共享契约原语，不能由可选插件拥有。
+- 支持该落点：破盒硬门 3 命中。该 Kernel 必须在服务组合和任何资源操作之前可用，event sequence 与 root proof 不能依赖按需激活的插件生命周期。
+- 支持该落点：软门 4--7 全部为破盒子。删除会使核心调用者缺少编译与运行依赖；插件贡献面不能替代 core/server 接入；系统身份的 root proof 不可由插件权限声明封装；产物是跨会话/跨组件共享的系统事实。
+- 反对该落点（最强反方）：Materialize 可表现为一个可选的用户功能，但它的临时 staging、预算、cleanup 与安全重校验必须由同一 ResourceIO 契约实现，不能作为独立插件绕过 mutation owner。
+
+**边界风险**：判据一边倒，风险低。后续 UI 或 Provider-specific presentation 可以消费该契约并在合适时作为插件扩展；T-10 不把这些消费者并入 Kernel。
+
+**落点建议**：所属层 `lib/` 与 `server/`；具体接入点 `lib/resource-io/**`、`lib/file-ref/resource-io.ts`、`server/routes/resource-io.ts` 和 `server/http/resource-operation-context.ts`。对上层仅暴露经授权的 ResourceRef、typed operation/result/event 和 opaque root relation，不暴露 raw root、公共 workspaceId 或绝对路径。
+
+**下游衔接**：系统本体 → 按既有 SpecDev T-10 Ticket、G2 Gate 和唯一 Resource Kernel owner 执行。
+
 ### Resume Protocol
 
 恢复时依次读取本 Goal Plan、`<Path>{roots.state}/specdev/changes/{change}/.status.json</Path>#worktrees`、当前 Wave 的 Gate Evidence、当前 Ticket 与最新 Ticket Evidence；核对 integration branch、exact base SHA、branch、workspace locator 和 Git worktree registry。匹配则从最后已验证 checkpoint 继续；不匹配则只暂停该 Ticket，保留现场并由 Lead恢复，不重新询问已锁定事项。
