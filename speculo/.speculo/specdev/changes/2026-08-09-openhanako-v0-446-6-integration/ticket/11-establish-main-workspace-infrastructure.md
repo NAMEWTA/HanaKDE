@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-11
 title: 建立 main Workspace 基础设施
-status: ready
+status: review
 planning_depth: deep
 planning_depth_reason: "唯一 main 生命周期、physical watcher、baseline observation、健康状态与 root authority 是跨消费者共享核心状态机。"
 ready: true
