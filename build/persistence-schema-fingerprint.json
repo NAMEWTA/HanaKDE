@@ -3142,7 +3142,7 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "v0.443.54 changes only the executable source hash of the existing session-sidecars bridge reader; DATA_EPOCH, store schemas, persisted record shapes, and paths remain unchanged. The BOM/old-ledger retry enhancement is excluded, and T-07's dormant File History and Document Extraction remain outside production persistence.",
+    "compatibilityReason": "v0.444.1 adds an independent instant simple compaction toggle and one-shot request. The existing compaction enum treats lossy_local as invalid and resolves it to Auto; no persisted schema, store path, identity key, migration, or compatibility reader is added.",
     "payloadFingerprint": "sha256:e9a75a22215d96936f267cc509e02cb44854f1acac890c789db7fa748a5856da"
   },
   "schemas": [

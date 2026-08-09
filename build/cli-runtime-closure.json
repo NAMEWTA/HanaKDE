@@ -1249,6 +1249,18 @@
       "reason": "Reached via esbuild source module graph, imported by server/routes/access.ts (import-statement); server/routes/web-auth.ts (import-statement)."
     },
     {
+      "path": "core/lossy-local-compaction.ts",
+      "inputType": "source-graph",
+      "provenance": [
+        {
+          "root": "server-bootstrap",
+          "from": "core/session-compactor.ts",
+          "kind": "import-statement"
+        }
+      ],
+      "reason": "Reached via esbuild source module graph, imported by core/session-compactor.ts (import-statement)."
+    },
+    {
       "path": "core/mcp/clients/http-client.ts",
       "inputType": "source-graph",
       "provenance": [
@@ -6868,11 +6880,16 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "core/engine.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/routes/config.ts",
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/memory/session-summary.ts (import-statement); lib/memory/compile.ts (import-statement); lib/memory/memory-ticker.ts (import-statement); +2 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by lib/memory/session-summary.ts (import-statement); lib/memory/compile.ts (import-statement); lib/memory/memory-ticker.ts (import-statement); +3 more importer(s)."
     },
     {
       "path": "lib/memory/config-loader.ts",
@@ -9324,6 +9341,11 @@
       "provenance": [
         {
           "root": "server-bootstrap",
+          "from": "core/lossy-local-compaction.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "core/session-jsonl-file.ts",
           "kind": "import-statement"
         },
@@ -9373,7 +9395,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by core/session-jsonl-file.ts (import-statement); lib/session-files/session-file-registry.ts (import-statement); lib/memory/memory-ticker.ts (import-statement); +7 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by core/lossy-local-compaction.ts (import-statement); core/session-jsonl-file.ts (import-statement); lib/session-files/session-file-registry.ts (import-statement); +8 more importer(s)."
     },
     {
       "path": "lib/shell/execution-cwd.ts",
@@ -111216,7 +111238,17 @@
       "provenance": [
         {
           "root": "server-bootstrap",
+          "from": "core/session-compactor.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "lib/experiments/registry.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "server/routes/chat.ts",
           "kind": "import-statement"
         },
         {
@@ -111230,7 +111262,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/experiments/registry.ts (import-statement); lib/extensions/compaction-guard-ext.ts (import-statement); server/index.ts (import-statement)."
+      "reason": "Reached via esbuild source module graph, imported by core/session-compactor.ts (import-statement); lib/experiments/registry.ts (import-statement); server/routes/chat.ts (import-statement); +2 more importer(s)."
     },
     {
       "path": "shared/config-schema.ts",
@@ -111648,6 +111680,18 @@
         }
       ],
       "reason": "Reached via esbuild source module graph, imported by core/input-drafts-store.ts (import-statement); server/routes/input-drafts.ts (import-statement)."
+    },
+    {
+      "path": "shared/internal-mood-block.ts",
+      "inputType": "source-graph",
+      "provenance": [
+        {
+          "root": "server-bootstrap",
+          "from": "core/events.ts",
+          "kind": "import-statement"
+        }
+      ],
+      "reason": "Reached via esbuild source module graph, imported by core/events.ts (import-statement)."
     },
     {
       "path": "shared/knowledge-diagnostics.ts",
@@ -112572,6 +112616,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "lib/memory/compiled-memory-state.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "core/preferences-manager.ts",
           "kind": "import-statement"
         },
@@ -112593,11 +112642,6 @@
         {
           "root": "server-bootstrap",
           "from": "core/persona-source.ts",
-          "kind": "import-statement"
-        },
-        {
-          "root": "server-bootstrap",
-          "from": "lib/memory/compiled-memory-state.ts",
           "kind": "import-statement"
         },
         {
@@ -113280,9 +113324,9 @@
     }
   ],
   "stats": {
-    "totalFiles": 9663,
+    "totalFiles": 9665,
     "byInputType": {
-      "source-graph": 683,
+      "source-graph": 685,
       "runtime-asset": 11,
       "nft-runtime-trace": 8969
     }
