@@ -11,9 +11,9 @@ ready: true
 risk: medium
 blocked_by: [T-09]
 contract_ids: [AC-024]
-owner: unassigned
-expected_changes: ["<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>"]
-writable_paths: ["<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>", "<Path>desktop/src/react/__tests__/utils/file-mention-items.test.ts</Path>", "<Path>desktop/src/react/__tests__/utils/mention-items.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/at-search-lifecycle.spec.ts</Path>"]
+owner: Worker-T-18 / Lead
+expected_changes: ["<Path>desktop/src/react/components/InputArea.tsx</Path>", "<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>"]
+writable_paths: ["<Path>desktop/src/react/components/InputArea.tsx</Path>", "<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>", "<Path>desktop/src/react/__tests__/utils/file-mention-items.test.ts</Path>", "<Path>desktop/src/react/__tests__/utils/mention-items.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/at-search-lifecycle.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/search/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>desktop/src/react/components/knowledge-workspace/**</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -82,6 +82,7 @@ shared_path_owners: []
 ## 7. 路径访问契约
 
 - **预计修改点：** input components、mention utilities 与定向 tests。
+- **D-T18-02：** Lead 批准将 `<Path>desktop/src/react/components/InputArea.tsx</Path>` 作为 host lifecycle 的精确可写入口；该路径是本 Ticket 已锁定的 InputArea 接缝，不扩展到 `components/**`。
 - **可写范围：** 仅 frontmatter `writable_paths`；Search/Knowledge backend 只读。
 - **只读上下文：** search providers、Knowledge query 和 Resource contracts。
 - **共享路径：** 无；与 Workspace/Extraction Tickets 可并行。
