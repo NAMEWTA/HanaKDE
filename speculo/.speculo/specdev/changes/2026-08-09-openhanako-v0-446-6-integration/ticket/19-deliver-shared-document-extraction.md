@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-19
 title: 交付共享 Document Extraction
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "多格式/native converter、50 MiB 预算、remote Materialize、安全授权与临时文件清理构成跨平台公共能力。"
 ready: true
@@ -110,9 +110,9 @@ File Tool 或其他系统调用者提交已授权 ResourceRef。服务先检查�
 
 ## 10. 验收标准
 
-- [ ] `AC-018`：冻结支持格式返回 derived Markdown/format/warnings，File Tool 可消费。
-- [ ] `AC-019`：四种稳定失败和 converter 前 50 MiB gate 通过。
-- [ ] `AC-020`：authorized bounded read/Materialize、denial 与 staging cleanup 通过。
-- [ ] `AC-022`：不写派生 Markdown、不启动 OCR、不形成 loop。
-- [ ] `AC-023`/`AC-026`：Materialize 与 Transfer 分离，接口不接受 raw root/泄漏绝对路径。
-- [ ] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-19.md</Path>`。
+- [x] `AC-018`：冻结支持格式返回 derived Markdown/format/warnings，File Tool 可消费。
+- [x] `AC-019`：四种稳定失败和 converter 前 50 MiB gate 通过。
+- [x] `AC-020`：authorized bounded read/Materialize、denial 与 staging cleanup 通过。
+- [x] `AC-022`：不写派生 Markdown、不启动 OCR、不形成 loop。
+- [x] `AC-023`/`AC-026`：Materialize 与 Transfer 分离，接口不接受 raw root/泄漏绝对路径。
+- [x] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-19.md</Path>`。
