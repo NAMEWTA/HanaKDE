@@ -1,3 +1,5 @@
+import type { ResourceOperationContext, ResourceRef } from "../resource-io/types.ts";
+
 export type ExtractFailureReason = "unsupported" | "parse-failed" | "scanned-pdf" | "too-large";
 
 export interface ExtractSuccess {
@@ -5,6 +7,7 @@ export interface ExtractSuccess {
   markdown: string;
   format: string;
   warnings: string[];
+  extractorVersion: string;
 }
 
 export interface ExtractFailure {
@@ -14,3 +17,10 @@ export interface ExtractFailure {
 }
 
 export type ExtractResult = ExtractSuccess | ExtractFailure;
+
+export interface DocumentExtractionRequest {
+  resource: ResourceRef;
+  filenameHint?: string;
+  signal?: AbortSignal;
+  context?: ResourceOperationContext;
+}

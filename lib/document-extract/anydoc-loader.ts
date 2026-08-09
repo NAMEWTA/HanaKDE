@@ -4,9 +4,15 @@
 
 /** 只声明我们真正调用的三个函数，其余上游 API 不在这里扩散。 */
 export interface AnydocApi {
-  toMarkdownBytes(bytes: Uint8Array, format?: string | null): Promise<string>;
+  toMarkdownBytes(
+    bytes: Uint8Array,
+    format?: string | null,
+    options?: { signal?: AbortSignal },
+  ): Promise<string>;
   formatFromBytes(bytes: Uint8Array): string | null;
   formatFromExtension(ext: string): string | null;
+  formatFromPath?(filePath: string): string | null;
+  toMarkdown?(filePath: string): Promise<string>;
 }
 
 const REQUIRED_FUNCTIONS = ["toMarkdownBytes", "formatFromBytes", "formatFromExtension"] as const;
