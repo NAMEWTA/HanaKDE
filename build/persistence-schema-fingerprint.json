@@ -634,7 +634,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:8a4791104b917aaf0839d2ea9d724936b0eb655a88324b38eafe8e1b9aab8dcd",
+  "payloadFingerprint": "sha256:e9a75a22215d96936f267cc509e02cb44854f1acac890c789db7fa748a5856da",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3142,8 +3142,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "T-07 preserves DATA_EPOCH and persisted record contracts while adopting strict canonical MCP normalization; File History and Document Extraction remain dormant and excluded from production persistence.",
-    "payloadFingerprint": "sha256:8a4791104b917aaf0839d2ea9d724936b0eb655a88324b38eafe8e1b9aab8dcd"
+    "compatibilityReason": "v0.444.1 adds an independent instant simple compaction toggle and one-shot request. The existing compaction enum treats lossy_local as invalid and resolves it to Auto; no persisted schema, store path, identity key, migration, or compatibility reader is added.",
+    "payloadFingerprint": "sha256:e9a75a22215d96936f267cc509e02cb44854f1acac890c789db7fa748a5856da"
   },
   "schemas": [
     {
@@ -3673,7 +3673,7 @@
       "contract": "bridge index, legacy session metadata, title, and vision sidecar readers",
       "kind": "runtime-contract",
       "module": "core/bridge-session-manager.ts",
-      "sourceHash": "sha256:01155fe29dd0b3665ba940297e26ca0c6b566c0d27a9926a1ab8e4af710d2199",
+      "sourceHash": "sha256:c50224c29af58ed7d9753f549c7c2a483844388b0982487365f33ce4b4be06c0",
       "storeId": "session-sidecars"
     },
     {
