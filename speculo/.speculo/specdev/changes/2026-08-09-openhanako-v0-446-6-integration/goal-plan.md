@@ -236,7 +236,7 @@ GATE_STATUS gate=G0 state=closed evidence=<Path>{roots.state}/specdev/changes/{c
 GATE_STATUS gate=G1 state=open evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-03.md</Path> checkpoint=88b89039f9c0d46c7bc8a941c0b243fed8341233 risks=six-staged-checkpoints-remain
 ```
 
-规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-03 已完成 Lead 独立验收，当前集成 checkpoint 为 `88b89039f9c0d46c7bc8a941c0b243fed8341233`，T-04 已就绪。
+规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-03 已完成 Lead 独立验收，当前集成 checkpoint 为 `88b89039f9c0d46c7bc8a941c0b243fed8341233`，其 T-02/T-03 worktree 与候选分支已非强制清理，T-04 已就绪。
 
 ### Pending Decisions and Blockers
 
