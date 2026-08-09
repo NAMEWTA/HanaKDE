@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-02
 title: 整合上游 v0.421.24 checkpoint
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "首个整仓 staged merge 涉及约 46 个提交、146 个文件和 26 个重叠路径，并建立后续冲突裁决基线。"
 ready: true
 risk: high
 blocked_by: [T-01]
 contract_ids: [AC-001, AC-002, AC-003]
-owner: unassigned
+owner: Worker-T-02 / Lead
 expected_changes: ["<Path>**</Path>"]
 writable_paths: ["<Path>**</Path>"]
 read_only_paths: []
