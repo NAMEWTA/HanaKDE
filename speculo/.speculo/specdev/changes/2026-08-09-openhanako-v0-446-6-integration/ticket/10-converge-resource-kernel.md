@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-10
 title: 收敛 Resource Kernel
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "ResourceIO、事件、Root Identity、Materialize、Transfer 与授权是跨系统公共核心接口并承载安全和数据完整性。"
 ready: true
 risk: critical
 blocked_by: [T-09]
 contract_ids: [AC-011, AC-014, AC-020, AC-023, AC-026]
-owner: unassigned
+owner: Worker-T-10 / Lead
 expected_changes: ["<Path>lib/resource-io/**</Path>", "<Path>lib/file-ref/resource-io.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>server/http/resource-operation-context.ts</Path>", "<Path>tests/resource-*.test.ts</Path>"]
 writable_paths: ["<Path>lib/resource-io/**</Path>", "<Path>lib/file-ref/resource-io.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>server/http/resource-operation-context.ts</Path>", "<Path>tests/resource-*.test.ts</Path>"]
 read_only_paths: ["<Path>core/engine.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>", "<Path>lib/document-extract/**</Path>"]
