@@ -246,6 +246,8 @@ DELIVERY ticket=T-18 state=removed workspace=specdev-worktree/T-18 checkpoint=16
 W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-11,T-18,T-19
 W3_GATE_CLASSIFICATION product_gate=2018ce1dc671f0d9bb3c6f61f4078625c7863001 management_only=e1b11c6d72d2d069e3bc8f4646692f2e504d5a3e
 DISPATCH ticket=T-11 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-11 workspace=specdev-worktree/T-11
+HANDOFF ticket=T-11 from=Worker-T-11 checkpoint=c40b65c3590c5d81fb9f927d8ea7159f03cd82e0 to=Worker-T-18 round=1/3 preserve_candidate=yes rebase=no
+CORRECTION ticket=T-11 requirements=resubscribe-revalidate-and-baseline,serialize-baseline-events,no-stale-replay,per-event-root-scope-revalidation-fail-closed
 DISPATCH ticket=T-18 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-18 workspace=specdev-worktree/T-18
 DEVIATION id=D-T18-02 level=ticket resolved=T-18 checkpoint=16712d425c3a3d23d0f8f5617ac4170982d68079 recovery=Ticket grants exact <Path>desktop/src/react/components/InputArea.tsx</Path>; no W3 writable overlap; Lead re-audited candidate paths and accepted the integrated checkpoint
 DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-19 workspace=specdev-worktree/T-19

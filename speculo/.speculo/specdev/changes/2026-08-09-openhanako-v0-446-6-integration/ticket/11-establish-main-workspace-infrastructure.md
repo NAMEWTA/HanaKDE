@@ -11,7 +11,7 @@ ready: true
 risk: critical
 blocked_by: [T-10]
 contract_ids: [AC-004, AC-005, AC-009, AC-012, AC-013, AC-014, AC-025, AC-026]
-owner: Worker-T-11
+owner: Worker-T-18 / Lead
 expected_changes: ["<Path>core/workspace-runtime/**</Path>", "<Path>shared/workspace-*.ts</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>desktop/main.cjs</Path>", "<Path>tests/workspace-*.test.ts</Path>"]
 writable_paths: ["<Path>core/workspace-runtime/**</Path>", "<Path>shared/workspace-*.ts</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>desktop/main.cjs</Path>", "<Path>tests/workspace-*.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/engine.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
@@ -85,6 +85,7 @@ shared_path_owners: []
 ## 7. 路径访问契约
 
 - **预计修改点：** frontmatter 中 workspace runtime、desktop registry、shared contract 和测试。
+- **继任修正（round 1 / 3）：** 保留原候选 checkpoint `c40b65c3590c5d81fb9f927d8ea7159f03cd82e0`，由 `Worker-T-18 / Lead` 在同一 `<Path>specdev-worktree/T-11</Path>`、同一 W3 base 上修正；不得 rebase 或重置候选。必须证明 last-release 后重新订阅会重新验证 root/scope 并执行一次 baseline、baseline 异步期间的 watcher 事件不会交错覆盖或重放 stale facts、以及每个普通 watcher change 在发布前都会重验证 root identity/scope 并在 replacement/unavailable 时 fail closed。
 - **可写范围：** 仅 `writable_paths`；`<Path>core/engine.ts</Path>` 为 T-12 唯一生产 wiring owner。
 - **只读上下文：** Resource Kernel、Knowledge、History 与 engine。
 - **共享路径：** 无；本 Ticket 拥有 workspace infrastructure contract。
