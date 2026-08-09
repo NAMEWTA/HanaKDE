@@ -5,6 +5,8 @@ import path from "path";
 
 import { healCredentialFileModes } from "../core/credential-file-healer.ts";
 import { LOCAL_PROVIDER_PLUGINS_DIR } from "../core/local-provider-plugin-store.ts";
+import { PLUGIN_CONFIG_FILENAME, PLUGIN_DATA_DIRNAME } from "../core/plugin-config.ts";
+import { SECURITY_DIR } from "../core/security-dir.ts";
 
 const POSIX = process.platform !== "win32";
 
@@ -97,6 +99,42 @@ describe.skipIf(!POSIX)("healCredentialFileModes", () => {
     expect(modeOf(providerDir)).toBe(0o700);
     expect(modeOf(path.join(root, keyFile))).toBe(0o600);
     expect(result.healed).toContain(keyFile);
+  });
+
+  it("tightens the security directory that holds signing keys and grant records", () => {
+    const root = makeHome();
+    const securityRoot = path.join(root, SECURITY_DIR);
+    const keyFile = path.join(SECURITY_DIR, "resource-ticket-key");
+    const grantsFile = path.join(SECURITY_DIR, "grants.json");
+    writeOpen(keyFile, "key-material\n");
+    writeOpen(grantsFile, "{}\n");
+    fs.chmodSync(securityRoot, 0o755);
+
+    const result = healCredentialFileModes({ hanakoHome: root });
+
+    expect(modeOf(securityRoot)).toBe(0o700);
+    expect(modeOf(path.join(root, keyFile))).toBe(0o600);
+    expect(modeOf(path.join(root, grantsFile))).toBe(0o600);
+    expect(result.healed).toContain(keyFile);
+    expect(result.healed).toContain(grantsFile);
+  });
+
+  it("tightens plugin configuration files without touching the rest of a plugin's data", () => {
+    const root = makeHome();
+    const mcpConfig = path.join(PLUGIN_DATA_DIRNAME, "mcp", PLUGIN_CONFIG_FILENAME);
+    const imageConfig = path.join(PLUGIN_DATA_DIRNAME, "image-gen", PLUGIN_CONFIG_FILENAME);
+    const neighbour = path.join(PLUGIN_DATA_DIRNAME, "image-gen", "helper.bin");
+    writeOpen(mcpConfig);
+    writeOpen(imageConfig);
+    writeOpen(neighbour);
+    fs.chmodSync(path.join(root, neighbour), 0o755);
+
+    const result = healCredentialFileModes({ hanakoHome: root });
+
+    expect(modeOf(path.join(root, mcpConfig))).toBe(0o600);
+    expect(modeOf(path.join(root, imageConfig))).toBe(0o600);
+    expect(result.healed).toContain(mcpConfig);
+    expect(modeOf(path.join(root, neighbour))).toBe(0o755);
   });
 
   it("tightens agent configuration captured inside session-manifest checkpoints", () => {
