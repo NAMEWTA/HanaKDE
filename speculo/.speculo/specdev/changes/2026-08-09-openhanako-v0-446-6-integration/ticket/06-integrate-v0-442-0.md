@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-06
 title: 整合上游 v0.442.0 checkpoint
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "约 40 个提交、180 个文件和 30 个 overlap，是 staged chain 中高重叠的整仓公共契约 checkpoint。"
 ready: true
@@ -107,8 +107,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-001`：`v0.442.0` checkpoint 与裁决可审计。
-- [ ] `AC-002`：正常上游变化完整吸收。
-- [ ] `AC-003`：HanaKDE 合同无回退，生产 owner overlap 为 0。
-- [ ] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>`。
-- [ ] 无未批准 Git 操作或隐式范围扩大。
+- [x] `AC-001`：`v0.442.0` checkpoint 与裁决可审计。
+- [x] `AC-002`：正常上游变化完整吸收。
+- [x] `AC-003`：HanaKDE 合同无回退，生产 owner overlap 为 0。
+- [x] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>`。
+- [x] 无未批准 Git 操作或隐式范围扩大。
