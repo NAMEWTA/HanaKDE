@@ -614,6 +614,10 @@
         "reason": "Renderer/service-worker code is not an Electron host persistence owner."
       },
       {
+        "id": "dormant-file-history-input",
+        "reason": "T-06 retains the upstream File History implementation as an unconnected input; it is not a production persistence owner until the later single-owner cutover."
+      },
+      {
         "id": "source-tests",
         "reason": "Test fixtures and test-only mutations are excluded from production ownership."
       }
@@ -630,7 +634,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:346c935b089a031237aa7df6e28995055c4565eafdb2d5899888f8f0c0bdd9af",
+  "payloadFingerprint": "sha256:135301ee9451b508485126fe9a75e0ef3e71cfa101818f69986804a830f116eb",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3138,8 +3142,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "T-05 absorbs the optional Win32 install ACL-heal receipt, execution-digest provenance, and the existing local provider plugin storageId descriptor; no existing persisted data is transformed, and absent ACL-heal state is initialized as fresh state.",
-    "payloadFingerprint": "sha256:346c935b089a031237aa7df6e28995055c4565eafdb2d5899888f8f0c0bdd9af"
+    "compatibilityReason": "T-06 repins executable-source hashes for the v0.442.0 desktop, MCP, and session JSONL readers; DATA_EPOCH and all persisted record contracts remain unchanged. File History remains a dormant input and is omitted from production persistence, while the T-05 Win32 install ACL-heal descriptor is retained unchanged.",
+    "payloadFingerprint": "sha256:135301ee9451b508485126fe9a75e0ef3e71cfa101818f69986804a830f116eb"
   },
   "schemas": [
     {
@@ -3322,7 +3326,7 @@
       "contract": "update channel record version, device identifier, activation flag, update feed address, activation time, and held invite codes",
       "kind": "runtime-contract",
       "module": "desktop/auto-updater.cjs",
-      "sourceHash": "sha256:2259fbd5c99545339c1149f289aa9d3d5eccc61570127d27771999fbdcd37e1c",
+      "sourceHash": "sha256:739190e68c9f0a66775c72424e335f3182abec97c91dc932179be8aabf46a591",
       "storeId": "desktop-update-channel"
     },
     {
@@ -3336,7 +3340,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:7f32e7a6310f479c6c409514e8dfd984e5864f3cac9aa6de36dde1e79f5b3e17",
+      "sourceHash": "sha256:b703c5ceab776ec2818f2c98963c22544024dba01571f9c5afce368ca89ffe28",
       "storeId": "desktop-window-version-state"
     },
     {
@@ -3452,7 +3456,7 @@
       "contract": "normalizeMcpConfig accepts canonical connector fields and requires every current permission-policy field.",
       "kind": "runtime-contract",
       "module": "core/mcp/manager.ts",
-      "sourceHash": "sha256:5999c1329bcdba31a2a89e006304aeab415584b9c01010a7a40d524085bd66c1",
+      "sourceHash": "sha256:f8e3e7e7a8d445b6adfae7b25f21fb175096648ac6cf35aeb246963bc2083451",
       "storeId": "mcp-config"
     },
     {
@@ -3571,7 +3575,7 @@
         {
           "contract": "core/session-coordinator.ts Hana metadata extensions",
           "module": "core/session-coordinator.ts",
-          "sourceHash": "sha256:c7a413bf90b0ed76bb840120d123abe7144e58f550076d0793989ca577652ccb"
+          "sourceHash": "sha256:9291ba90a08340f0b4071d0935e4d4abf55103bf9257296f7acedd32ae14b83e"
         },
         {
           "contract": "core/session-jsonl-file.ts repair contract",

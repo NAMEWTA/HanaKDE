@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-09T19:00:58+08:00",
+  "updated_at": "2026-08-09T22:35:17+08:00",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -51,6 +51,16 @@
       "workspace_ref": "specdev-worktree/T-05",
       "status": "removed",
       "updated_at": "2026-08-09T21:45:42+08:00"
+    },
+    {
+      "ticket_id": "T-06",
+      "owner": "Worker-T-06",
+      "provider": "git",
+      "base_sha": "01bc663c758ad899338e14008ebfff047ebe012d",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-06",
+      "workspace_ref": "specdev-worktree/T-06",
+      "status": "review",
+      "updated_at": "2026-08-09T22:35:17+08:00"
     }
   ]
 }
