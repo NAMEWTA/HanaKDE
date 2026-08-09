@@ -246,6 +246,7 @@ W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-1
 W3_GATE_CLASSIFICATION product_gate=2018ce1dc671f0d9bb3c6f61f4078625c7863001 management_only=e1b11c6d72d2d069e3bc8f4646692f2e504d5a3e
 DISPATCH ticket=T-11 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-11 workspace=specdev-worktree/T-11
 DISPATCH ticket=T-18 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-18 workspace=specdev-worktree/T-18
+DEVIATION id=D-T18-02 level=ticket paused=T-18 recovery=Ticket grants exact <Path>desktop/src/react/components/InputArea.tsx</Path>; no W3 writable overlap; re-audit candidate paths before acceptance
 DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-19 workspace=specdev-worktree/T-19
 ```
 
@@ -303,7 +304,7 @@ DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 b
 
 **功能本质**：消费现有 Search/Knowledge/Resource provider，更新核心 InputArea 的 query/abort/stale-result UI lifecycle；不新增持久化或特权服务，产物为主应用输入体验。
 
-**落点**：HanaKDE 系统本体（`desktop/src/react/components/input/**` 与既有 mention utilities）。
+**落点**：HanaKDE 系统本体（`desktop/src/react/components/InputArea.tsx`、`desktop/src/react/components/input/**` 与既有 mention utilities）。
 
 **关键判据**
 - 支持插件的一面：破盒硬门 1、2 不命中；它不改特权服务、不定义共享契约。软门 4、6、7 也可装进盒子：状态短暂、可由已授权 provider 支持、无插件私有外的持久化产物。
@@ -313,7 +314,7 @@ DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 b
 
 **边界风险**：接近插件边界；若未来出现可替换 InputArea lifecycle/mention contribution hook，应重新运行判定门。当前风险受既有 host-only 接入点约束，仍属 desktop core。
 
-**落点建议**：所属层 `desktop/` renderer host；具体接入点 `desktop/src/react/components/input/**`、`desktop/src/react/utils/file-mention-items.ts`、`desktop/src/react/utils/mention-items.ts`，继续消费既有 provider 与 ResourceRef，不暴露新 backend contract。
+**落点建议**：所属层 `desktop/` renderer host；具体接入点 `desktop/src/react/components/InputArea.tsx`、`desktop/src/react/components/input/**`、`desktop/src/react/utils/file-mention-items.ts`、`desktop/src/react/utils/mention-items.ts`，继续消费既有 provider 与 ResourceRef，不暴露新 backend contract。
 
 **下游衔接**：系统本体 → 按 T-18 Ticket 在 W3 实现，并把 UI E2E 结果交 Lead 验收。
 
@@ -624,7 +625,7 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 - **Implement / Ticket：** `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>`；`<Path>{roots.state}/specdev/changes/{change}/ticket/18-fuse-at-search-lifecycle.md</Path>`。
 - **Authority / dependencies：** AC-024、T-09 Evidence；Search/Knowledge/Resource backend只读复用。
 - **Wave / Gate / hard constraints：** W3；query identity/abort固定，close/unmount清理；无backend重写、History capture或scope扩大。
-- **Writable / read-only / shared owner：** writable=Ticket声明的 input components/mention utilities/component tests/E2E；read-only=`<Path>lib/search/**</Path>`, `<Path>lib/knowledge-workspace/**</Path>`, Knowledge UI；shared=`none`。
+- **Writable / read-only / shared owner：** writable=Ticket声明的 host `<Path>desktop/src/react/components/InputArea.tsx</Path>`、input components/mention utilities/component tests/E2E；该 exact host path 由 D-T18-02 ticket deviation 补齐，且与 W3 的 T-11 core/shared、T-19 lib/tool 路径无交集；read-only=`<Path>lib/search/**</Path>`, `<Path>lib/knowledge-workspace/**</Path>`, Knowledge UI；shared=`none`。
 - **Baseline / branch / workspace or session locator / package hash：** base_sha=`T-10_INTEGRATED_SHA`；branch=`speculo/2026-08-09-openhanako-v0-446-6-integration/T-18`；workspace_ref=`specdev-worktree/T-18`；package hash=`n/a-local-git`。
 - **Preflight receipt：** `<Path>{roots.state}/specdev/changes/{change}/evidence/T-18.md</Path>` 不超过10行，核对provider接口、并行W3路径和最大async race风险。
 - **Verification / baseline / reverse check：** rapid query/cancel/scope switch/reject/unmount、keyboard/ARIA/i18n/theme/typecheck；Worker返回direct flow，Lead运行连续@查询切换/选择；旧promise结果不得闪回。
