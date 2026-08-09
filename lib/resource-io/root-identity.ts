@@ -102,11 +102,8 @@ export class ProviderRootIdentityBroker {
     const aPrivate = localRootPrivate.get(a);
     const bPrivate = localRootPrivate.get(b);
     if (!aPrivate || !bPrivate) return "unknown";
-    if (
-      a.opaqueRootId === b.opaqueRootId
-      && a.scopeToken === b.scopeToken
-    ) {
-      return "same";
+    if (a.opaqueRootId === b.opaqueRootId) {
+      return a.scopeToken === b.scopeToken ? "same" : "unknown";
     }
     const aPath = aPrivate.comparisonPath;
     const bPath = bPrivate.comparisonPath;

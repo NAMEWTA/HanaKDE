@@ -78,6 +78,62 @@ describe("ResourceEventBus", () => {
     expect(bus.latestSequence()).toBe(2);
   });
 
+  it("isolates async subscriber failures without an unhandled rejection", async () => {
+    const unhandled = vi.fn();
+    const onUnhandledRejection = (reason: unknown) => unhandled(reason);
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      const second = vi.fn();
+      const bus = new ResourceEventBus({ emit: vi.fn() });
+      bus.subscribe(async () => {
+        throw new Error("async observer failed");
+      });
+      bus.subscribe(second);
+
+      expect(() => bus.changed({
+        changeType: "modified",
+        resourceKey: "local_fs:/repo/async-runtime.md",
+        resource: { kind: "local-file", path: "/repo/async-runtime.md" },
+        source: "api",
+      })).not.toThrow();
+
+      expect(second).toHaveBeenCalledTimes(1);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+  });
+
+  it("isolates async fan-out emitter failures without an unhandled rejection", async () => {
+    const unhandled = vi.fn();
+    const onUnhandledRejection = (reason: unknown) => unhandled(reason);
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      const received = vi.fn();
+      const emit = vi.fn(async () => {
+        throw new Error("async fan-out failed");
+      });
+      const bus = new ResourceEventBus({ emit });
+      bus.subscribe(received);
+
+      bus.changed({
+        changeType: "modified",
+        resourceKey: "local_fs:/repo/async-fan-out.md",
+        resource: { kind: "local-file", path: "/repo/async-fan-out.md" },
+        source: "api",
+      });
+
+      expect(emit).toHaveBeenCalledTimes(1);
+      expect(received).toHaveBeenCalledTimes(1);
+      expect(bus.since(0).events).toHaveLength(1);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+  });
+
   it("reports a stale cursor when retained events are unavailable", () => {
     const bus = new ResourceEventBus({
       emit: vi.fn(),
