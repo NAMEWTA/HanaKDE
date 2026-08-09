@@ -16,6 +16,9 @@ function fakeMcp(overrides: any = {}) {
     completeOAuth: vi.fn(async () => ({ status: "done" })),
     getOAuthStatus: vi.fn(() => ({ status: "pending" })),
     autoStartAfterAdd: vi.fn(async () => {}),
+    setConnectorEnabled: vi.fn(async () => ({})),
+    startConnector: vi.fn(async () => {}),
+    stopConnector: vi.fn(async () => {}),
     startOAuth: vi.fn(async () => ({ sessionId: "s1", url: "https://auth.example.com/authorize" })),
     listApps: vi.fn(() => []),
     readResource: vi.fn(async () => ({ contents: [] })),
@@ -89,14 +92,36 @@ describe("MCP first-class routes", () => {
     expect(mcp.startOAuth).not.toHaveBeenCalled();
   });
 
-  it("does not intercept the removed plugin namespace", async () => {
-    const mcp = fakeMcp();
+  it("records the user's intent before touching the transport on start and stop", async () => {
+    const order: string[] = [];
+    const mcp = fakeMcp({
+      setConnectorEnabled: vi.fn(async (_id, enabled) => { order.push(`persist:${enabled}`); }),
+      startConnector: vi.fn(async () => { order.push("start"); }),
+      stopConnector: vi.fn(async () => { order.push("stop"); }),
+    });
     const app = createApp(mcp);
 
-    const res = await app.request("/api/plugins/mcp/state");
+    await app.request("/api/mcp/connectors/github/start", { method: "POST" });
+    await app.request("/api/mcp/connectors/github/stop", { method: "POST" });
 
-    expect(res.status).toBe(404);
-    expect(mcp.getState).not.toHaveBeenCalled();
+    // Written first, so a connector that fails to come up right now is still
+    // wanted at the next launch.
+    expect(order).toEqual(["persist:true", "start", "persist:false", "stop"]);
+    expect(mcp.setConnectorEnabled).toHaveBeenNthCalledWith(1, "github", true);
+    expect(mcp.setConnectorEnabled).toHaveBeenNthCalledWith(2, "github", false);
+  });
+
+  it("reports an unknown connector id on stop instead of silently succeeding", async () => {
+    const mcp = fakeMcp({
+      setConnectorEnabled: vi.fn(async () => { throw new Error('MCP connector "ghost" not found'); }),
+      stopConnector: vi.fn(async () => {}),
+    });
+
+    const res = await createApp(mcp).request("/api/mcp/connectors/ghost/stop", { method: "POST" });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'MCP connector "ghost" not found' });
+    expect(mcp.stopConnector).not.toHaveBeenCalled();
   });
 
   it("serves an app's ui:// resource with the connector's own mime type", async () => {
@@ -141,6 +166,54 @@ describe("MCP first-class routes", () => {
     });
 
     expect(res.status).toBe(403);
+  });
+
+  // A connector the user switched off is a conflict with the current state of
+  // the system, the same kind of answer "not running" and "disabled globally"
+  // already give. It is emphatically not a bad gateway: nothing upstream failed,
+  // and the fix is a switch in Settings the user themselves flipped.
+  it("answers 409 and passes the wording through when a resource read hits a switched-off connector", async () => {
+    const message = 'MCP connector "acme" is disabled; enable it in Settings → MCP to use this tool';
+    const mcp = fakeMcp({
+      readResource: vi.fn(async () => { throw new Error(message); }),
+    });
+
+    const res = await createApp(mcp).request(
+      `/api/mcp/connectors/acme/resources?uri=${encodeURIComponent("ui://board/main")}`,
+    );
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: message });
+  });
+
+  it("answers 409 and passes the wording through when an app tool call hits a switched-off connector", async () => {
+    const message = 'MCP connector "acme" is disabled; enable it in Settings → MCP to use this tool';
+    const mcp = fakeMcp({
+      callAppTool: vi.fn(async () => { throw new Error(message); }),
+    });
+
+    const res = await createApp(mcp).request("/api/mcp/connectors/acme/app-tools/board/call", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: message });
+  });
+
+  it("answers 409 for the connector-start wording of the same refusal", async () => {
+    // The refusal is worded per entry point ("to use this tool" when something
+    // needs the connector, "before starting" when a start is refused outright).
+    // Both name the same user-flipped switch, so both get the same status.
+    const message = 'MCP connector "acme" is disabled; enable it in Settings → MCP before starting';
+    const mcp = fakeMcp({
+      readResource: vi.fn(async () => { throw new Error(message); }),
+    });
+
+    const res = await createApp(mcp).request(
+      `/api/mcp/connectors/acme/resources?uri=${encodeURIComponent("ui://board/main")}`,
+    );
+
+    expect(res.status).toBe(409);
   });
 
   it("reports 503 while the manager is not initialized", async () => {

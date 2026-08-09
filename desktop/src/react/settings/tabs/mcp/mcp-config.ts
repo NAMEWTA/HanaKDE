@@ -88,7 +88,9 @@ function connectorFromJsonServer(id: string, raw: McpJsonServer): McpConnectorIn
     ...(stringRecord(raw.headers) ? { headers: stringRecord(raw.headers) } : {}),
     ...(stringValue(raw.registryUrl) ? { registryUrl: stringValue(raw.registryUrl) } : {}),
     ...(positiveNumber(raw.timeout) ? { timeout: positiveNumber(raw.timeout) } : {}),
-    ...(raw.autoStart === true ? { autoStart: true } : {}),
+    // Import the canonical per-connector switch only. Retired aliases are not
+    // allowed to revive a second configuration shape.
+    ...(raw.enabled === false ? { enabled: false } : {}),
   };
   if (transport === 'stdio' && !connector.command) {
     throw new Error(`MCP server "${id}" is missing command`);

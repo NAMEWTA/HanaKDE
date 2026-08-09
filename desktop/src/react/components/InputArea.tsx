@@ -843,7 +843,12 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
     await executeCompact(t, setSlashBusy, () => { editor?.commands.clearContent(); }, setSlashMenuOpen)();
   }, [editor, t]);
 
-  const slashAgentId = pendingNewSession ? (selectedAgentId || currentAgentId) : currentAgentId;
+  // 这个输入框归属哪个助手：已有会话以会话自己的记录为准，新会话草稿才用选中的助手。
+  // 菜单里列出谁的命令、@ 菜单把谁认作"当前助手"、以及 slash 请求发给服务端的执行身份，
+  // 三处都读这一个值——它们说的是同一件事，分头算迟早会算出不一样的答案。
+  const slashAgentId = pendingNewSession
+    ? (selectedAgentId || currentAgentId)
+    : (currentSessionProjection?.agentId || currentAgentId);
   const skillItems = useSkillSlashItems({ enabled: surface !== 'mobile', agentId: slashAgentId });
   const serverCommandItems = useServerSlashCommandItems({ enabled: surface !== 'mobile', agentId: slashAgentId });
 
@@ -888,10 +893,8 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   const agentMentionItems = useMemo(() => buildAgentMentionItems({
     agents,
     query: fileMentionQuery,
-    currentAgentId: pendingNewSession
-      ? (selectedAgentId || currentAgentId)
-      : (currentSessionProjection?.agentId || currentAgentId),
-  }), [agents, currentAgentId, currentSessionProjection?.agentId, fileMentionQuery, pendingNewSession, selectedAgentId]);
+    currentAgentId: slashAgentId,
+  }), [agents, fileMentionQuery, slashAgentId]);
 
   const mentionItems = useMemo<MentionMenuItem[]>(() => {
     if (mentionTab === 'sessions') return sessionMentionItems;
@@ -1568,6 +1571,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
     if (item.type === 'server-command') {
       void executeSlashViaWs(
         item.name,
+        slashAgentId,
         setSlashBusy,
         () => { editor?.commands.clearContent(); },
         setSlashMenuOpen,
@@ -1585,7 +1589,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
       .insertContent(' ')
       .run();
     setSlashMenuOpen(false);
-  }, [editor, inputLocked, inputText]);
+  }, [editor, inputLocked, inputText, slashAgentId]);
 
   const handleFileMentionSelect = useCallback((item: FileMentionItem) => {
     if (inputLocked) return;
