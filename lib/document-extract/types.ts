@@ -1,3 +1,5 @@
+import type { ResourceOperationContext, ResourceRef } from "../resource-io/types.ts";
+
 export type ExtractFailureReason = "unsupported" | "parse-failed" | "scanned-pdf" | "too-large";
 
 export interface ExtractSuccess {
@@ -5,6 +7,7 @@ export interface ExtractSuccess {
   markdown: string;
   format: string;
   warnings: string[];
+  extractorVersion: string;
 }
 
 export interface ExtractFailure {
@@ -14,3 +17,15 @@ export interface ExtractFailure {
 }
 
 export type ExtractResult = ExtractSuccess | ExtractFailure;
+
+export interface DocumentExtractionRequest {
+  resource: ResourceRef;
+  filenameHint?: string;
+  /**
+   * Cancellation is checked at ResourceIO boundaries. Native Anydoc conversion
+   * runs in an isolated child process; aborting kills and reaps that process
+   * before any Materialize lease is released.
+   */
+  signal?: AbortSignal;
+  context?: ResourceOperationContext;
+}

@@ -2,11 +2,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_INPUT_BYTES, extractDocument } from "../lib/document-extract/index.ts";
+import {
+  EXTRACTOR_VERSION,
+  createDocumentExtractionService,
+} from "../lib/document-extract/index.ts";
 import type { ExtractFailure, ExtractResult } from "../lib/document-extract/types.ts";
 
-// 测试项目关掉了 strictNullChecks，联合类型的失败分支不会被自动收窄，
-// 所以失败断言统一走这里：先真的断言 ok 为 false，再把类型交给编译器。
 function expectFailure(result: ExtractResult): ExtractFailure {
   expect(result.ok).toBe(false);
   return result as ExtractFailure;
@@ -21,11 +22,7 @@ function makeApi(overrides: any = {}) {
   };
 }
 
-function depsFor(api: any) {
-  return { loadApi: async () => api };
-}
-
-describe("document extract", () => {
+describe("document extraction service", () => {
   let tmpDir: string | null = null;
 
   afterEach(() => {
@@ -34,153 +31,222 @@ describe("document extract", () => {
     tmpDir = null;
   });
 
-  function makeTmpDir() {
+  function writeSource(name: string, contents: string | Buffer) {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-document-extract-"));
-    return tmpDir;
+    const filePath = path.join(tmpDir, name);
+    fs.writeFileSync(filePath, contents);
+    return filePath;
   }
 
-  it("falls back to the filename extension when the bytes carry no signature", async () => {
+  function serviceFor(filePath: string, api: any, cleanup = vi.fn()) {
+    const size = fs.statSync(filePath).size;
+    const content = fs.readFileSync(filePath);
+    const resourceIO = {
+      stat: vi.fn(async () => ({
+        resourceKey: "resource:report",
+        resource: { kind: "resource" as const, resourceId: "report", displayName: path.basename(filePath) },
+        exists: true,
+        isDirectory: false,
+        version: { size },
+      })),
+      openRead: vi.fn(async () => ({
+        resourceKey: "resource:report",
+        resource: { kind: "resource" as const, resourceId: "report", displayName: path.basename(filePath) },
+        body: (async function* () { yield content; })(),
+        size,
+        mtimeMs: 0,
+        version: { size },
+      })),
+      read: vi.fn(),
+      materialize: vi.fn(async () => ({
+        resourceKey: "resource:report",
+        resource: { kind: "resource" as const, resourceId: "report" },
+        filePath,
+        cleanup,
+      })),
+    };
+    return {
+      cleanup,
+      resourceIO,
+      service: createDocumentExtractionService({ resourceIO: resourceIO as any, loadApi: async () => api }),
+    };
+  }
+
+  it("uses an authorized resource display name when bytes carry no signature", async () => {
     const api = makeApi({
       formatFromExtension: vi.fn((ext: string) => (ext === "csv" ? "csv" : null)),
-      toMarkdownBytes: vi.fn(async () => "| region | total |\n| --- | --- |\n| north | 120 |"),
+      toMarkdownBytes: vi.fn(async () => "| region | total |\r\n| --- | --- |\r\n| north | 120 |"),
+    });
+    const source = writeSource("quarterly.csv", "region,total\nnorth,120\n");
+    const { cleanup, resourceIO, service } = serviceFor(source, api);
+
+    const result = await service.extract({
+      resource: { kind: "resource", resourceId: "report" },
     });
 
-    const result = await extractDocument(
-      { buffer: Buffer.from("region,total\nnorth,120\n", "utf-8"), filename: "quarterly.csv" },
-      depsFor(api),
-    );
-
+    expect(resourceIO.stat).toHaveBeenCalledTimes(1);
+    expect(resourceIO.openRead).toHaveBeenCalledTimes(1);
+    expect(resourceIO.read).not.toHaveBeenCalled();
+    expect(resourceIO.materialize).not.toHaveBeenCalled();
+    expect(cleanup).not.toHaveBeenCalled();
     expect(api.formatFromExtension).toHaveBeenCalledWith("csv");
-    expect(result).toMatchObject({ ok: true, format: "csv" });
+    expect(api.toMarkdownBytes.mock.calls[0]).toHaveLength(2);
+    expect(result).toMatchObject({ ok: true, format: "csv", extractorVersion: EXTRACTOR_VERSION });
     if (result.ok) {
-      expect(result.markdown).toContain("north");
-      expect(result.warnings).toEqual([]);
+      expect(result.markdown).toContain("\n");
+      expect(result.markdown).not.toContain("\r");
     }
   });
 
-  it("reports unsupported when neither the bytes nor a filename identify a format", async () => {
-    const api = makeApi();
-
-    const result = await extractDocument({ buffer: Buffer.from([0x00, 0x01, 0x02, 0x03]) }, depsFor(api));
-
-    const failure = expectFailure(result);
-    expect(failure.reason).toBe("unsupported");
-    expect(failure.message).toMatch(/docx/i);
-    expect(api.toMarkdownBytes).not.toHaveBeenCalled();
-  });
-
-  it("rejects an oversized buffer before touching the converter", async () => {
-    const api = makeApi({ formatFromBytes: vi.fn(() => "pdf") });
-    const oversized = Buffer.allocUnsafe(MAX_INPUT_BYTES + 1);
-
-    const result = await extractDocument({ buffer: oversized, filename: "huge.pdf" }, depsFor(api));
-
-    const failure = expectFailure(result);
-    expect(failure.reason).toBe("too-large");
-    expect(failure.message).toContain(String(MAX_INPUT_BYTES + 1));
-    expect(failure.message).toContain(String(MAX_INPUT_BYTES));
-    expect(api.toMarkdownBytes).not.toHaveBeenCalled();
-  });
-
-  it("rejects an oversized file by stat without reading it from disk", async () => {
-    const dir = makeTmpDir();
-    const filePath = path.join(dir, "huge.pdf");
-    const fd = fs.openSync(filePath, "w");
-    try {
-      fs.ftruncateSync(fd, MAX_INPUT_BYTES + 1);
-    } finally {
-      fs.closeSync(fd);
-    }
-    const readFile = vi.spyOn(fs.promises, "readFile");
-    const api = makeApi({ formatFromBytes: vi.fn(() => "pdf") });
-
-    const result = await extractDocument({ filePath, filename: "huge.pdf" }, depsFor(api));
-
-    const failure = expectFailure(result);
-    expect(failure.reason).toBe("too-large");
-    expect(failure.message).toContain(String(MAX_INPUT_BYTES + 1));
-    expect(readFile).not.toHaveBeenCalled();
-    expect(api.toMarkdownBytes).not.toHaveBeenCalled();
-  });
-
-  it("converts a file read from disk and reports the detected format", async () => {
-    const dir = makeTmpDir();
-    const filePath = path.join(dir, "notes.csv");
-    fs.writeFileSync(filePath, "region,total\nnorth,120\n", "utf-8");
+  it("gives byte-detected PDF format precedence over an HTML filename hint", async () => {
     const api = makeApi({
-      formatFromExtension: vi.fn(() => "csv"),
-      toMarkdownBytes: vi.fn(async () => "| region | total |"),
+      formatFromBytes: vi.fn((bytes: Buffer) => (
+        bytes.subarray(0, 5).toString("utf8") === "%PDF-" ? "pdf" : null
+      )),
+      toMarkdownBytes: vi.fn(async () => "# PDF content"),
+    });
+    const htmlConversionRunner = { convertHtml: vi.fn(async () => "# HTML content") };
+    const source = writeSource("report.pdf", "%PDF-1.4\ntext layer");
+    const { resourceIO } = serviceFor(source, api);
+    const service = createDocumentExtractionService({
+      resourceIO,
+      loadApi: async () => api,
+      htmlConversionRunner,
     });
 
-    const result = await extractDocument({ filePath }, depsFor(api));
+    const result = await service.extract({
+      resource: { kind: "resource", resourceId: "report" },
+      filenameHint: "spoofed.html",
+    });
 
-    expect(api.formatFromExtension).toHaveBeenCalledWith("csv");
-    expect(api.toMarkdownBytes).toHaveBeenCalledWith(expect.anything(), "csv");
-    expect(result).toMatchObject({ ok: true, format: "csv" });
+    expect(result).toMatchObject({ ok: true, format: "pdf", markdown: "# PDF content" });
+    expect(api.toMarkdownBytes).toHaveBeenCalledWith(expect.any(Buffer), "pdf");
+    expect(htmlConversionRunner.convertHtml).not.toHaveBeenCalled();
   });
 
-  it("maps a scanned-looking PDF failure to the scanned-pdf reason", async () => {
+  it("reports unsupported without invoking the converter", async () => {
+    const api = makeApi();
+    const source = writeSource("unknown.bin", Buffer.from([0x00, 0x01, 0x02, 0x03]));
+    const { service } = serviceFor(source, api);
+
+    const result = await service.extract({
+      resource: { kind: "resource", resourceId: "report" },
+    });
+
+    expect(expectFailure(result).reason).toBe("unsupported");
+    expect(api.toMarkdownBytes).not.toHaveBeenCalled();
+  });
+
+  it("maps scanned PDF parser failures without exposing converter details", async () => {
     const api = makeApi({
       formatFromBytes: vi.fn(() => "pdf"),
       toMarkdownBytes: vi.fn(async () => {
-        throw new Error("pdf has no text layer: scanned document");
+        throw new Error("OCR required for /private/staging/scan.pdf");
       }),
     });
+    const source = writeSource("scan.pdf", "%PDF-1.4");
+    const { service } = serviceFor(source, api);
 
-    const result = await extractDocument({ buffer: Buffer.from("%PDF-1.4"), filename: "scan.pdf" }, depsFor(api));
+    const result = await service.extract({
+      resource: { kind: "resource", resourceId: "report" },
+    });
 
     const failure = expectFailure(result);
     expect(failure.reason).toBe("scanned-pdf");
-    expect(failure.message).toContain("scanned document");
+    expect(failure.message).not.toContain("/private");
   });
 
-  it("keeps an unrecognized PDF failure as parse-failed with the original message", async () => {
+  it("keeps ordinary parser failures stable and path-free", async () => {
     const api = makeApi({
       formatFromBytes: vi.fn(() => "pdf"),
       toMarkdownBytes: vi.fn(async () => {
-        throw new Error("xref table is corrupt at offset 512");
+        throw new Error("xref table is corrupt at /private/staging/report.pdf");
       }),
     });
+    const source = writeSource("broken.pdf", "%PDF-1.4");
+    const { service } = serviceFor(source, api);
 
-    const result = await extractDocument({ buffer: Buffer.from("%PDF-1.4"), filename: "broken.pdf" }, depsFor(api));
+    const result = await service.extract({
+      resource: { kind: "resource", resourceId: "report" },
+    });
 
     const failure = expectFailure(result);
     expect(failure.reason).toBe("parse-failed");
-    expect(failure.message).toContain("xref table is corrupt at offset 512");
+    expect(failure.message).toBe("Document extraction failed.");
   });
 
-  it("never reports scanned-pdf for a non-PDF format even when the message looks like one", async () => {
+  it("rejects raw buffers and paths instead of bypassing ResourceIO", async () => {
+    const api = makeApi();
+    const source = writeSource("notes.csv", "a,b\n1,2\n");
+    const { resourceIO, service } = serviceFor(source, api);
+
+    await expect(service.extract({ filePath: source } as any)).rejects.toThrow(/authorized ResourceRef/i);
+    await expect(service.extract({ buffer: Buffer.from("a,b") } as any)).rejects.toThrow(/authorized ResourceRef/i);
+    expect(resourceIO.stat).not.toHaveBeenCalled();
+  });
+
+  it("cancels before reading and never starts the converter", async () => {
+    const api = makeApi({ formatFromBytes: vi.fn(() => "csv") });
+    const source = writeSource("notes.csv", "a,b\n1,2\n");
+    const { cleanup, resourceIO, service } = serviceFor(source, api);
+    const controller = new AbortController();
+    controller.abort("caller requested cancellation");
+
+    await expect(service.extract({
+      resource: { kind: "resource", resourceId: "report" },
+      signal: controller.signal,
+    })).rejects.toMatchObject({
+      name: "AbortError",
+      message: "Document extraction cancelled",
+    });
+
+    expect(resourceIO.stat).not.toHaveBeenCalled();
+    expect(resourceIO.openRead).not.toHaveBeenCalled();
+    expect(resourceIO.read).not.toHaveBeenCalled();
+    expect(resourceIO.materialize).not.toHaveBeenCalled();
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(api.toMarkdownBytes).not.toHaveBeenCalled();
+  });
+
+  it("waits for an in-flight byte conversion before reporting cancellation", async () => {
+    let signalConverterStarted!: () => void;
+    const converterStarted = new Promise<void>((resolve) => {
+      signalConverterStarted = resolve;
+    });
+    let finishConversion!: (markdown: string) => void;
+    const conversion = new Promise<string>((resolve) => {
+      finishConversion = resolve;
+    });
     const api = makeApi({
-      formatFromBytes: vi.fn(() => "docx"),
-      toMarkdownBytes: vi.fn(async () => {
-        throw new Error("scanned image only content, ocr required");
+      formatFromBytes: vi.fn(() => "csv"),
+      toMarkdownBytes: vi.fn(() => {
+        signalConverterStarted();
+        return conversion;
       }),
     });
-
-    const result = await extractDocument({ buffer: Buffer.from("PK"), filename: "report.docx" }, depsFor(api));
-
-    const failure = expectFailure(result);
-    expect(failure.reason).toBe("parse-failed");
-    expect(failure.message).toContain("ocr required");
-  });
-
-  it("treats an empty conversion as success but warns that no text was found", async () => {
-    const api = makeApi({
-      formatFromBytes: vi.fn(() => "docx"),
-      toMarkdownBytes: vi.fn(async () => "   \n  "),
+    const source = writeSource("notes.csv", "a,b\n1,2\n");
+    const { resourceIO, service } = serviceFor(source, api);
+    const controller = new AbortController();
+    const pending = service.extract({
+      resource: { kind: "resource", resourceId: "report" },
+      signal: controller.signal,
     });
 
-    const result = await extractDocument({ buffer: Buffer.from("PK"), filename: "empty.docx" }, depsFor(api));
+    await converterStarted;
+    controller.abort(new Error("caller requested cancellation"));
+    let settled = false;
+    void pending.then(
+      () => { settled = true; },
+      () => { settled = true; },
+    );
+    await Promise.resolve();
+    expect(settled).toBe(false);
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.format).toBe("docx");
-      expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings.join(" ")).toMatch(/no text/i);
-    }
-  });
-
-  it("requires either a buffer or a file path", async () => {
-    await expect(extractDocument({} as any, depsFor(makeApi()))).rejects.toThrow(/buffer or filePath/i);
+    finishConversion("| a | b |");
+    await expect(pending).rejects.toMatchObject({
+      name: "AbortError",
+      message: "caller requested cancellation",
+    });
+    expect(resourceIO.materialize).not.toHaveBeenCalled();
   });
 });

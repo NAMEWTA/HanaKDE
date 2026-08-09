@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-19
 title: 交付共享 Document Extraction
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "多格式/native converter、50 MiB 预算、remote Materialize、安全授权与临时文件清理构成跨平台公共能力。"
 ready: true

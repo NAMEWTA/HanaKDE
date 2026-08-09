@@ -3110,84 +3110,6 @@ export class HanaEngine {
     const executionScope = executionBoundary
       ? { serverNodeId: executionBoundary.serverNodeId, executionBoundary }
       : {};
-    const withRuntimeContext = (tool) => {
-      if (!tool?.execute) return tool;
-      return {
-        ...tool,
-        execute: (toolCallId, params, signalOrRuntimeCtx, onUpdate, piCtx) => {
-          const { ctx: runtimeCtx } = normalizeToolRuntimeContext(signalOrRuntimeCtx, piCtx);
-          const runtimeSessionPath = runtimeCtx?.sessionPath
-            || getToolSessionPath(runtimeCtx)
-            || getSessionPath()
-            || null;
-          const sessionRef = resolveRuntimeSessionRef(runtimeCtx);
-          const sessionPath = runtimeSessionPath || sessionRef?.sessionPath || null;
-          const mergedCtx = {
-            ...runtimeCtx,
-            ...(sessionRef ? { sessionId: sessionRef.sessionId, sessionRef } : {}),
-            ...(sessionPath ? { sessionPath } : {}),
-            ...(opts.bridgeContext ? { bridgeContext: opts.bridgeContext } : {}),
-            ...(opts.notificationContext ? { notificationContext: opts.notificationContext } : {}),
-            allowHumanApproval,
-            approvalPolicy,
-            agentId,
-            ...executionScope,
-          };
-          return tool.execute(toolCallId, params, signalOrRuntimeCtx, onUpdate, mergedCtx);
-        },
-      };
-    };
-    // Deferred assembly is decided once, here, and never revisited for the life
-    // of this tool set. The session's cacheable prefix is the tool schemas plus
-    // the system prompt, and a running session asserts that prefix on every
-    // request, so a tool set that changed shape mid-session would break the
-    // cache and fail the contract. Everything dynamic goes through the
-    // conversation stream instead.
-    const deferPlan = this._planDeferredToolAssembly(mcpTools, pluginTools);
-    const directMcpTools = deferPlan
-      ? mcpTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
-      : mcpTools;
-    const directPluginTools = deferPlan
-      ? pluginTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
-      : pluginTools;
-    const bridgeTools = deferPlan ? deferPlan.bridgeTools : [];
-
-    const runtimeCustomTools = ct.map(withRuntimeContext);
-    // Plugin tools and MCP tools both need the same session context injection;
-    // withRuntimeContext is that wrapper, so neither gets its own copy of it.
-    const wrappedPluginTools = directPluginTools.map(withRuntimeContext);
-    const wrappedMcpTools = directMcpTools.map(withRuntimeContext);
-    const wrappedBridgeTools = bridgeTools.map(withRuntimeContext);
-    if (deferPlan) {
-      // withRuntimeContext returns copies, and the permission layer keys its
-      // delegation registry on object identity, so the objects that actually
-      // reach that layer are the ones that must be registered.
-      registerBridgeCapabilityDelegates(wrappedBridgeTools, { catalog: deferPlan.catalog });
-    }
-    const pluginDevTools = this._pluginDevService && this._prefs.getPluginDevToolsEnabled?.() === true
-      ? createPluginDevTools({
-          pluginDevService: this._pluginDevService,
-          getAgentId: () => agentId,
-        })
-      : [];
-    assertUniqueBuiltToolNames([
-      { source: "custom tools", tools: baseCustomTools },
-      { source: "extra custom tools", tools: extraCustomTools },
-      { source: "plugin tools", tools: directPluginTools },
-      { source: "mcp tools", tools: directMcpTools },
-      { source: "mcp bridge tools", tools: bridgeTools },
-      { source: "plugin development tools", tools: pluginDevTools },
-    ]);
-    const allTools = filterToolObjectsByAvailability(
-      [...runtimeCustomTools, ...wrappedPluginTools, ...wrappedMcpTools, ...wrappedBridgeTools, ...pluginDevTools],
-      toolAgent?.config || {},
-      {
-        agentId,
-        channelsEnabled: resolveChannelsEnabledForToolAvailability(this),
-      },
-      { warn: (msg) => toolAvailabilityLog.warn(msg) },
-    );
-
     const effectiveAgentDir = opts.agentDir || this.agent.agentDir;
     const effectiveWorkspace = opts.workspace !== undefined ? opts.workspace : this.homeCwd;
     const workspaceFolders = opts.workspaceFolders || [];
@@ -3245,7 +3167,6 @@ export class HanaEngine {
         hanakoHome: this.hanakoHome,
       });
     };
-
     const resourceIO = createSandboxResourceIO({
       cwd,
       agentDir: effectiveAgentDir,
@@ -3263,6 +3184,88 @@ export class HanaEngine {
       resourceService: this._resources || null,
       studioId: this._runtimeContext?.studioId || null,
     });
+    const withRuntimeContext = (tool, contextResourceIO = null) => {
+      if (!tool?.execute) return tool;
+      return {
+        ...tool,
+        execute: (toolCallId, params, signalOrRuntimeCtx, onUpdate, piCtx) => {
+          const { ctx: runtimeCtx } = normalizeToolRuntimeContext(signalOrRuntimeCtx, piCtx);
+          const runtimeSessionPath = runtimeCtx?.sessionPath
+            || getToolSessionPath(runtimeCtx)
+            || getSessionPath()
+            || null;
+          const sessionRef = resolveRuntimeSessionRef(runtimeCtx);
+          const sessionPath = runtimeSessionPath || sessionRef?.sessionPath || null;
+          const mergedCtx = {
+            ...runtimeCtx,
+            ...(sessionRef ? { sessionId: sessionRef.sessionId, sessionRef } : {}),
+            ...(sessionPath ? { sessionPath } : {}),
+            ...(opts.bridgeContext ? { bridgeContext: opts.bridgeContext } : {}),
+            ...(opts.notificationContext ? { notificationContext: opts.notificationContext } : {}),
+            allowHumanApproval,
+            approvalPolicy,
+            agentId,
+            ...executionScope,
+            ...(contextResourceIO ? { resourceIO: contextResourceIO } : {}),
+          };
+          return tool.execute(toolCallId, params, signalOrRuntimeCtx, onUpdate, mergedCtx);
+        },
+      };
+    };
+    // Deferred assembly is decided once, here, and never revisited for the life
+    // of this tool set. The session's cacheable prefix is the tool schemas plus
+    // the system prompt, and a running session asserts that prefix on every
+    // request, so a tool set that changed shape mid-session would break the
+    // cache and fail the contract. Everything dynamic goes through the
+    // conversation stream instead.
+    const deferPlan = this._planDeferredToolAssembly(mcpTools, pluginTools);
+    const directMcpTools = deferPlan
+      ? mcpTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
+      : mcpTools;
+    const directPluginTools = deferPlan
+      ? pluginTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
+      : pluginTools;
+    const bridgeTools = deferPlan ? deferPlan.bridgeTools : [];
+
+    const runtimeCustomTools = ct.map((tool) => withRuntimeContext(
+      tool,
+      tool === toolAgent?._fileTool ? resourceIO : null,
+    ));
+    // Plugin tools and MCP tools both need the same session context injection;
+    // withRuntimeContext is that wrapper, so neither gets its own copy of it.
+    const wrappedPluginTools = directPluginTools.map(withRuntimeContext);
+    const wrappedMcpTools = directMcpTools.map(withRuntimeContext);
+    const wrappedBridgeTools = bridgeTools.map(withRuntimeContext);
+    if (deferPlan) {
+      // withRuntimeContext returns copies, and the permission layer keys its
+      // delegation registry on object identity, so the objects that actually
+      // reach that layer are the ones that must be registered.
+      registerBridgeCapabilityDelegates(wrappedBridgeTools, { catalog: deferPlan.catalog });
+    }
+    const pluginDevTools = this._pluginDevService && this._prefs.getPluginDevToolsEnabled?.() === true
+      ? createPluginDevTools({
+          pluginDevService: this._pluginDevService,
+          getAgentId: () => agentId,
+        })
+      : [];
+    assertUniqueBuiltToolNames([
+      { source: "custom tools", tools: baseCustomTools },
+      { source: "extra custom tools", tools: extraCustomTools },
+      { source: "plugin tools", tools: directPluginTools },
+      { source: "mcp tools", tools: directMcpTools },
+      { source: "mcp bridge tools", tools: bridgeTools },
+      { source: "plugin development tools", tools: pluginDevTools },
+    ]);
+    const allTools = filterToolObjectsByAvailability(
+      [...runtimeCustomTools, ...wrappedPluginTools, ...wrappedMcpTools, ...wrappedBridgeTools, ...pluginDevTools],
+      toolAgent?.config || {},
+      {
+        agentId,
+        channelsEnabled: resolveChannelsEnabledForToolAvailability(this),
+      },
+      { warn: (msg) => toolAvailabilityLog.warn(msg) },
+    );
+
     let result = createSandboxedTools(cwd, allTools, {
       agentDir: effectiveAgentDir,
       workspace: effectiveWorkspace,
