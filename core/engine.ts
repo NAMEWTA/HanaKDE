@@ -42,6 +42,7 @@ import { PluginDevService } from "./plugin-dev-service.ts";
 import { createPluginDevTools } from "./plugin-dev-tools.ts";
 import { DefaultResourceLoader, SessionManager, SettingsManager } from "../lib/pi-sdk/index.ts";
 import { compactSessionWithCachePreservationRecoveringRuntime } from "./session-compactor.ts";
+import { resolveRequestReasoningLevelForContext } from "./request-reasoning-level.ts";
 import { getFreshCompactNoopReason } from "../lib/fresh-compact/policy.ts";
 import { DeferredResultCoordinator } from "../lib/deferred-result-coordinator.ts";
 import {
@@ -67,27 +68,6 @@ function findUniqueModelById(models, id) {
   if (!id || !Array.isArray(models)) return null;
   const matches = models.filter(m => m.id === id);
   return matches.length === 1 ? matches[0] : null;
-}
-
-function readSessionThinkingLevel(ctx) {
-  try {
-    const level = ctx?.sessionManager?.buildSessionContext?.()?.thinkingLevel;
-    return typeof level === "string" ? level : null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveRequestReasoningLevel(models, prefs, ctx) {
-  const sessionThinkingLevel = readSessionThinkingLevel(ctx);
-  const defaultThinkingLevel = typeof models.getModelDefaultThinkingLevel === "function"
-    ? models.getModelDefaultThinkingLevel(ctx?.model || null, prefs.getThinkingLevel())
-    : prefs.getThinkingLevel();
-  const preferenceThinkingLevel = models.resolveThinkingLevel(defaultThinkingLevel);
-  const preferenceRequestsMax = preferenceThinkingLevel === "xhigh" || preferenceThinkingLevel === "max";
-  return preferenceRequestsMax && sessionThinkingLevel === "high"
-    ? preferenceThinkingLevel
-    : (sessionThinkingLevel || preferenceThinkingLevel);
 }
 
 function resolveChannelsEnabledForToolAvailability(engine) {
@@ -1578,8 +1558,35 @@ export class HanaEngine {
   getSessionProviderCacheAffinityKey(p) {
     return this._sessionCoord.getSessionProviderCacheAffinityKey(p);
   }
+  /**
+   * Per-session provider quirks that shape the request body. A live request and
+   * the compaction request for the same session share a cache prefix, so both
+   * have to normalize with the same options; this is the one place that answers
+   * what those options are, so neither path can drift from the other.
+   */
+  getProviderCompatOptionsForSession(p) {
+    return {
+      deepseekRoleplayReasoningPatch: this._sessionCoord.isDeepSeekRoleplayReasoningPatchEnabled(p),
+      deepseekRoleplayReasoningContext: this._sessionCoord.getDeepSeekRoleplayReasoningContext(p),
+    };
+  }
+  /**
+   * The reasoning level a request on this session carries. Same reason as the
+   * provider options above: the live request and the compaction request for one
+   * session ride the same cache prefix, so they cannot each decide for
+   * themselves whether reasoning is on. Both ask this.
+   */
+  resolveRequestReasoningLevel(ctx) {
+    return resolveRequestReasoningLevelForContext(this._models, this._prefs, ctx);
+  }
   getSessionStreamFn(p) {
     return this._sessionCoord.getSessionStreamFn(p);
+  }
+  getSessionAgentRunRuntime(p) {
+    return this._sessionCoord.getSessionAgentRunRuntime(p);
+  }
+  getSessionTransformContext(p) {
+    return this._sessionCoord.getSessionTransformContext(p);
   }
   async switchSession(p) {
     const result = await this._sessionCoord.switchSession(p);
@@ -2003,6 +2010,13 @@ export class HanaEngine {
   setLearnSkills(p) { this._prefs.setLearnSkills(p); }
   getLocale() { return this._prefs.getLocale(); }
   setLocale(l) { this._prefs.setLocale(l); }
+  getUserName() { return this._prefs.getUserName(); }
+  setUserName(n) {
+    this._prefs.setUserName(n);
+    // 名字是全局的：改一次，所有已经加载的 agent 都要立刻改口，
+    // 而不是等到进程重启才生效。
+    this._agentMgr?.refreshResolvedUserNames?.();
+  }
   getSetupComplete() { return this._prefs.getSetupComplete(); }
   markSetupComplete() { return this._prefs.markSetupComplete(); }
   getEditor() { return this._prefs.getEditor(); }
@@ -2470,7 +2484,7 @@ export class HanaEngine {
         pi.on("context", (event, ctx) => {
           const model = ctx?.model;
           if (!model) return;
-          const reasoningLevel = resolveRequestReasoningLevel(this._models, this._prefs, ctx);
+          const reasoningLevel = this.resolveRequestReasoningLevel(ctx);
           const messages = normalizeProviderContextMessages(event.messages, model, {
             mode: "chat",
             reasoningLevel,
@@ -2485,12 +2499,12 @@ export class HanaEngine {
           const requestModel = ctx?.model
             || findUniqueModelById(this._models.availableModels, p.model)
             || null;
-          const reasoningLevel = resolveRequestReasoningLevel(this._models, this._prefs, ctx);
+          const reasoningLevel = this.resolveRequestReasoningLevel(ctx);
           const sessionPath = ctx?.sessionManager?.getSessionFile?.() || null;
-          const deepseekRoleplayReasoningPatch = this._sessionCoord
-            .isDeepSeekRoleplayReasoningPatchEnabled(sessionPath);
-          const deepseekRoleplayReasoningContext = this._sessionCoord
-            .getDeepSeekRoleplayReasoningContext(sessionPath);
+          const {
+            deepseekRoleplayReasoningPatch,
+            deepseekRoleplayReasoningContext,
+          } = this.getProviderCompatOptionsForSession(sessionPath);
           // The SDK hook exposes the serialized body, but not whether maxTokens came
           // from user intent or buildBaseOptions' model-derived default. Keep source
           // unspecified here; output-budget removes only values matching that SDK default.

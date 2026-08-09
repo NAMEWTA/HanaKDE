@@ -15,7 +15,8 @@ import { isDefaultWorkspacePath, restoreDefaultWorkspaceIfMissing } from "../sha
 import { computeHardTruncation } from "./compaction-utils.ts";
 import {
   appendCompactionResultToSession,
-  createCachePreservingCompactionResult,
+  createColdUtilitySummaryResult,
+  isDirectCompactionInProgress,
   runCachePreservingCompactionForSession,
 } from "./session-compactor.ts";
 import { teardownSessionResources } from "./session-teardown.ts";
@@ -134,8 +135,32 @@ const SESSION_META_PAYLOAD_FIELDS = ["promptSnapshot", "memoryReflectionSnapshot
 // payload 字段一律外置为 sidecar 文件，索引文件只承载小标量，防止快照全文把共享索引撑大
 const SESSION_META_PAYLOAD_INLINE_LIMIT_BYTES = 0;
 const SESSION_META_INDEX_MAX_BYTES = 1024 * 1024;
-const REMINDER_HEADER_RE = /^\[hana_reminder at \d{4}-\d{2}-\d{2} \d{2}:\d{2}\]$/;
+// 当前块头是静态的；`at <时间戳>` 是历史 JSONL 里的旧块头，剥离端必须继续认
+const REMINDER_HEADER_RE = /^\[hana_reminder(?: at \d{4}-\d{2}-\d{2} \d{2}:\d{2})?\]$/;
 const SESSION_MODEL_UNAVAILABLE_API = "hana-unavailable-model";
+const identitySessionTransformContext = async (messages: any[]) => messages;
+
+export class SessionTransformContextResolutionError extends Error {
+  code = "SESSION_TRANSFORM_CONTEXT_UNKNOWN";
+  sessionPath: any;
+
+  constructor(sessionPath: any) {
+    super(`Session transform context unavailable: unknown session ${sessionPath || "(empty)"}`);
+    this.name = "SessionTransformContextResolutionError";
+    this.sessionPath = sessionPath;
+  }
+}
+
+export class SessionAgentRunRuntimeResolutionError extends Error {
+  code = "SESSION_AGENT_RUN_RUNTIME_UNKNOWN";
+  sessionPath: any;
+
+  constructor(sessionPath: any, reason = "unknown session") {
+    super(`Session AgentRun runtime unavailable: ${reason} ${sessionPath || "(empty)"}`);
+    this.name = "SessionAgentRunRuntimeResolutionError";
+    this.sessionPath = sessionPath;
+  }
+}
 
 type SessionModelAvailability = {
   available: boolean;
@@ -215,7 +240,8 @@ function createUnavailableSessionModel(models: any, provider: string, modelId: s
 /** 巡检/定时任务默认工具白名单（"*" = 与 chat 一致，全部放行） */
 export const PATROL_TOOLS_DEFAULT = "*";
 function splitLeadingSessionReminder(text: any) {
-  if (typeof text !== "string" || !text.startsWith(`${REMINDER_BLOCK_PREFIX} at `)) return null;
+  // 粗筛只看前缀，精确匹配交给下面的整行 REMINDER_HEADER_RE
+  if (typeof text !== "string" || !text.startsWith(REMINDER_BLOCK_PREFIX)) return null;
   const firstNewline = text.indexOf("\n");
   if (firstNewline < 0 || !REMINDER_HEADER_RE.test(text.slice(0, firstNewline).replace(/\r$/, ""))) return null;
   const closingMarker = `\n${REMINDER_BLOCK_END}`;
@@ -1567,6 +1593,45 @@ export class SessionCoordinator {
   getSessionStreamFn(sessionPath: any) {
     const entry = this._getSessionEntryByPath(sessionPath);
     return entry?.session?.agent?.streamFn || null;
+  }
+
+  getSessionAgentRunRuntime(sessionPath: any) {
+    const entry = this._getSessionEntryByPath(sessionPath);
+    if (!sessionPath || !entry?.session) {
+      throw new SessionAgentRunRuntimeResolutionError(sessionPath);
+    }
+    const session = entry.session;
+    const agent = session.agent;
+    if (typeof agent?.streamFn !== "function") {
+      throw new SessionAgentRunRuntimeResolutionError(sessionPath, "missing streamFn for session");
+    }
+    const tools = Object.freeze(
+      (Array.isArray(agent.state?.tools) ? agent.state.tools : [])
+        .map((tool) => Object.freeze({ ...tool })),
+    );
+    const streamOptions = Object.freeze({
+      sessionId: agent.sessionId ?? session.sessionManager?.getSessionId?.(),
+      onPayload: agent.onPayload,
+      onResponse: agent.onResponse,
+      transport: agent.transport,
+      thinkingBudgets: agent.thinkingBudgets,
+      maxRetryDelayMs: agent.maxRetryDelayMs,
+    });
+    return Object.freeze({
+      streamFn: agent.streamFn,
+      tools,
+      streamOptions,
+    });
+  }
+
+  getSessionTransformContext(sessionPath: any) {
+    const entry = this._getSessionEntryByPath(sessionPath);
+    if (!sessionPath || !entry?.session) {
+      throw new SessionTransformContextResolutionError(sessionPath);
+    }
+    return typeof entry.session.agent?.transformContext === "function"
+      ? entry.session.agent.transformContext
+      : identitySessionTransformContext;
   }
 
   getSessionProviderCacheAffinityKey(sessionPath: any) {
@@ -4210,8 +4275,9 @@ export class SessionCoordinator {
     const targetSessionPath = session.sessionManager?.getSessionFile?.() || null;
     const targetSessionId = targetSessionPath ? this._sessionIdForPath(targetSessionPath) : null;
     try {
-      const result = await createCachePreservingCompactionResult({
+      const result = await createColdUtilitySummaryResult({
         preparation,
+        transcriptMessages,
         model,
         systemPrompt: session.agent?.state?.systemPrompt ?? session.systemPrompt,
         customInstructions: [
@@ -5087,6 +5153,9 @@ export class SessionCoordinator {
     const reason = this._normalizeAbortReason(options, "abort");
     const pending = this._getRuntimeValueForPath(this._prePromptAbortControllers, sessionPath);
     if (pending) {
+      // preflight 窗口的中止不补发 turn_end：promptSession 尚未运行，本轮
+      // turn input 还没落入 branch，合成 turn_end 会把上一轮的 entry id
+      // 错绑到本轮的乐观消息上。
       pending.abort();
       this._deleteRuntimeValueForPath(this._prePromptAbortControllers, sessionPath);
       this._cleanupAbortedSessionSidecars(sessionPath, reason);
@@ -5132,7 +5201,10 @@ export class SessionCoordinator {
     if (entry._switching) {
       throw new Error("Model switch already in progress for this session");
     }
-    if (session.isCompacting) {
+    // Both kinds of compaction rewrite this session's history, so either one
+    // blocks a model switch: isCompacting covers the SDK's own pass, and the
+    // direct cache-preserving pass reports itself separately.
+    if (session.isCompacting || isDirectCompactionInProgress(session)) {
       throw new Error("Cannot switch model while compaction is in progress");
     }
 
@@ -5580,6 +5652,12 @@ export class SessionCoordinator {
     const session = entry.session;
     const spShort = sessionPath ? path.basename(sessionPath) : "(anon)";
     entry.lastTouchedAt = Date.now();
+
+    // 中止路径补发 turn_end：下面的 unsub 会抢在 SDK 自己的 turn_end 之前断流，
+    // 前端就永远等不到 entry id 回绑（重试/fork/重写按钮的唯一数据源）。
+    // 必须在 _sessions 删除之前发出——chat 路由的 turn_end handler 要通过
+    // getSessionByPath 读 in-memory branch 才能算出 entry id（事件总线同步分发）。
+    this._d.emitEvent?.({ type: "turn_end", aborted: true, reason }, sessionPath);
 
     this._clearRuntimePressureTimer(sessionPath);
     this._deleteRuntimeValueForPath(this._hibernatedSessionMeta, sessionPath);

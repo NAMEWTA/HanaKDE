@@ -797,7 +797,8 @@
         "avatar": "Ming.png"
       },
       "kong": {
-        "label": "模型原本的樣子",
+        "label": "無發散思考模組（如 MOOD），和其他 Agent 一致的體驗。",
+        "shortLabel": "無思考區塊，直接回答。",
         "avatar": "Kong.png"
       }
     },

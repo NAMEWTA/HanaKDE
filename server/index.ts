@@ -494,6 +494,16 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     getSessionProviderCacheAffinityKey: (sessionPath) => (
       engine.getSessionProviderCacheAffinityKey(sessionPath)
     ),
+    getSessionTransformContext: (sessionPath) => (
+      engine.getSessionTransformContext(sessionPath)
+    ),
+    getSessionAgentRunRuntime: (sessionPath) => (
+      engine.getSessionAgentRunRuntime(sessionPath)
+    ),
+    getProviderCompatOptions: (sessionPath) => (
+      engine.getProviderCompatOptionsForSession(sessionPath)
+    ),
+    getRequestReasoningLevel: (ctx) => engine.resolveRequestReasoningLevel(ctx),
     buildUsageContext: ({ ctx }) => {
       const sessionPath = ctx?.sessionManager?.getSessionFile?.() || null;
       const bridgeContext = sessionPath ? engine.getBridgeContextForSessionPath(sessionPath) : null;
@@ -950,6 +960,10 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     return c.json({
       status: "ok",
       version: appVersion,
+      // @ui-focus-ok: a client asking for health on first load has no agent of
+      // its own yet, and this tells it which agent the server was last left on
+      // so it can open there. It reports the focus rather than deciding who
+      // owns anything, and the fields below it describe that same agent.
       agentId: engine.currentAgentId || null,
       agent: engine.agentName,
       agentYuan: engine.agent?.config?.agent?.yuan || "hanako",
