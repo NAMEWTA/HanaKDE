@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import { discoverSites } from "../scripts/scan-persistent-stores.mjs";
 import { SECRET_TREES, TOP_LEVEL_SECRET_FILES } from "../core/credential-file-healer.ts";
 import { LOCAL_PROVIDER_PLUGINS_DIR } from "../core/local-provider-plugin-store.ts";
+import { SECURITY_DIR } from "../core/security-dir.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -27,6 +28,7 @@ const EXCLUSIVE_CREDENTIAL_WRITERS = [
   "core/device-registry.ts",
   "core/local-user-account.ts",
   "core/web-session-store.ts",
+  "core/plugin-config.ts",
   "lib/memory/config-loader.ts",
 ];
 
@@ -68,6 +70,10 @@ describe("startup healer coverage", () => {
   // which is exactly how this tree went uncovered.
   it("covers the local provider plugin tree that holds per-provider keys", () => {
     expect(SECRET_TREES).toContain(LOCAL_PROVIDER_PLUGINS_DIR);
+  });
+
+  it("covers the security tree that holds signing keys and grant records", () => {
+    expect(SECRET_TREES).toContain(SECURITY_DIR);
   });
 
   it.each([
