@@ -41,6 +41,10 @@
       "reason": "Renderer/service-worker code is not an Electron host persistence owner."
     },
     {
+      "id": "dormant-file-history-input",
+      "reason": "T-06 retains the upstream File History implementation as an unconnected input; it is not a production persistence owner until the later single-owner cutover."
+    },
+    {
       "id": "source-tests",
       "reason": "Test fixtures and test-only mutations are excluded from production ownership."
     }

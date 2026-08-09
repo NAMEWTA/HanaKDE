@@ -393,6 +393,57 @@ describe("ModelManager AuthStorage ownership", () => {
     ))).toBe(false);
   });
 
+  it("uses the normalized Kimi model endpoint for fresh auxiliary execution credentials", async () => {
+    writeProviderCatalogProviders({
+      "kimi-coding": {
+        base_url: "https://api.kimi.com/coding/",
+        api: "anthropic-messages",
+        api_key: "sk-kimi",
+        models: ["k3"],
+      },
+    });
+    writeAuth({});
+
+    const manager = new ModelManager({ hanakoHome: tmpDir });
+    manager.init();
+    await manager.refreshAvailable();
+
+    const selected = manager.availableModels.find((item) => (
+      item.provider === "kimi-coding" && item.id === "k3"
+    ));
+    expect(selected).toMatchObject({
+      api: "openai-completions",
+      baseUrl: "https://api.kimi.com/coding/v1",
+    });
+
+    expect(manager.resolveModelWithCredentials({
+      id: "k3",
+      provider: "kimi-coding",
+    })).toMatchObject({
+      api: "openai-completions",
+      api_key: "sk-kimi",
+      base_url: "https://api.kimi.com/coding/v1",
+      credential_source: "provider-catalog",
+    });
+
+    const resolved = await manager.resolveModelWithCredentialsFresh({
+      id: "k3",
+      provider: "kimi-coding",
+    });
+    expect(resolved).toMatchObject({
+      api: "openai-completions",
+      api_key: "sk-kimi",
+      base_url: "https://api.kimi.com/coding/v1",
+      credential_source: "provider-catalog",
+      model: {
+        id: "k3",
+        provider: "kimi-coding",
+        api: "openai-completions",
+        baseUrl: "https://api.kimi.com/coding/v1",
+      },
+    });
+  });
+
   it("keeps provider-specific GPT-5.6 APIs ahead of an incompatible provider-wide default", async () => {
     writeProviderCatalogProviders({
       openai: {
@@ -675,7 +726,7 @@ describe("ModelManager AuthStorage ownership", () => {
       .rejects.toThrow(/openai-codex/);
   });
 
-  it("builds a fresh model credential result from AuthStorage and strips stale catalog/model credential headers", async () => {
+  it("builds a fresh model credential result from AuthStorage, preserves its dynamic resource URL, and strips stale headers", async () => {
     writeProviderCatalogProviders({
       "openai-codex-oauth": {
         api_key: "stale-catalog-token",
@@ -702,7 +753,7 @@ describe("ModelManager AuthStorage ownership", () => {
       id: "gpt-5.6-sol",
       provider: "openai-codex",
       api: "openai-codex-responses",
-      baseUrl: "https://chatgpt.com/backend-api",
+      baseUrl: "https://fixed-codex.example/v1",
       headers: {
         Authorization: "Bearer stale-model-header",
         Cookie: "model=stale",
@@ -731,6 +782,7 @@ describe("ModelManager AuthStorage ownership", () => {
     expect(resolved).toMatchObject({
       api: "openai-codex-responses",
       api_key: "fresh-auth-storage-token",
+      base_url: "https://chatgpt.com/backend-api",
       accountId: "acct_fresh",
       credential_source: "auth-storage",
       model: {

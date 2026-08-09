@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-06
 title: 整合上游 v0.442.0 checkpoint
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "约 40 个提交、180 个文件和 30 个 overlap，是 staged chain 中高重叠的整仓公共契约 checkpoint。"
 ready: true
