@@ -30,33 +30,33 @@ status: ready
 
 | ID | Ticket | 可观察产出 | Blocked By | Depth | Risk | Ready | Owner | Contract IDs | Wave/Gate | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T-01 | `<Path>{roots.state}/specdev/changes/{change}/ticket/01-freeze-baseline-and-authorization-gates.md</Path>` | 实际 HEAD/target/merge-base/overlap 与 Git 授权边界冻结 | — | deep | high | yes | unassigned | AC-001 | G0 | ready |
-| T-02 | `<Path>{roots.state}/specdev/changes/{change}/ticket/02-integrate-v0-421-24.md</Path>` | `v0.421.24` 可审计 checkpoint | T-01 | deep | high | yes | unassigned | AC-001—AC-003 | W1.1 | ready |
-| T-03 | `<Path>{roots.state}/specdev/changes/{change}/ticket/03-integrate-v0-433-1.md</Path>` | `v0.433.1` 可审计 checkpoint | T-02 | deep | high | yes | unassigned | AC-001—AC-003 | W1.2 | ready |
-| T-04 | `<Path>{roots.state}/specdev/changes/{change}/ticket/04-integrate-v0-441-3.md</Path>` | `v0.441.3` 可审计 checkpoint | T-03 | deep | high | yes | unassigned | AC-001—AC-003 | W1.3 | ready |
-| T-05 | `<Path>{roots.state}/specdev/changes/{change}/ticket/05-integrate-v0-441-32.md</Path>` | `v0.441.32` checkpoint 与重复职责输入清单 | T-04 | deep | high | yes | unassigned | AC-001—AC-003 | W1.4 | ready |
-| T-06 | `<Path>{roots.state}/specdev/changes/{change}/ticket/06-integrate-v0-442-0.md</Path>` | `v0.442.0` 高重叠 checkpoint 与 owner handoff | T-05 | deep | critical | yes | unassigned | AC-001—AC-003 | W1.5 | ready |
-| T-07 | `<Path>{roots.state}/specdev/changes/{change}/ticket/07-integrate-v0-443-46.md</Path>` | `v0.443.46` checkpoint 与 History/Extraction 输入 | T-06 | deep | critical | yes | unassigned | AC-001—AC-003 | W1.6 | ready |
-| T-08 | `<Path>{roots.state}/specdev/changes/{change}/ticket/08-integrate-v0-443-54-through-v0-444-1.md</Path>` | `v0.443.54`/`v0.444.1` 两个子 checkpoint | T-07 | deep | high | yes | unassigned | AC-001—AC-003 | W1.7 | ready |
-| T-09 | `<Path>{roots.state}/specdev/changes/{change}/ticket/09-integrate-v0-446-6.md</Path>` | 冻结 target ancestry 与完整上游功能基线 | T-08 | deep | critical | yes | unassigned | AC-001—AC-003 | G1 | ready |
-| T-10 | `<Path>{roots.state}/specdev/changes/{change}/ticket/10-converge-resource-kernel.md</Path>` | 唯一 Resource Kernel、Materialize/Transfer/Root/Event contracts | T-09 | deep | critical | yes | unassigned | AC-011, AC-014, AC-020, AC-023, AC-026 | G2 | ready |
-| T-11 | `<Path>{roots.state}/specdev/changes/{change}/ticket/11-establish-main-workspace-infrastructure.md</Path>` | 唯一 main lifecycle、watcher、baseline 与四态 health | T-10 | deep | critical | yes | unassigned | AC-004, AC-005, AC-009, AC-012—AC-014, AC-025, AC-026 | W3 | ready |
-| T-12 | `<Path>{roots.state}/specdev/changes/{change}/ticket/12-perform-single-owner-production-cutover.md</Path>` | stop-then-start production cutover，overlap 永远为 0 | T-10, T-11 | deep | critical | yes | unassigned | AC-009—AC-013 | W4 | ready |
-| T-13 | `<Path>{roots.state}/specdev/changes/{change}/ticket/13-deliver-main-only-file-history.md</Path>` | main-only capture/deleted/timeline/diff/retention/quota | T-10, T-11 | deep | critical | yes | unassigned | AC-005—AC-007, AC-025, AC-026 | W4 | ready |
-| T-14 | `<Path>{roots.state}/specdev/changes/{change}/ticket/14-converge-knowledge-events-and-repair.md</Path>` | Knowledge 只消费统一事件/shared baseline 并 scoped repair | T-10, T-11 | deep | critical | yes | unassigned | AC-003, AC-011—AC-013, AC-017 | W4 | ready |
-| T-15 | `<Path>{roots.state}/specdev/changes/{change}/ticket/15-deliver-secure-restore-convergence.md</Path>` | expected-version/TOCTOU 安全 restore 与六读面一致 | T-12, T-13, T-14 | deep | critical | yes | unassigned | AC-015—AC-017, AC-026 | G5 | ready |
-| T-16 | `<Path>{roots.state}/specdev/changes/{change}/ticket/16-deliver-workspace-history-ui.md</Path>` | Workbench History/deleted/diff/restore/health 用户流程 | T-13, T-15 | deep | high | yes | unassigned | AC-006, AC-007, AC-013, AC-015—AC-017, AC-024 | W6 | ready |
-| T-17 | `<Path>{roots.state}/specdev/changes/{change}/ticket/17-deliver-agent-file-change-projection.md</Path>` | 对话/操作过滤的 Agent 影响与 main 共享 History | T-15, T-16 | deep | high | yes | unassigned | AC-008, AC-015—AC-017, AC-024 | W7 | ready |
-| T-18 | `<Path>{roots.state}/specdev/changes/{change}/ticket/18-fuse-at-search-lifecycle.md</Path>` | `@` query/loading/cancel/stale-response lifecycle 正确 | T-09 | standard | medium | yes | unassigned | AC-024 | W3 | ready |
-| T-19 | `<Path>{roots.state}/specdev/changes/{change}/ticket/19-deliver-shared-document-extraction.md</Path>` | 共享多格式 Extraction、Materialize 与稳定失败 | T-10 | deep | critical | yes | unassigned | AC-018—AC-020, AC-022, AC-023, AC-026 | W3 | ready |
-| T-20 | `<Path>{roots.state}/specdev/changes/{change}/ticket/20-upgrade-office-to-knowledge-ingestion.md</Path>` | Office 经共享 Extraction 进入 IR/index/Search 并按版本重建 | T-14, T-15, T-19 | deep | critical | yes | unassigned | AC-003, AC-017, AC-021, AC-022 | W6 | ready |
-| T-21 | `<Path>{roots.state}/specdev/changes/{change}/ticket/21-converge-production-native-packaging.md</Path>` | clean install/build 与双平台 native/package inputs 就绪 | T-12, T-16, T-17, T-18, T-20 | deep | critical | yes | unassigned | AC-002, AC-003, AC-018—AC-023, AC-027 | G8 | ready |
-| T-22 | `<Path>{roots.state}/specdev/changes/{change}/ticket/22-windows-blocking-gate.md</Path>` | Windows native/security/restore/extraction/NSIS Gate 通过 | T-21 | deep | critical | yes | unassigned | AC-009, AC-010, AC-014—AC-023, AC-027 | G9-WIN | ready |
-| T-23 | `<Path>{roots.state}/specdev/changes/{change}/ticket/23-macos-blocking-gate.md</Path>` | macOS native/watch/restore/extraction/DMG Gate 通过 | T-21 | deep | critical | yes | unassigned | AC-009, AC-010, AC-012—AC-023, AC-027 | G9-MAC | ready |
-| T-24 | `<Path>{roots.state}/specdev/changes/{change}/ticket/24-architecture-and-upstream-sync-ledger.md</Path>` | 当前架构、恢复与 upstream sync ledger 进入项目 docs | T-21 | standard | medium | yes | unassigned | AC-001, AC-028 | W9-DOCS | ready |
-| T-25 | `<Path>{roots.state}/specdev/changes/{change}/ticket/25-final-umbrella-acceptance.md</Path>` | 28 AC、15 DoD、双平台与去冗余最终 verdict | T-22, T-23, T-24 | deep | critical | yes | unassigned | AC-001—AC-028 | G10-FINAL | ready |
+| T-01 | `<Path>{roots.state}/specdev/changes/{change}/ticket/01-freeze-baseline-and-authorization-gates.md</Path>` | 实际 HEAD/target/merge-base/overlap 与 Git 授权边界冻结 | — | deep | high | yes | Worker-T-01 / Lead验收 | AC-001 | G0 | ready |
+| T-02 | `<Path>{roots.state}/specdev/changes/{change}/ticket/02-integrate-v0-421-24.md</Path>` | `v0.421.24` 可审计 checkpoint | T-01 | deep | high | yes | Worker-T-02 / Lead集成 | AC-001—AC-003 | W1.1/G1 | ready |
+| T-03 | `<Path>{roots.state}/specdev/changes/{change}/ticket/03-integrate-v0-433-1.md</Path>` | `v0.433.1` 可审计 checkpoint | T-02 | deep | high | yes | Worker-T-03 / Lead集成 | AC-001—AC-003 | W1.2/G1 | ready |
+| T-04 | `<Path>{roots.state}/specdev/changes/{change}/ticket/04-integrate-v0-441-3.md</Path>` | `v0.441.3` 可审计 checkpoint | T-03 | deep | high | yes | Worker-T-04 / Lead集成 | AC-001—AC-003 | W1.3/G1 | ready |
+| T-05 | `<Path>{roots.state}/specdev/changes/{change}/ticket/05-integrate-v0-441-32.md</Path>` | `v0.441.32` checkpoint 与重复职责输入清单 | T-04 | deep | high | yes | Worker-T-05 / Lead集成 | AC-001—AC-003 | W1.4/G1 | ready |
+| T-06 | `<Path>{roots.state}/specdev/changes/{change}/ticket/06-integrate-v0-442-0.md</Path>` | `v0.442.0` 高重叠 checkpoint 与 owner handoff | T-05 | deep | critical | yes | Worker-T-06 / Lead集成 | AC-001—AC-003 | W1.5/G1 | ready |
+| T-07 | `<Path>{roots.state}/specdev/changes/{change}/ticket/07-integrate-v0-443-46.md</Path>` | `v0.443.46` checkpoint 与 History/Extraction 输入 | T-06 | deep | critical | yes | Worker-T-07 / Lead集成 | AC-001—AC-003 | W1.6/G1 | ready |
+| T-08 | `<Path>{roots.state}/specdev/changes/{change}/ticket/08-integrate-v0-443-54-through-v0-444-1.md</Path>` | `v0.443.54`/`v0.444.1` 两个子 checkpoint | T-07 | deep | high | yes | Worker-T-08 / Lead集成 | AC-001—AC-003 | W1.7/G1 | ready |
+| T-09 | `<Path>{roots.state}/specdev/changes/{change}/ticket/09-integrate-v0-446-6.md</Path>` | 冻结 target ancestry 与完整上游功能基线 | T-08 | deep | critical | yes | Worker-T-09 / Lead集成 | AC-001—AC-003 | W1.8/G1 | ready |
+| T-10 | `<Path>{roots.state}/specdev/changes/{change}/ticket/10-converge-resource-kernel.md</Path>` | 唯一 Resource Kernel、Materialize/Transfer/Root/Event contracts | T-09 | deep | critical | yes | Worker-T-10 / Lead Gate | AC-011, AC-014, AC-020, AC-023, AC-026 | G2 | ready |
+| T-11 | `<Path>{roots.state}/specdev/changes/{change}/ticket/11-establish-main-workspace-infrastructure.md</Path>` | 唯一 main lifecycle、watcher、baseline 与四态 health | T-10 | deep | critical | yes | Worker-T-11 / Lead集成 | AC-004, AC-005, AC-009, AC-012—AC-014, AC-025, AC-026 | W3 | ready |
+| T-12 | `<Path>{roots.state}/specdev/changes/{change}/ticket/12-perform-single-owner-production-cutover.md</Path>` | stop-then-start production cutover，overlap 永远为 0 | T-10, T-11 | deep | critical | yes | Worker-T-12 / Lead集成 | AC-009—AC-013 | W4 | ready |
+| T-13 | `<Path>{roots.state}/specdev/changes/{change}/ticket/13-deliver-main-only-file-history.md</Path>` | main-only capture/deleted/timeline/diff/retention/quota | T-10, T-11 | deep | critical | yes | Worker-T-13 / Lead集成 | AC-005—AC-007, AC-025, AC-026 | W4 | ready |
+| T-14 | `<Path>{roots.state}/specdev/changes/{change}/ticket/14-converge-knowledge-events-and-repair.md</Path>` | Knowledge 只消费统一事件/shared baseline 并 scoped repair | T-10, T-11 | deep | critical | yes | Worker-T-14 / Lead集成 | AC-003, AC-011—AC-013, AC-017 | W4 | ready |
+| T-15 | `<Path>{roots.state}/specdev/changes/{change}/ticket/15-deliver-secure-restore-convergence.md</Path>` | expected-version/TOCTOU 安全 restore 与六读面一致 | T-12, T-13, T-14 | deep | critical | yes | Worker-T-15 / Lead Gate | AC-015—AC-017, AC-026 | G5 | ready |
+| T-16 | `<Path>{roots.state}/specdev/changes/{change}/ticket/16-deliver-workspace-history-ui.md</Path>` | Workbench History/deleted/diff/restore/health 用户流程 | T-13, T-15 | deep | high | yes | Worker-T-16 / Lead E2E | AC-006, AC-007, AC-013, AC-015—AC-017, AC-024 | W6 | ready |
+| T-17 | `<Path>{roots.state}/specdev/changes/{change}/ticket/17-deliver-agent-file-change-projection.md</Path>` | 对话/操作过滤的 Agent 影响与 main 共享 History | T-15, T-16 | deep | high | yes | Worker-T-17 / Lead E2E | AC-008, AC-015—AC-017, AC-024 | W7 | ready |
+| T-18 | `<Path>{roots.state}/specdev/changes/{change}/ticket/18-fuse-at-search-lifecycle.md</Path>` | `@` query/loading/cancel/stale-response lifecycle 正确 | T-09 | standard | medium | yes | Worker-T-18 / Lead E2E | AC-024 | W3 | ready |
+| T-19 | `<Path>{roots.state}/specdev/changes/{change}/ticket/19-deliver-shared-document-extraction.md</Path>` | 共享多格式 Extraction、Materialize 与稳定失败 | T-10 | deep | critical | yes | Worker-T-19 / Lead集成 | AC-018—AC-020, AC-022, AC-023, AC-026 | W3 | ready |
+| T-20 | `<Path>{roots.state}/specdev/changes/{change}/ticket/20-upgrade-office-to-knowledge-ingestion.md</Path>` | Office 经共享 Extraction 进入 IR/index/Search 并按版本重建 | T-14, T-15, T-19 | deep | critical | yes | Worker-T-20 / Lead E2E | AC-003, AC-017, AC-021, AC-022 | W6 | ready |
+| T-21 | `<Path>{roots.state}/specdev/changes/{change}/ticket/21-converge-production-native-packaging.md</Path>` | clean install/build 与双平台 native/package inputs 就绪 | T-12, T-16, T-17, T-18, T-20 | deep | critical | yes | Worker-T-21 shared owner / Lead Gate | AC-002, AC-003, AC-018—AC-023, AC-027 | G8 | ready |
+| T-22 | `<Path>{roots.state}/specdev/changes/{change}/ticket/22-windows-blocking-gate.md</Path>` | Windows native/security/restore/extraction/NSIS Gate 通过 | T-21 | deep | critical | yes | Worker-T-22 / Lead平台验收 | AC-009, AC-010, AC-014—AC-023, AC-027 | W9-WIN/G9 | ready |
+| T-23 | `<Path>{roots.state}/specdev/changes/{change}/ticket/23-macos-blocking-gate.md</Path>` | macOS native/watch/restore/extraction/DMG Gate 通过 | T-21 | deep | critical | yes | Worker-T-23 / Lead平台验收 | AC-009, AC-010, AC-012—AC-023, AC-027 | W9-MAC/G9 | ready |
+| T-24 | `<Path>{roots.state}/specdev/changes/{change}/ticket/24-architecture-and-upstream-sync-ledger.md</Path>` | 当前架构、恢复与 upstream sync ledger 进入项目 docs | T-21 | standard | medium | yes | Worker-T-24 / Lead审查 | AC-001, AC-028 | W9-DOCS | ready |
+| T-25 | `<Path>{roots.state}/specdev/changes/{change}/ticket/25-final-umbrella-acceptance.md</Path>` | 28 AC、15 DoD、双平台与去冗余最终 verdict | T-22, T-23, T-24 | deep | critical | yes | Worker-T-25 / Lead final owner | AC-001—AC-028 | G10-FINAL | ready |
 
-Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；本表是同步投影，不得独立修改出另一套真相。
+Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；本表的 Worker/Lead、Wave/Gate 是 `<Path>{roots.state}/specdev/changes/{change}/goal-plan.md</Path>` 的委派执行投影，不改变 Ticket 产品 owner 或路径合同，也不得独立修改出另一套真相。
 
 ## 3. 依赖 DAG
 
@@ -128,9 +128,10 @@ T-01 [G0 fixed point / authorization]
 ## 5. 并行与路径所有权
 
 - 最大并发来自 `<Path>{roots.state}/specdev/config.json</Path>`，当前为 3。
-- 并行代码 Ticket 使用独立 worktree；具体 worktree/branch/owner 只由后续 Goal Plan 在获授权后编排。
-- 根 manifests、lockfile 和共享 CI 的唯一 owner 是 T-21；其他 Ticket 对这些路径只读。
+- 本次执行使用一个 persistent native Lead；所有代码 Ticket 使用独立 worktree，branch 为 `speculo/2026-08-09-openhanako-v0-446-6-integration/T-NN`，locator 为 `specdev-worktree/T-NN`。初始 planning checkpoint 固定为 `5f819b1233d6acdc0893363d4647bf1d53af8355`，每个并行 Wave 的全部 Ticket 必须共享 Lead 发布的同一个 immutable Gate SHA。
+- 根 manifests、lockfile 和共享 CI 在 G1 后的唯一语义收敛 owner 是 T-21；T-02—T-09 只能随冻结上游 checkpoint 吸收原始 release 增量。其他 G1 后 Ticket 对这些路径只读。
 - production assembly/cutover 的唯一 owner 是 T-12；Resource Kernel 是 T-10；Workspace infrastructure 是 T-11；History domain 是 T-13；Knowledge event/repair 是 T-14；Extraction core 是 T-19。
+- 用户已授权 Lead 无需中间确认即可执行 Ticket local changes/commit、已验收候选到本地 integration line 的 merge，以及 integrated clean worktree/branch 的非强制清理；push、PR、deploy、release、archive、远程写入与真实用户数据操作仍未授权。
 
 | Ticket A | Ticket B | Writable 交集 | 真实依赖 | 处理 |
 |---|---|---|---|---|
@@ -154,7 +155,7 @@ T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能�
 | G0 Fixed Point | T-01 | 当前 change ready | 实际基线和所有 Git 副作用批准点冻结 |
 | W1 Staged Upstream | T-02—T-09（严格串行） | 前一 checkpoint 绿色且当前 Git 动作获批 | 冻结 target ancestor、上游功能/HanaKDE contract union 绿色 |
 | G2 Resource Contract | T-10 | T-09 完成 | Resource/Root/Event/Materialize/Transfer 唯一契约稳定 |
-| W3 Shared Foundations | T-11, T-18, T-19 | T-10 完成；T-18 可在 T-09 后提前 | main infrastructure、@ lifecycle、Extraction 在隔离接缝绿色 |
+| W3 Shared Foundations | T-11, T-18, T-19 | T-10 完成且三者使用同一 Gate SHA | main infrastructure、@ lifecycle、Extraction 在隔离接缝绿色 |
 | W4 Single-Owner Consumers | T-12, T-13, T-14 | T-11 完成 | production overlap=0；History/Knowledge 分离且共享事实 |
 | G5 Restore Convergence | T-15 | T-12/T-13/T-14 完成 | secure restore 和六读面一致 |
 | W6 Product/Office | T-16, T-20 | T-15、各自前置完成 | Workspace UI 与 Office Knowledge E2E 绿色 |
@@ -167,7 +168,7 @@ T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能�
 
 ## 7. 横切契约与风险
 
-- **Git 与 upstream：** T-01 只读；branch/tag/merge/commit/push/fetch/release 均在具体执行点单独授权。target 永远使用冻结 SHA，final HEAD 必须包含其 ancestry。
+- **Git 与 upstream：** T-01 Worker只读；G0 后 Lead 可按 Goal Plan 无需中间确认创建本地branch/worktree、提交候选、合并到本地integration line并非强制清理已集成worktree/branch。local tag、fetch、push、PR、deploy、release和archive仍未授权。target永远使用冻结SHA，final integration HEAD必须包含其ancestry。
 - **Workspace identity：** `main` 唯一；工作目录切换为 close/open；mount 不是 Workspace；不新增 relocation 或 public/cross-feature `workspaceId`。
 - **单一事实源：** ResourceIO 写入、ResourceEventBus fan-out、WorkspaceWatchCoordinator physical observation、shared baseline observation 各只有一个 production owner。
 - **切换与恢复：** 只允许 isolated proof → stop old → prove release → start new；失败恢复同样先停新 owner。无 dual-run、dual-write、shadow watcher 或 dual baseline。
@@ -181,7 +182,7 @@ T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能�
 
 | 风险 | 控制 Ticket/Gate |
 |---|---|
-| 脏树或错误 fixed point 污染 merge | T-01 + 每 checkpoint 前置复核 |
+| 错误 fixed point 或隔离 worktree 污染 merge | T-01 exact SHA + 每 checkpoint/worktree 前置复核；并发用户修改保留且不进入基线 |
 | Git 冲突隐藏产品/安全回退 | T-02—T-09 contract union + semantic ledger |
 | watcher/mutation/baseline 双 owner | T-10—T-12 + overlap state-machine/structure scan |
 | History/Knowledge 数据分叉 | T-13—T-15 + final convergence E2E |
@@ -192,7 +193,7 @@ T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能�
 
 ## 8. 同步规则
 
-- Ticket 状态变化后同步本执行清单；frontmatter 是状态、依赖、路径和 owner 权威。
+- Ticket 状态变化后同步本执行清单；frontmatter 是状态、依赖、局部路径和产品 owner 权威，本次 Worker/Lead 执行 owner 由 Goal Plan 投影。
 - Ticket ID、路径、依赖或 frontmatter 不一致时，以具体 Ticket 文件为权威并修复本 Map。
 - Goal Plan 存在后，Wave、Gate、执行 owner、worktree 与恢复顺序以 `<Path>{roots.state}/specdev/changes/{change}/goal-plan.md</Path>` 为编排权威；不得复制改写 Ticket 产品契约。
 - 依赖、AC coverage、path ownership、shared owner 或 Gate 变化后运行 `<Path>{roots.workflows}/specdev/common/tools/validate-specdev.mjs</Path>` 的 tickets/goal-plan stage。

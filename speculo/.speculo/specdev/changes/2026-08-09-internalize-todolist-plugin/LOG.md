@@ -496,3 +496,18 @@
 - **约束或不变量：** readiness retry 不是到期扫描器；EventBus handoff 不是 delivered；任何插件目录外产品 diff 都使验收失败；SpecDev 规划工件不属于产品实现。
 - **后续：** T-tickets 必须把所有 writable_paths 限制为 `<Path>plugins/todolist/</Path>`，共享/只读路径不得获得写权限。
 - **替代/被替代：** 取代 D-001 的系统本体前置范围、D-006、D-020，并收缩 D-024 的逐渠道回执措辞。
+
+## LOG-034 — 2026-08-09T15:47:12+08:00 — T-tickets Ready 发布
+- **设计树节点：** D-001 至 D-025
+- **轮次与依赖：** T-tickets / ready Spec / 用户确认的十票拆分
+- **状态：** confirmed
+- **问题：** 如何把 33 个验收合同拆成单上下文可执行的纵向 Ticket，同时保持唯一插件目录写入边界和可信依赖。
+- **事实与来源：** 用户确认十票拆分；全部 Ticket 的 `writable_paths` 仅为 `<Path>plugins/todolist/**</Path>`；宿主、公共测试、构建脚本和参考插件均为只读；`validate-specdev --stage tickets` 返回 0 error、0 warning。
+- **选项：** 按技术层并行拆分；使用 shared path 最终合并；按真实数据与运行接缝串行拆成十个纵向行为切片。
+- **推荐：** 采用 T-01 至 T-10 单链 DAG，并由 Goal Plan 正式定义 Gate、基线、owner 和恢复点。
+- **结论：** 十张 Ticket 全部 `ready: true`，AC-001 至 AC-033 全部 covered，无 deferred、无 DAG 环、无并发写冲突、无高影响未决问题。
+- **原因：** Todo 的 store、routes、tools、Page 与 runtime 会在同一插件根持续演进；每条依赖边都对应前序稳定 schema、identity 或状态协议，而不是人员交接。
+- **影响工件：** ticket / tickets-map / evidence / status
+- **约束或不变量：** SpecDev 工件可位于 change 目录；任何产品实现、测试、fixture、Playwright 配置、构建资产和依赖声明仍只能位于 `<Path>plugins/todolist/</Path>`。
+- **后续：** 运行 `<Path>{roots.workflows}/specdev/P-goal-plan/P-goal-plan.md</Path>`；不得由 T-tickets 自动进入实现。
+- **替代/被替代：** 无
