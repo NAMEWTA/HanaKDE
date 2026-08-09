@@ -18,7 +18,7 @@ describe("file tool document extraction", () => {
     const source = path.join(tmpDir, "source.csv");
     fs.mkdirSync(workspace);
     fs.writeFileSync(source, "region,total\nnorth,120\n");
-    const cleanup = vi.fn();
+    const content = fs.readFileSync(source);
     const resourceIO = {
       stat: vi.fn(async () => ({
         resourceKey: "resource:quarterly",
@@ -27,12 +27,15 @@ describe("file tool document extraction", () => {
         isDirectory: false,
         version: { size: fs.statSync(source).size },
       })),
-      materialize: vi.fn(async () => ({
+      openRead: vi.fn(async () => ({
         resourceKey: "resource:quarterly",
-        resource: { kind: "resource", resourceId: "quarterly" },
-        filePath: source,
-        cleanup,
+        resource: { kind: "resource", resourceId: "quarterly", displayName: "quarterly.csv" },
+        body: (async function* () { yield content; })(),
+        size: content.byteLength,
+        mtimeMs: 0,
+        version: { size: content.byteLength },
       })),
+      read: vi.fn(),
     };
     const tool = createFileTool({
       getCwd: () => workspace,
@@ -57,7 +60,16 @@ describe("file tool document extraction", () => {
       { kind: "resource", resourceId: "quarterly" },
       expect.objectContaining({ source: "agent_tool", auditRead: true }),
     );
-    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(resourceIO.openRead).toHaveBeenCalledWith(
+      { kind: "resource", resourceId: "quarterly" },
+      expect.objectContaining({
+        end: content.byteLength - 1,
+        expectedVersion: { size: content.byteLength },
+      }),
+      expect.objectContaining({ source: "agent_tool", auditRead: true }),
+    );
+    expect(resourceIO.read).not.toHaveBeenCalled();
+    expect(resourceIO).not.toHaveProperty("materialize");
     expect(fs.readdirSync(workspace)).toEqual([]);
   });
 

@@ -21,6 +21,11 @@ export type ExtractResult = ExtractSuccess | ExtractFailure;
 export interface DocumentExtractionRequest {
   resource: ResourceRef;
   filenameHint?: string;
+  /**
+   * Cancellation is checked at ResourceIO boundaries. Native Anydoc conversion
+   * runs in an isolated child process; aborting kills and reaps that process
+   * before any Materialize lease is released.
+   */
   signal?: AbortSignal;
   context?: ResourceOperationContext;
 }

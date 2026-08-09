@@ -4,19 +4,19 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-19
 title: 交付共享 Document Extraction
-status: ready
+status: review
 planning_depth: deep
 planning_depth_reason: "多格式/native converter、50 MiB 预算、remote Materialize、安全授权与临时文件清理构成跨平台公共能力。"
 ready: true
 risk: critical
 blocked_by: [T-10]
 contract_ids: [AC-018, AC-019, AC-020, AC-022, AC-023, AC-026]
-owner: unassigned
-expected_changes: ["<Path>lib/document-extract/**</Path>", "<Path>lib/tools/file-tool.ts</Path>", "<Path>tests/document-extract-*.test.ts</Path>", "<Path>tests/fixtures/document-extract/**</Path>"]
-writable_paths: ["<Path>lib/document-extract/**</Path>", "<Path>lib/tools/file-tool.ts</Path>", "<Path>tests/document-extract-*.test.ts</Path>", "<Path>tests/fixtures/document-extract/**</Path>"]
-read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>plugins/office/**</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>package.json</Path>", "<Path>package-lock.json</Path>"]
-shared_paths: []
-shared_path_owners: []
+owner: Worker-T-19 / Lead
+expected_changes: ["<Path>lib/document-extract/**</Path>", "<Path>lib/tools/file-tool.ts</Path>", "<Path>core/engine.ts</Path>", "<Path>tests/document-extract-*.test.ts</Path>", "<Path>tests/engine-build-tools.test.ts</Path>", "<Path>tests/fixtures/document-extract/**</Path>"]
+writable_paths: ["<Path>lib/document-extract/**</Path>", "<Path>lib/tools/file-tool.ts</Path>", "<Path>core/engine.ts</Path>", "<Path>tests/document-extract-*.test.ts</Path>", "<Path>tests/engine-build-tools.test.ts</Path>", "<Path>tests/fixtures/document-extract/**</Path>"]
+read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/agent.ts</Path>", "<Path>plugins/office/**</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>package.json</Path>", "<Path>package-lock.json</Path>"]
+shared_paths: ["<Path>core/engine.ts</Path>"]
+shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File Tool injection until W3 integration; T-12 owns later production cutover work"]
 ---
 
 # Ticket T-19: 交付共享 Document Extraction
@@ -85,9 +85,10 @@ File Tool 或其他系统调用者提交已授权 ResourceRef。服务先检查�
 ## 7. 路径访问契约
 
 - **预计修改点：** extraction core、File Tool、fixtures/tests。
+- **D-T19-02（ticket；Lead 于 2026-08-10 批准）：** 仅增加 `<Path>core/engine.ts</Path>` 与 `<Path>tests/engine-build-tools.test.ts</Path>`，修复正常 Agent File Tool 无法获得 ResourceIO 的生产装配缺口。Engine 只可在 mapping `ct` 时以对象身份 `tool === toolAgent?._fileTool` 为内建 File Tool 注入当前 session sandbox `resourceIO`；不得基于名称匹配、不得调用/注入 broader engine-global ResourceIO、不得修改 `<Path>core/agent.ts</Path>`，并须有负向测试证明其他 custom、plugin、MCP 与 bridge tool context 不获得该对象。该窄共享路径在 W3 由 T-19 暂时 owner；T-12 后续 production cutover 仍为其 owner。
 - **可写范围：** 仅 frontmatter `writable_paths`；Resource Kernel/Office/Knowledge/package 只读。
-- **只读上下文：** Resource authority/materialize、Office adapters、Knowledge consumers、dependency manifests。
-- **共享路径：** 无；T-19 是 Document Extraction 核心唯一 owner。
+- **只读上下文：** Resource authority/materialize、Agent constructor、Office adapters、Knowledge consumers、dependency manifests。
+- **共享路径：** `<Path>core/engine.ts</Path>` 按 D-T19-02 串行共享；T-19 是 extraction core 和此窄 session injection owner。
 - **保留或不动：** Office HTML/JSON/PDF-range adapters、Knowledge index、package scripts、OCR。
 
 ## 8. 验证矩阵

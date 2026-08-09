@@ -1,11 +1,25 @@
 import fs from "fs";
 import path from "path";
-import { loadAnydoc, type AnydocApi } from "./anydoc-loader.ts";
+import {
+  loadAnydoc,
+  resolveAnydocModulePath,
+  type AnydocApi,
+} from "./anydoc-loader.ts";
+import {
+  AnydocProcessRunner,
+  HtmlProcessRunner,
+  isScannedPdfConversionError,
+  normalizeDerivedMarkdownLimit,
+  type DocumentConversionRunner,
+  type HtmlConversionRunner,
+} from "./anydoc-process-runner.ts";
 import { normalizeResourceRef } from "../resource-io/resource-refs.ts";
-import { htmlToMarkdownDocument } from "../tools/web-reader.ts";
+import { RESOURCE_READ_PROOF } from "../resource-io/types.ts";
 import type {
   MaterializeResult,
   ResourceDescriptor,
+  ResourceOpenReadOptions,
+  ResourceOpenReadResult,
   ResourceOperationContext,
   ResourceRef,
   ResourceStat,
@@ -16,6 +30,7 @@ import type {
 } from "./types.ts";
 
 export type { AnydocApi } from "./anydoc-loader.ts";
+export { MAX_DERIVED_MARKDOWN_BYTES } from "./anydoc-process-runner.ts";
 export type {
   DocumentExtractionRequest,
   ExtractFailure,
@@ -27,7 +42,6 @@ export type {
 export const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 export const EXTRACTOR_VERSION = "anydoc@0.1.2";
 
-const READ_CHUNK_BYTES = 1024 * 1024;
 const SUPPORTED_FORMAT_HINT = "docx, pdf, xlsx, pptx, odt, ods, odp, rtf, epub, csv, html";
 const SCANNED_PDF_MESSAGE = /scan(?:ned)?|image[- ]only|no text(?: layer)?|ocr/i;
 const HTML_EXTENSIONS = new Set(["html", "htm"]);
@@ -41,6 +55,11 @@ const RESOURCE_KINDS = new Set<ResourceRef["kind"]>([
 
 type ExtractionResourceIO = {
   stat(input: unknown, options?: ResourceOperationContext): Promise<ResourceStat>;
+  openRead?: (
+    input: unknown,
+    readOptions?: ResourceOpenReadOptions,
+    options?: ResourceOperationContext,
+  ) => Promise<ResourceOpenReadResult>;
   materialize?: (
     input: unknown,
     options?: ResourceOperationContext,
@@ -55,30 +74,45 @@ type ExtractionResourceIO = {
 export interface DocumentExtractionServiceOptions {
   resourceIO: ExtractionResourceIO;
   loadApi?: () => Promise<AnydocApi>;
+  conversionRunner?: DocumentConversionRunner;
+  htmlConversionRunner?: HtmlConversionRunner;
+  maxDerivedMarkdownBytes?: number;
   extractorVersion?: string;
 }
 
 export class DocumentExtractionService {
   private readonly resourceIO: ExtractionResourceIO;
   private readonly loadApi: () => Promise<AnydocApi>;
+  private readonly conversionRunner: DocumentConversionRunner | null;
+  private readonly htmlConversionRunner: HtmlConversionRunner;
+  private readonly maxDerivedMarkdownBytes: number;
   private readonly extractorVersion: string;
 
   constructor({
     resourceIO,
-    loadApi = loadAnydoc,
+    loadApi,
+    conversionRunner,
+    htmlConversionRunner,
+    maxDerivedMarkdownBytes,
     extractorVersion = EXTRACTOR_VERSION,
   }: DocumentExtractionServiceOptions) {
     if (!resourceIO || typeof resourceIO.stat !== "function") {
       throw new TypeError("DocumentExtractionService requires ResourceIO stat authority");
     }
-    if (
-      typeof resourceIO.withMaterialized !== "function"
-      && typeof resourceIO.materialize !== "function"
-    ) {
-      throw new TypeError("DocumentExtractionService requires ResourceIO materialization authority");
+    if (!hasDirectReadAuthority(resourceIO) && !hasMaterializationAuthority(resourceIO)) {
+      throw new TypeError("DocumentExtractionService requires ResourceIO openRead or materialization authority");
     }
     this.resourceIO = resourceIO;
-    this.loadApi = loadApi;
+    this.loadApi = loadApi ?? loadAnydoc;
+    this.maxDerivedMarkdownBytes = normalizeDerivedMarkdownLimit(maxDerivedMarkdownBytes);
+    this.conversionRunner = conversionRunner
+      ?? (loadApi ? null : new AnydocProcessRunner({
+        getModulePath: resolveAnydocModulePath,
+        maxOutputBytes: this.maxDerivedMarkdownBytes,
+      }));
+    this.htmlConversionRunner = htmlConversionRunner ?? new HtmlProcessRunner({
+      maxOutputBytes: this.maxDerivedMarkdownBytes,
+    });
     this.extractorVersion = extractorVersion;
   }
 
@@ -95,6 +129,7 @@ export class DocumentExtractionService {
     try {
       stat = await this.resourceIO.stat(resource, context);
     } catch (error) {
+      if (isAbortError(error)) throw error;
       throw resourceReadError(error);
     }
     throwIfAborted(signal);
@@ -115,20 +150,72 @@ export class DocumentExtractionService {
       return parseFailed();
     }
     throwIfAborted(signal);
-    let result: ExtractResult;
+    const filename = filenameFor(resource, stat.resource, request?.filenameHint);
     try {
-      result = await this.convertMaterialized(
+      const directResult = await this.convertDirectlyReadable(
         resource,
         context,
         api,
-        filenameFor(resource, stat.resource, request?.filenameHint),
+        stat,
+        filename,
+        signal,
+      );
+      if (directResult) return directResult;
+
+      if (!hasMaterializationAuthority(this.resourceIO)) return parseFailed();
+      return await this.convertMaterialized(
+        resource,
+        context,
+        api,
+        filename,
         signal,
       );
     } catch (error) {
       if (isAbortError(error)) throw error;
       throw resourceReadError(error);
     }
-    return result;
+  }
+
+  private async convertDirectlyReadable(
+    resource: ResourceRef,
+    context: ResourceOperationContext,
+    api: AnydocApi,
+    stat: ResourceStat,
+    filename: string | null,
+    signal: AbortSignal | undefined,
+  ): Promise<ExtractResult | null> {
+    const bytes = await this.readAuthorizedBytes(resource, context, stat, signal);
+    if (bytes === null) return null;
+    if (!Buffer.isBuffer(bytes)) return bytes;
+
+    const format = detectedFormat(api, bytes, filename);
+    if (format === "html" || (!format && isHtmlFilename(filename))) {
+      return this.convertHtml(bytes, signal);
+    }
+    if (format) return this.convertBytes(api, bytes, format, signal);
+    return unsupported();
+  }
+
+  private async readAuthorizedBytes(
+    resource: ResourceRef,
+    context: ResourceOperationContext,
+    stat: ResourceStat,
+    signal: AbortSignal | undefined,
+  ): Promise<Buffer | ExtractResult | null> {
+    if (typeof this.resourceIO.openRead === "function") {
+      try {
+        const opened = await this.resourceIO.openRead(
+          resource,
+          boundedOpenReadOptions(stat),
+          context,
+        );
+        return await readOpenedResource(opened, signal);
+      } catch (error) {
+        if (!isCapabilityDenied(error)) throw error;
+      }
+    }
+
+    return null;
   }
 
   private async convertMaterialized(
@@ -141,21 +228,18 @@ export class DocumentExtractionService {
     return this.withMaterialized(resource, context, async (materialized) => {
       throwIfAborted(signal);
       if (materialized.isDirectory) return unsupported();
-      const metadata = await fs.promises.stat(materialized.filePath);
-      if (!metadata.isFile()) return unsupported();
-      if (metadata.size > MAX_INPUT_BYTES) return tooLarge(metadata.size);
-
-      const pathFormat = normalizedFormat(api.formatFromPath?.(materialized.filePath));
-      if (pathFormat && typeof api.toMarkdown === "function") {
-        return this.convertPath(api, materialized.filePath, pathFormat, signal);
-      }
-
-      const bytes = await readMaterializedFile(materialized.filePath, signal);
+      const bytes = await readMaterializedBytes(materialized.filePath, signal);
       if (!Buffer.isBuffer(bytes)) return bytes;
-      const format = detectedFormat(api, bytes, filename);
-      if (format) return this.convertBytes(api, bytes, format, signal);
-      if (isHtmlFilename(filename)) return this.convertHtml(bytes, signal);
-      return unsupported();
+
+      const materializedFilename = filename || path.basename(materialized.filePath);
+      const format = detectedFormat(api, bytes, materializedFilename)
+        ?? normalizedFormat(api.formatFromPath?.(materialized.filePath));
+      if (format === "html" || (!format && isHtmlFilename(materializedFilename))) {
+        return this.convertHtml(bytes, signal);
+      }
+      if (!format) return unsupported();
+      if (!this.conversionRunner && !supportsPathConversion(api)) return parseFailed();
+      return this.convertPath(api, materialized.filePath, format, signal);
     });
   }
 
@@ -166,12 +250,17 @@ export class DocumentExtractionService {
     signal: AbortSignal | undefined,
   ): Promise<ExtractResult> {
     try {
-      const markdown = await api.toMarkdown!(filePath);
       throwIfAborted(signal);
-      return success(markdown, format, this.extractorVersion);
+      const markdown = this.conversionRunner
+        ? await this.conversionRunner.convertMaterializedPath(filePath, signal)
+        : await api.toMarkdown!(filePath);
+      throwIfAborted(signal);
+      return success(markdown, format, this.extractorVersion, this.maxDerivedMarkdownBytes);
     } catch (error) {
       if (isAbortError(error)) throw error;
-      return format === "pdf" && SCANNED_PDF_MESSAGE.test(errorMessage(error))
+      return format === "pdf" && (
+        isScannedPdfConversionError(error) || SCANNED_PDF_MESSAGE.test(errorMessage(error))
+      )
         ? scannedPdf()
         : parseFailed();
     }
@@ -184,12 +273,17 @@ export class DocumentExtractionService {
     signal: AbortSignal | undefined,
   ): Promise<ExtractResult> {
     try {
-      const markdown = await api.toMarkdownBytes(bytes, format, { signal });
       throwIfAborted(signal);
-      return success(markdown, format, this.extractorVersion);
+      const markdown = this.conversionRunner
+        ? await this.conversionRunner.convertBytes(bytes, format, signal)
+        : await api.toMarkdownBytes(bytes, format);
+      throwIfAborted(signal);
+      return success(markdown, format, this.extractorVersion, this.maxDerivedMarkdownBytes);
     } catch (error) {
       if (isAbortError(error)) throw error;
-      return format === "pdf" && SCANNED_PDF_MESSAGE.test(errorMessage(error))
+      return format === "pdf" && (
+        isScannedPdfConversionError(error) || SCANNED_PDF_MESSAGE.test(errorMessage(error))
+      )
         ? scannedPdf()
         : parseFailed();
     }
@@ -200,9 +294,10 @@ export class DocumentExtractionService {
     signal: AbortSignal | undefined,
   ): Promise<ExtractResult> {
     try {
-      const document = await htmlToMarkdownDocument(bytes.toString("utf8"), "https://document.invalid/");
       throwIfAborted(signal);
-      return success(document.content, "html", this.extractorVersion);
+      const markdown = await this.htmlConversionRunner.convertHtml(bytes, signal);
+      throwIfAborted(signal);
+      return success(markdown, "html", this.extractorVersion, this.maxDerivedMarkdownBytes);
     } catch (error) {
       if (isAbortError(error)) throw error;
       return parseFailed();
@@ -250,33 +345,81 @@ function extractionResource(input: unknown): ResourceRef {
   return normalizeResourceRef(input);
 }
 
+function hasDirectReadAuthority(resourceIO: ExtractionResourceIO): boolean {
+  return typeof resourceIO.openRead === "function";
+}
+
+function hasMaterializationAuthority(resourceIO: ExtractionResourceIO): boolean {
+  return typeof resourceIO.withMaterialized === "function" || typeof resourceIO.materialize === "function";
+}
+
+function supportsPathConversion(api: AnydocApi): api is AnydocApi & Required<Pick<AnydocApi, "toMarkdown">> {
+  return typeof api.toMarkdown === "function";
+}
+
 function sizeFromStat(stat: ResourceStat): number | null {
   const size = stat.version?.size;
   return typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : null;
 }
 
-async function readMaterializedFile(
+function boundedOpenReadOptions(stat: ResourceStat): ResourceOpenReadOptions {
+  const size = sizeFromStat(stat);
+  return {
+    end: size === null ? MAX_INPUT_BYTES : Math.max(size - 1, 0),
+    ...(stat.version ? { expectedVersion: stat.version } : {}),
+    ...(stat[RESOURCE_READ_PROOF] ? { [RESOURCE_READ_PROOF]: stat[RESOURCE_READ_PROOF] } : {}),
+  };
+}
+
+async function readOpenedResource(
+  opened: ResourceOpenReadResult,
+  signal: AbortSignal | undefined,
+): Promise<Buffer | ExtractResult> {
+  const chunks: Buffer[] = [];
+  let length = 0;
+  const knownOversized = opened.size > MAX_INPUT_BYTES;
+  for await (const chunk of opened.body) {
+    throwIfAborted(signal);
+    if (knownOversized) return tooLarge(opened.size);
+    const remaining = MAX_INPUT_BYTES - length;
+    if (chunk.byteLength > remaining) return tooLarge(length + chunk.byteLength);
+    const bytes = Buffer.from(chunk);
+    length += bytes.byteLength;
+    chunks.push(bytes);
+  }
+  throwIfAborted(signal);
+  if (knownOversized) return tooLarge(opened.size);
+  return Buffer.concat(chunks, length);
+}
+
+async function readMaterializedBytes(
   filePath: string,
   signal: AbortSignal | undefined,
 ): Promise<Buffer | ExtractResult> {
-  const handle = await fs.promises.open(filePath, "r");
-  const chunks: Buffer[] = [];
-  let length = 0;
+  const file = await fs.promises.open(filePath, "r");
   try {
+    const metadata = await file.stat();
+    if (!metadata.isFile()) return unsupported();
+    if (metadata.size > MAX_INPUT_BYTES) return tooLarge(metadata.size);
+
+    const chunks: Buffer[] = [];
+    let length = 0;
     while (length <= MAX_INPUT_BYTES) {
       throwIfAborted(signal);
-      const remaining = MAX_INPUT_BYTES + 1 - length;
-      const buffer = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, remaining));
-      const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, null);
+      const bytes = Buffer.allocUnsafe(Math.min(
+        64 * 1024,
+        MAX_INPUT_BYTES + 1 - length,
+      ));
+      const { bytesRead } = await file.read(bytes, 0, bytes.byteLength, length);
       if (bytesRead === 0) break;
       length += bytesRead;
       if (length > MAX_INPUT_BYTES) return tooLarge(length);
-      chunks.push(buffer.subarray(0, bytesRead));
+      chunks.push(bytes.subarray(0, bytesRead));
     }
     throwIfAborted(signal);
     return Buffer.concat(chunks, length);
   } finally {
-    await handle.close();
+    await file.close();
   }
 }
 
@@ -323,8 +466,14 @@ function filenameFor(
   return null;
 }
 
-function success(markdown: unknown, format: string, extractorVersion: string): ExtractResult {
+function success(
+  markdown: unknown,
+  format: string,
+  extractorVersion: string,
+  maxDerivedMarkdownBytes: number,
+): ExtractResult {
   if (typeof markdown !== "string") return parseFailed();
+  if (Buffer.byteLength(markdown, "utf8") > maxDerivedMarkdownBytes) return parseFailed();
   const normalized = normalizeMarkdown(markdown);
   return {
     ok: true,
@@ -373,14 +522,19 @@ function parseFailed(): ExtractResult {
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (!signal?.aborted) return;
-  if (signal.reason instanceof Error) throw signal.reason;
-  const error = new Error("Document extraction cancelled");
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === "AbortError") throw reason;
+  const error = new Error(reason instanceof Error && reason.message ? reason.message : "Document extraction cancelled");
   error.name = "AbortError";
   throw error;
 }
 
 function isAbortError(error: unknown): boolean {
   return (error as { name?: unknown })?.name === "AbortError";
+}
+
+function isCapabilityDenied(error: unknown): boolean {
+  return (error as { code?: unknown })?.code === "capability_denied";
 }
 
 function resourceReadError(error: unknown): Error {

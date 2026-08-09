@@ -140,7 +140,7 @@ export function createFileTool({
   return {
     name: "file",
     label: "File",
-    description: "File operations: stat to inspect metadata without reading content, copy to materialize a file into the workspace.",
+    description: "File operations: stat metadata, copy files into the workspace, or extract authorized documents into Markdown.",
     parameters: Type.Object({
       action: Type.Union([
         Type.Literal("stat"),
