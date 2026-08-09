@@ -240,7 +240,7 @@ DELIVERY ticket=T-06 state=integrated workspace=specdev-worktree/T-06 checkpoint
 DELIVERY ticket=T-07 state=integrated workspace=specdev-worktree/T-07 checkpoint=3c4c9fac68c99ed5bf6a771f84ddc0da6f7a9a44 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>
 ```
 
-规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-07 已完成 Lead 独立验收，当前集成 checkpoint 为 `3c4c9fac68c99ed5bf6a771f84ddc0da6f7a9a44`；T-02/T-03/T-04/T-05/T-06 worktree 与候选分支已非强制清理，T-07 将按同一协议清理，T-08 已发布为 ready。
+规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-07 已完成 Lead 独立验收，当前集成 checkpoint 为 `3c4c9fac68c99ed5bf6a771f84ddc0da6f7a9a44`；T-02/T-03/T-04/T-05/T-06/T-07 worktree 与候选分支已非强制清理，T-08 已发布为 ready。
 
 ### Pending Decisions and Blockers
 
