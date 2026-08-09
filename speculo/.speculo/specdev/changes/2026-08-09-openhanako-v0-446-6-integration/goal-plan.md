@@ -2,7 +2,7 @@
 schema_version: 3
 artifact: goal-plan
 change: 2026-08-09-openhanako-v0-446-6-integration
-status: ready
+status: in_progress
 modes: [coordination, high-assurance, reference-conformance, release-coordination]
 ready_for_execution: true
 ---
@@ -231,8 +231,8 @@ Lead 接收每个候选时必须读取 Dispatch、Ticket、Evidence、实际 dif
 ### Current Status
 
 ```text
-WAVE_STATUS wave=G0 ready=T-01 active=none done=none blocked=none
-GATE_STATUS gate=G0 state=open evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-01.md</Path> risks=none
+WAVE_STATUS wave=G0 ready=T-02 active=none done=T-01 blocked=none
+GATE_STATUS gate=G0 state=closed evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-01.md</Path> checkpoint=5c281aae27eed87a0954c93b553ea7b2b255eef4 risks=50-semantic-overlap-paths-for-W1
 ```
 
 规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；实施尚未启动，所有 Ticket Evidence 仍待创建。

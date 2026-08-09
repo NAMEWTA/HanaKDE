@@ -2,7 +2,7 @@
 schema_version: 3
 artifact: tickets-map
 change: 2026-08-09-openhanako-v0-446-6-integration
-status: ready
+status: in_progress
 ---
 
 # Tickets Map: HanaKDE 跟随 openhanako v0.446.6 并收敛系统基础设施
@@ -30,7 +30,7 @@ status: ready
 
 | ID | Ticket | 可观察产出 | Blocked By | Depth | Risk | Ready | Owner | Contract IDs | Wave/Gate | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T-01 | `<Path>{roots.state}/specdev/changes/{change}/ticket/01-freeze-baseline-and-authorization-gates.md</Path>` | 实际 HEAD/target/merge-base/overlap 与 Git 授权边界冻结 | — | deep | high | yes | Worker-T-01 / Lead验收 | AC-001 | G0 | ready |
+| T-01 | `<Path>{roots.state}/specdev/changes/{change}/ticket/01-freeze-baseline-and-authorization-gates.md</Path>` | 实际 HEAD/target/merge-base/overlap 与 Git 授权边界冻结 | — | deep | high | yes | Worker-T-01 / Lead验收 | AC-001 | G0 | done |
 | T-02 | `<Path>{roots.state}/specdev/changes/{change}/ticket/02-integrate-v0-421-24.md</Path>` | `v0.421.24` 可审计 checkpoint | T-01 | deep | high | yes | Worker-T-02 / Lead集成 | AC-001—AC-003 | W1.1/G1 | ready |
 | T-03 | `<Path>{roots.state}/specdev/changes/{change}/ticket/03-integrate-v0-433-1.md</Path>` | `v0.433.1` 可审计 checkpoint | T-02 | deep | high | yes | Worker-T-03 / Lead集成 | AC-001—AC-003 | W1.2/G1 | ready |
 | T-04 | `<Path>{roots.state}/specdev/changes/{change}/ticket/04-integrate-v0-441-3.md</Path>` | `v0.441.3` 可审计 checkpoint | T-03 | deep | high | yes | Worker-T-04 / Lead集成 | AC-001—AC-003 | W1.3/G1 | ready |
