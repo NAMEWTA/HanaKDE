@@ -12,8 +12,8 @@ risk: critical
 blocked_by: [T-10, T-11, T-19]
 contract_ids: [AC-009, AC-010, AC-011, AC-012, AC-013]
 owner: Worker-T-12
-expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
-writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
+expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>", "<Path>tests/resource-io-route.test.ts</Path>"]
+writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>", "<Path>tests/resource-io-route.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
 shared_paths: ["<Path>core/engine.ts</Path>"]
 shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File Tool injection until W3 integration; T-12 owns later production cutover work"]
@@ -97,6 +97,21 @@ shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File To
 - **并行 / 所有权审计：** T-13 仅拥有 `<Path>lib/file-history/**</Path>`、`<Path>server/routes/file-history.ts</Path>` 和 file-history tests；T-14 仅拥有 Knowledge core/lib/route/tests；均与新增 T-12 路径不交叉。T-11 曾拥有 `<Path>desktop/main.cjs</Path>` 的 isolated proof，但已 integrated/removed，且 Evidence 明确将 production cutover 留给 T-12。
 - **不扩大内容：** 不修改 `<Path>desktop/workspace-watch-registry.cjs</Path>`、`<Path>desktop/src/modules/platform.js</Path>` 或其测试；这些路径不再从 production main/preload reachable。不得保留 disabled fallback、compat flag 或另一条 root watch IPC。
 - **反向验证：** 在 source/behavior tests 中证明 main 和 preload 不再注册、暴露或可调用 `watch-workspace`，renderer 不发起 `/api/resource-io/subscribe` physical watch lease，且 Engine stop-old/prove-release/start-new 的 overlap count 始终为 0。
+
+### D-T12-03: renderer catch-up safe projection
+
+- **等级 / 触发事实：** ticket；`<Path>server/routes/resource-io.ts</Path>` 将 `isLocalLoopbackRequest()` 的 `/resource-io/events` 结果原样返回。renderer reconnect 会调用该 HTTP route；Engine 的 main bridge 同时生成带绝对 `local-file.path`/`filePath` 的内部事件。因此 renderer 可以在 client-side validation/requery 之前收到 raw root，违反 AC-026 与本 Ticket 的 event bridge 隐私合同。
+- **批准与范围：** Lead 于 2026-08-10 批准把 `<Path>server/routes/resource-io.ts</Path>`、`<Path>tests/resource-io-route.test.ts</Path>` 和现有 renderer catch-up tests 加入 T-12。T-10 已完成且没有并发 owner；此授权只覆盖 renderer-facing catch-up projection，不改变 ResourceIO mutation、route authority、root identity 或 LAN lease contract。
+- **固定合同：** HTTP catch-up 对 renderer 不返回内部 `ResourceRef`、`resourceKey`、absolute path、raw root 或 scope secret。只要内部页为 stale 或含一个以上增量事实，响应必须是 `{ stale: true, latestSequence, events: [], resync: "resource-stat-required" }`；空的 current page 仍可为 `{ stale: false, latestSequence, events: [] }`。renderer 仅通过现有 authoritative requery 恢复；不得按 local/remote principal 保留兼容分叉，也不得依赖 client-only filter。
+- **并行 / 所有权审计：** T-13 不拥有此 route/test；T-14 只拥有 Knowledge route/core tests；T-10 的 Resource Kernel ownership 已完成。T-12 是唯一本轮 renderer/event bridge owner。
+- **反向验证：** local-loopback 与 remote route tests 均将 internal local-file event 投影为无路径 resync；renderer catch-up 只接收 safe cursor projection，`JSON.stringify` 不含 fixture absolute root；empty current page 不触发无谓 requery；不存在 local fallback/allowlist 分支。
+
+### W4 correction record: round 1/3
+
+- **Checkpoint / workspace：** immutable W4 base `e758c7a12d31e8385b4993c406ae5acc04b18635`; `<Path>specdev-worktree/T-12</Path>`; current candidate remains uncommitted and must not be merged.
+- **Failure standard：** canonical-main descendants must never fall back to `ResourceWatchRegistry` while a main authority is claimed, including DEGRADED/RECONCILING/FAILED/start-failure; root A-to-B switch must stop/prove/repartition every active subscription and retain receipt with overlap 0; cross-agent session switching must use the same lifecycle hook; Engine must provide T-14's real `{ subscribe, requestRepair }` canonical shared-baseline adapter; D-T12-03 must keep every renderer-facing catch-up response path-free.
+- **Preserve green behavior：** explicit unavailable `desk.home_folder` remains fail-closed across restart; `last_cwd` never becomes main; renderer lease cleanup and resource subscriptions remain idempotent; mount and disjoint preview retain physical registry behavior; legacy absolute-root IPC remains removed; stop-old/prove-release/start-new ordering remains mandatory.
+- **Required proof before review：** focused lifecycle/resource/route/renderer tests cover the listed failure states, A/B repartition, session switch, actual main shared-port wiring, and safe catch-up projection; path and fallback scans plus Evidence must name commands and results.
 
 ## 8. 验证矩阵
 

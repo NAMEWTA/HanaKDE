@@ -89,6 +89,13 @@ shared_path_owners: []
 - **共享路径：** 无；本 Ticket 是 Knowledge event/repair 唯一 owner。
 - **保留或不动：** History store/policy、Office plugin、UI state 和 mount semantics。
 
+### W4 correction record: round 1/3
+
+- **Checkpoint / workspace：** immutable W4 base `e758c7a12d31e8385b4993c406ae5acc04b18635`; `<Path>specdev-worktree/T-14</Path>`; current candidate remains uncommitted and must not be merged.
+- **Failure standard：** `main` must consume only T-12's real canonical `{ subscribe, requestRepair }` shared-baseline port and must not retain a private watcher or call a local scan; mounted sources retain only their canonical registry lease and use bounded mounted repair; empty differences/rereads durably advance cursor; a failed shared baseline stays degraded/replay-required, and a subsequent explicit retry must request a fresh repair rather than hang or become incrementally HEALTHY.
+- **Preserve green behavior：** event debounce, multi-path reread, in-flight cursor handling, duplicate/stale suppression, burst repair, replay ordering, caller cancellation, generation atomicity, and batch/yield limits remain intact; History and Knowledge databases remain independent.
+- **Required proof before review：** focused event/runtime/shared-repair tests prove main/mount partition, lease release, empty-cursor restart durability, failed-apply retry liveness, no private full main scan, and a cross-contract production adapter receipt from T-12; Evidence must name commands and results.
+
 ## 8. 验证矩阵
 
 | 行为或风险 | 验证接缝 | 命令或步骤 | 预期结果 | Evidence |
