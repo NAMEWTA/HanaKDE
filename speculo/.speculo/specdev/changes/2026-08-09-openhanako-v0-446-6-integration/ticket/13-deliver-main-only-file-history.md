@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-13
 title: 交付仅覆盖 main 的 File History
-status: in_progress
+status: done
 planning_depth: deep
 planning_depth_reason: "新 SQLite 数据模型、retention/quota、rename/delete 版本语义和安全 scope 属于共享持久化与数据完整性能力。"
 ready: true
@@ -109,9 +109,9 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-005`：挂载功能保持但不捕获、不建 History store。
-- [ ] `AC-006`：main create/modify/delete/rename/origin/timeline/diff/dedupe 全部正确。
-- [ ] `AC-007`：60 秒、5 MiB、30 天、500 MiB 和 noise policy 可判定通过。
-- [ ] `AC-025`：唯一新 store baseline、FAILED/retry 和无 migration 合同通过。
-- [ ] `AC-026`：route 绑定授权 main 且不泄漏 raw root。
-- [ ] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-13.md</Path>`。
+- [x] `AC-005`：挂载功能保持但不捕获、不建 History store。
+- [x] `AC-006`：main create/modify/delete/rename/origin/timeline/diff/dedupe 全部正确。
+- [x] `AC-007`：60 秒、5 MiB、30 天、500 MiB 和 noise policy 可判定通过。
+- [x] `AC-025`：唯一新 store baseline、FAILED/retry 和无 migration 合同通过。
+- [x] `AC-026`：route 绑定授权 main 且不泄漏 raw root。
+- [x] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-13.md</Path>`。

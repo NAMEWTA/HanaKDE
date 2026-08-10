@@ -41,10 +41,6 @@
       "reason": "Renderer/service-worker code is not an Electron host persistence owner."
     },
     {
-      "id": "dormant-file-history-input",
-      "reason": "T-06 retains the upstream File History implementation as an unconnected input; it is not a production persistence owner until the later single-owner cutover."
-    },
-    {
       "id": "source-tests",
       "reason": "Test fixtures and test-only mutations are excluded from production ownership."
     }
@@ -949,6 +945,45 @@
       "bootstrapSafety": null,
       "preCoordinatorReadProjection": null,
       "identityContract": "leaseId is durable only within its principal, grant, and expiry scope.",
+      "exemption": null
+    },
+    {
+      "id": "file-history-sqlite",
+      "ownerModule": "lib/file-history/history-store.ts",
+      "pathPattern": "file-history/{historyStoreKey}/history.sqlite",
+      "pathPatterns": [
+        "file-history/{historyStoreKey}/history.sqlite",
+        "file-history/{historyStoreKey}/history.sqlite-wal",
+        "file-history/{historyStoreKey}/history.sqlite-shm"
+      ],
+      "pathExclusions": [],
+      "pathKind": "file",
+      "format": "sqlite",
+      "schemaSource": {
+        "kind": "sqlite-runtime",
+        "module": "lib/file-history/history-store.ts",
+        "contract": "FileHistoryStore main-only baseline DDL, schema metadata, and runtime introspection"
+      },
+      "schemaContract": {
+        "kind": "runtime-source",
+        "source": "lib/file-history/history-store.ts",
+        "compatibility": "The named runtime reader is canonical; this inventory does not imply stricter validation than runtime currently performs."
+      },
+      "openEntry": [
+        "new FileHistoryService",
+        "FileHistoryService.activateMain"
+      ],
+      "migrationEntry": [],
+      "protocolModules": [],
+      "firstPossibleOpenPhase": "runtime_ready",
+      "firstPossibleWritePhase": "runtime_ready",
+      "epochPolicy": "epoch-managed",
+      "checkpointPolicy": "The private main-only history database is durable user history and remains an independently owned SQLite store until a coordinated checkpoint policy explicitly includes it.",
+      "restorePolicy": "Never accept a pre-baseline database; FileHistoryStore validates the sole main-only schema before opening, and restore must use its owning flow.",
+      "affectedByEpochMigration": false,
+      "bootstrapSafety": null,
+      "preCoordinatorReadProjection": null,
+      "identityContract": "historyStoreKey is opaque and root-derived; its SHA-256 directory is a private locator under HANA_HOME and the physical destination must remain outside main Workspace.",
       "exemption": null
     },
     {
@@ -3008,6 +3043,15 @@
       "excerpt": "fs.mkdirSync(this.channelsDir, { recursive: true })",
       "reason": "Creates the channel root.",
       "storeId": "channels",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "core/engine.ts",
+      "kind": "persistent-store-constructor",
+      "excerpt": "new FileHistoryService({ privateStoreRoot: this.hanakoHome })",
+      "reason": "Constructs the sole production FileHistoryService assembly owner.",
+      "storeId": "file-history-sqlite",
       "exemptionId": null,
       "ordinal": 0
     },
@@ -5970,6 +6014,33 @@
       "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
       "storeId": null,
       "exemptionId": "generic-zip-extractor",
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "lib/file-history/file-history-service.ts",
+      "kind": "persistent-store-constructor",
+      "excerpt": "new FileHistoryStore(input)",
+      "reason": "Constructs the canonical History SQLite store after its private path is verified.",
+      "storeId": "file-history-sqlite",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "lib/file-history/history-store.ts",
+      "kind": "database-open",
+      "excerpt": "new Database(dbPath)",
+      "reason": "Creates the private History directory and opens the canonical main-only SQLite database.",
+      "storeId": "file-history-sqlite",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "lib/file-history/history-store.ts",
+      "kind": "mkdir",
+      "excerpt": "fs.mkdirSync(path.dirname(dbPath), { recursive: true })",
+      "reason": "Creates the private History directory and opens the canonical main-only SQLite database.",
+      "storeId": "file-history-sqlite",
+      "exemptionId": null,
       "ordinal": 0
     },
     {

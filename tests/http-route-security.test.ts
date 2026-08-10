@@ -299,6 +299,33 @@ describe("HTTP route security policy", () => {
       .toMatchObject({ allowed: false, error: "insufficient_scope", requiredScope: "files.write" });
   });
 
+  it("opens only File History's three read endpoints to files.read principals", async () => {
+    const { authorizeHttpRoute, classifyHttpRoute } = await import("../server/http/route-security.ts");
+    const reader = devicePrincipal(["files.read"]);
+    const chatOnly = devicePrincipal(["chat"]);
+
+    for (const path of [
+      "/api/file-history/files",
+      "/api/file-history/versions?relPath=notes%2Fa.md",
+      "/api/file-history/diff?snapshotId=1",
+    ]) {
+      expect(classifyHttpRoute({ method: "GET", path })).toEqual({ kind: "scope", scope: "files.read" });
+      expect(authorizeHttpRoute({ method: "GET", path, principal: reader })).toMatchObject({ allowed: true });
+      expect(authorizeHttpRoute({ method: "GET", path, principal: chatOnly }))
+        .toMatchObject({ allowed: false, error: "insufficient_scope", requiredScope: "files.read" });
+    }
+
+    for (const [method, path] of [
+      ["HEAD", "/api/file-history/files"],
+      ["POST", "/api/file-history/restore"],
+      ["GET", "/api/file-history/snapshot"],
+    ]) {
+      expect(classifyHttpRoute({ method, path })).toEqual({ kind: "local_only" });
+      expect(authorizeHttpRoute({ method, path, principal: reader }))
+        .toMatchObject({ allowed: false, error: "local_only_route" });
+    }
+  });
+
   it("allows remote plugin UI metadata, settings tabs, and iframe ticket issuance while keeping plugin route apps owner-gated", async () => {
     const { authorizeHttpRoute } = await import("../server/http/route-security.ts");
     const principal = devicePrincipal(["chat", "settings.read"]);

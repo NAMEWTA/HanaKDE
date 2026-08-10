@@ -41,9 +41,9 @@ status: in_progress
 | T-09 | `<Path>{roots.state}/specdev/changes/{change}/ticket/09-integrate-v0-446-6.md</Path>` | 冻结 target ancestry 与完整上游功能基线 | T-08 | deep | critical | yes | Worker-T-09 / Lead集成 | AC-001—AC-003 | W1.8/G1 | done |
 | T-10 | `<Path>{roots.state}/specdev/changes/{change}/ticket/10-converge-resource-kernel.md</Path>` | 唯一 Resource Kernel、Materialize/Transfer/Root/Event contracts | T-09 | deep | critical | yes | Worker-T-10 / Lead Gate | AC-011, AC-014, AC-020, AC-023, AC-026 | G2 | done |
 | T-11 | `<Path>{roots.state}/specdev/changes/{change}/ticket/11-establish-main-workspace-infrastructure.md</Path>` | 唯一 main lifecycle、watcher、baseline 与四态 health | T-10 | deep | critical | yes | Worker-T-18 / Lead集成 | AC-004, AC-005, AC-009, AC-012—AC-014, AC-025, AC-026 | W3 | done |
-| T-12 | `<Path>{roots.state}/specdev/changes/{change}/ticket/12-perform-single-owner-production-cutover.md</Path>` | stop-then-start production cutover，overlap 永远为 0 | T-10, T-11, T-19 | deep | critical | yes | Worker-T-12 / Lead集成 | AC-009—AC-013 | W4 | in_progress |
-| T-13 | `<Path>{roots.state}/specdev/changes/{change}/ticket/13-deliver-main-only-file-history.md</Path>` | main-only capture/deleted/timeline/diff/retention/quota | T-10, T-11 | deep | critical | yes | Worker-T-13 / Lead集成 | AC-005—AC-007, AC-025, AC-026 | W4 | in_progress |
-| T-14 | `<Path>{roots.state}/specdev/changes/{change}/ticket/14-converge-knowledge-events-and-repair.md</Path>` | Knowledge 只消费统一事件/shared baseline differences，按 scoped repair 收敛 | T-10, T-11 | deep | critical | yes | Worker-T-14 / Lead集成 | AC-003, AC-011—AC-013, AC-017 | W4 | in_progress |
+| T-12 | `<Path>{roots.state}/specdev/changes/{change}/ticket/12-perform-single-owner-production-cutover.md</Path>` | stop-then-start production cutover，overlap 永远为 0 | T-10, T-11, T-19 | deep | critical | yes | Worker-T-12 / Lead集成 | AC-009—AC-013 | W4 | done |
+| T-13 | `<Path>{roots.state}/specdev/changes/{change}/ticket/13-deliver-main-only-file-history.md</Path>` | main-only capture/deleted/timeline/diff/retention/quota | T-10, T-11 | deep | critical | yes | Worker-T-13 / Lead集成 | AC-005—AC-007, AC-025, AC-026 | W4 | done |
+| T-14 | `<Path>{roots.state}/specdev/changes/{change}/ticket/14-converge-knowledge-events-and-repair.md</Path>` | Knowledge 只消费统一事件/shared baseline differences，按 scoped repair 收敛 | T-10, T-11 | deep | critical | yes | Worker-T-14 / Lead集成 | AC-003, AC-011—AC-013, AC-017 | W4 | done |
 | T-15 | `<Path>{roots.state}/specdev/changes/{change}/ticket/15-deliver-secure-restore-convergence.md</Path>` | expected-version/TOCTOU 安全 restore 与六读面一致 | T-12, T-13, T-14 | deep | critical | yes | Worker-T-15 / Lead Gate | AC-015—AC-017, AC-026 | G5 | ready |
 | T-16 | `<Path>{roots.state}/specdev/changes/{change}/ticket/16-deliver-workspace-history-ui.md</Path>` | Workbench History/deleted/diff/restore/health 用户流程 | T-13, T-15 | deep | high | yes | Worker-T-16 / Lead E2E | AC-006, AC-007, AC-013, AC-015—AC-017, AC-024 | W6 | ready |
 | T-17 | `<Path>{roots.state}/specdev/changes/{change}/ticket/17-deliver-agent-file-change-projection.md</Path>` | 对话/操作过滤的 Agent 影响与 main 共享 History | T-15, T-16 | deep | high | yes | Worker-T-17 / Lead E2E | AC-008, AC-015—AC-017, AC-024 | W7 | ready |
@@ -130,7 +130,7 @@ T-01 [G0 fixed point / authorization]
 - 最大并发来自 `<Path>{roots.state}/specdev/config.json</Path>`，当前为 3。
 - 本次执行使用一个 persistent native Lead；所有代码 Ticket 使用独立 worktree，branch 为 `speculo/2026-08-09-openhanako-v0-446-6-integration/T-NN`，locator 为 `specdev-worktree/T-NN`。初始 planning checkpoint 固定为 `5f819b1233d6acdc0893363d4647bf1d53af8355`，每个并行 Wave 的全部 Ticket 必须共享 Lead 发布的同一个 immutable Gate SHA。
 - 根 manifests、lockfile 和共享 CI 在 G1 后的唯一语义收敛 owner 是 T-21；T-02—T-09 只能随冻结上游 checkpoint 吸收原始 release 增量。其他 G1 后 Ticket 对这些路径只读。
-- production assembly/cutover 的唯一 owner 是 T-12；Resource Kernel 是 T-10；Workspace infrastructure 是 T-11；History domain 是 T-13；Knowledge event/repair 是 T-14；Extraction core 是 T-19。
+- production assembly/cutover 的唯一 owner 是 T-12；D-T12-06 额外授予 T-12 对已激活 `file-history-sqlite` 的 registry/scanner/receipt 最小修订，且不触及 `<Path>lib/file-history/**</Path>`；Resource Kernel 是 T-10；Workspace infrastructure 是 T-11；History domain 是 T-13；Knowledge event/repair 是 T-14；Extraction core 是 T-19。
 - 用户已授权 Lead 无需中间确认即可执行 Ticket local changes/commit、已验收候选到本地 integration line 的 merge，以及 integrated clean worktree/branch 的非强制清理；push、PR、deploy、release、archive、远程写入与真实用户数据操作仍未授权。
 
 | Ticket A | Ticket B | Writable 交集 | 真实依赖 | 处理 |
@@ -156,7 +156,7 @@ T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能�
 | W1 Staged Upstream | T-02—T-09（严格串行） | 前一 checkpoint 绿色且当前 Git 动作获批 | 冻结 target ancestor、上游功能/HanaKDE contract union 绿色 |
 | G2 Resource Contract | T-10 | T-09 完成 | Resource/Root/Event/Materialize/Transfer 唯一契约稳定 |
 | W3 Shared Foundations | T-11, T-18, T-19 | T-10 完成且三者使用同一 Gate SHA | main infrastructure、@ lifecycle、Extraction 在隔离接缝绿色 |
-| W4 Single-Owner Consumers | T-12, T-13, T-14 | T-11 完成 | production overlap=0；History/Knowledge 分离且共享事实 |
+| W4 Single-Owner Consumers | T-12, T-13, T-14 | T-11 完成 | 2026-08-10 closed：14 files / 220 tests、typecheck、authorized-path lint、persistence census `63 stores, 762 sites` 与 two-axis review 通过；发布一次本地 W4 merge SHA |
 | G5 Restore Convergence | T-15 | T-12/T-13/T-14 完成 | secure restore 和六读面一致 |
 | W6 Product/Office | T-16, T-20 | T-15、各自前置完成 | Workspace UI 与 Office Knowledge E2E 绿色 |
 | W7 Agent Projection | T-17 | T-16 完成 | Agent/Workspace semantics 分离且共享 primitives |

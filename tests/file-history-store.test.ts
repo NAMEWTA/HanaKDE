@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { createRequire } from "module";
-import { FileHistoryStore } from "../lib/file-history/history-store.ts";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createRequire } from "node:module";
+import {
+  FILE_HISTORY_SCHEMA_ID,
+  FileHistoryStore,
+} from "../lib/file-history/history-store.ts";
+import { MAX_SNAPSHOT_BYTES } from "../lib/file-history/text-file-policy.ts";
 
 const tmpDirs: string[] = [];
+
 function makeStore(overrides: Record<string, unknown> = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-private-"));
   tmpDirs.push(dir);
   return new FileHistoryStore({ dbPath: path.join(dir, "history.sqlite"), ...overrides });
 }
@@ -17,109 +22,141 @@ afterEach(() => {
 });
 
 describe("FileHistoryStore", () => {
-  it("inserts a snapshot and reads it back losslessly", () => {
+  it("creates only the new main-history schema and records opaque versions", () => {
     const store = makeStore();
-    const res = store.recordSnapshot({
-      relPath: "notes/a.md", content: Buffer.from("hello 世界"), origin: "event",
-      opContext: "agent_tool", capturedAt: 1000,
+    const snapshot = store.recordSnapshot({
+      relPath: "notes/a.md",
+      content: Buffer.from("hello"),
+      origin: "event",
+      versionToken: "v-1",
+      capturedAt: 1_000,
     });
-    expect(res.status).toBe("inserted");
-    const got = store.getSnapshotContent(res.snapshotId);
-    expect(got.content.toString("utf-8")).toBe("hello 世界");
-    expect(got.relPath).toBe("notes/a.md");
+
+    expect(store.schemaId()).toBe(FILE_HISTORY_SCHEMA_ID);
+    expect(store.getSnapshotContent(snapshot.snapshotId).content.toString()).toBe("hello");
+    expect(store.listVersions("notes/a.md")[0]).toMatchObject({ versionToken: "v-1" });
     store.close();
   });
 
-  it("dedupes identical content by hash", () => {
-    const store = makeStore();
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("x"), origin: "event", capturedAt: 1000 });
-    const res = store.recordSnapshot({ relPath: "a.md", content: Buffer.from("x"), origin: "watcher", capturedAt: 999_000 });
-    expect(res.status).toBe("unchanged");
-    expect(store.listVersions("a.md")).toHaveLength(1);
-    store.close();
-  });
-
-  it("merges snapshots inside the merge window and keeps them apart outside it", () => {
-    const store = makeStore({ mergeWindowMs: 60_000 });
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v1"), origin: "event", capturedAt: 1000 });
-    const merged = store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v2"), origin: "event", capturedAt: 30_000 });
-    expect(merged.status).toBe("merged");
-    const apart = store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v3"), origin: "event", capturedAt: 200_000 });
-    expect(apart.status).toBe("inserted");
-    const versions = store.listVersions("a.md");
-    expect(versions).toHaveLength(2);
-    expect(store.getSnapshotContent(versions[0].id).content.toString()).toBe("v3");
-    expect(store.getSnapshotContent(versions[1].id).content.toString()).toBe("v2");
-    store.close();
-  });
-
-  it("never merges into or over a restore snapshot", () => {
-    const store = makeStore({ mergeWindowMs: 60_000 });
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v1"), origin: "restore", capturedAt: 1000 });
-    const res = store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v2"), origin: "event", capturedAt: 2000 });
-    expect(res.status).toBe("inserted");
-    store.close();
-  });
-
-  it("marks deletion without dropping snapshots, and un-deletes on new capture", () => {
-    const store = makeStore();
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v1"), origin: "event", capturedAt: 1000 });
-    store.markDeleted("a.md", 2000);
-    expect(store.listFiles().find(f => f.relPath === "a.md")?.deletedAt).toBe(2000);
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v2"), origin: "watcher", capturedAt: 100_000 });
-    expect(store.listFiles().find(f => f.relPath === "a.md")?.deletedAt).toBeNull();
-    store.close();
-  });
-
-  it("follows renames", () => {
-    const store = makeStore();
-    store.recordSnapshot({ relPath: "old.md", content: Buffer.from("v1"), origin: "event", capturedAt: 1000 });
-    store.renamePath("old.md", "new.md");
-    expect(store.listVersions("new.md")).toHaveLength(1);
-    expect(store.listVersions("old.md")).toHaveLength(0);
-    store.close();
-  });
-
-  it("latestHash reflects the newest snapshot", () => {
-    const store = makeStore();
-    expect(store.latestHash("a.md")).toBeNull();
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v1"), origin: "sweep", capturedAt: 1000 });
-    const first = store.latestHash("a.md");
-    expect(typeof first).toBe("string");
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v2"), origin: "sweep", capturedAt: 200_000 });
-    expect(store.latestHash("a.md")).not.toBe(first);
-    store.close();
-  });
-
-  it("enforceRetention drops expired snapshots and stays under the byte budget", () => {
+  it("dedupes a repeated content hash or opaque resource version", () => {
     const store = makeStore({ mergeWindowMs: 0 });
-    const day = 24 * 3600 * 1000;
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("ancient"), origin: "event", capturedAt: 0 });
-    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("recent"), origin: "event", capturedAt: 40 * day });
-    store.enforceRetention({ maxAgeMs: 30 * day, maxTotalBytes: 500 * 1024 * 1024, now: 41 * day });
-    expect(store.listVersions("a.md")).toHaveLength(1);
+    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("one"), origin: "event", versionToken: "v-1", capturedAt: 1_000 });
 
-    const big1 = Buffer.from(Array.from({ length: 3000 }, () => Math.floor(Math.random() * 256)));
-    const big2 = Buffer.from(Array.from({ length: 3000 }, () => Math.floor(Math.random() * 256)));
-    store.recordSnapshot({ relPath: "b.bin", content: big1, origin: "event", capturedAt: 40 * day + 1 });
-    store.recordSnapshot({ relPath: "b.bin", content: big2, origin: "event", capturedAt: 40 * day + 2 });
-    store.enforceRetention({ maxAgeMs: 365 * day, maxTotalBytes: 3500, now: 41 * day });
-    expect(store.totalStoredBytes()).toBeLessThanOrEqual(3500);
+    expect(store.recordSnapshot({
+      relPath: "a.md", content: Buffer.from("one"), origin: "event", versionToken: "v-2", capturedAt: 2_000,
+    }).status).toBe("unchanged");
+    expect(store.recordSnapshot({
+      relPath: "a.md", content: Buffer.from("inconsistent-repeat"), origin: "event", versionToken: "v-1", capturedAt: 3_000,
+    }).status).toBe("unchanged");
+    expect(store.listVersions("a.md")).toHaveLength(1);
     store.close();
   });
 
-  it("refuses to open a database from a newer schema", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-"));
+  it("rejects content beyond the file-history snapshot budget at the store boundary", () => {
+    const store = makeStore();
+
+    expect(() => store.recordSnapshot({
+      relPath: "large.md",
+      content: Buffer.alloc(MAX_SNAPSHOT_BYTES + 1),
+      origin: "event",
+    })).toThrow(/snapshot|size|large/i);
+
+    store.close();
+  });
+
+  it("merges changes inside the fixed 60-second window but preserves a restore boundary", () => {
+    const store = makeStore({ mergeWindowMs: 60_000 });
+    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v1"), origin: "event", capturedAt: 1_000 });
+    expect(store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v2"), origin: "event", capturedAt: 60_999 }).status).toBe("merged");
+    expect(store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v3"), origin: "restore", capturedAt: 61_000 }).status).toBe("inserted");
+    expect(store.recordSnapshot({ relPath: "a.md", content: Buffer.from("v4"), origin: "event", capturedAt: 61_001 }).status).toBe("inserted");
+    expect(store.listVersions("a.md")).toHaveLength(3);
+    store.close();
+  });
+
+  it("retains one timeline across an in-main rename and turns move-out into a deletion", () => {
+    const store = makeStore();
+    store.recordSnapshot({ relPath: "old.md", content: Buffer.from("v1"), origin: "event", capturedAt: 1_000 });
+    expect(store.renamePath("old.md", "renamed.md")).toBe(true);
+    store.recordSnapshot({ relPath: "renamed.md", content: Buffer.from("v2"), origin: "event", capturedAt: 80_000 });
+    store.markDeleted("renamed.md", 90_000);
+
+    expect(store.listVersions("old.md")).toHaveLength(0);
+    expect(store.listVersions("renamed.md")).toHaveLength(2);
+    expect(store.listFiles().find(file => file.relPath === "renamed.md")?.deletedAt).toBe(90_000);
+    store.close();
+  });
+
+  it("enforces 30-day retention and the supplied byte quota deterministically", () => {
+    const store = makeStore({ mergeWindowMs: 0 });
+    const day = 24 * 60 * 60 * 1_000;
+    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("old"), origin: "event", capturedAt: 0 });
+    store.recordSnapshot({ relPath: "a.md", content: Buffer.from("new"), origin: "event", capturedAt: 31 * day });
+    store.enforceRetention({ maxAgeMs: 30 * day, maxTotalBytes: 500 * 1024 * 1024, now: 31 * day });
+    expect(store.listVersions("a.md")).toHaveLength(1);
+
+    store.recordSnapshot({ relPath: "b.md", content: Buffer.from(Array.from({ length: 4_000 }, (_, index) => index % 251)), origin: "event", capturedAt: 31 * day + 1 });
+    store.recordSnapshot({ relPath: "c.md", content: Buffer.from(Array.from({ length: 4_000 }, (_, index) => (index + 17) % 251)), origin: "event", capturedAt: 31 * day + 2 });
+    store.enforceRetention({ maxAgeMs: 365 * day, maxTotalBytes: 1_000, now: 31 * day + 3 });
+    expect(store.totalStoredBytes()).toBeLessThanOrEqual(1_000);
+    store.close();
+  });
+
+  it("removes only the minimum oldest snapshots needed to meet a quota", () => {
+    const store = makeStore({ mergeWindowMs: 0 });
+    store.recordSnapshot({ relPath: "oldest.md", content: Buffer.from("first payload"), origin: "event", capturedAt: 1 });
+    store.recordSnapshot({ relPath: "middle.md", content: Buffer.from("second payload"), origin: "event", capturedAt: 2 });
+    store.recordSnapshot({ relPath: "newest.md", content: Buffer.from("third payload"), origin: "event", capturedAt: 3 });
+    const quota = store.totalStoredBytes() - 1;
+
+    store.enforceRetention({ maxAgeMs: Number.MAX_SAFE_INTEGER, maxTotalBytes: quota, now: 3 });
+
+    expect(store.totalStoredBytes()).toBeLessThanOrEqual(quota);
+    expect(store.listFiles().map(file => file.relPath).sort()).toEqual(["middle.md", "newest.md"]);
+    store.close();
+  });
+
+  it("returns line-level snapshot diffs without a filesystem read", () => {
+    const store = makeStore({ mergeWindowMs: 0 });
+    const oldSnapshot = store.recordSnapshot({ relPath: "a.md", content: Buffer.from("one\ntwo\n"), origin: "event", capturedAt: 1_000 });
+    const newSnapshot = store.recordSnapshot({ relPath: "a.md", content: Buffer.from("one\nthree\n"), origin: "event", capturedAt: 70_000 });
+
+    expect(store.getSnapshotDiff(newSnapshot.snapshotId, oldSnapshot.snapshotId)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "removed", text: "two\n" }),
+      expect.objectContaining({ kind: "added", text: "three\n" }),
+    ]));
+    store.close();
+  });
+
+  it("rejects an existing non-baseline database instead of migrating or discovering legacy state", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-private-"));
     tmpDirs.push(dir);
     const dbPath = path.join(dir, "history.sqlite");
-    const first = new FileHistoryStore({ dbPath });
-    first.close();
     const requireHere = createRequire(import.meta.url);
     const DatabaseMod = requireHere("better-sqlite3");
     const Database = DatabaseMod?.default || DatabaseMod;
     const raw = new Database(dbPath);
-    raw.prepare("UPDATE meta SET value='999' WHERE key='schema_version'").run();
+    raw.exec("CREATE TABLE legacy_profile(id INTEGER PRIMARY KEY)");
     raw.close();
-    expect(() => new FileHistoryStore({ dbPath })).toThrow(/schema/i);
+
+    expect(() => new FileHistoryStore({ dbPath })).toThrow(/baseline|schema/i);
+  });
+
+  it("rejects an incomplete old schema instead of adding fields or indexes", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-private-"));
+    tmpDirs.push(dir);
+    const dbPath = path.join(dir, "history.sqlite");
+    const requireHere = createRequire(import.meta.url);
+    const DatabaseMod = requireHere("better-sqlite3");
+    const Database = DatabaseMod?.default || DatabaseMod;
+    const raw = new Database(dbPath);
+    raw.exec(`
+      CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE files(id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, deleted_at INTEGER);
+      CREATE TABLE snapshots(id INTEGER PRIMARY KEY AUTOINCREMENT, file_id INTEGER NOT NULL, content_hash TEXT NOT NULL, content BLOB NOT NULL, raw_size INTEGER NOT NULL, stored_size INTEGER NOT NULL, captured_at INTEGER NOT NULL, origin TEXT NOT NULL, op_context TEXT);
+    `);
+    raw.close();
+
+    expect(() => new FileHistoryStore({ dbPath })).toThrow(/baseline|schema/i);
   });
 });

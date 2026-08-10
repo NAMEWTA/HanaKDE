@@ -5,12 +5,21 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-10T08:04:57+0800",
+  "updated_at": "2026-08-10T14:48:22+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
   "blockers": [],
-  "deviations": [],
+  "deviations": [
+    {
+      "id": "D-T12-06",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T14:12:37+0800",
+      "scope": "Register the activated File History SQLite production store; remove the dormant scanner exclusion; regenerate persistence receipts; test physical private-store symlink isolation."
+    }
+  ],
   "worktrees": [
     {
       "ticket_id": "T-02",
@@ -139,8 +148,8 @@
       "base_sha": "e758c7a12d31e8385b4993c406ae5acc04b18635",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-12",
       "workspace_ref": "specdev-worktree/T-12",
-      "status": "active",
-      "updated_at": "2026-08-10T08:04:57+0800"
+      "status": "integrated",
+      "updated_at": "2026-08-10T14:48:22+0800"
     },
     {
       "ticket_id": "T-13",
@@ -149,8 +158,8 @@
       "base_sha": "e758c7a12d31e8385b4993c406ae5acc04b18635",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-13",
       "workspace_ref": "specdev-worktree/T-13",
-      "status": "active",
-      "updated_at": "2026-08-10T08:04:57+0800"
+      "status": "integrated",
+      "updated_at": "2026-08-10T14:48:22+0800"
     },
     {
       "ticket_id": "T-14",
@@ -159,8 +168,8 @@
       "base_sha": "e758c7a12d31e8385b4993c406ae5acc04b18635",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-14",
       "workspace_ref": "specdev-worktree/T-14",
-      "status": "active",
-      "updated_at": "2026-08-10T08:04:57+0800"
+      "status": "integrated",
+      "updated_at": "2026-08-10T14:48:22+0800"
     }
   ]
 }

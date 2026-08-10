@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  FILE_HISTORY_POLICY,
   MAX_SNAPSHOT_BYTES,
   isIgnoredRelPath,
+  isSafeHistoryRelativePath,
   isTrackedFile,
 } from "../lib/file-history/text-file-policy.ts";
 
@@ -40,5 +42,26 @@ describe("file-history text policy", () => {
 
   it("exposes a 5MB size cap", () => {
     expect(MAX_SNAPSHOT_BYTES).toBe(5 * 1024 * 1024);
+  });
+
+  it("keeps the fixed merge, age, and quota policy together", () => {
+    expect(FILE_HISTORY_POLICY).toMatchObject({
+      mergeWindowMs: 60_000,
+      maxSnapshotBytes: 5 * 1024 * 1024,
+      maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
+      maxTotalBytes: 500 * 1024 * 1024,
+    });
+  });
+
+  it("accepts only safe relative logical paths", () => {
+    expect(isSafeHistoryRelativePath("notes/a.md")).toBe(true);
+    expect(isSafeHistoryRelativePath("../outside.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("/etc/passwd")).toBe(false);
+    expect(isSafeHistoryRelativePath("notes/../../outside.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("C:/Users/alice/notes.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("C:notes.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("notes/unsafe\u0000.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("notes/unsafe\u001f.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("notes/unsafe\u0085.md")).toBe(false);
   });
 });

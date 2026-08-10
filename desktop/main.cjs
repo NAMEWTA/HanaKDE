@@ -25,10 +25,8 @@ const {
 const { createKeepAwakeManager } = require("./keep-awake.cjs");
 const { createFileWatchRegistry } = require("./file-watch-registry.cjs");
 const { createStableFileWatcher } = require("./file-watch-adapter.cjs");
-const { createWorkspaceWatchRegistry } = require("./workspace-watch-registry.cjs");
 const { createKnowledgeTrashRetentionScheduler } = require("./knowledge-trash-retention.cjs");
 const { readTextFileSnapshot, writeTextFileIfUnchanged } = require("./file-text-io.cjs");
-const chokidar = require("chokidar");
 const { wrapIpcHandler, wrapIpcBestEffortHandler, wrapIpcOn } = require('./ipc-wrapper.cjs');
 const themeRegistry = require('./src/shared/theme-registry.cjs');
 const {
@@ -5994,42 +5992,6 @@ wrapIpcBestEffortHandler("watch-file", (event, filePath) => {
 wrapIpcBestEffortHandler("unwatch-file", (event, filePath) => {
   if (!filePath || !path.isAbsolute(filePath)) return true;
   return _fileWatchRegistry.unwatchFile(filePath, event.sender.id);
-});
-
-// 工作区文件树监听：以 workspace root 为粒度递归监听，renderer 只消费目录失效事件。
-const _workspaceWatchedRendererIds = new Set();
-const _workspaceWatchRegistry = createWorkspaceWatchRegistry({
-  watch: (rootPath, options) => chokidar.watch(rootPath, options),
-  notifySubscriber: (subscriberId, payload) => {
-    const wc = webContents.fromId(subscriberId);
-    if (!wc || wc.isDestroyed()) {
-      _workspaceWatchedRendererIds.delete(subscriberId);
-      _workspaceWatchRegistry.unwatchAllForSubscriber(subscriberId);
-      return;
-    }
-    wc.send("workspace-changed", payload);
-  },
-  onError: (err, rootPath) => {
-    console.warn("[workspace-watch] failed:", rootPath, err?.message || err);
-  },
-});
-
-wrapIpcBestEffortHandler("watch-workspace", (event, rootPath) => {
-  if (!rootPath || !path.isAbsolute(rootPath)) return false;
-  const subscriberId = event.sender.id;
-  if (!_workspaceWatchedRendererIds.has(subscriberId)) {
-    _workspaceWatchedRendererIds.add(subscriberId);
-    event.sender.once("destroyed", () => {
-      _workspaceWatchedRendererIds.delete(subscriberId);
-      _workspaceWatchRegistry.unwatchAllForSubscriber(subscriberId);
-    });
-  }
-  return _workspaceWatchRegistry.watchWorkspace(rootPath, subscriberId);
-});
-
-wrapIpcBestEffortHandler("unwatch-workspace", (event, rootPath) => {
-  if (!rootPath || !path.isAbsolute(rootPath)) return true;
-  return _workspaceWatchRegistry.unwatchWorkspace(rootPath, event.sender.id);
 });
 
 // 读取二进制文件为 base64（图片、PDF 等）

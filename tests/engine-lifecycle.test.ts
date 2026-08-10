@@ -2,7 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HanaEngine } from "../core/engine.ts";
+import { createSingleOwnerProductionCutover, HanaEngine } from "../core/engine.ts";
 import { autoProjectIdForCwd, UNCATEGORIZED_PROJECT_ID } from "../shared/session-projects.ts";
 
 // ---------------------------------------------------------------------------
@@ -238,5 +238,145 @@ describe("HanaEngine session API", () => {
         ],
       },
     });
+  });
+});
+
+describe("HanaEngine single-owner production cutover", () => {
+  it("stops and proves the legacy owner before starting the coordinator", async () => {
+    const order: string[] = [];
+    let legacyWatchers = 1;
+    let coordinatorWatchers = 0;
+    const cutover = createSingleOwnerProductionCutover({
+      isolatedProof: async () => {
+        order.push("isolated-proof");
+      },
+      legacyOwner: {
+        stop: async () => {
+          order.push("legacy.stop");
+          legacyWatchers = 0;
+        },
+        inspect: () => ({ watchers: legacyWatchers, mutations: 0, baselines: 0 }),
+      },
+      newOwner: {
+        start: async () => {
+          order.push("new.start");
+          coordinatorWatchers = 1;
+        },
+        stop: async () => {
+          order.push("new.stop");
+          coordinatorWatchers = 0;
+        },
+        inspect: () => ({ watchers: coordinatorWatchers, mutations: 0, baselines: 1 }),
+      },
+    });
+
+    await cutover.start();
+
+    expect(order).toEqual(["isolated-proof", "legacy.stop", "new.start"]);
+    expect(cutover.snapshot()).toMatchObject({ state: "HEALTHY", overlap: 0 });
+  });
+
+  it("stops a failed new owner and proves release without reviving the legacy owner", async () => {
+    const order: string[] = [];
+    let legacyWatchers = 1;
+    let coordinatorWatchers = 0;
+    const cutover = createSingleOwnerProductionCutover({
+      isolatedProof: async () => {
+        order.push("isolated-proof");
+      },
+      legacyOwner: {
+        stop: async () => {
+          order.push("legacy.stop");
+          legacyWatchers = 0;
+        },
+        inspect: () => ({ watchers: legacyWatchers, mutations: 0, baselines: 0 }),
+      },
+      newOwner: {
+        start: async () => {
+          order.push("new.start");
+          coordinatorWatchers = 1;
+          throw new Error("start failed");
+        },
+        stop: async () => {
+          order.push("new.stop");
+          coordinatorWatchers = 0;
+        },
+        inspect: () => ({ watchers: coordinatorWatchers, mutations: 0, baselines: 0 }),
+      },
+    });
+
+    await expect(cutover.start()).rejects.toThrow("start failed");
+
+    expect(order).toEqual(["isolated-proof", "legacy.stop", "new.start", "new.stop"]);
+    expect(cutover.snapshot()).toMatchObject({ state: "FAILED", overlap: 0 });
+  });
+
+  it("does not turn invalid owner inspection into a zero-overlap proof", async () => {
+    const newStart = vi.fn(async () => {});
+    const cutover = createSingleOwnerProductionCutover({
+      isolatedProof: async () => {},
+      legacyOwner: {
+        stop: async () => {},
+        inspect: () => ({ watchers: -1, mutations: 0, baselines: 0 }),
+      },
+      newOwner: {
+        start: newStart,
+        stop: async () => {},
+        inspect: () => ({ watchers: 0, mutations: 0, baselines: 0 }),
+      },
+    });
+
+    await expect(cutover.start()).rejects.toThrow("release cannot be proven");
+    expect(newStart).not.toHaveBeenCalled();
+    expect(cutover.snapshot()).toEqual({
+      state: "FAILED",
+      overlap: null,
+      legacy: { watchers: null, mutations: null, baselines: null },
+      coordinator: { watchers: null, mutations: null, baselines: null },
+    });
+  });
+
+  it("stops and proves a previously active coordinator before retrying after inspection fails", async () => {
+    const order: string[] = [];
+    let inspectionFails = false;
+    let coordinatorWatchers = 0;
+    const cutover = createSingleOwnerProductionCutover({
+      isolatedProof: async () => { order.push("isolated-proof"); },
+      legacyOwner: {
+        stop: async () => { order.push("legacy.stop"); },
+        inspect: () => ({ watchers: 0, mutations: 0, baselines: 0 }),
+      },
+      newOwner: {
+        start: async () => {
+          order.push("new.start");
+          coordinatorWatchers = 1;
+        },
+        stop: async () => {
+          order.push("new.stop");
+          coordinatorWatchers = 0;
+        },
+        inspect: () => {
+          if (inspectionFails) throw new Error("inspection unavailable");
+          return { watchers: coordinatorWatchers, mutations: 0, baselines: coordinatorWatchers };
+        },
+      },
+    });
+
+    await cutover.start();
+    inspectionFails = true;
+    expect(cutover.snapshot()).toMatchObject({ state: "FAILED", overlap: null });
+    inspectionFails = false;
+    await cutover.start();
+
+    expect(order).toEqual([
+      "isolated-proof",
+      "legacy.stop",
+      "new.start",
+      "new.stop",
+      "isolated-proof",
+      "legacy.stop",
+      "new.start",
+    ]);
+    expect(cutover.snapshot()).toMatchObject({ state: "HEALTHY", overlap: 0 });
   });
 });

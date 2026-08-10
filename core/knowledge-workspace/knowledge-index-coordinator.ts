@@ -84,6 +84,17 @@ export class KnowledgeIndexCoordinator {
     store.applyIncremental(input);
   }
 
+  async advanceSequence(
+    sourceKey: string,
+    lastCompleteSequence: number,
+  ): Promise<void> {
+    await this.#sourceRegistry.revalidate(sourceKey);
+    const identity = this.#sourceRegistry.rootIdentity(sourceKey);
+    const sourceFingerprint = fingerprintProviderRootIdentity(identity);
+    const store = this.#storeForIdentity(sourceKey, sourceFingerprint);
+    store.advanceSequence(lastCompleteSequence);
+  }
+
   markDegraded(sourceKey: string, reason: string): void {
     const existing = this.#stores.get(sourceKey);
     if (existing) {

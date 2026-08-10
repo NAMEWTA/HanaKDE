@@ -41,6 +41,7 @@ import { createMcpRoute } from "../routes/mcp.ts";
 import { createPluginsRoute } from "../routes/plugins.ts";
 import { createCheckpointsRoute } from "../routes/checkpoints.ts";
 import { createCommandsRoute } from "../routes/commands.ts";
+import { createFileHistoryRoute } from "../routes/file-history.ts";
 import { createServerIdentityRoute } from "../routes/server-identity.ts";
 import { createResourcesRoute } from "../routes/resources.ts";
 import { createResourceIoRoute } from "../routes/resource-io.ts";
@@ -58,6 +59,7 @@ import { createHtmlPreviewRoute } from "../routes/html-preview.ts";
 import { createAccessRoute } from "../routes/access.ts";
 import { createSpeechRecognitionRoute } from "../routes/speech-recognition.ts";
 import { createMemoryDreamRoute } from "../routes/memory-dream.ts";
+import { createProductionWorkspaceHealthRoute } from "./production-workspace-health.ts";
 
 /**
  * `/mobile`、`/desktop` 网页客户端入口的供货模式，启动时决议一次 —— 见
@@ -139,7 +141,9 @@ export async function registerOpenRoutes(
   app.route("/api", createPluginsRoute(engine));
   app.route("/api", createCheckpointsRoute(engine));
   app.route("/api", createCommandsRoute(engine));
+  app.route("/api", createFileHistoryRoute(engine));
   app.route("/api", createResourceIoRoute(engine));
+  app.route("/api", createProductionWorkspaceHealthRoute(engine));
   app.route("/api", createResourcesRoute(engine));
   app.route("/api", createUsageRoute(engine));
   app.route("/api", createSpeechRecognitionRoute(engine));

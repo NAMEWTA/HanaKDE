@@ -6,6 +6,7 @@ import {
   KnowledgeIndexEventCoordinator,
   ResourceIOKnowledgeIndexSourceReader,
   type KnowledgeIndexEventSource,
+  type KnowledgeIndexSharedBaselineChange,
 } from "../core/knowledge-workspace/knowledge-index-event-coordinator.ts";
 import {
   KnowledgeIndexCoordinator,
@@ -26,7 +27,7 @@ describe("knowledge index rebuild", () => {
     cleanup.clear();
   });
 
-  it("scans saved ResourceIO facts and excludes source trash", async () => {
+  it("indexes saved ResourceIO facts from a shared source difference and excludes source trash", async () => {
     const fixture = createFixture("scan");
     fs.mkdirSync(path.join(fixture.workspace, "notes"), { recursive: true });
     fs.mkdirSync(path.join(fixture.workspace, ".trash"), { recursive: true });
@@ -38,7 +39,11 @@ describe("knowledge index rebuild", () => {
     fs.writeFileSync(path.join(fixture.workspace, "manual.pdf"), "%PDF-1.7");
     fs.writeFileSync(path.join(fixture.workspace, ".trash", "gone.md"), "# Gone");
 
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "notes/page.md", changeType: "upsert" },
+      { relativePath: "plain.txt", changeType: "upsert" },
+      { relativePath: "manual.pdf", changeType: "upsert" },
+    ]);
 
     expect(fixture.index.health("main")).toMatchObject({
       state: "ready",
@@ -58,15 +63,17 @@ describe("knowledge index rebuild", () => {
     lease.release();
   });
 
-  it("keeps the old generation queryable while a new source generation builds", async () => {
+  it("keeps the old generation queryable while a shared source difference builds a new generation", async () => {
     const fixture = createFixture("old-generation");
     fs.writeFileSync(path.join(fixture.workspace, "page.md"), "# One");
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ]);
     const oldGeneration = readyGeneration(fixture.index.health("main"));
 
-    let releaseScan!: () => void;
-    const scanGate = new Promise<void>((resolve) => {
-      releaseScan = resolve;
+    let releaseReread!: () => void;
+    const rereadGate = new Promise<void>((resolve) => {
+      releaseReread = resolve;
     });
     let reportStarted!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -74,18 +81,18 @@ describe("knowledge index rebuild", () => {
     });
     const gated: KnowledgeIndexEventSource = {
       eventPaths: (event) => fixture.reader.eventPaths(event),
-      reread: (relativePath, signal) =>
-        fixture.reader.reread(relativePath, signal),
-      async *scan(signal) {
+      async reread(relativePath, signal) {
         reportStarted();
-        await scanGate;
-        yield* fixture.reader.scan(signal);
+        await rereadGate;
+        return fixture.reader.reread(relativePath, signal);
       },
     };
     fixture.sources.set("main", gated);
     fs.writeFileSync(path.join(fixture.workspace, "page.md"), "# Two");
 
-    const rebuilding = fixture.events.rebuild("main");
+    const rebuilding = publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ], 1);
     await started;
     expect(fixture.index.health("main")).toEqual({
       state: "building",
@@ -95,7 +102,7 @@ describe("knowledge index rebuild", () => {
     });
     const oldLease = fixture.index.acquireQueryLease("main");
     expect(oldLease.inspect().generationId).toBe(oldGeneration);
-    releaseScan();
+    releaseReread();
     await rebuilding;
     expect(readyGeneration(fixture.index.health("main"))).not.toBe(
       oldGeneration,
@@ -104,10 +111,12 @@ describe("knowledge index rebuild", () => {
     oldLease.release();
   });
 
-  it("cancels a full rebuild without replacing the old generation", async () => {
+  it("cancels a pre-aborted shared repair wait without replacing the old generation", async () => {
     const fixture = createFixture("cancel");
     fs.writeFileSync(path.join(fixture.workspace, "page.md"), "# Stable");
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ]);
     const oldGeneration = readyGeneration(fixture.index.health("main"));
     const controller = new AbortController();
     controller.abort();
@@ -128,14 +137,15 @@ describe("knowledge index rebuild", () => {
   it("rejects a scope-token change at publish and preserves the prior generation", async () => {
     const fixture = createFixture("scope");
     fs.writeFileSync(path.join(fixture.workspace, "page.md"), "# Stable");
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ]);
     const oldGeneration = readyGeneration(fixture.index.health("main"));
     let revalidations = 0;
     fixture.sources.set("main", {
       eventPaths: (event) => fixture.reader.eventPaths(event),
       reread: (relativePath, signal) =>
         fixture.reader.reread(relativePath, signal),
-      scan: (signal) => fixture.reader.scan(signal),
       async revalidate() {
         revalidations += 1;
         if (revalidations === 2) {
@@ -147,7 +157,9 @@ describe("knowledge index rebuild", () => {
       },
     });
 
-    await expect(fixture.events.rebuild("main")).rejects.toThrow(
+    await expect(publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ], 1)).rejects.toThrow(
       /source identity changed/,
     );
     fixture.identities.set("main", identity("main-root", "main-scope"));
@@ -161,20 +173,20 @@ describe("knowledge index rebuild", () => {
     lease.release();
   });
 
-  it("reports unavailable when initial source scanning fails without an old generation", async () => {
+  it("reports unavailable when initial shared source reread fails without an old generation", async () => {
     const fixture = createFixture("unavailable");
     fixture.sources.set("main", {
       eventPaths: () => [],
-      reread: async () => null,
-      async *scan() {
-        yield* [];
+      async reread() {
         throw Object.assign(new Error("offline"), {
           code: "source_unavailable",
         });
       },
     });
 
-    await expect(fixture.events.rebuild("main")).rejects.toMatchObject({
+    await expect(publishSourceBaseline(fixture.events, [
+      { relativePath: "offline.md", changeType: "upsert" },
+    ])).rejects.toMatchObject({
       code: "source_unavailable",
     });
     expect(fixture.index.health("main")).toEqual({
@@ -186,7 +198,9 @@ describe("knowledge index rebuild", () => {
   it("surfaces stale extractor health while the old generation remains readable", async () => {
     const fixture = createFixture("stale");
     fs.writeFileSync(path.join(fixture.workspace, "page.md"), "# Stable");
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ]);
     const oldGeneration = readyGeneration(fixture.index.health("main"));
     const upgraded = createSiblingIndex(fixture, {
       extractorContractVersion: "knowledge-index-v2",
@@ -210,7 +224,9 @@ describe("knowledge index rebuild", () => {
   it("surfaces a writer lock without hiding the old generation", async () => {
     const fixture = createFixture("locked");
     fs.writeFileSync(path.join(fixture.workspace, "page.md"), "# Stable");
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ]);
     const oldGeneration = readyGeneration(fixture.index.health("main"));
     const active = await fixture.index.beginRebuild("main", {
       rebuildId: "held",
@@ -237,7 +253,9 @@ describe("knowledge index rebuild", () => {
   it("surfaces source-local corruption without leaking paths or raw SQLite errors", async () => {
     const fixture = createFixture("corrupt");
     fs.writeFileSync(path.join(fixture.workspace, "page.md"), "# Stable");
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "page.md", changeType: "upsert" },
+    ]);
     const generationId = readyGeneration(fixture.index.health("main"));
     const generationFile = findGenerationFile(fixture.hanakoHome);
     fs.writeFileSync(generationFile, "not a sqlite database");
@@ -255,7 +273,9 @@ describe("knowledge index rebuild", () => {
   it("rejects a source symlink that resolves outside the source before publishing its body", async (context) => {
     const fixture = createFixture("symlink-scope");
     fs.writeFileSync(path.join(fixture.workspace, "stable.md"), "# Stable\ninside");
-    await fixture.events.rebuild("main");
+    await publishSourceBaseline(fixture.events, [
+      { relativePath: "stable.md", changeType: "upsert" },
+    ]);
     const generationId = readyGeneration(fixture.index.health("main"));
     const outside = path.join(fixture.root, "outside.md");
     fs.writeFileSync(outside, "# Outside Secret\nleak-token");
@@ -271,7 +291,10 @@ describe("knowledge index rebuild", () => {
       throw error;
     }
 
-    await expect(fixture.events.rebuild("main")).rejects.toMatchObject({
+    await expect(publishSourceBaseline(fixture.events, [
+      { relativePath: "stable.md", changeType: "upsert" },
+      { relativePath: "leak.md", changeType: "upsert" },
+    ], 1)).rejects.toMatchObject({
       code: "knowledge_resource_out_of_scope",
     });
     const lease = fixture.index.acquireQueryLease("main");
@@ -365,6 +388,20 @@ describe("knowledge index rebuild", () => {
       workspaceIdentity: identity("workspace-root", "workspace-scope"),
       workspace,
     };
+  }
+
+  async function publishSourceBaseline(
+    events: KnowledgeIndexEventCoordinator,
+    changes: readonly KnowledgeIndexSharedBaselineChange[],
+    cursor = 0,
+  ): Promise<void> {
+    await events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor,
+      coverage: "source",
+      changes,
+    });
   }
 });
 

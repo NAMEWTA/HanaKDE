@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-14
 title: 收敛 Knowledge 事件消费与 scoped repair
-status: in_progress
+status: done
 planning_depth: deep
 planning_depth_reason: "Knowledge 索引状态、event cursor、generation 与跨模块一致性依赖共享核心事件并涉及可重建持久化模型。"
 ready: true
@@ -116,8 +116,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-003`：Knowledge/Workbench 外部合同无回退。
-- [ ] `AC-011`/`AC-012`：事件和 stale/gap 通过 shared baseline + scoped repair 收敛。
-- [ ] `AC-013`：Knowledge 派生 failure/retry 与四态 health 一致且可见。
-- [ ] `AC-017`：资源版本变化后 Knowledge source/search 可收敛到磁盘版本。
-- [ ] watcher/full-walk/direct mutation 重复调用点为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-14.md</Path>`。
+- [x] `AC-003`：Knowledge/Workbench 外部合同无回退。
+- [x] `AC-011`/`AC-012`：事件和 stale/gap 通过 shared baseline + scoped repair 收敛。
+- [x] `AC-013`：Knowledge 派生 failure/retry 与四态 health 一致且可见。
+- [x] `AC-017`：资源版本变化后 Knowledge source/search 可收敛到磁盘版本。
+- [x] watcher/full-walk/direct mutation 重复调用点为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-14.md</Path>`。

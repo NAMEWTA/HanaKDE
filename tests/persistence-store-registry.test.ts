@@ -60,6 +60,11 @@ describe("persistent store registry", () => {
       expect(Number(Boolean(site.storeId)) + Number(Boolean(site.exemptionId))).toBe(1);
       expect(site.reason).toBeTruthy();
     }
+    expect(inventory.discoveredSites.filter((site) => (
+      site.storeId === "file-history-sqlite"
+      && site.sourceFile === "core/engine.ts"
+      && site.kind === "persistent-store-constructor"
+    ))).toHaveLength(1);
   });
 
   it("keeps required store contracts explicit and session identity path-independent", () => {
@@ -81,6 +86,7 @@ describe("persistent store registry", () => {
       "security-audit-log",
       "user-preferences",
       "agent-facts-sqlite",
+      "file-history-sqlite",
       "session-manifest-sqlite",
       "session-jsonl",
       "session-files",
@@ -125,6 +131,27 @@ describe("persistent store registry", () => {
 
     const facts = PERSISTENT_STORES.find((store) => store.id === "agent-facts-sqlite")!;
     expect(facts.schemaSource).toMatchObject({ kind: "sqlite-runtime", module: "lib/memory/fact-store.ts" });
+
+    const history = PERSISTENT_STORES.find((store) => store.id === "file-history-sqlite")!;
+    expect(history).toMatchObject({
+      ownerModule: "lib/file-history/history-store.ts",
+      pathPatterns: [
+        "file-history/{historyStoreKey}/history.sqlite",
+        "file-history/{historyStoreKey}/history.sqlite-wal",
+        "file-history/{historyStoreKey}/history.sqlite-shm",
+      ],
+      schemaSource: { kind: "sqlite-runtime", module: "lib/file-history/history-store.ts" },
+    });
+    expect(history.siteRules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceFile: "core/engine.ts",
+        kinds: expect.arrayContaining(["persistent-store-constructor"]),
+      }),
+      expect.objectContaining({
+        sourceFile: "lib/file-history/history-store.ts",
+        kinds: expect.arrayContaining(["database-open"]),
+      }),
+    ]));
 
     const sessions = PERSISTENT_STORES.find((store) => store.id === "session-jsonl")!;
     expect(sessions.schemaSource).toMatchObject({
