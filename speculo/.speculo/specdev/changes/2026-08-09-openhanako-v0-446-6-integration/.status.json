@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-10T15:21:16+0800",
+  "updated_at": "2026-08-10T15:38:11+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -34,6 +34,14 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-10T15:21:16+0800",
       "scope": "Authorize only local-fs-provider.ts and its focused provider test to harden the existing generic writeExpectedVersion with provider-held ancestry/identity/no-follow proof at effect time. ResourceIO public APIs, Engine, route authority, watcher/baseline/EventBus, UI, migration, and compatibility remain unchanged; a further deviation is required before altering resource-io.ts, types.ts, or adding a native helper."
+    },
+    {
+      "id": "D-T15-03",
+      "level": "architecture/security",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T15:38:11+0800",
+      "scope": "Authorize a single fail-closed system-core secure conditional-write primitive: ResourceIO internal runner/types/ref/root-identity seam, local provider, desktop/native/HanaSecureFsHelper, dev/test helper build script and a narrow package.json dev build entry with focused fixtures/tests. Existing writeExpectedVersion remains the sole upper mutation interface; private proofs stay non-serializable. T-21 retains production artifact/package, lockfile and CI ownership. No Node fallback, new plugin/route authority, migration, compatibility mode, or public raw root/native identity."
     }
   ],
   "worktrees": [
