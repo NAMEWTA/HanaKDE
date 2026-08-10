@@ -121,15 +121,25 @@ describe("resource-io route", () => {
     expect(response.status).toBe(500);
     expect(getterRuns).toBe(0);
   });
-  it("returns retained resource events for catch-up by cursor", async () => {
+  it("requires resource-stat resync for nonempty catch-up pages from local callers", async () => {
+    const privatePath = "/private/local/root/Notes/a.md";
+    const resourceKey = `local_fs:${privatePath}`;
+    const root = "/private/local/root";
+    const scope = "scope-local-route-fixture";
     const resourceEventsSince = vi.fn(() => ({
       stale: false,
       latestSequence: 7,
       events: [{
         type: "resource.changed",
         changeType: "modified",
-        resourceKey: "local_fs:/tmp/a.md",
-        resource: { kind: "local-file", path: "/tmp/a.md" },
+        resourceKey,
+        resource: {
+          kind: "local-file",
+          path: privatePath,
+          filePath: privatePath,
+          root,
+          scope,
+        },
         source: "provider_watch",
         sequence: 7,
         occurredAt: "2026-06-22T00:00:00.000Z",
@@ -142,23 +152,24 @@ describe("resource-io route", () => {
     const res = await app.request("/api/resource-io/events?since=3");
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      stale: false,
+    const body = await res.json();
+    expect(body).toEqual({
+      stale: true,
       latestSequence: 7,
-      events: [{
-        type: "resource.changed",
-        changeType: "modified",
-        resourceKey: "local_fs:/tmp/a.md",
-        resource: { kind: "local-file", path: "/tmp/a.md" },
-        source: "provider_watch",
-        sequence: 7,
-        occurredAt: "2026-06-22T00:00:00.000Z",
-      }],
+      events: [],
+      resync: "resource-stat-required",
     });
+    expect(typeof body.latestSequence).toBe("number");
+    const serialized = JSON.stringify(body);
+    for (const forbidden of [privatePath, resourceKey, root, scope]) {
+      expect(serialized).not.toContain(forbidden);
+    }
     expect(resourceEventsSince).toHaveBeenCalledWith(3);
   });
 
   it("returns a resync hint when the event cursor is stale", async () => {
+    const root = "/private/local/stale-root";
+    const scope = "scope-stale-route-fixture";
     const app = new Hono();
     useLocalOwnerAuth(app);
     app.route("/api", createResourceIoRoute({
@@ -166,18 +177,24 @@ describe("resource-io route", () => {
         stale: true,
         latestSequence: 12,
         events: [],
+        root,
+        scope,
       })),
     }));
 
     const res = await app.request("/api/resource-io/events?since=1");
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    const body = await res.json();
+    expect(body).toEqual({
       stale: true,
       latestSequence: 12,
       events: [],
       resync: "resource-stat-required",
     });
+    expect(typeof body.latestSequence).toBe("number");
+    expect(JSON.stringify(body)).not.toContain(root);
+    expect(JSON.stringify(body)).not.toContain(scope);
   });
 
   it("redacts auxiliary ResourceIO diagnostics and event paths for remote principals", async () => {
@@ -602,9 +619,9 @@ describe("resource-io route", () => {
     });
   });
 
-  it("keeps an empty remote event page non-stale", async () => {
+  it("keeps an empty local event page non-stale", async () => {
     const app = new Hono();
-    useRemoteOwnerAuth(app);
+    useLocalOwnerAuth(app);
     app.route("/api", createResourceIoRoute({
       resourceEventsSince: vi.fn(() => ({
         stale: false,

@@ -154,6 +154,30 @@ import type {
 import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import { resourceKeyForRef } from "../lib/resource-io/resource-refs.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
+import {
+  createResourceMainRootAuthority,
+} from "./workspace-runtime/index.ts";
+import type { MainWorkspaceRuntime } from "./workspace-runtime/main-workspace-runtime.ts";
+import {
+  EMPTY_PRODUCTION_OWNER_COUNTS,
+  MainWorkspaceKnowledgeSharedBaselineAdapter,
+  canonicalPhysicalWatchPath,
+  createProductionWorkspaceRuntime,
+  createSingleOwnerProductionCutover,
+  isSameOrPhysicalDescendant,
+  resolveExistingWorkspaceDirectory,
+} from "./workspace-runtime/production-workspace-runtime.ts";
+import type {
+  ProductionCutoverSnapshot,
+  SingleOwnerProductionCutover,
+} from "./workspace-runtime/production-workspace-runtime.ts";
+import { MAIN_WORKSPACE_CUTOVER_DESCRIPTOR } from "../shared/workspace-observation.ts";
+
+export {
+  MainWorkspaceKnowledgeSharedBaselineAdapter,
+  createSingleOwnerProductionCutover,
+};
+
 import { externalReadPathsFromSessionFiles } from "../lib/sandbox/win32-policy.ts";
 import { t } from "../lib/i18n.ts";
 import { CheckpointStore } from "../lib/checkpoint-store.ts";
@@ -291,6 +315,17 @@ function sessionBelongsToProject(projectId) {
   };
 }
 
+type EngineResourceWatchSubscription = {
+  input: Record<string, unknown>;
+  resources: unknown[];
+  physicalSubscriptionId: string | null;
+  logicalReleases: Array<() => void>;
+};
+
+type EngineRetainedResourceWatch = {
+  resource: unknown;
+  release: (() => void) | null;
+};
 export class HanaEngine {
   declare _activityHub: any;
   declare _agentMgr: any;
@@ -335,9 +370,18 @@ export class HanaEngine {
   declare _resourceAccess: any;
   declare _resourceEventBus: any;
   declare _knowledgeIndexRuntime: KnowledgeIndexRuntime | null;
+  declare _mainWorkspaceSharedBaseline: MainWorkspaceKnowledgeSharedBaselineAdapter | null;
+  declare _mainWorkspaceRuntime: MainWorkspaceRuntime | null;
+  declare _mainWorkspaceCutover: SingleOwnerProductionCutover | null;
+  declare _mainWorkspaceRoot: string | null;
+  declare _mainWorkspaceCanonicalRoot: string | null;
+  declare _mainWorkspaceUnavailable: boolean;
   declare _resourceLoader: any;
   declare _resourceIO: any;
   declare _resourceWatchRegistry: any;
+  declare _resourceWatchSubscriptions: Map<string, EngineResourceWatchSubscription>;
+  declare _retainedResourceWatches: Map<string, EngineRetainedResourceWatch>;
+  declare _logicalMainResourceWatchRefs: Map<string, number>;
   declare _resources: any;
   declare _runtimeContext: any;
   declare _sessionCoord: any;
@@ -388,6 +432,14 @@ export class HanaEngine {
     this._resourceIO = null;
     this._resourceEventBus = null;
     this._knowledgeIndexRuntime = null;
+    this._mainWorkspaceSharedBaseline = new MainWorkspaceKnowledgeSharedBaselineAdapter({
+      currentResourceEventSequence: () => this._resourceEvents().latestSequence(),
+    });
+    this._mainWorkspaceRuntime = null;
+    this._mainWorkspaceCutover = null;
+    this._mainWorkspaceRoot = null;
+    this._mainWorkspaceCanonicalRoot = null;
+    this._mainWorkspaceUnavailable = false;
     this.agentsDir = path.join(hanakoHome, "agents");
     this.userDir = path.join(hanakoHome, "user");
     this.channelsDir = path.join(hanakoHome, "channels");
@@ -409,6 +461,9 @@ export class HanaEngine {
       eventBus: this._resourceEvents(),
       resolveWatchTarget: (resource) => this.getResourceIO().resolveWatchTarget(resource),
     });
+    this._resourceWatchSubscriptions = new Map();
+    this._retainedResourceWatches = new Map();
+    this._logicalMainResourceWatchRefs = new Map();
     this._sessionManifestStoreRecovery = null;
     this._sessionManifestStore = this._openSessionManifestStore();
     this._sessionManifestResolver = this._sessionManifestStore
@@ -537,7 +592,7 @@ export class HanaEngine {
       emitDevLog: (t, l) => this.emitDevLog(t, l),
       getHomeCwd: (agentId) => this.getHomeCwd(agentId),
       agentIdFromSessionPath: (p) => this.agentIdFromSessionPath(p),
-      switchAgentOnly: (id) => this._agentMgr.switchAgentOnly(id),
+      switchAgentOnly: (id) => this.switchAgentOnly(id),
       getConfig: () => this.config,
       getPrefs: () => this._prefs,
       getAgents: () => this._agentMgr.agents,
@@ -1047,6 +1102,119 @@ export class HanaEngine {
   resourceEventsSince(sequence) {
     return this._resourceEvents().since(sequence);
   }
+  getProductionWorkspaceHealth(): ProductionCutoverSnapshot {
+    if (this._mainWorkspaceCutover?.snapshot) return this._mainWorkspaceCutover.snapshot();
+    if (this._mainWorkspaceUnavailable) {
+      return Object.freeze({
+        state: "FAILED" as const,
+        overlap: 0,
+        legacy: EMPTY_PRODUCTION_OWNER_COUNTS,
+        coordinator: EMPTY_PRODUCTION_OWNER_COUNTS,
+      });
+    }
+    return Object.freeze({
+      state: "DEGRADED" as const,
+      overlap: 0,
+      legacy: EMPTY_PRODUCTION_OWNER_COUNTS,
+      coordinator: EMPTY_PRODUCTION_OWNER_COUNTS,
+    });
+  }
+  _getMainWorkspaceSharedBaseline(): MainWorkspaceKnowledgeSharedBaselineAdapter {
+    if (!this._mainWorkspaceSharedBaseline) {
+      this._mainWorkspaceSharedBaseline = new MainWorkspaceKnowledgeSharedBaselineAdapter({
+        currentResourceEventSequence: () => this._resourceEvents().latestSequence(),
+      });
+    }
+    return this._mainWorkspaceSharedBaseline;
+  }
+  _hasConfiguredMainWorkspaceHome(): boolean {
+    const configuredHome = this._agentMgr?.agent?.config?.desk?.home_folder;
+    return typeof configuredHome === "string"
+      ? configuredHome.trim().length > 0
+      : configuredHome !== null && configuredHome !== undefined;
+  }
+  _resolveActiveMainWorkspaceRoot(): string | null {
+    const configuredHome = this._agentMgr?.agent?.config?.desk?.home_folder;
+    const hasConfiguredHome = this._hasConfiguredMainWorkspaceHome();
+
+    // `last_cwd` is session history and may name a mounted workspace. Main
+    // ownership is the agent's configured home only. Keep an unavailable
+    // explicit home fail-closed rather than silently observing the default.
+    if (hasConfiguredHome) {
+      return resolveExistingWorkspaceDirectory(configuredHome);
+    }
+    return resolveExistingWorkspaceDirectory(this.getHomeCwd(this._agentMgr?.activeAgentId));
+  }
+  async _startProductionWorkspaceRuntime(log: (message: string) => void = () => {}) {
+    const hasConfiguredHome = this._hasConfiguredMainWorkspaceHome();
+    const rootPath = this._resolveActiveMainWorkspaceRoot();
+    if (!rootPath) {
+      await this._stopProductionWorkspaceRuntime();
+      this._mainWorkspaceUnavailable = hasConfiguredHome;
+      return this.getProductionWorkspaceHealth();
+    }
+    this._mainWorkspaceUnavailable = false;
+
+    if (this._mainWorkspaceCutover && this._mainWorkspaceRoot === rootPath) {
+      try {
+        await this._mainWorkspaceCutover.start();
+      } catch {
+        log("[workspace] main workspace coordinator failed to start");
+      }
+      return this.getProductionWorkspaceHealth();
+    }
+
+    await this._stopProductionWorkspaceRuntime();
+    const assembly = createProductionWorkspaceRuntime({
+      rootPath,
+      rootAuthority: createResourceMainRootAuthority({ resourceIO: this.getResourceIO() }),
+      resourceEvents: this._resourceEvents(),
+      legacyWatchRegistry: this._resourceWatchRegistry,
+      isolatedProof: () => this._proveMainWorkspaceCutoverDescriptor(),
+      beforeCoordinatorStart: () => this._repartitionActiveResourceWatches(),
+      sharedBaseline: this._getMainWorkspaceSharedBaseline(),
+    });
+    this._mainWorkspaceRuntime = assembly.runtime;
+    this._mainWorkspaceCutover = assembly.cutover;
+    this._mainWorkspaceRoot = rootPath;
+    this._mainWorkspaceCanonicalRoot = assembly.canonicalRoot;
+
+    try {
+      await assembly.cutover.start();
+    } catch {
+      log("[workspace] main workspace coordinator failed to start");
+    }
+    return this.getProductionWorkspaceHealth();
+  }
+  async _stopProductionWorkspaceRuntime() {
+    const cutover = this._mainWorkspaceCutover;
+    if (!cutover) {
+      this._mainWorkspaceSharedBaseline?.detach();
+      this._mainWorkspaceCanonicalRoot = null;
+      this._mainWorkspaceUnavailable = false;
+      return this.getProductionWorkspaceHealth();
+    }
+    await cutover.stop();
+    this._mainWorkspaceRuntime = null;
+    this._mainWorkspaceCutover = null;
+    this._mainWorkspaceRoot = null;
+    this._mainWorkspaceCanonicalRoot = null;
+    this._mainWorkspaceUnavailable = false;
+    return this.getProductionWorkspaceHealth();
+  }
+  _proveMainWorkspaceCutoverDescriptor() {
+    const descriptor = MAIN_WORKSPACE_CUTOVER_DESCRIPTOR;
+    const requiredOrder = descriptor.requiredOrder;
+    if (
+      descriptor.phase !== "isolated-proof"
+      || descriptor.productionOwner !== null
+      || requiredOrder[0] !== "stop-old-owner"
+      || requiredOrder[1] !== "prove-old-owner-released"
+      || requiredOrder[2] !== "start-new-owner"
+    ) {
+      throw new Error("main workspace cutover proof is unavailable");
+    }
+  }
   _emitResourceChangedForSessionFileOperation(file, entry: any = {}) {
     const origin = typeof file?.origin === "string" ? file.origin : entry?.origin;
     if (origin !== "agent_write" && origin !== "agent_edit") return;
@@ -1263,14 +1431,19 @@ export class HanaEngine {
       const runtime = this.getRuntimeContext();
       const hostId = runtime.serverNodeId || runtime.serverId;
       if (!hostId) throw new Error("knowledge index host identity is unavailable");
-      this._knowledgeIndexRuntime = new KnowledgeIndexRuntime({
+      const options = {
         hanakoHome: this.hanakoHome,
         hostId,
         pid: process.pid,
         resourceIO: this.getResourceIO(),
         resourceEvents: this._resourceEvents(),
+        sharedBaseline: this._getMainWorkspaceSharedBaseline().port,
         retainWatch: (resource) => this.retainResourceWatch(resource),
-      });
+      };
+      const KnowledgeIndexRuntimeWithSharedBaseline = KnowledgeIndexRuntime as unknown as {
+        new (runtimeOptions: typeof options): KnowledgeIndexRuntime;
+      };
+      this._knowledgeIndexRuntime = new KnowledgeIndexRuntimeWithSharedBaseline(options);
     }
     try {
       return await this._knowledgeIndexRuntime.bindWorkspace(sourceRegistry);
@@ -1442,26 +1615,179 @@ export class HanaEngine {
       signal,
     });
   }
+  _logicalMainWatchRefs(): Map<string, number> {
+    if (!this._logicalMainResourceWatchRefs) this._logicalMainResourceWatchRefs = new Map();
+    return this._logicalMainResourceWatchRefs;
+  }
+  _engineResourceWatchSubscriptions(): Map<string, EngineResourceWatchSubscription> {
+    if (!this._resourceWatchSubscriptions) this._resourceWatchSubscriptions = new Map();
+    return this._resourceWatchSubscriptions;
+  }
+  _retainedResourceWatchRecords(): Map<string, EngineRetainedResourceWatch> {
+    if (!this._retainedResourceWatches) this._retainedResourceWatches = new Map();
+    return this._retainedResourceWatches;
+  }
+  _isActiveMainWatchTarget(target: any): boolean {
+    const rootPath = this._mainWorkspaceCanonicalRoot;
+    if (
+      !rootPath
+      || target?.ref?.kind !== "local-file"
+      || typeof target?.filePath !== "string"
+    ) {
+      return false;
+    }
+    const candidatePath = canonicalPhysicalWatchPath(target.filePath);
+    return candidatePath !== null && isSameOrPhysicalDescendant(rootPath, candidatePath);
+  }
+  _partitionResourceWatch(resource: unknown) {
+    const target = this.getResourceIO().resolveWatchTarget(resource);
+    if (!target || typeof target.resourceKey !== "string" || !target.resourceKey) {
+      throw new Error("resource watch target is unavailable");
+    }
+    return Object.freeze({
+      resource,
+      resourceKey: target.resourceKey,
+      logicalMain: this._isActiveMainWatchTarget(target),
+    });
+  }
+  _retainLogicalMainResourceWatch(resourceKey: string): () => void {
+    const refs = this._logicalMainWatchRefs();
+    refs.set(resourceKey, (refs.get(resourceKey) || 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const count = refs.get(resourceKey) || 0;
+      if (count <= 1) refs.delete(resourceKey);
+      else refs.set(resourceKey, count - 1);
+    };
+  }
+  _releaseEngineSubscriptionBinding(subscription: EngineResourceWatchSubscription): void {
+    if (subscription.physicalSubscriptionId) {
+      this._resourceWatchRegistry.unsubscribe(subscription.physicalSubscriptionId);
+      subscription.physicalSubscriptionId = null;
+    }
+    while (subscription.logicalReleases.length > 0) {
+      const release = subscription.logicalReleases[subscription.logicalReleases.length - 1];
+      release();
+      subscription.logicalReleases.pop();
+    }
+  }
+  _bindEngineSubscription(subscription: EngineResourceWatchSubscription): string[] {
+    const partitions = subscription.resources.map((resource) => this._partitionResourceWatch(resource));
+    const logicalReleases: Array<() => void> = [];
+    let physicalSubscriptionId: string | null = null;
+    try {
+      for (const partition of partitions) {
+        if (partition.logicalMain) {
+          logicalReleases.push(this._retainLogicalMainResourceWatch(partition.resourceKey));
+        }
+      }
+      const physicalResources = partitions
+        .filter((partition) => !partition.logicalMain)
+        .map((partition) => partition.resource);
+      if (physicalResources.length > 0) {
+        const physical = this._resourceWatchRegistry.subscribe({
+          ...subscription.input,
+          resources: physicalResources,
+        });
+        physicalSubscriptionId = physical?.subscriptionId || null;
+        if (!physicalSubscriptionId) throw new Error("resource watch unavailable");
+      }
+    } catch (error) {
+      for (const release of logicalReleases.splice(0).reverse()) release();
+      throw error;
+    }
+    subscription.logicalReleases = logicalReleases;
+    subscription.physicalSubscriptionId = physicalSubscriptionId;
+    return partitions.map((partition) => partition.resourceKey);
+  }
+  _bindRetainedResourceWatch(record: EngineRetainedResourceWatch): void {
+    const partition = this._partitionResourceWatch(record.resource);
+    record.release = partition.logicalMain
+      ? this._retainLogicalMainResourceWatch(partition.resourceKey)
+      : this._resourceWatchRegistry.retain(record.resource);
+  }
+  _repartitionActiveResourceWatches(): void {
+    const subscriptions = [...this._engineResourceWatchSubscriptions().values()];
+    const retained = [...this._retainedResourceWatchRecords().values()];
+
+    // Release every previous binding before assigning the new canonical main.
+    // A failed release aborts this handoff before a new coordinator can start.
+    for (const subscription of subscriptions) this._releaseEngineSubscriptionBinding(subscription);
+    for (const record of retained) {
+      record.release?.();
+      record.release = null;
+    }
+    for (const subscription of subscriptions) this._bindEngineSubscription(subscription);
+    for (const record of retained) this._bindRetainedResourceWatch(record);
+  }
   retainResourceWatch(resource) {
     if (!this._resourceWatchRegistry || typeof this._resourceWatchRegistry.retain !== "function") {
       throw new Error("resource watch unavailable");
     }
-    return this._resourceWatchRegistry.retain(resource);
+    const id = randomUUID();
+    const record: EngineRetainedResourceWatch = { resource, release: null };
+    this._bindRetainedResourceWatch(record);
+    this._retainedResourceWatchRecords().set(id, record);
+    let released = false;
+    return () => {
+      if (released) return;
+      const active = this._retainedResourceWatchRecords().get(id);
+      if (!active) return;
+      active.release?.();
+      active.release = null;
+      this._retainedResourceWatchRecords().delete(id);
+      released = true;
+    };
   }
   subscribeResourceWatch(input) {
     if (!this._resourceWatchRegistry || typeof this._resourceWatchRegistry.subscribe !== "function") {
       throw new Error("resource watch unavailable");
     }
-    return this._resourceWatchRegistry.subscribe(input);
+    const resources = Array.isArray(input?.resources)
+      ? input.resources
+      : input?.resource
+        ? [input.resource]
+        : [];
+    if (!resources.length) throw new Error("ResourceWatchRegistry subscription requires resources");
+    const { resource: _resource, resources: _resources, ...metadata } = input || {};
+    const record: EngineResourceWatchSubscription = {
+      input: metadata,
+      resources,
+      physicalSubscriptionId: null,
+      logicalReleases: [],
+    };
+    const resourceKeys = this._bindEngineSubscription(record);
+    const subscriptionId = randomUUID();
+    this._engineResourceWatchSubscriptions().set(subscriptionId, record);
+    return {
+      subscriptionId,
+      resourceKeys,
+    };
   }
   unsubscribeResourceWatch(subscriptionId) {
     if (!this._resourceWatchRegistry || typeof this._resourceWatchRegistry.unsubscribe !== "function") {
       throw new Error("resource watch unavailable");
     }
-    return this._resourceWatchRegistry.unsubscribe(subscriptionId);
+    const subscriptions = this._engineResourceWatchSubscriptions();
+    const subscription = subscriptions.get(subscriptionId);
+    if (!subscription) return this._resourceWatchRegistry.unsubscribe(subscriptionId);
+
+    // Preserve the Engine receipt after a failed physical release so route
+    // lease retries cannot under-release logical subscriptions.
+    this._releaseEngineSubscriptionBinding(subscription);
+    subscriptions.delete(subscriptionId);
+    return true;
   }
   resourceWatchDiagnostics() {
-    return this._resourceWatchRegistry?.diagnostics?.() || { subscriptions: 0, watches: [] };
+    const diagnostics = this._resourceWatchRegistry?.diagnostics?.() || { subscriptions: 0, watches: [] };
+    return {
+      ...diagnostics,
+      logicalSubscriptions: this._engineResourceWatchSubscriptions().size,
+      retainedLogicalWatches: this._retainedResourceWatchRecords().size,
+      logicalMainResources: this._logicalMainWatchRefs().size,
+    };
   }
   getResource(resourceId) { return this.getResourceService().getResource(resourceId); }
   resolveResourceContent(resourceId) { return this.getResourceService().resolveContent(resourceId); }
@@ -1521,7 +1847,28 @@ export class HanaEngine {
   invalidateAgentListCache() { this._agentMgr.invalidateAgentListCache(); }
   async createAgent(opts) { return this._agentMgr.createAgent(opts); }
   async switchAgent(agentId) {
-    return this._agentMgr.switchAgent(agentId);
+    const result = await this._agentMgr.switchAgent(agentId);
+    await this._startProductionWorkspaceRuntime();
+    return result;
+  }
+  async switchAgentOnly(agentId) {
+    const previousAgentId = this.currentAgentId;
+    try {
+      const result = await this._agentMgr.switchAgentOnly(agentId);
+      await this._startProductionWorkspaceRuntime();
+      return result;
+    } catch (error) {
+      // AgentManager restores its previous active agent on activation failure.
+      // Keep that owner's coordinator alive, or re-establish it if a caller
+      // reached this hook with an already-diverged lifecycle state.
+      if (
+        this.currentAgentId === previousAgentId
+        && this._mainWorkspaceRoot !== this._resolveActiveMainWorkspaceRoot()
+      ) {
+        await this._startProductionWorkspaceRuntime();
+      }
+      throw error;
+    }
   }
   async deleteAgent(agentId) { return this._agentMgr.deleteAgent(agentId); }
   setPrimaryAgent(agentId) { return this._agentMgr.setPrimaryAgent(agentId); }
@@ -1977,7 +2324,18 @@ export class HanaEngine {
   async refreshModels() { return this._models.refreshAvailable(); }
 
   getHomeFolder(agentId) { return this._configCoord.getHomeFolder(agentId); }
-  setHomeFolder(agentId, folder) { return this._configCoord.setHomeFolder(agentId, folder); }
+  async setHomeFolder(agentId, folder) {
+    const targetAgentId = agentId || this.currentAgentId;
+    const updatesFocusedAgent = targetAgentId === this.currentAgentId;
+    const previousRoot = updatesFocusedAgent
+      ? this._resolveActiveMainWorkspaceRoot()
+      : null;
+    const result = await this._configCoord.setHomeFolder(agentId, folder);
+    if (updatesFocusedAgent && this._resolveActiveMainWorkspaceRoot() !== previousRoot) {
+      await this._startProductionWorkspaceRuntime();
+    }
+    return result;
+  }
   getHeartbeatMaster() { return this._configCoord.getHeartbeatMaster(); }
   setHeartbeatMaster(v) { return this._configCoord.setHeartbeatMaster(v); }
   getChannelsEnabled() { return this._configCoord.getChannelsEnabled(); }
@@ -2237,7 +2595,24 @@ export class HanaEngine {
   get accessMode() { return this._sessionCoord.getAccessMode(); }
   setAccessMode(mode) { return this._sessionCoord.setAccessMode(mode); }
   setPlanMode(enabled) { return this._sessionCoord.setPlanMode(enabled); }
-  async updateConfig(p, opts) { return this._configCoord.updateConfig(p, opts); }
+  async updateConfig(p, opts) {
+    const updatesMainWorkspaceRoot = Object.prototype.hasOwnProperty.call(p?.desk || {}, "home_folder");
+    const targetAgentId = opts?.agentId ?? this.currentAgentId;
+    const updatesFocusedAgent = targetAgentId === this.currentAgentId;
+    const previousRoot = updatesMainWorkspaceRoot && updatesFocusedAgent
+      ? this._resolveActiveMainWorkspaceRoot()
+      : null;
+    const result = await this._configCoord.updateConfig(p, opts);
+    if (
+      updatesMainWorkspaceRoot
+      && updatesFocusedAgent
+      && targetAgentId === this.currentAgentId
+      && this._resolveActiveMainWorkspaceRoot() !== previousRoot
+    ) {
+      await this._startProductionWorkspaceRuntime();
+    }
+    return result;
+  }
 
   getPreferences() { return this._readPreferences(); }
   savePreferences(p) { return this._writePreferences(p); }
@@ -2736,6 +3111,10 @@ export class HanaEngine {
     // 9. 清理过期的 .ephemeral session 文件（>7 天）
     this._cleanEphemeralSessions();
 
+    // The Engine owns the one physical main-workspace observer. Consumers
+    // only observe ResourceEventBus facts after this one-way cutover.
+    await this._startProductionWorkspaceRuntime(log);
+
     const totalTime = ((Date.now() - startupTimer) / 1000).toFixed(1);
     log(`✿ 初始化完成（${totalTime}s）`);
   }
@@ -2768,6 +3147,11 @@ export class HanaEngine {
 
   async dispose() {
     try {
+      try {
+        await this._stopProductionWorkspaceRuntime();
+      } catch {
+        moduleLog.warn("[workspace] main workspace coordinator did not stop cleanly");
+      }
       // 先卸载 plugins（它们可能依赖 engine 资源）
       if (this._pluginManager) {
         for (const p of this._pluginManager.listPlugins()) {
