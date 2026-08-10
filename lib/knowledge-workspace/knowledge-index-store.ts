@@ -720,8 +720,8 @@ export class KnowledgeIndexStore {
       input.lastCompleteSequence,
       "lastCompleteSequence",
     );
-    if (!Array.isArray(input.changes) || input.changes.length === 0) {
-      throw new TypeError("knowledge index incremental changes are required");
+    if (!Array.isArray(input.changes)) {
+      throw new TypeError("knowledge index incremental changes are invalid");
     }
     const beforeLock = this.#readCurrent();
     if (!beforeLock.manifest || !beforeLock.databaseReadable) {
@@ -816,6 +816,15 @@ export class KnowledgeIndexStore {
         this.#degradedReason = "writer_lock_release_failed";
       }
     }
+  }
+
+  /**
+   * Advances the durable cursor without changing indexed facts. A shared
+   * observer can legitimately report that no resource changed; that cursor
+   * still has to survive a restart so the same repair is not requested again.
+   */
+  advanceSequence(lastCompleteSequence: number): void {
+    this.applyIncremental({ lastCompleteSequence, changes: [] });
   }
 
   markDegraded(reason: string): void {
