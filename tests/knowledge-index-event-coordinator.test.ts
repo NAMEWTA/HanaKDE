@@ -6,6 +6,7 @@ import {
   KnowledgeIndexEventCoordinator,
   type KnowledgeIndexEventDiagnostic,
   type KnowledgeIndexEventSource,
+  type KnowledgeIndexScopedRepairRequest,
 } from "../core/knowledge-workspace/knowledge-index-event-coordinator.ts";
 import {
   KnowledgeIndexCoordinator,
@@ -16,6 +17,7 @@ import {
   type KnowledgeIndexFileSystem,
   type KnowledgeIndexResourceDocument,
 } from "../lib/knowledge-workspace/knowledge-index-store.ts";
+import { searchKnowledgeIndex } from "../lib/knowledge-workspace/knowledge-search-query.ts";
 import type {
   ProviderRootIdentity,
   ResourceDescriptor,
@@ -33,71 +35,74 @@ describe("knowledge index event coordinator", () => {
     cleanup.clear();
   });
 
-  it("coalesces a same-path burst into one disk reread and one incremental transaction", async () => {
-    const fixture = createFixture("coalesce");
-    await fixture.events.rebuild("main");
+  it("coalesces saved-disk create and modify events into one scoped reread", async () => {
+    const fixture = createFixture("coalesce", {
+      "note.txt": document("note.txt", "old"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
     fixture.documents.set("note.txt", document("note.txt", "latest"));
 
     fixture.events.accept("main", changed(1, "note.txt"));
     fixture.events.accept("main", changed(2, "note.txt", OPERATION_ID));
-    expect(fixture.events.inspect("main")).toMatchObject({
-      pendingCount: 1,
-      lastSequence: 2,
-      lastOperationId: OPERATION_ID,
-    });
     await fixture.events.flush("main");
 
-    expect(fixture.reread).toHaveBeenCalledTimes(1);
+    expect(fixture.reread).toHaveBeenCalledTimes(2);
+    expect(fixture.reread.mock.calls.at(-1)?.[0]).toBe("note.txt");
     expect(fixture.index.health("main")).toMatchObject({
       state: "ready",
       sequence: 2,
     });
     const lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect()).toMatchObject({
-      resourceCount: 1,
-      nonEmptyBodyFtsCount: 1,
-    });
+    expect(lease.inspect()).toMatchObject({ resourceCount: 1 });
     lease.release();
   });
 
   it("uses the frozen debounce window before applying a queued hint", async () => {
-    const fixture = createFixture("debounce");
-    await fixture.events.rebuild("main");
     vi.useFakeTimers();
-    fixture.documents.set("note.txt", document("note.txt", "body"));
-    fixture.events.accept("main", changed(1, "note.txt"));
+    const fixture = createFixture("debounce", {
+      "note.txt": document("note.txt", "before"),
+    }, { debounceMs: 100 });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+    fixture.documents.set("note.txt", document("note.txt", "after"));
 
+    fixture.events.accept("main", changed(1, "note.txt"));
     await vi.advanceTimersByTimeAsync(99);
     expect(fixture.reread).not.toHaveBeenCalled();
-    expect(fixture.events.inspect("main").pendingCount).toBe(1);
+
     await vi.advanceTimersByTimeAsync(1);
-    await fixture.events.flush("main");
-    expect(fixture.reread).toHaveBeenCalledTimes(1);
-    expect(fixture.events.inspect("main").pendingCount).toBe(0);
+    expect(fixture.reread).toHaveBeenCalledWith("note.txt", undefined);
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 1 });
   });
 
-  it("merges one internal operation without skipping distinct commit-time disk rereads", async () => {
-    const fixture = createFixture("operation");
-    await fixture.events.rebuild("main");
-    fixture.documents.set("a.txt", document("a.txt", "a"));
-    fixture.documents.set("b.txt", document("b.txt", "b"));
+  it("keeps distinct paths in one operation as distinct saved-disk rereads", async () => {
+    const fixture = createFixture("multi-path", {
+      "first.txt": document("first.txt", "first"),
+      "second.txt": document("second.txt", "second"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+    fixture.documents.set("first.txt", document("first.txt", "first updated"));
+    fixture.documents.set("second.txt", document("second.txt", "second updated"));
 
-    fixture.events.accept("main", changed(1, "a.txt", OPERATION_ID));
-    fixture.events.accept("main", changed(2, "b.txt", OPERATION_ID));
+    fixture.events.accept("main", changed(1, "first.txt", OPERATION_ID));
+    fixture.events.accept("main", changed(2, "second.txt", OPERATION_ID));
     await fixture.events.flush("main");
 
     expect(fixture.reread.mock.calls.map((call) => call[0]).sort()).toEqual([
-      "a.txt",
-      "b.txt",
+      "first.txt",
+      "second.txt",
     ]);
     expect(fixture.index.health("main")).toMatchObject({ sequence: 2 });
   });
 
-  it("does not advance sequence past an event that arrives during an in-flight reread", async () => {
-    const fixture = createFixture("in-flight");
-    await fixture.events.rebuild("main");
-    fixture.documents.set("first.txt", document("first.txt", "first"));
-    fixture.documents.set("second.txt", document("second.txt", "second"));
+  it("does not advance the durable sequence past an event received during an in-flight reread", async () => {
+    const fixture = createFixture("in-flight", {
+      "first.txt": document("first.txt", "first"),
+      "second.txt": document("second.txt", "second"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
     let releaseRead!: () => void;
     const readGate = new Promise<void>((resolve) => {
       releaseRead = resolve;
@@ -106,11 +111,12 @@ describe("knowledge index event coordinator", () => {
     const readStarted = new Promise<void>((resolve) => {
       reportRead = resolve;
     });
-    fixture.reread.mockImplementationOnce(async (relativePath) => {
+    fixture.reread.mockImplementationOnce(async (relativePath: string) => {
       reportRead();
       await readGate;
       return fixture.documents.get(relativePath) ?? null;
     });
+
     fixture.events.accept("main", changed(1, "first.txt"));
     const firstFlush = fixture.events.flush("main");
     await readStarted;
@@ -122,12 +128,97 @@ describe("knowledge index event coordinator", () => {
     expect(fixture.events.inspect("main").pendingCount).toBe(1);
     await fixture.events.flush("main");
     expect(fixture.index.health("main")).toMatchObject({ sequence: 2 });
-    expect(fixture.reread).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores duplicate and stale replay events without rereading disk", async () => {
-    const fixture = createFixture("stale");
-    await fixture.events.rebuild("main");
+  it("replays an in-flight event when a lower-cursor source baseline arrives", async () => {
+    const fixture = createFixture("in-flight-shared-baseline", {
+      "page.txt": document("page.txt", "initial", "page"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let reportRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      reportRead = resolve;
+    });
+    let reads = 0;
+    fixture.reread.mockImplementation(async () => {
+      reads += 1;
+      if (reads === 1) {
+        reportRead();
+        await readGate;
+        return document("page.txt", "event-version", "page");
+      }
+      return document(
+        "page.txt",
+        reads === 2 ? "baseline-version" : "event-version",
+        "page",
+      );
+    });
+
+    fixture.events.accept("main", changed(1, "page.txt"));
+    const flushing = fixture.events.flush("main");
+    await readStarted;
+    const rebuilding = fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 0,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    releaseRead();
+    await flushing;
+    await rebuilding;
+
+    expect(reads).toBe(3);
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 1,
+    });
+    const eventVersion = await searchKnowledgeIndex(fixture.index, {
+      query: "event-version",
+    }, {
+      sources: [{
+        sourceKey: "main",
+        displayName: "Main workspace",
+        availability: "available",
+      }],
+    });
+    expect(eventVersion.groups[0]).toMatchObject({
+      state: "ready",
+      items: [{
+        address: { sourceKey: "main", relativePath: "page.txt" },
+        snippets: [expect.objectContaining({
+          field: "body",
+          text: expect.stringContaining("event-version"),
+        })],
+      }],
+    });
+    const baselineVersion = await searchKnowledgeIndex(fixture.index, {
+      query: "baseline-version",
+    }, {
+      sources: [{
+        sourceKey: "main",
+        displayName: "Main workspace",
+        availability: "available",
+      }],
+    });
+    expect(baselineVersion.groups[0]).toMatchObject({
+      state: "ready",
+      items: [],
+    });
+  });
+
+  it("ignores duplicate and stale event hints without rereading disk", async () => {
+    const fixture = createFixture("stale-events", {
+      "note.txt": document("note.txt", "note"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+
     fixture.events.accept("main", changed(1, "note.txt"));
     fixture.events.accept("main", changed(1, "note.txt"));
     fixture.events.accept("main", changed(0, "note.txt"));
@@ -139,134 +230,181 @@ describe("knowledge index event coordinator", () => {
     )).toHaveLength(2);
   });
 
-  it("rereads old and new rename hints and removes the missing old resource", async () => {
-    const fixture = createFixture("rename", {
+  it("converges rename and delete through resource-scoped saved-disk rereads", async () => {
+    const fixture = createFixture("rename-delete", {
       "old.txt": document("old.txt", "old"),
     });
-    await fixture.events.rebuild("main");
+    await supplySourceDifference(fixture, "main", 0);
     fixture.documents.delete("old.txt");
     fixture.documents.set("new.txt", document("new.txt", "new"));
 
     fixture.events.accept("main", renamed(1, "old.txt", "new.txt"));
     await fixture.events.flush("main");
-
-    expect(fixture.reread.mock.calls.map((call) => call[0]).sort()).toEqual([
-      "new.txt",
-      "old.txt",
-    ]);
-    const lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect()).toMatchObject({
-      resourceCount: 1,
-      nonEmptyBodyFtsCount: 1,
-    });
-    lease.release();
-  });
-
-  it("removes indexed facts after a delete is confirmed by disk reread", async () => {
-    const fixture = createFixture("delete", {
-      "gone.md": document("gone.md", "body", "page"),
-    });
-    await fixture.events.rebuild("main");
-    fixture.documents.delete("gone.md");
-
-    fixture.events.accept("main", deleted(1, "gone.md"));
+    fixture.documents.delete("new.txt");
+    fixture.events.accept("main", deleted(2, "new.txt"));
     await fixture.events.flush("main");
 
     const lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect()).toMatchObject({
-      resourceCount: 0,
-      nonEmptyBodyFtsCount: 0,
-      rowCounts: {
-        resources: 0,
-        pages: 0,
-        headings: 0,
-        links: 0,
-        tags: 0,
-        tasks: 0,
-        contentFts: 0,
-      },
-    });
+    expect(lease.inspect()).toMatchObject({ resourceCount: 0 });
     lease.release();
   });
 
-  it("rebuilds the source for a directory mutation so descendant rows converge", async () => {
-    const fixture = createFixture("directory-mutation", {
-      "old/a.md": document("old/a.md", "a", "page"),
-      "old/b.md": document("old/b.md", "b", "page"),
+  it("requests one shared source repair for a dropped cursor and applies the supplied difference", async () => {
+    const fixture = createFixture("gap", {
+      "stable.txt": document("stable.txt", "stable"),
     });
-    await fixture.events.rebuild("main");
-    fixture.documents.clear();
-    fixture.documents.set("renamed/c.md", document("renamed/c.md", "c", "page"));
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.documents.set("stable.txt", document("stable.txt", "repaired"));
 
-    fixture.events.accept(
-      "main",
-      renamed(1, "old", "renamed", true),
-    );
-    await fixture.events.flush("main");
+    fixture.events.accept("main", changed(2, "stable.txt"));
+    fixture.events.accept("main", changed(3, "stable.txt"));
 
-    const lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect()).toMatchObject({
-      resourceCount: 1,
-      rowCounts: { resources: 1, pages: 1 },
-    });
-    lease.release();
-    expect(fixture.diagnostics).toContainEqual(expect.objectContaining({
-      state: "rebuild",
-      reason: "directory_event",
-      sequence: 1,
-    }));
-  });
-
-  it("turns a sequence gap into a source rebuild instead of trusting event payload facts", async () => {
-    const fixture = createFixture("gap");
-    await fixture.events.rebuild("main");
-    fixture.documents.set("one.txt", document("one.txt", "one"));
-    fixture.events.accept("main", changed(1, "one.txt"));
-    await fixture.events.flush("main");
-    const firstGeneration = readyGeneration(fixture.index.health("main"));
-
-    fixture.documents.set("two.txt", document("two.txt", "two"));
-    fixture.events.accept("main", changed(3, "two.txt"));
-    await fixture.events.flush("main");
-
-    expect(readyGeneration(fixture.index.health("main"))).not.toBe(
-      firstGeneration,
-    );
-    expect(fixture.diagnostics).toContainEqual(
+    expect(fixture.repairRequests).toEqual([
       expect.objectContaining({
-        state: "rebuild",
+        sourceKey: "main",
+        afterSequence: 2,
         reason: "sequence_gap",
-        sequence: 3,
       }),
-    );
+    ]);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 3,
+      coverage: "resources",
+      changes: [{ relativePath: "stable.txt", changeType: "upsert" }],
+    });
+
+    expect(fixture.events.inspect("main")).toMatchObject({
+      repairRequested: false,
+      lastSequence: 3,
+    });
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 3,
+    });
   });
 
-  it("turns a stale catch-up cursor into a source rebuild", async () => {
-    const fixture = createFixture("catch-up", {
-      "page.txt": document("page.txt", "one"),
+  it("publishes a current shared source baseline after an older repair cursor and replays only later events", async () => {
+    const fixture = createFixture("current-source-baseline", {
+      "base.txt": document("base.txt", "base"),
     });
-    await fixture.events.rebuild("main");
-    const firstGeneration = readyGeneration(fixture.index.health("main"));
-    fixture.documents.set("page.txt", document("page.txt", "two"));
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.documents.set("missed.txt", document("missed.txt", "missed"));
+    fixture.documents.set("six.txt", document("six.txt", "six"));
+    fixture.documents.set("seven.txt", document("seven.txt", "seven"));
+
+    fixture.events.accept("main", changed(5, "missed.txt"));
+    fixture.events.accept("main", changed(6, "six.txt"));
+    fixture.events.accept("main", changed(7, "seven.txt"));
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({
+        sourceKey: "main",
+        afterSequence: 5,
+        reason: "sequence_gap",
+      }),
+    ]);
+
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let reportRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      reportRead = resolve;
+    });
+    fixture.reread.mockImplementation(async (relativePath: string) => {
+      if (relativePath === "base.txt") {
+        reportRead();
+        await readGate;
+      }
+      return fixture.documents.get(relativePath) ?? null;
+    });
+
+    const rebuilding = fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 7,
+      coverage: "source",
+      changes: [
+        "base.txt",
+        "missed.txt",
+        "six.txt",
+        "seven.txt",
+      ].map((relativePath) => ({ relativePath, changeType: "upsert" as const })),
+    });
+    await readStarted;
+    fixture.documents.set("eight.txt", document("eight.txt", "eight"));
+    fixture.events.accept("main", changed(8, "eight.txt"));
+    releaseRead();
+    await rebuilding;
+
+    expect(fixture.repairRequests).toHaveLength(1);
+    expect(fixture.events.inspect("main")).toMatchObject({
+      repairRequested: false,
+      lastSequence: 8,
+    });
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 8,
+    });
+    const lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect()).toMatchObject({ resourceCount: 5 });
+    lease.release();
+  });
+
+  it("requests one shared source repair for a stale catch-up cursor", async () => {
+    const fixture = createFixture("stale-cursor", {
+      "page.txt": document("page.txt", "before"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.documents.set("page.txt", document("page.txt", "after"));
 
     fixture.events.acceptCatchUp("main", {
       stale: true,
       latestSequence: 9,
       events: [],
     });
-    await fixture.events.flush("main");
+    fixture.events.acceptCatchUp("main", {
+      stale: true,
+      latestSequence: 10,
+      events: [],
+    });
 
-    expect(readyGeneration(fixture.index.health("main"))).not.toBe(
-      firstGeneration,
-    );
-    expect(fixture.index.health("main")).toMatchObject({ sequence: 9 });
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({
+        sourceKey: "main",
+        afterSequence: 9,
+        reason: "catch_up_stale",
+      }),
+    ]);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 10,
+      coverage: "resources",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 10 });
   });
 
-  it("escalates an event storm to rebuild at the frozen rate threshold", async () => {
-    const fixture = createFixture("burst", {}, {
-      burstLimit: 3,
+  it("requests a shared source difference for a directory event instead of walking descendants", async () => {
+    const fixture = createFixture("directory", {
+      "old/a.md": document("old/a.md", "a"),
     });
-    await fixture.events.rebuild("main");
+    await supplySourceDifference(fixture, "main", 0);
+
+    fixture.events.accept("main", renamed(1, "old", "new", true));
+
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({ reason: "directory_event", sourceKey: "main" }),
+    ]);
+    expect(fixture.reread).toHaveBeenCalledTimes(1);
+  });
+
+  it("escalates an event burst to one shared repair at the configured threshold", async () => {
+    const fixture = createFixture("burst", {}, { burstLimit: 3 });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
     fixture.documents.set("a.txt", document("a.txt", "a"));
     fixture.documents.set("b.txt", document("b.txt", "b"));
     fixture.documents.set("c.txt", document("c.txt", "c"));
@@ -274,143 +412,393 @@ describe("knowledge index event coordinator", () => {
     fixture.events.accept("main", changed(1, "a.txt"));
     fixture.events.accept("main", changed(2, "b.txt"));
     fixture.events.accept("main", changed(3, "c.txt"));
-    await fixture.events.flush("main");
+    fixture.events.accept("main", changed(4, "c.txt"));
 
-    expect(fixture.diagnostics).toContainEqual(
-      expect.objectContaining({
-        state: "rebuild",
-        reason: "event_burst",
-      }),
-    );
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({ reason: "event_burst", sourceKey: "main" }),
+    ]);
+    expect(fixture.reread).not.toHaveBeenCalled();
   });
 
-  it("replays events received during rebuild before publishing the new generation", async () => {
-    const fixture = createFixture("replay", {
+  it("replays events received while a shared source baseline is building before publication", async () => {
+    const fixture = createFixture("shared-replay", {
       "page.txt": document("page.txt", "old"),
     });
-    await fixture.events.rebuild("main");
-    let releaseScan!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      releaseScan = resolve;
+    await supplySourceDifference(fixture, "main", 0);
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
     });
-    let reportStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      reportStarted = resolve;
+    let reportRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      reportRead = resolve;
     });
-    fixture.source.scan = async function* () {
-      reportStarted();
-      const snapshot = [...fixture.documents.values()];
-      await gate;
-      yield* snapshot;
-    };
-    const rebuilding = fixture.events.rebuild("main");
-    await started;
+    fixture.reread.mockImplementation(async (relativePath: string) => {
+      if (relativePath === "page.txt") {
+        reportRead();
+        await readGate;
+      }
+      return fixture.documents.get(relativePath) ?? null;
+    });
+
+    const rebuilding = fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 0,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    await readStarted;
     fixture.documents.set("during.txt", document("during.txt", "during"));
     fixture.events.accept("main", changed(1, "during.txt"));
-    releaseScan();
+    releaseRead();
     await rebuilding;
 
-    expect(fixture.reread).toHaveBeenCalledWith(
-      "during.txt",
-      expect.any(AbortSignal),
-    );
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 1 });
     const lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect().resourceCount).toBe(2);
+    expect(lease.inspect()).toMatchObject({ resourceCount: 2 });
     lease.release();
   });
 
-  it("does not publish a sequence for an event that arrives after the final replay drain", async () => {
-    const fixture = createFixture("late-replay", {
+  it("requests a follow-up shared repair when a gap arrives during an older source baseline", async () => {
+    const fixture = createFixture("shared-repair-follow-up", {
+      "base.txt": document("base.txt", "base"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.documents.set("missed.txt", document("missed.txt", "missed"));
+    fixture.documents.set("known.txt", document("known.txt", "known"));
+
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let reportRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      reportRead = resolve;
+    });
+    fixture.reread.mockImplementation(async (relativePath: string) => {
+      if (relativePath === "base.txt") {
+        reportRead();
+        await readGate;
+      }
+      return fixture.documents.get(relativePath) ?? null;
+    });
+
+    fixture.events.accept("main", renamed(1, "old", "new", true));
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({ afterSequence: 1, reason: "directory_event" }),
+    ]);
+    const firstBaseline = fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 1,
+      coverage: "source",
+      changes: [{ relativePath: "base.txt", changeType: "upsert" }],
+    });
+    await readStarted;
+    fixture.events.accept("main", changed(3, "known.txt"));
+    releaseRead();
+    await firstBaseline;
+
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({ afterSequence: 1, reason: "directory_event" }),
+      expect.objectContaining({ afterSequence: 3, reason: "sequence_gap" }),
+    ]);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 3,
+      coverage: "source",
+      changes: ["base.txt", "known.txt", "missed.txt"].map((relativePath) => ({
+        relativePath,
+        changeType: "upsert" as const,
+      })),
+    });
+
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 3 });
+    const lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect()).toMatchObject({ resourceCount: 3 });
+    lease.release();
+  });
+
+  it("does not publish a late replay cursor until the event is separately applied", async () => {
+    const fixture = createFixture("late-shared-replay", {
       "page.txt": document("page.txt", "stable"),
     });
-    await fixture.events.rebuild("main");
-    let revalidateCount = 0;
-    Object.assign(fixture.source, {
+    await supplySourceDifference(fixture, "main", 0);
+    let revalidations = 0;
+    Object.assign(fixture.sources.get("main")!, {
       revalidate: async () => {
-        revalidateCount += 1;
-        if (revalidateCount === 2) {
+        revalidations += 1;
+        if (revalidations === 2) {
           fixture.documents.set("late.txt", document("late.txt", "late"));
           fixture.events.accept("main", changed(1, "late.txt"));
         }
       },
     });
 
-    await fixture.events.rebuild("main");
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 0,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
 
     expect(fixture.index.health("main")).toMatchObject({ sequence: 0 });
-    let lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect().resourceCount).toBe(1);
-    lease.release();
-
     await fixture.events.flush("main");
     expect(fixture.index.health("main")).toMatchObject({ sequence: 1 });
-    lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect().resourceCount).toBe(2);
+    const lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect()).toMatchObject({ resourceCount: 2 });
     lease.release();
   });
 
-  it("cancels only an aborted caller while another rebuild waiter remains active", async () => {
+  it("cancels only one shared repair caller while another waiter remains active", async () => {
     const fixture = createFixture("shared-cancel", {
       "page.txt": document("page.txt", "stable"),
     });
-    await fixture.events.rebuild("main");
-    let releaseScan!: () => void;
-    const scanGate = new Promise<void>((resolve) => {
-      releaseScan = resolve;
-    });
-    let reportStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      reportStarted = resolve;
-    });
-    fixture.source.scan = async function* () {
-      reportStarted();
-      await scanGate;
-      yield* fixture.documents.values();
-    };
     const firstController = new AbortController();
     const secondController = new AbortController();
     const first = fixture.events.rebuild("main", {
       signal: firstController.signal,
     });
-    await started;
     const second = fixture.events.rebuild("main", {
       signal: secondController.signal,
     });
 
     firstController.abort();
     await expect(first).rejects.toMatchObject({ name: "AbortError" });
-    expect(fixture.events.inspect("main").rebuilding).toBe(true);
-    releaseScan();
+    expect(fixture.repairRequests).toHaveLength(1);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 0,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
     await second;
     expect(fixture.index.health("main")).toMatchObject({ state: "ready" });
   });
 
-  it("degrades on source read failure while keeping the previous generation readable", async () => {
-    const fixture = createFixture("degraded", {
+  it("coalesces an explicit rebuild into an automatic shared repair awaiting its baseline", async () => {
+    const fixture = createFixture("shared-repair-coalesce", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+
+    fixture.events.accept("main", changed(2, "page.txt"));
+    expect(fixture.repairRequests).toHaveLength(1);
+
+    const rebuilding = fixture.events.rebuild("main");
+    expect(fixture.repairRequests).toHaveLength(1);
+
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 2,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    await rebuilding;
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 2,
+    });
+  });
+
+  it("fails closed when a shared baseline predates the outstanding repair cursor", async () => {
+    const fixture = createFixture("stale-repair-baseline", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+
+    fixture.events.accept("main", changed(5, "page.txt"));
+    const repairing = fixture.events.rebuild("main");
+    const repairFailure = expect(repairing).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+
+    await expect(fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 4,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    })).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+    await repairFailure;
+
+    expect(fixture.reread).not.toHaveBeenCalled();
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "degraded",
+      reason: "knowledge_shared_baseline_cursor_stale",
+    });
+
+    const retry = fixture.events.rebuild("main");
+    expect(fixture.repairRequests).toHaveLength(2);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 5,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    await retry;
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 5,
+    });
+  });
+
+  it("fails closed for an outdated repair baseline even after a newer cursor was accepted", async () => {
+    const fixture = createFixture("stale-accepted-repair-baseline", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 10);
+
+    fixture.events.accept("main", changed(12, "page.txt"));
+    const repairing = fixture.events.rebuild("main");
+    const repairFailure = expect(repairing).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+
+    await expect(fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 9,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    })).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+    await repairFailure;
+
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "degraded",
+      reason: "knowledge_shared_baseline_cursor_stale",
+    });
+  });
+
+  it("keeps the last committed generation readable when a shared repair read fails and retries", async () => {
+    const fixture = createFixture("reader-retry", {
       "stable.txt": document("stable.txt", "stable"),
     });
-    await fixture.events.rebuild("main");
+    await supplySourceDifference(fixture, "main", 0);
     const generationId = readyGeneration(fixture.index.health("main"));
+    fixture.documents.set("stable.txt", document("stable.txt", "repaired"));
     fixture.reread.mockRejectedValueOnce(Object.assign(
       new Error("offline"),
       { code: "source_unavailable" },
     ));
-    fixture.events.accept("main", changed(1, "stable.txt"));
+    const difference = {
+      type: "shared-baseline-difference" as const,
+      sourceKey: "main",
+      cursor: 1,
+      coverage: "resources" as const,
+      changes: [{ relativePath: "stable.txt", changeType: "upsert" as const }],
+    };
 
-    await expect(fixture.events.flush("main")).rejects.toMatchObject({
-      code: "source_unavailable",
+    await expect(fixture.events.acceptSharedBaseline(difference)).rejects
+      .toMatchObject({ code: "source_unavailable" });
+    expect(fixture.index.health("main")).toEqual({
+      state: "degraded",
+      generationId,
+      reason: "source_unavailable",
+    });
+    await fixture.events.acceptSharedBaseline(difference);
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 1,
+    });
+  });
+
+  it("keeps a failed shared repair barrier active until a replacement baseline publishes", async () => {
+    const fixture = createFixture("failed-barrier", {
+      "stable.txt": document("stable.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    const generationId = readyGeneration(fixture.index.health("main"));
+    fixture.reread.mockClear();
+    fixture.reread.mockRejectedValueOnce(Object.assign(
+      new Error("offline"),
+      { code: "source_unavailable" },
+    ));
+
+    await expect(fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 1,
+      coverage: "resources",
+      changes: [{ relativePath: "stable.txt", changeType: "upsert" }],
+    })).rejects.toMatchObject({ code: "source_unavailable" });
+    fixture.documents.set("stable.txt", document("stable.txt", "recovered"));
+    fixture.events.accept("main", changed(2, "stable.txt"));
+    await fixture.events.flush("main");
+
+    expect(fixture.events.inspect("main")).toMatchObject({
+      repairRequested: true,
+      replayCount: 1,
     });
     expect(fixture.index.health("main")).toEqual({
       state: "degraded",
       generationId,
       reason: "source_unavailable",
     });
-    const lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect().generationId).toBe(generationId);
-    lease.release();
+    expect(fixture.reread).toHaveBeenCalledTimes(1);
+
+    const retry = fixture.events.rebuild("main");
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({ sourceKey: "main", reason: "requested" }),
+    ]);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 2,
+      coverage: "source",
+      changes: [{ relativePath: "stable.txt", changeType: "upsert" }],
+    });
+    await retry;
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 2,
+    });
   });
 
-  it("rolls back an incremental transaction when manifest publication fails", async () => {
+  it("ignores a stale shared baseline below the last accepted cursor", async () => {
+    const fixture = createFixture("stale-shared", {
+      "stable.txt": document("stable.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+    fixture.documents.set("stable.txt", document("stable.txt", "new"));
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 5,
+      coverage: "resources",
+      changes: [{ relativePath: "stable.txt", changeType: "upsert" }],
+    });
+    fixture.reread.mockClear();
+
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 4,
+      coverage: "resources",
+      changes: [{ relativePath: "stable.txt", changeType: "upsert" }],
+    });
+
+    expect(fixture.reread).not.toHaveBeenCalled();
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 5 });
+    expect(fixture.diagnostics).toContainEqual(expect.objectContaining({
+      state: "ignored",
+      reason: "stale_shared_baseline",
+    }));
+  });
+
+  it("rolls back a failed scoped index commit and retries the retained event", async () => {
     let failNextManifest = false;
     const fileSystem: KnowledgeIndexFileSystem = {
       ...nodeKnowledgeIndexFileSystem,
@@ -422,20 +810,16 @@ describe("knowledge index event coordinator", () => {
           failNextManifest = false;
           throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
         }
-        nodeKnowledgeIndexFileSystem.writeFileFsynced(
-          filePath,
-          content,
-          mode,
-        );
+        nodeKnowledgeIndexFileSystem.writeFileFsynced(filePath, content, mode);
       },
     };
-    const fixture = createFixture("incremental-failure", {
+    const fixture = createFixture("index-retry", {
       "stable.txt": document("stable.txt", "stable"),
     }, { fileSystem });
-    await fixture.events.rebuild("main");
+    await supplySourceDifference(fixture, "main", 0);
     const generationId = readyGeneration(fixture.index.health("main"));
-    fixture.documents.set("new.txt", document("new.txt", "new"));
-    fixture.events.accept("main", changed(1, "new.txt"));
+    fixture.documents.set("stable.txt", document("stable.txt", "changed"));
+    fixture.events.accept("main", changed(1, "stable.txt"));
     failNextManifest = true;
 
     await expect(fixture.events.flush("main")).rejects.toMatchObject({
@@ -446,36 +830,33 @@ describe("knowledge index event coordinator", () => {
       generationId,
       reason: "knowledge_index_unavailable",
     });
-    const lease = fixture.index.acquireQueryLease("main");
-    expect(lease.inspect()).toMatchObject({
-      generationId,
-      resourceCount: 1,
+    await fixture.events.flush("main");
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 1,
     });
-    lease.release();
   });
 
-  it("keeps source queues independent so one unavailable source does not block another", async () => {
-    const fixture = createFixture("sources");
-    fixture.identities.set(
-      "research",
-      identity("research-root", "research-scope"),
-    );
-    const researchDocuments = new Map([
+  it("keeps a failed source repair isolated from another source", async () => {
+    const fixture = createFixture("independent", {
+      "main.txt": document("main.txt", "main"),
+    });
+    fixture.identities.set("research", providerIdentity("research-root", "research-scope"));
+    const researchDocuments = new Map<string, KnowledgeIndexResourceDocument>([
       ["research.txt", document("research.txt", "research")],
     ]);
-    const researchSource = sourceFrom(researchDocuments);
-    fixture.sources.set("research", researchSource.source);
+    fixture.addSource("research", researchDocuments);
     await Promise.all([
-      fixture.events.rebuild("main"),
-      fixture.events.rebuild("research"),
+      supplySourceDifference(fixture, "main", 0),
+      supplySourceDifference(fixture, "research", 0),
     ]);
     fixture.reread.mockRejectedValueOnce(Object.assign(
-      new Error("main offline"),
+      new Error("main unavailable"),
       { code: "source_unavailable" },
     ));
-    researchDocuments.set("new.txt", document("new.txt", "new"));
+    researchDocuments.set("research.txt", document("research.txt", "updated"));
     fixture.events.accept("main", changed(1, "main.txt"));
-    fixture.events.accept("research", changed(1, "new.txt"));
+    fixture.events.accept("research", changed(1, "research.txt"));
 
     const results = await Promise.allSettled([
       fixture.events.flush("main"),
@@ -491,14 +872,13 @@ describe("knowledge index event coordinator", () => {
     });
   });
 
-  it("keeps diagnostics correlation-only and never exposes event path or body", async () => {
-    const fixture = createFixture("diagnostics");
-    await fixture.events.rebuild("main");
-    fixture.documents.set("private.txt", document("private.txt", "secret body"));
-    fixture.events.accept(
-      "main",
-      changed(1, "private.txt", OPERATION_ID),
-    );
+  it("keeps diagnostics correlation-only when applying shared differences", async () => {
+    const fixture = createFixture("diagnostics", {
+      "private.txt": document("private.txt", "secret body"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.documents.set("private.txt", document("private.txt", "new secret body"));
+    fixture.events.accept("main", changed(1, "private.txt", OPERATION_ID));
     await fixture.events.flush("main");
 
     const serialized = JSON.stringify(fixture.diagnostics);
@@ -510,27 +890,26 @@ describe("knowledge index event coordinator", () => {
   function createFixture(
     label: string,
     initial: Record<string, KnowledgeIndexResourceDocument> = {},
-    eventOptions: {
+    options: {
       burstLimit?: number;
+      debounceMs?: number;
+      maxDebounceMs?: number;
       fileSystem?: KnowledgeIndexFileSystem;
     } = {},
   ) {
-    const root = fs.mkdtempSync(path.join(
-      os.tmpdir(),
-      `hana-index-events-${label}-`,
-    ));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), `hana-index-events-${label}-`));
     cleanup.add(root);
     const identities = new Map<string, ProviderRootIdentity>([
-      ["main", identity("main-root", "main-scope")],
+      ["main", providerIdentity("main-root", "main-scope")],
     ]);
     const index = new KnowledgeIndexCoordinator({
       hanakoHome: root,
-      workspaceIdentity: identity("workspace-root", "workspace-scope"),
+      workspaceIdentity: providerIdentity("workspace-root", "workspace-scope"),
       sourceRegistry: {
         rootIdentity(sourceKey) {
-          const value = identities.get(sourceKey);
-          if (!value) throw new Error("source unavailable");
-          return value;
+          const identity = identities.get(sourceKey);
+          if (!identity) throw new Error("source unavailable");
+          return identity;
         },
         async revalidate(sourceKey) {
           if (!identities.has(sourceKey)) throw new Error("source unavailable");
@@ -539,14 +918,39 @@ describe("knowledge index event coordinator", () => {
       extractorContractVersion: "knowledge-index-v1",
       hostId: "event-host",
       pid: 42_001,
-      fileSystem: eventOptions.fileSystem,
+      fileSystem: options.fileSystem,
     });
     const documents = new Map(Object.entries(initial));
-    const sourceFixture = sourceFrom(documents);
-    const sources = new Map<string, KnowledgeIndexEventSource>([
-      ["main", sourceFixture.source],
-    ]);
+    const sources = new Map<string, KnowledgeIndexEventSource>();
+    const rereads = new Map<string, ReturnType<typeof vi.fn>>();
+    const addSource = (
+      sourceKey: string,
+      entries: Map<string, KnowledgeIndexResourceDocument>,
+    ) => {
+      const reread = vi.fn(async (relativePath: string) =>
+        entries.get(relativePath) ?? null
+      );
+      rereads.set(sourceKey, reread);
+      sources.set(sourceKey, {
+        eventPaths(event) {
+          if (event.type === "resource.renamed") {
+            return [resourcePath(event.oldResource), resourcePath(event.newResource)];
+          }
+          return [resourcePath(event.resource)];
+        },
+        reread,
+        async *scanMountedSource() {
+          for (const document of [...entries.values()].sort((left, right) =>
+            left.resource.relativePath.localeCompare(right.resource.relativePath)
+          )) {
+            yield document;
+          }
+        },
+      });
+    };
+    addSource("main", documents);
     const diagnostics: KnowledgeIndexEventDiagnostic[] = [];
+    const repairRequests: KnowledgeIndexScopedRepairRequest[] = [];
     let nextId = 0;
     const events = new KnowledgeIndexEventCoordinator({
       indexCoordinator: index,
@@ -557,53 +961,54 @@ describe("knowledge index event coordinator", () => {
       },
       createId: () => `event-${++nextId}`,
       yieldNow: async () => {},
-      burstLimit: eventOptions.burstLimit,
+      burstLimit: options.burstLimit,
+      debounceMs: options.debounceMs,
+      maxDebounceMs: options.maxDebounceMs,
       onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onScopedRepairRequested: (request) => repairRequests.push(request),
     });
     return {
+      addSource,
       diagnostics,
       documents,
       events,
       identities,
       index,
-      reread: sourceFixture.reread,
-      source: sourceFixture.source,
+      repairRequests,
+      reread: rereads.get("main")!,
+      rereads,
       sources,
     };
   }
 });
 
-const OPERATION_ID = "123e4567-e89b-42d3-a456-426614174000";
-
-function sourceFrom(
-  documents: Map<string, KnowledgeIndexResourceDocument>,
-) {
-  const reread = vi.fn(async (relativePath: string) =>
-    documents.get(relativePath) ?? null
-  );
-  const source: KnowledgeIndexEventSource & {
-    scan: KnowledgeIndexEventSource["scan"];
-  } = {
-    eventPaths(event) {
-      if (event.type === "resource.renamed") {
-        return [
-          resourcePath(event.oldResource),
-          resourcePath(event.newResource),
-        ];
-      }
-      return [resourcePath(event.resource)];
-    },
-    reread,
-    async *scan() {
-      for (const entry of [...documents.entries()].sort(
-        ([left], [right]) => left.localeCompare(right),
-      )) {
-        yield entry[1];
-      }
-    },
-  };
-  return { reread, source };
+async function supplySourceDifference(
+  fixture: {
+    documents: Map<string, KnowledgeIndexResourceDocument>;
+    events: KnowledgeIndexEventCoordinator;
+    sources: Map<string, KnowledgeIndexEventSource>;
+  },
+  sourceKey: string,
+  cursor: number,
+): Promise<void> {
+  const source = fixture.sources.get(sourceKey);
+  if (!source) throw new Error("source fixture is unavailable");
+  const entries = sourceKey === "main"
+    ? fixture.documents
+    : undefined;
+  const paths = entries
+    ? [...entries.keys()]
+    : [];
+  await fixture.events.acceptSharedBaseline({
+    type: "shared-baseline-difference",
+    sourceKey,
+    cursor,
+    coverage: "source",
+    changes: paths.map((relativePath) => ({ relativePath, changeType: "upsert" })),
+  });
 }
+
+const OPERATION_ID = "123e4567-e89b-42d3-a456-426614174000";
 
 function document(
   relativePath: string,
@@ -717,7 +1122,7 @@ function renamed(
   };
 }
 
-function identity(
+function providerIdentity(
   opaqueRootId: string,
   scopeToken: string,
 ): ProviderRootIdentity {

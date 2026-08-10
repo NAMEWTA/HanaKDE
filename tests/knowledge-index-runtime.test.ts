@@ -2,92 +2,37 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HanaEngine } from "../core/engine.ts";
+import {
+  KnowledgeIndexRuntime,
+} from "../core/knowledge-workspace/knowledge-index-runtime.ts";
+import type {
+  KnowledgeIndexScopedRepairRequest,
+  KnowledgeIndexSharedBaselineDifference,
+} from "../core/knowledge-workspace/knowledge-index-event-coordinator.ts";
 import { SourceRegistry } from "../core/knowledge-workspace/source-registry.ts";
 import { searchKnowledgeIndex } from "../lib/knowledge-workspace/knowledge-search-query.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import { ResourceIO } from "../lib/resource-io/resource-io.ts";
+import { resourceKeyForRef } from "../lib/resource-io/resource-refs.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
 
-describe("production knowledge index runtime", () => {
+describe("knowledge index runtime", () => {
   const cleanup = new Set<string>();
 
   afterEach(() => {
-    vi.useRealTimers();
     for (const directory of cleanup) {
       fs.rmSync(directory, { recursive: true, force: true });
     }
     cleanup.clear();
   });
 
-  it("builds the initial saved-disk index and converges an external filesystem write through the retained source watcher", async () => {
-    const fixture = await createFixture("initial");
+  it("accepts an already-cached source baseline, then applies a normal ResourceEventBus change through the registered root alias", async (context) => {
+    const fixture = await createFixture("cached-main");
     fs.writeFileSync(path.join(fixture.workspace, "Initial.md"), "# Initial\n\nalpha", "utf8");
-
-    await fixture.engine.bindKnowledgeIndexWorkspace(fixture.registry);
-    await waitForReady(fixture.engine, "main");
-    await expect(searchPaths(fixture.engine, "initial")).resolves.toEqual([
-      "Initial.md",
-    ]);
-
-    fs.writeFileSync(
-      path.join(fixture.workspace, "Later.md"),
-      "# Later\n\nbeta",
-      "utf8",
-    );
-    await vi.waitFor(() => {
-      expect(fixture.engine.getKnowledgeIndexCoordinator()?.health("main"))
-        .toMatchObject({ state: "ready", sequence: 1 });
-    }, { timeout: 5_000, interval: 25 });
-    await vi.waitFor(async () => {
-      expect(await searchPaths(fixture.engine, "beta")).toEqual(["Later.md"]);
-    }, { timeout: 5_000, interval: 25 });
-
-    await fixture.engine.disposeKnowledgeIndexRuntime();
-    expect(fixture.watchRegistry.diagnostics().watches).toHaveLength(0);
-  });
-
-  it("rebuilds after external directory rename and deletion so descendant rows do not remain stale", async () => {
-    const fixture = await createFixture("directory-mutations");
-    const oldDirectory = path.join(fixture.workspace, "old");
-    fs.mkdirSync(oldDirectory, { recursive: true });
-    fs.writeFileSync(path.join(oldDirectory, "A.md"), "# A\n\nfolder-token", "utf8");
-    fs.writeFileSync(path.join(oldDirectory, "B.md"), "# B\n\nfolder-token", "utf8");
-
-    await fixture.engine.bindKnowledgeIndexWorkspace(fixture.registry);
-    await waitForReady(fixture.engine, "main");
-    await expect(searchPaths(fixture.engine, "folder-token")).resolves.toEqual([
-      "old/A.md",
-      "old/B.md",
-    ]);
-
-    const renamedDirectory = path.join(fixture.workspace, "renamed");
-    fs.renameSync(oldDirectory, renamedDirectory);
-    await vi.waitFor(async () => {
-      expect(await searchPaths(fixture.engine, "folder-token")).toEqual([
-        "renamed/A.md",
-        "renamed/B.md",
-      ]);
-    }, { timeout: 10_000, interval: 50 });
-
-    fs.rmSync(renamedDirectory, { recursive: true });
-    await vi.waitFor(async () => {
-      expect(await searchPaths(fixture.engine, "folder-token")).toEqual([]);
-    }, { timeout: 10_000, interval: 50 });
-
-    await fixture.engine.disposeKnowledgeIndexRuntime();
-  });
-
-  it("fails closed when an externally added source symlink resolves outside the registered root", async (context) => {
-    const fixture = await createFixture("symlink-scope");
-    fs.writeFileSync(path.join(fixture.workspace, "Stable.md"), "# Stable\ninside", "utf8");
-    await fixture.engine.bindKnowledgeIndexWorkspace(fixture.registry);
-    await waitForReady(fixture.engine, "main");
-    const outside = path.join(fixture.root, "Outside.md");
-    fs.writeFileSync(outside, "# Outside\nleak-token", "utf8");
+    const workspaceAlias = path.join(fixture.root, "workspace-alias");
     try {
-      fs.symlinkSync(outside, path.join(fixture.workspace, "Leak.md"), "file");
+      fs.symlinkSync(fixture.workspace, workspaceAlias, "dir");
     } catch (error) {
       if (["EPERM", "EACCES"].includes(
         (error as NodeJS.ErrnoException).code ?? "",
@@ -97,60 +42,260 @@ describe("production knowledge index runtime", () => {
       }
       throw error;
     }
+    const registry = await SourceRegistry.create({
+      mainRoot: { kind: "local-file", path: workspaceAlias },
+      resourceIO: fixture.resourceIO,
+      hanakoHome: fixture.hanakoHome,
+    });
+    const repairRequests: KnowledgeIndexScopedRepairRequest[] = [];
+    const runtime = new KnowledgeIndexRuntime({
+      hanakoHome: fixture.hanakoHome,
+      hostId: "runtime-cached-main",
+      resourceIO: fixture.resourceIO,
+      resourceEvents: fixture.eventBus,
+      retainWatch: fixture.retainWatch,
+      sharedBaseline: {
+        subscribe(consumer) {
+          consumer(sourceBaseline(0, ["Initial.md"]));
+          return () => undefined;
+        },
+        requestRepair(request) {
+          repairRequests.push(request);
+        },
+      },
+    });
 
-    await vi.waitFor(() => {
-      expect(fixture.engine.getKnowledgeIndexCoordinator()?.health("main"))
-        .toMatchObject({ state: "degraded" });
-    }, { timeout: 10_000, interval: 50 });
-    await expect(searchPaths(fixture.engine, "leak-token")).resolves.toEqual([]);
+    await runtime.bindWorkspace(registry);
+    await waitForReady(runtime, "main");
+    await expect(searchPaths(runtime, "alpha")).resolves.toEqual(["Initial.md"]);
+    expect(repairRequests).toEqual([]);
+    expect(fixture.watchRegistry.diagnostics().watches).toHaveLength(0);
+    expect(mainWasListed(fixture.list.mock.calls, fixture.workspace)).toBe(false);
 
-    await fixture.engine.disposeKnowledgeIndexRuntime();
+    const later = path.join(workspaceAlias, "Later.md");
+    fs.writeFileSync(later, "# Later\n\nbeta", "utf8");
+    fixture.eventBus.changed({
+      changeType: "created",
+      resourceKey: resourceKeyForRef({ kind: "local-file", path: later }),
+      resource: { kind: "local-file", path: later, isDirectory: false },
+      source: "provider_watch",
+      sessionPath: null,
+    });
+
+    await vi.waitFor(async () => {
+      expect(runtime.coordinator()?.health("main")).toMatchObject({
+        state: "ready",
+        sequence: 1,
+      });
+      expect(await searchPaths(runtime, "beta")).toEqual(["Later.md"]);
+    });
+    expect(repairRequests).toEqual([]);
+    await runtime.dispose();
   });
 
-  it("starts newly registered sources and stops the old workspace before rebinding", async () => {
-    const first = await createFixture("switch-first");
-    const research = path.join(first.root, "research");
+  it("requests a shared source repair for directory rename and deletion", async () => {
+    const fixture = await createFixture("directory-repair");
+    const oldDirectory = path.join(fixture.workspace, "old");
+    fs.mkdirSync(oldDirectory, { recursive: true });
+    fs.writeFileSync(path.join(oldDirectory, "A.md"), "# A\n\nfolder-token", "utf8");
+    fs.writeFileSync(path.join(oldDirectory, "B.md"), "# B\n\nfolder-token", "utf8");
+    const repairRequests: KnowledgeIndexScopedRepairRequest[] = [];
+    let receiveSharedBaseline: ((input: KnowledgeIndexSharedBaselineDifference) => void) | null = null;
+    const runtime = new KnowledgeIndexRuntime({
+      hanakoHome: fixture.hanakoHome,
+      hostId: "runtime-directory-repair",
+      resourceIO: fixture.resourceIO,
+      resourceEvents: fixture.eventBus,
+      retainWatch: fixture.retainWatch,
+      sharedBaseline: {
+        subscribe(consumer) {
+          receiveSharedBaseline = consumer;
+          consumer(sourceBaseline(0, ["old/A.md", "old/B.md"]));
+          return () => undefined;
+        },
+        requestRepair(request) {
+          repairRequests.push(request);
+        },
+      },
+    });
+
+    await runtime.bindWorkspace(fixture.registry);
+    await waitForReady(runtime, "main");
+    await expect(searchPaths(runtime, "folder-token")).resolves.toEqual([
+      "old/A.md",
+      "old/B.md",
+    ]);
+
+    const renamedDirectory = path.join(fixture.workspace, "renamed");
+    fs.renameSync(oldDirectory, renamedDirectory);
+    fixture.eventBus.renamed({
+      oldResourceKey: resourceKeyForRef({ kind: "local-file", path: oldDirectory }),
+      newResourceKey: resourceKeyForRef({ kind: "local-file", path: renamedDirectory }),
+      oldResource: { kind: "local-file", path: oldDirectory, isDirectory: true },
+      newResource: { kind: "local-file", path: renamedDirectory, isDirectory: true },
+      source: "provider_watch",
+      sessionPath: null,
+    });
+    await vi.waitFor(() => {
+      expect(repairRequests).toEqual([
+        expect.objectContaining({
+          sourceKey: "main",
+          afterSequence: 1,
+          reason: "directory_event",
+        }),
+      ]);
+    });
+    if (!receiveSharedBaseline) throw new Error("shared baseline subscriber was not retained");
+    receiveSharedBaseline(sourceBaseline(1, ["renamed/A.md", "renamed/B.md"]));
+    await vi.waitFor(async () => {
+      expect(await searchPaths(runtime, "folder-token")).toEqual([
+        "renamed/A.md",
+        "renamed/B.md",
+      ]);
+    });
+
+    fs.rmSync(renamedDirectory, { recursive: true });
+    fixture.eventBus.deleted({
+      resourceKey: resourceKeyForRef({ kind: "local-file", path: renamedDirectory }),
+      resource: { kind: "local-file", path: renamedDirectory, isDirectory: true },
+      source: "provider_watch",
+      sessionPath: null,
+    });
+    await vi.waitFor(() => {
+      expect(repairRequests).toHaveLength(2);
+      expect(repairRequests[1]).toMatchObject({
+        sourceKey: "main",
+        afterSequence: 2,
+        reason: "directory_event",
+      });
+    });
+    receiveSharedBaseline(sourceBaseline(2, []));
+    await vi.waitFor(async () => {
+      expect(await searchPaths(runtime, "folder-token")).toEqual([]);
+    });
+    expect(mainWasListed(fixture.list.mock.calls, fixture.workspace)).toBe(false);
+    await runtime.dispose();
+  });
+
+  it("fails closed when a file event resolves through a symlink outside main", async (context) => {
+    const fixture = await createFixture("symlink-scope");
+    const stable = path.join(fixture.workspace, "Stable.md");
+    fs.writeFileSync(stable, "# Stable\ninside", "utf8");
+    const runtime = new KnowledgeIndexRuntime({
+      hanakoHome: fixture.hanakoHome,
+      hostId: "runtime-symlink-scope",
+      resourceIO: fixture.resourceIO,
+      resourceEvents: fixture.eventBus,
+      retainWatch: fixture.retainWatch,
+      sharedBaseline: {
+        subscribe(consumer) {
+          consumer(sourceBaseline(0, ["Stable.md"]));
+          return () => undefined;
+        },
+        requestRepair() {},
+      },
+    });
+    await runtime.bindWorkspace(fixture.registry);
+    await waitForReady(runtime, "main");
+    const outside = path.join(fixture.root, "Outside.md");
+    fs.writeFileSync(outside, "# Outside\nleak-token", "utf8");
+    const leak = path.join(fixture.workspace, "Leak.md");
+    try {
+      fs.symlinkSync(outside, leak, "file");
+    } catch (error) {
+      if (["EPERM", "EACCES"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )) {
+        context.skip();
+        return;
+      }
+      throw error;
+    }
+    fixture.eventBus.changed({
+      changeType: "created",
+      resourceKey: resourceKeyForRef({ kind: "local-file", path: leak }),
+      resource: { kind: "local-file", path: leak, isDirectory: false },
+      source: "provider_watch",
+      sessionPath: null,
+    });
+
+    await vi.waitFor(() => {
+      expect(runtime.coordinator()?.health("main")).toMatchObject({
+        state: "degraded",
+      });
+    });
+    await expect(searchPaths(runtime, "leak-token")).resolves.toEqual([]);
+    await runtime.dispose();
+  });
+
+  it("indexes mounted sources through the canonical lease and replaces the main binding without stale projection", async () => {
+    const fixture = await createFixture("switch-first");
+    const research = path.join(fixture.root, "research");
     fs.mkdirSync(research, { recursive: true });
     fs.writeFileSync(path.join(research, "Research.md"), "# Research\n\ngamma", "utf8");
-    await first.registry.register({
+    await fixture.registry.register({
       sourceKey: "research",
       displayName: "Research",
       root: { kind: "local-file", path: research },
     });
+    let currentBaseline = sourceBaseline(0, []);
+    let receiveSharedBaseline: ((input: KnowledgeIndexSharedBaselineDifference) => void) | null = null;
+    const runtime = new KnowledgeIndexRuntime({
+      hanakoHome: fixture.hanakoHome,
+      hostId: "runtime-switch-test",
+      resourceIO: fixture.resourceIO,
+      resourceEvents: fixture.eventBus,
+      retainWatch: fixture.retainWatch,
+      sharedBaseline: {
+        subscribe(consumer) {
+          receiveSharedBaseline = consumer;
+          return () => undefined;
+        },
+        requestRepair() {
+          receiveSharedBaseline?.(currentBaseline);
+        },
+      },
+    });
+    currentBaseline = sourceBaseline(0, []);
+    fs.writeFileSync(path.join(fixture.workspace, "First.md"), "# First\n\nalpha", "utf8");
+    currentBaseline = sourceBaseline(0, ["First.md"]);
 
-    await first.engine.bindKnowledgeIndexWorkspace(first.registry);
-    await waitForReady(first.engine, "research");
-    await expect(searchPaths(first.engine, "gamma", "research")).resolves.toEqual([
+    await runtime.bindWorkspace(fixture.registry);
+    await waitForReady(runtime, "main");
+    await waitForReady(runtime, "research");
+    await expect(searchPaths(runtime, "gamma", "research")).resolves.toEqual([
       "Research.md",
     ]);
+    expect(fixture.watchRegistry.diagnostics().watches).toHaveLength(1);
 
-    const oldCoordinator = first.engine.getKnowledgeIndexCoordinator();
-    const oldHealth = oldCoordinator?.health("main");
-    const secondWorkspace = path.join(first.root, "second-workspace");
+    const secondWorkspace = path.join(fixture.root, "second-workspace");
     fs.mkdirSync(secondWorkspace, { recursive: true });
     fs.writeFileSync(path.join(secondWorkspace, "Second.md"), "# Second\n\ndelta", "utf8");
     const secondRegistry = await SourceRegistry.create({
       mainRoot: { kind: "local-file", path: secondWorkspace },
-      resourceIO: first.resourceIO,
-      hanakoHome: first.hanakoHome,
+      resourceIO: fixture.resourceIO,
+      hanakoHome: fixture.hanakoHome,
     });
+    currentBaseline = sourceBaseline(fixture.eventBus.latestSequence(), ["Second.md"]);
 
-    await first.engine.bindKnowledgeIndexWorkspace(secondRegistry);
-    await waitForReady(first.engine, "main");
-    await expect(searchPaths(first.engine, "delta")).resolves.toEqual([
-      "Second.md",
-    ]);
+    await runtime.bindWorkspace(secondRegistry);
+    await waitForReady(runtime, "main");
+    await expect(searchPaths(runtime, "delta")).resolves.toEqual(["Second.md"]);
 
-    await first.resourceIO.write(
-      { kind: "local-file", path: path.join(first.workspace, "Old.md") },
-      "# Old\n\nshould-not-converge",
-      { reason: "runtime-switch-test" },
-    );
+    const oldPath = path.join(fixture.workspace, "Old.md");
+    fs.writeFileSync(oldPath, "# Old\n\nshould-not-converge", "utf8");
+    fixture.eventBus.changed({
+      changeType: "created",
+      resourceKey: resourceKeyForRef({ kind: "local-file", path: oldPath }),
+      resource: { kind: "local-file", path: oldPath, isDirectory: false },
+      source: "provider_watch",
+      sessionPath: null,
+    });
     await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(oldCoordinator?.health("main")).toEqual(oldHealth);
-    await expect(searchPaths(first.engine, "should-not-converge")).resolves.toEqual([]);
+    await expect(searchPaths(runtime, "should-not-converge")).resolves.toEqual([]);
 
-    await first.engine.disposeKnowledgeIndexRuntime();
+    await runtime.dispose();
+    expect(fixture.watchRegistry.diagnostics().watches).toHaveLength(0);
   });
 
   async function createFixture(label: string) {
@@ -160,7 +305,7 @@ describe("production knowledge index runtime", () => {
     const workspace = path.join(root, "workspace");
     fs.mkdirSync(hanakoHome, { recursive: true });
     fs.mkdirSync(workspace, { recursive: true });
-    const eventBus = new ResourceEventBus({ emit: () => {} });
+    const eventBus = new ResourceEventBus({ emit: () => undefined });
     const resourceIO = new ResourceIO({
       providers: {
         local_fs: new LocalFsProvider({ cwd: root }),
@@ -172,30 +317,21 @@ describe("production knowledge index runtime", () => {
       resourceIO,
       hanakoHome,
     });
+    const list = vi.spyOn(resourceIO, "list");
     const watchRegistry = new ResourceWatchRegistry({
       eventBus,
-      debounceMs: 10,
+      debounceMs: 0,
       resolveWatchTarget: (resource) => resourceIO.resolveWatchTarget(resource),
-    });
-    const engine = Object.create(HanaEngine.prototype) as HanaEngine;
-    Object.assign(engine, {
-      hanakoHome,
-      _knowledgeIndexRuntime: null,
-      _resourceEventBus: eventBus,
-      _resourceIO: resourceIO,
-      _resourceWatchRegistry: watchRegistry,
-      _runtimeContext: {
-        serverId: "server-runtime-test",
-        serverNodeId: "node-runtime-test",
-        studioId: "studio-runtime-test",
-      },
+      watchPath: () => ({ close: () => undefined }),
     });
     return {
-      engine,
       eventBus,
       hanakoHome,
+      list,
       registry,
       resourceIO,
+      retainWatch: (resource: Parameters<ResourceWatchRegistry["retain"]>[0]) =>
+        watchRegistry.retain(resource),
       root,
       watchRegistry,
       workspace,
@@ -203,20 +339,39 @@ describe("production knowledge index runtime", () => {
   }
 });
 
-async function waitForReady(engine: HanaEngine, sourceKey: string): Promise<void> {
+function sourceBaseline(
+  cursor: number,
+  relativePaths: readonly string[],
+): KnowledgeIndexSharedBaselineDifference {
+  return {
+    type: "shared-baseline-difference",
+    sourceKey: "main",
+    cursor,
+    coverage: "source",
+    changes: relativePaths.map((relativePath) => ({
+      relativePath,
+      changeType: "upsert" as const,
+    })),
+  };
+}
+
+async function waitForReady(
+  runtime: KnowledgeIndexRuntime,
+  sourceKey: string,
+): Promise<void> {
   await vi.waitFor(() => {
-    expect(engine.getKnowledgeIndexCoordinator()?.health(sourceKey)).toMatchObject({
+    expect(runtime.coordinator()?.health(sourceKey)).toMatchObject({
       state: "ready",
     });
   }, { timeout: 10_000, interval: 25 });
 }
 
 async function searchPaths(
-  engine: HanaEngine,
+  runtime: KnowledgeIndexRuntime,
   query: string,
   sourceKey = "main",
 ): Promise<string[]> {
-  const coordinator = engine.getKnowledgeIndexCoordinator();
+  const coordinator = runtime.coordinator();
   if (!coordinator) throw new Error("knowledge index coordinator unavailable");
   const result = await searchKnowledgeIndex(coordinator, {
     query,
@@ -227,4 +382,16 @@ async function searchPaths(
   const group = result.groups[0];
   if (!group || group.state !== "ready") return [];
   return group.items.map((item) => item.address.relativePath);
+}
+
+function mainWasListed(
+  calls: readonly (readonly unknown[])[],
+  workspace: string,
+): boolean {
+  return calls.some(([resource]) => {
+    const listedResource = resource as { kind?: unknown; path?: unknown };
+    return listedResource.kind === "local-file"
+      && typeof listedResource.path === "string"
+      && path.resolve(listedResource.path) === path.resolve(workspace);
+  });
 }

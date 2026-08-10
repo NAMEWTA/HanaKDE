@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-14
 title: 收敛 Knowledge 事件消费与 scoped repair
-status: ready
+status: review
 planning_depth: deep
 planning_depth_reason: "Knowledge 索引状态、event cursor、generation 与跨模块一致性依赖共享核心事件并涉及可重建持久化模型。"
 ready: true
