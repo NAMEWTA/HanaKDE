@@ -567,6 +567,8 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 - **Authorization / deviation / correction limit：** local changes/commit与Lead local merge/non-force cleanup自动授权；真实用户数据/remote/release/archive禁止；3轮。
 - **Return：** 状态、Evidence、workspace、candidate commit、schema/policy/scan、未验证项、Lead验收。
 
+- **Correction round 1 / reopening:** `b9315d4b` is rejected as an incomplete candidate. A successor continues in the same `specdev-worktree/T-13` branch without rebase, under the existing writable/read-only contract. Required corrections are path validation, bounded reads, baseline batching, shared health aggregation, delete/rename cancellation, lifecycle serialization, and baseline deletion/cycle completion. T-12 must not close W4 until the successor checkpoint is merged and independently verified.
+
 #### Dispatch: T-14
 
 - **Goal / observable result：** Knowledge只消费统一事件/shared baseline differences，按source/resource scoped repair，保留独立DB/IR/Registry/Search并删除私有watch/full walk。
