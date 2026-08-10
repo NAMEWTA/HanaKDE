@@ -12,9 +12,10 @@ risk: critical
 blocked_by: [T-12, T-13, T-14]
 contract_ids: [AC-015, AC-016, AC-017, AC-026]
 owner: Worker-T-15
-expected_changes: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
-writable_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
-read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>core/engine.ts</Path>", "<Path>desktop/src/react/components/**</Path>"]
+deviations: [D-T15-01]
+expected_changes: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
+writable_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
+read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/engine.ts</Path>", "<Path>desktop/src/react/components/**</Path>"]
 shared_paths: []
 shared_path_owners: []
 ---
@@ -113,3 +114,12 @@ shared_path_owners: []
 - [ ] `AC-017`：所有六个读取面最终一致。
 - [ ] `AC-026`：restore route 不接受 raw root/public workspaceId 且不泄漏绝对路径。
 - [ ] 验证与结构 scan 记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-15.md</Path>`。
+
+## 11. 偏差 D-T15-01：主 Workspace restore authority 接缝
+
+- **等级与状态：** ticket / approved。
+- **触发事实：** `MainFileHistoryBinding` 只提供订阅和有界读取；`server/routes/file-history.ts` 只能获得已经激活的 History service，不能安全地取得或重建 main root。若 route 直接组装 filesystem path 或 ResourceIO ref，将绕过 `MainWorkspaceRootProof` 的 canonical root authority，无法在 effect time 保证 AC-015/AC-016。
+- **受影响路径与工件：** 唯一新增可写生产路径为 `<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>`，且只新增 main-bound restore adapter；唯一新增测试路径为 `<Path>tests/production-workspace-runtime.test.ts</Path>`。`<Path>lib/resource-io/**</Path>`、`<Path>core/engine.ts</Path>` 和 renderer component paths 仍只读。
+- **批准路线：** 在现有 `MainFileHistoryBinding` 上增加窄 `restore` operation。它必须在 sole write 前重新取得并比对 main root identity、重新 stat/canonicalize target、验证 authorized relative path 与 opaque expected-version token；随后仅调用既有 `ResourceIO.writeExpectedVersion`，并带 `source: "system"`、`reason: "history_restore"` 和 operation correlation。route 只能提交 opaque `snapshotId`/expected token，不能构造 raw root/path 或 fan-out refresh。
+- **不变约束：** 不改 ResourceIO 合同、不新增 watcher/baseline/EventBus、不使用 direct filesystem/DB restore、不新增 workspaceId、迁移或 compatibility mode。successful restore 必须由 canonical event 驱动 consumers，并以 `origin: "restore"` 写入可反悔 History boundary；T-16 仍独占 UI E2E。
+- **批准：** Root Lead，2026-08-10T15:13:18+0800；范围仅为上述路径授权、adapter 设计与相应 focused tests。Spec/ADR 的外部行为、AC 和 Gate 依赖不变。
