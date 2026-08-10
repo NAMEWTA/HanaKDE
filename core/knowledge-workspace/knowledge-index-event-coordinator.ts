@@ -132,6 +132,7 @@ type SharedRepairCycle = {
 type SourceState = {
   pending: Map<string, PendingHint>;
   replay: Map<string, PendingHint>;
+  inFlight: Map<string, PendingHint> | null;
   pendingSince: number | null;
   timer: ReturnType<typeof setTimeout> | null;
   lastSequence: number;
@@ -149,6 +150,8 @@ type SourceState = {
   repairRequested: boolean;
   repairReason: string | null;
   sharedRepairRequestPending: boolean;
+  sharedRepairMinimumCursor: number | null;
+  sharedRepairAfterCurrentReason: string | null;
   sharedRepair: SharedRepairCycle | null;
   sharedBaselineQueued: number;
   lastReason: string | null;
@@ -251,9 +254,7 @@ export class KnowledgeIndexEventCoordinator {
           ? "directory_event"
           : null;
     if (state.repairRequested || state.rebuilding) {
-      if (state.rebuilding && repairReason && this.#repairMode(key) === "mounted") {
-        this.#requestMountedRebuild(key, state, repairReason);
-      }
+      if (repairReason) this.#requestRepair(key, state, repairReason);
       this.#queueEventPaths(key, state, event, state.replay);
       return;
     }
@@ -279,7 +280,7 @@ export class KnowledgeIndexEventCoordinator {
     const previousSequence = state.lastSequence;
     state.lastSequence = event.sequence;
     state.lastOperationId = validOperationId(event.operationId);
-    if (!state.repairRequested && event.sequence > previousSequence + 1) {
+    if (event.sequence > previousSequence + 1) {
       this.#requestRepair(key, state, "sequence_gap");
       return;
     }
@@ -321,6 +322,20 @@ export class KnowledgeIndexEventCoordinator {
     const baseline = normalizeSharedBaselineDifference(input);
     const state = this.#state(baseline.sourceKey);
     if (state.disposed) return Promise.resolve();
+    if (
+      state.sharedRepairRequestPending
+      && state.sharedRepairMinimumCursor !== null
+      && baseline.cursor < state.sharedRepairMinimumCursor
+    ) {
+      const error = sharedBaselineCursorStale();
+      state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
+      state.repairRequested = true;
+      state.repairReason = errorReason(error);
+      this.#markDegraded(baseline.sourceKey, state, state.repairReason);
+      this.#failSharedRepair(state, error);
+      return Promise.reject(error);
+    }
     if (baseline.cursor < state.acceptedSharedCursor) {
       this.#diagnose(
         baseline.sourceKey,
@@ -335,6 +350,8 @@ export class KnowledgeIndexEventCoordinator {
       baseline.cursor,
     );
     state.sharedRepairRequestPending = false;
+    state.sharedRepairMinimumCursor = null;
+    if (state.inFlight) mergeHints(state.replay, state.inFlight);
     state.lastSequence = Math.max(state.lastSequence, baseline.cursor);
     state.sharedBaselineQueued += 1;
     state.rebuilding = true;
@@ -417,6 +434,7 @@ export class KnowledgeIndexEventCoordinator {
       this.#failSharedRepair(state, abortError());
       state.pending.clear();
       state.replay.clear();
+      state.inFlight?.clear();
       pending.push(state.tail);
       this.#states.delete(key);
     }
@@ -444,6 +462,7 @@ export class KnowledgeIndexEventCoordinator {
     const state: SourceState = {
       pending: new Map(),
       replay: new Map(),
+      inFlight: null,
       pendingSince: null,
       timer: null,
       lastSequence,
@@ -461,6 +480,8 @@ export class KnowledgeIndexEventCoordinator {
       repairRequested: false,
       repairReason: null,
       sharedRepairRequestPending: false,
+      sharedRepairMinimumCursor: null,
+      sharedRepairAfterCurrentReason: null,
       sharedRepair: null,
       sharedBaselineQueued: 0,
       lastReason: null,
@@ -510,6 +531,17 @@ export class KnowledgeIndexEventCoordinator {
       this.#requestMountedRebuild(sourceKey, state, reason);
       return;
     }
+    if (state.rebuilding) {
+      state.sharedRepairAfterCurrentReason ??= sanitizeReason(reason);
+      return;
+    }
+    if (state.repairRequested) {
+      state.sharedRepairMinimumCursor = Math.max(
+        state.sharedRepairMinimumCursor ?? 0,
+        state.lastSequence,
+      );
+      return;
+    }
     this.#requestSharedRepair(sourceKey, state, reason);
   }
 
@@ -542,6 +574,7 @@ export class KnowledgeIndexEventCoordinator {
     if (!state.repairRequested) {
       this.#clearTimer(state);
       mergeHints(state.replay, state.pending);
+      if (state.inFlight) mergeHints(state.replay, state.inFlight);
       state.pending.clear();
       state.pendingSince = null;
     }
@@ -554,6 +587,7 @@ export class KnowledgeIndexEventCoordinator {
       state.repairRequested = false;
       state.repairReason = null;
       state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
       this.#markDegraded(sourceKey, state, errorReason(error));
       this.#failSharedRepair(state, error);
       return;
@@ -567,12 +601,14 @@ export class KnowledgeIndexEventCoordinator {
       // A port may synchronously publish the requested baseline, so mark this
       // before invoking it. acceptSharedBaseline clears the marker on receipt.
       state.sharedRepairRequestPending = true;
+      state.sharedRepairMinimumCursor = request.afterSequence;
       const result = this.#onScopedRepairRequested(request);
       consumeThenable(result, () => {
         const error = sharedRepairRequestFailed();
         state.repairRequested = false;
         state.repairReason = null;
         state.sharedRepairRequestPending = false;
+        state.sharedRepairMinimumCursor = null;
         this.#markDegraded(sourceKey, state, errorReason(error));
         this.#failSharedRepair(state, error);
       });
@@ -580,6 +616,7 @@ export class KnowledgeIndexEventCoordinator {
       state.repairRequested = false;
       state.repairReason = null;
       state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
       this.#markDegraded(sourceKey, state, errorReason(error));
       this.#failSharedRepair(state, error);
     }
@@ -688,11 +725,16 @@ export class KnowledgeIndexEventCoordinator {
     const pending = state.pending;
     state.pending = new Map();
     state.pendingSince = null;
+    state.inFlight = pending;
     try {
       const source = this.#sourceFor(sourceKey);
       await source.revalidate?.();
       const changes = await rereadHints(source, pending);
       await source.revalidate?.();
+      if (state.repairRequested || state.rebuilding) {
+        mergeHints(state.replay, pending);
+        return;
+      }
       await this.#applyChangesOrAdvance(
         sourceKey,
         maxHintSequence(
@@ -704,10 +746,16 @@ export class KnowledgeIndexEventCoordinator {
       this.#indexCoordinator.clearDegraded(sourceKey);
       this.#diagnose(sourceKey, state, "incremental", "disk_reread_complete");
     } catch (error) {
-      mergeHints(state.pending, pending);
-      state.pendingSince ??= this.#now();
+      if (state.repairRequested || state.rebuilding) {
+        mergeHints(state.replay, pending);
+      } else {
+        mergeHints(state.pending, pending);
+        state.pendingSince ??= this.#now();
+      }
       this.#markDegraded(sourceKey, state, errorReason(error));
       throw error;
+    } finally {
+      if (state.inFlight === pending) state.inFlight = null;
     }
   }
 
@@ -738,6 +786,7 @@ export class KnowledgeIndexEventCoordinator {
       }
       state.repairRequested = false;
       state.repairReason = null;
+      state.sharedRepairMinimumCursor = null;
       state.acceptedSharedCursor = Math.max(
         state.acceptedSharedCursor,
         completedCursor,
@@ -748,6 +797,8 @@ export class KnowledgeIndexEventCoordinator {
     } catch (error) {
       state.repairRequested = true;
       state.repairReason ??= "shared_baseline_failed";
+      state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
       this.#markDegraded(sourceKey, state, errorReason(error));
       this.#failSharedRepair(state, error);
       throw error;
@@ -755,6 +806,24 @@ export class KnowledgeIndexEventCoordinator {
       state.sharedBaselineQueued = Math.max(0, state.sharedBaselineQueued - 1);
       state.rebuilding = state.sharedBaselineQueued > 0;
       this.#releaseReplayAfterBaseline(sourceKey, state, completedCursor);
+      if (
+        state.sharedRepairAfterCurrentReason
+        && !state.rebuilding
+        && (
+          baseline.coverage !== "source"
+          || baseline.cursor < state.lastSequence
+        )
+      ) {
+        const reason = state.sharedRepairAfterCurrentReason;
+        state.sharedRepairAfterCurrentReason = null;
+        this.#requestSharedRepair(sourceKey, state, reason);
+      } else if (
+        !state.rebuilding
+        && baseline.coverage === "source"
+        && baseline.cursor >= state.lastSequence
+      ) {
+        state.sharedRepairAfterCurrentReason = null;
+      }
     }
   }
 
@@ -1616,6 +1685,12 @@ function sharedBaselineUnavailable(): Error {
 function sharedRepairRequestFailed(): Error {
   return Object.assign(new Error("knowledge shared repair request failed"), {
     code: "shared_repair_request_failed",
+  });
+}
+
+function sharedBaselineCursorStale(): Error {
+  return Object.assign(new Error("knowledge shared baseline cursor is stale"), {
+    code: "knowledge_shared_baseline_cursor_stale",
   });
 }
 

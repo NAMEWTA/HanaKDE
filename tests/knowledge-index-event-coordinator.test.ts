@@ -17,6 +17,7 @@ import {
   type KnowledgeIndexFileSystem,
   type KnowledgeIndexResourceDocument,
 } from "../lib/knowledge-workspace/knowledge-index-store.ts";
+import { searchKnowledgeIndex } from "../lib/knowledge-workspace/knowledge-search-query.ts";
 import type {
   ProviderRootIdentity,
   ResourceDescriptor,
@@ -127,6 +128,88 @@ describe("knowledge index event coordinator", () => {
     expect(fixture.events.inspect("main").pendingCount).toBe(1);
     await fixture.events.flush("main");
     expect(fixture.index.health("main")).toMatchObject({ sequence: 2 });
+  });
+
+  it("replays an in-flight event when a lower-cursor source baseline arrives", async () => {
+    const fixture = createFixture("in-flight-shared-baseline", {
+      "page.txt": document("page.txt", "initial", "page"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let reportRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      reportRead = resolve;
+    });
+    let reads = 0;
+    fixture.reread.mockImplementation(async () => {
+      reads += 1;
+      if (reads === 1) {
+        reportRead();
+        await readGate;
+        return document("page.txt", "event-version", "page");
+      }
+      return document(
+        "page.txt",
+        reads === 2 ? "baseline-version" : "event-version",
+        "page",
+      );
+    });
+
+    fixture.events.accept("main", changed(1, "page.txt"));
+    const flushing = fixture.events.flush("main");
+    await readStarted;
+    const rebuilding = fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 0,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    releaseRead();
+    await flushing;
+    await rebuilding;
+
+    expect(reads).toBe(3);
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 1,
+    });
+    const eventVersion = await searchKnowledgeIndex(fixture.index, {
+      query: "event-version",
+    }, {
+      sources: [{
+        sourceKey: "main",
+        displayName: "Main workspace",
+        availability: "available",
+      }],
+    });
+    expect(eventVersion.groups[0]).toMatchObject({
+      state: "ready",
+      items: [{
+        address: { sourceKey: "main", relativePath: "page.txt" },
+        snippets: [expect.objectContaining({
+          field: "body",
+          text: expect.stringContaining("event-version"),
+        })],
+      }],
+    });
+    const baselineVersion = await searchKnowledgeIndex(fixture.index, {
+      query: "baseline-version",
+    }, {
+      sources: [{
+        sourceKey: "main",
+        displayName: "Main workspace",
+        availability: "available",
+      }],
+    });
+    expect(baselineVersion.groups[0]).toMatchObject({
+      state: "ready",
+      items: [],
+    });
   });
 
   it("ignores duplicate and stale event hints without rereading disk", async () => {
@@ -377,6 +460,67 @@ describe("knowledge index event coordinator", () => {
     lease.release();
   });
 
+  it("requests a follow-up shared repair when a gap arrives during an older source baseline", async () => {
+    const fixture = createFixture("shared-repair-follow-up", {
+      "base.txt": document("base.txt", "base"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.documents.set("missed.txt", document("missed.txt", "missed"));
+    fixture.documents.set("known.txt", document("known.txt", "known"));
+
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let reportRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      reportRead = resolve;
+    });
+    fixture.reread.mockImplementation(async (relativePath: string) => {
+      if (relativePath === "base.txt") {
+        reportRead();
+        await readGate;
+      }
+      return fixture.documents.get(relativePath) ?? null;
+    });
+
+    fixture.events.accept("main", renamed(1, "old", "new", true));
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({ afterSequence: 1, reason: "directory_event" }),
+    ]);
+    const firstBaseline = fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 1,
+      coverage: "source",
+      changes: [{ relativePath: "base.txt", changeType: "upsert" }],
+    });
+    await readStarted;
+    fixture.events.accept("main", changed(3, "known.txt"));
+    releaseRead();
+    await firstBaseline;
+
+    expect(fixture.repairRequests).toEqual([
+      expect.objectContaining({ afterSequence: 1, reason: "directory_event" }),
+      expect.objectContaining({ afterSequence: 3, reason: "sequence_gap" }),
+    ]);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 3,
+      coverage: "source",
+      changes: ["base.txt", "known.txt", "missed.txt"].map((relativePath) => ({
+        relativePath,
+        changeType: "upsert" as const,
+      })),
+    });
+
+    expect(fixture.index.health("main")).toMatchObject({ sequence: 3 });
+    const lease = fixture.index.acquireQueryLease("main");
+    expect(lease.inspect()).toMatchObject({ resourceCount: 3 });
+    lease.release();
+  });
+
   it("does not publish a late replay cursor until the event is separately applied", async () => {
     const fixture = createFixture("late-shared-replay", {
       "page.txt": document("page.txt", "stable"),
@@ -459,6 +603,81 @@ describe("knowledge index event coordinator", () => {
     expect(fixture.index.health("main")).toMatchObject({
       state: "ready",
       sequence: 2,
+    });
+  });
+
+  it("fails closed when a shared baseline predates the outstanding repair cursor", async () => {
+    const fixture = createFixture("stale-repair-baseline", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+    fixture.reread.mockClear();
+
+    fixture.events.accept("main", changed(5, "page.txt"));
+    const repairing = fixture.events.rebuild("main");
+    const repairFailure = expect(repairing).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+
+    await expect(fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 4,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    })).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+    await repairFailure;
+
+    expect(fixture.reread).not.toHaveBeenCalled();
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "degraded",
+      reason: "knowledge_shared_baseline_cursor_stale",
+    });
+
+    const retry = fixture.events.rebuild("main");
+    expect(fixture.repairRequests).toHaveLength(2);
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 5,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    await retry;
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 5,
+    });
+  });
+
+  it("fails closed for an outdated repair baseline even after a newer cursor was accepted", async () => {
+    const fixture = createFixture("stale-accepted-repair-baseline", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 10);
+
+    fixture.events.accept("main", changed(12, "page.txt"));
+    const repairing = fixture.events.rebuild("main");
+    const repairFailure = expect(repairing).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+
+    await expect(fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 9,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    })).rejects.toMatchObject({
+      code: "knowledge_shared_baseline_cursor_stale",
+    });
+    await repairFailure;
+
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "degraded",
+      reason: "knowledge_shared_baseline_cursor_stale",
     });
   });
 
