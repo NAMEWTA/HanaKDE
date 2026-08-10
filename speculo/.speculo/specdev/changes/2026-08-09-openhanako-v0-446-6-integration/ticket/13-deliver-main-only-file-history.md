@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-13
 title: 交付仅覆盖 main 的 File History
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "新 SQLite 数据模型、retention/quota、rename/delete 版本语义和安全 scope 属于共享持久化与数据完整性能力。"
 ready: true
@@ -87,7 +87,7 @@ shared_path_owners: []
 - `b9315d4b` 是被拒绝的候选基线，不得视为 T-13 完成或 W4 Gate 通过。
 - 修正必须保持既有 History/Knowledge/production ownership 边界；只在本 Ticket 的 `writable_paths` 内修改。
 - 必须补足并以真实测试证明：Windows drive/NUL/control path 拒绝；5 MiB 前有界读取；50k baseline 批处理且无 per-file timer/每次 capture vacuum；共享 health 不能被单次成功错误清除；delete/rename 取消 pending/failed/in-flight old path；activate/retry/close 统一 generation+mutex；shared baseline deletion diff 与 cycle completion。
-- Evidence 必须重写为本轮实际命令和结果；在 Lead 独立验收及 T-12 合并修正 checkpoint 前，T-13 不得推进 `review` 或触发 W4 完成。
+- Evidence 已重写为本轮实际命令和结果；Lead 已独立接受 `e4600aff1fcd71285f8032fb610425ced5ead7cb`。该候选在纳入 T-12 production assembly 并通过 W4 集成验证前保持 `review`，不得触发 W4 完成。
 
 ## 7. 路径访问契约
 
