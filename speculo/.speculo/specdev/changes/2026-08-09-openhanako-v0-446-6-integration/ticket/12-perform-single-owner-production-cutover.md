@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-12
 title: 执行单 owner 生产切换
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "生产 watcher、mutation fan-out 与 baseline owner 的一次性 stop-then-start 切换具有全局事故半径且禁止双运行。"
 ready: true
 risk: critical
 blocked_by: [T-10, T-11, T-19]
 contract_ids: [AC-009, AC-010, AC-011, AC-012, AC-013]
-owner: unassigned
+owner: Worker-T-12
 expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
 writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>desktop/main.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
