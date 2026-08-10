@@ -10,6 +10,9 @@ export const FILE_HISTORY_POLICY = Object.freeze({
 
 export const MAX_SNAPSHOT_BYTES = FILE_HISTORY_POLICY.maxSnapshotBytes;
 
+const CONTROL_CHARACTER = /\p{Cc}/u;
+const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/;
+
 const TEXT_EXTENSIONS = new Set([
   "txt", "md", "markdown", "mdx", "rst", "tex",
   "json", "jsonc", "json5", "yaml", "yml", "toml", "ini", "cfg", "conf", "properties",
@@ -48,7 +51,13 @@ function extOf(name: string): string | null {
 }
 
 export function isSafeHistoryRelativePath(value: unknown): value is string {
-  if (typeof value !== "string" || !value || value.includes("\\")) return false;
+  if (
+    typeof value !== "string"
+    || !value
+    || value.includes("\\")
+    || CONTROL_CHARACTER.test(value)
+    || WINDOWS_DRIVE_PREFIX.test(value)
+  ) return false;
   const segments = value.split("/");
   return !segments.some(segment => !segment || segment === "." || segment === "..");
 }

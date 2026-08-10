@@ -21,11 +21,22 @@ export const FILE_HISTORY_DEFAULTS = Object.freeze({
   retentionIntervalMs: 24 * 60 * 60 * 1_000,
 });
 
+const CAPTURE_BATCH_SIZE = 128;
+// A batch limits queue turnover; this lower limit caps retained source bodies.
+const MAX_CONCURRENT_CAPTURES = 4;
+const CONTROL_CHARACTER = /\p{Cc}/u;
+const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/;
+
 export type FileHistoryHealth = "HEALTHY" | "DEGRADED" | "RECONCILING" | "FAILED";
 
 export type FileHistoryRead = Readonly<{
-  content: Buffer;
+  content?: Buffer;
   versionToken?: string | null;
+  truncated?: boolean;
+}>;
+
+export type FileHistoryReadRequest = Readonly<{
+  maxBytes: number;
 }>;
 
 export type FileHistorySubscription = Readonly<{
@@ -60,7 +71,8 @@ export type MainFileHistoryBinding = Readonly<{
   verifyPrivateStorePath: (candidateStorePath: string) => boolean | Promise<boolean>;
   subscribe: (consumer: (observation: WorkspaceObservation) => void | Promise<void>) => Promise<FileHistorySubscription>;
   subscribeEvents?: (consumer: (event: MainFileHistoryEvent) => void | Promise<void>) => (() => void);
-  read: (relativePath: string) => Promise<FileHistoryRead | null>;
+  // The adapter must honor maxBytes before materializing content and signal a truncated read.
+  read: (relativePath: string, request: FileHistoryReadRequest) => Promise<FileHistoryRead | null>;
 }>;
 
 type CreateStore = (input: {
@@ -74,9 +86,29 @@ type CaptureRequest = {
   origin: SnapshotOrigin;
   operationContext: string | null;
   versionToken: string | null;
+  pathGeneration: number;
 };
 
-type PendingCapture = CaptureRequest & { timer: ReturnType<typeof setTimeout> };
+type BaselineCycle = {
+  seenPaths: Set<string>;
+};
+
+type StoreMutation =
+  | Readonly<{
+    type: "delete";
+    relativePath: string;
+    deletedAt: number;
+  }>
+  | Readonly<{
+    type: "rename";
+    oldRelativePath: string;
+    newRelativePath: string;
+  }>;
+
+type StoreOperation = StoreMutation | Readonly<{
+  type: "reconcile";
+  repairCycle: number;
+}>;
 
 type MainEntry = {
   binding: MainFileHistoryBinding;
@@ -85,9 +117,20 @@ type MainEntry = {
   subscription: FileHistorySubscription | null;
   releaseEvents: (() => void) | null;
   retentionTimer: ReturnType<typeof setInterval> | null;
-  pending: Map<string, PendingCapture>;
+  captureTimer: ReturnType<typeof setTimeout> | null;
+  drainPromise: Promise<void> | null;
+  pending: Map<string, CaptureRequest>;
   failedCaptures: Map<string, CaptureRequest>;
   inflight: Set<Promise<unknown>>;
+  pathGenerations: Map<string, number>;
+  baselineCycles: Map<number, BaselineCycle>;
+  failedStoreOperations: Map<string, StoreOperation>;
+  latestObservedRepairCycle: number;
+  lastReconciledBaselineCycle: number;
+  knownCapturePaths: Set<string>;
+  unresolvedSharedCycles: Map<number, "RECONCILING" | "DEGRADED" | "FAILED">;
+  retentionFailed: boolean;
+  generation: number;
   retired: boolean;
 };
 
@@ -113,6 +156,8 @@ export class FileHistoryService {
   declare _pendingMain: PendingMain | null;
   declare _health: FileHistoryHealth | null;
   declare _retiredDisposals: Set<Promise<void>>;
+  declare _lifecycleTail: Promise<void>;
+  declare _lifecycleGeneration: number;
 
   constructor({
     privateStoreRoot,
@@ -148,44 +193,39 @@ export class FileHistoryService {
     this._pendingMain = null;
     this._health = null;
     this._retiredDisposals = new Set();
+    this._lifecycleTail = Promise.resolve();
+    this._lifecycleGeneration = 0;
   }
 
   async activateMain(binding: MainFileHistoryBinding): Promise<FileHistoryHealth> {
-    const pending = await this._prepareBinding(binding);
-    await this._closeActive();
-    this._pendingMain = pending;
-    return this._openPending();
+    return this._withLifecycle(async () => {
+      const pending = await this._prepareBinding(binding);
+      const generation = this._nextLifecycleGeneration();
+      await this._closeActive();
+      this._pendingMain = pending;
+      return this._openPending(generation);
+    });
   }
 
   async retryMainHistory(): Promise<FileHistoryHealth> {
-    if (this._entry) {
+    return this._withLifecycle(async () => {
       const entry = this._entry;
-      this._health = "RECONCILING";
-      const failedCaptures = [...entry.failedCaptures.values()];
-      entry.failedCaptures.clear();
-      const retryResults = await Promise.all(failedCaptures.map(request => this._capture(
-        entry,
-        request.relativePath,
-        request.origin,
-        request.operationContext,
-        request.versionToken,
-      )));
-      if (!this._isCurrentEntry(entry)) return this._health || "FAILED";
-      let retentionSucceeded = true;
-      try {
-        entry.store.enforceRetention({
-          maxAgeMs: this._maxAgeMs,
-          maxTotalBytes: this._maxTotalBytes,
-          now: this._now(),
-        });
-      } catch (error) {
-        retentionSucceeded = false;
-        this._recordFailure("retry", error, "DEGRADED");
+      if (!entry) {
+        return this._pendingMain ? this._openPending(this._lifecycleGeneration) : "FAILED";
       }
-      if (retentionSucceeded && retryResults.every(Boolean) && entry.failedCaptures.size === 0) this._health = "HEALTHY";
+      if (!this._isCurrentEntry(entry)) return this._health || "FAILED";
+
+      this._retryStoreOperations(entry, [...entry.failedStoreOperations.values()]);
+      if (!this._isCurrentEntry(entry)) return this._health || "FAILED";
+
+      const failedCaptures = [...entry.failedCaptures.values()];
+      await this._captureRequests(entry, failedCaptures);
+      if (!this._isCurrentEntry(entry)) return this._health || "FAILED";
+
+      this._enforceRetention(entry, "retry");
+      this._recomputeHealth(entry);
       return this._health || "FAILED";
-    }
-    return this._pendingMain ? this._openPending() : "FAILED";
+    });
   }
 
   isAvailable(): boolean {
@@ -215,15 +255,28 @@ export class FileHistoryService {
   async waitForIdle(): Promise<void> {
     const entry = this._entry;
     if (!entry) return;
-    await new Promise(resolve => setTimeout(resolve, this._debounceMs + 5));
-    while (entry.inflight.size) await Promise.allSettled([...entry.inflight]);
+    while (this._isCurrentEntry(entry)) {
+      if (entry.captureTimer) {
+        await new Promise(resolve => setTimeout(resolve, Math.max(1, this._debounceMs) + 5));
+        continue;
+      }
+      if (entry.inflight.size) {
+        await Promise.allSettled([...entry.inflight]);
+        continue;
+      }
+      if (!entry.drainPromise && entry.pending.size === 0) return;
+      await Promise.resolve();
+    }
   }
 
   async close(): Promise<void> {
-    await this._closeActive();
-    while (this._retiredDisposals.size) await Promise.allSettled([...this._retiredDisposals]);
-    this._pendingMain = null;
-    this._health = null;
+    return this._withLifecycle(async () => {
+      this._nextLifecycleGeneration();
+      this._pendingMain = null;
+      await this._closeActive();
+      while (this._retiredDisposals.size) await Promise.allSettled([...this._retiredDisposals]);
+      this._health = null;
+    });
   }
 
   async _prepareBinding(binding: MainFileHistoryBinding): Promise<PendingMain> {
@@ -243,9 +296,9 @@ export class FileHistoryService {
     return Object.freeze({ binding, dbPath });
   }
 
-  async _openPending(): Promise<FileHistoryHealth> {
+  async _openPending(generation: number): Promise<FileHistoryHealth> {
     const pending = this._pendingMain;
-    if (!pending) return "FAILED";
+    if (!pending || !this._isCurrentLifecycle(generation)) return "FAILED";
     this._health = "RECONCILING";
     let entry: MainEntry | null = null;
     try {
@@ -261,41 +314,60 @@ export class FileHistoryService {
         subscription: null,
         releaseEvents: null,
         retentionTimer: null,
+        captureTimer: null,
+        drainPromise: null,
         pending: new Map(),
         failedCaptures: new Map(),
         inflight: new Set(),
+        pathGenerations: new Map(),
+        baselineCycles: new Map(),
+        failedStoreOperations: new Map(),
+        latestObservedRepairCycle: -1,
+        lastReconciledBaselineCycle: -1,
+        knownCapturePaths: new Set(),
+        unresolvedSharedCycles: new Map(),
+        retentionFailed: false,
+        generation,
         retired: false,
       };
       this._entry = entry;
-      entry.subscription = await entry.binding.subscribe(observation => this._acceptObservation(entry!, observation));
+
+      const subscription = await entry.binding.subscribe(observation => this._acceptObservation(entry!, observation));
+      entry.subscription = subscription;
+      if (!subscription || typeof subscription.release !== "function") {
+        throw new FileHistoryScopeError("file-history observation subscription is incomplete");
+      }
+      if (!this._isCurrentEntry(entry)) {
+        await this._disposeEntry(entry);
+        return this._health || "FAILED";
+      }
+
       if (entry.binding.subscribeEvents) {
         entry.releaseEvents = entry.binding.subscribeEvents(event => this._acceptEvent(entry!, event));
       }
-      entry.store.enforceRetention({
-        maxAgeMs: this._maxAgeMs,
-        maxTotalBytes: this._maxTotalBytes,
-        now: this._now(),
-      });
-      entry.retentionTimer = setInterval(() => {
-        if (this._entry !== entry) return;
-        try {
-          entry.store.enforceRetention({
-            maxAgeMs: this._maxAgeMs,
-            maxTotalBytes: this._maxTotalBytes,
-            now: this._now(),
-          });
-        } catch (error) {
-          this._recordFailure("retention", error, "DEGRADED");
-        }
-      }, this._retentionIntervalMs);
-      entry.retentionTimer.unref?.();
-      this._health = "HEALTHY";
-      return this._health;
+      if (!this._isCurrentEntry(entry)) {
+        await this._disposeEntry(entry);
+        return this._health || "FAILED";
+      }
+
+      this._enforceRetention(entry, "initialization");
+      if (this._retentionIntervalMs > 0) {
+        entry.retentionTimer = setInterval(() => {
+          if (!this._isCurrentEntry(entry!)) return;
+          this._enforceRetention(entry!, "retention");
+        }, this._retentionIntervalMs);
+        entry.retentionTimer.unref?.();
+      }
+      this._recomputeHealth(entry);
+      return this._health || "FAILED";
     } catch (error) {
       if (this._entry === entry) this._entry = null;
       await this._disposeEntry(entry);
-      this._recordFailure("initialization", error, "FAILED");
-      return "FAILED";
+      if (this._isCurrentLifecycle(generation)) {
+        this._health = "FAILED";
+        this._logFailure("initialization", error);
+      }
+      return this._health || "FAILED";
     }
   }
 
@@ -309,8 +381,13 @@ export class FileHistoryService {
     if (!entry || entry.retired) return;
     entry.retired = true;
     if (entry.retentionTimer) clearInterval(entry.retentionTimer);
-    for (const capture of entry.pending.values()) clearTimeout(capture.timer);
+    if (entry.captureTimer) clearTimeout(entry.captureTimer);
+    entry.captureTimer = null;
     entry.pending.clear();
+    entry.failedCaptures.clear();
+    entry.baselineCycles.clear();
+    entry.failedStoreOperations.clear();
+    entry.knownCapturePaths.clear();
     try { entry.releaseEvents?.(); } catch {}
     try { await entry.subscription?.release(); } catch {}
     const disposal = Promise.allSettled([...entry.inflight]).then(() => {
@@ -323,8 +400,18 @@ export class FileHistoryService {
   _acceptObservation(entry: MainEntry, observation: WorkspaceObservation): void {
     if (!this._isCurrentEntry(entry) || observation?.sourceKey !== "main") return;
     try {
+      const repairCycle = normalizedRepairCycle(observation.repairCycle);
+      const staleRepairCycle = repairCycle < entry.latestObservedRepairCycle;
+      if (staleRepairCycle) return;
+      if (repairCycle > entry.latestObservedRepairCycle) {
+        this._clearStaleReconciliations(entry, repairCycle);
+      }
+      entry.latestObservedRepairCycle = repairCycle;
       if (observation.type === "workspace.baseline") {
-        if (observation.entryKind === "file") this._scheduleCapture(entry, observation.relativePath, "baseline", null, null);
+        if (observation.entryKind === "file" && isCapturablePath(observation.relativePath)) {
+          this._baselineCycle(entry, observation.repairCycle).seenPaths.add(observation.relativePath);
+          this._scheduleCapture(entry, observation.relativePath, "baseline", null, null);
+        }
         return;
       }
       if (observation.type === "workspace.changed") {
@@ -332,11 +419,9 @@ export class FileHistoryService {
         else this._scheduleCapture(entry, observation.relativePath, "event", "workspace_observation", null);
         return;
       }
-      if (observation.type === "workspace.health" && (observation.health === "DEGRADED" || observation.health === "FAILED")) {
-        if (this._health !== "FAILED") this._health = "DEGRADED";
-      }
+      if (observation.type === "workspace.health") this._acceptSharedHealth(entry, observation);
     } catch (error) {
-      this._recordFailure("observation", error, "DEGRADED");
+      this._recordEntryFailure(entry, "observation", error);
     }
   }
 
@@ -353,24 +438,84 @@ export class FileHistoryService {
       }
       if (event.type === "main.resource.renamed") {
         if (!isCapturablePath(event.oldRelativePath)) return;
+        const retainForRetry = this._hasPendingRenameTarget(entry, event.oldRelativePath);
+        this._invalidateCapture(entry, event.oldRelativePath);
         if (!event.newRelativePath || !isCapturablePath(event.newRelativePath)) {
-          this._markDeleted(entry, event.oldRelativePath);
+          this._markDeleted(entry, event.oldRelativePath, false);
           return;
         }
-        entry.store.renamePath(event.oldRelativePath, event.newRelativePath);
+        entry.knownCapturePaths.delete(event.oldRelativePath);
         this._scheduleCapture(entry, event.newRelativePath, "event", event.operationContext || null, event.versionToken || null);
+        this._applyStoreOperation(entry, {
+          type: "rename",
+          oldRelativePath: event.oldRelativePath,
+          newRelativePath: event.newRelativePath,
+        }, retainForRetry);
       }
     } catch (error) {
-      this._recordFailure("event", error, "DEGRADED");
+      this._recordEntryFailure(entry, "event", error);
     }
   }
 
-  _markDeleted(entry: MainEntry, relativePath: string): void {
+  _markDeleted(entry: MainEntry, relativePath: string, invalidate = true): void {
     if (!isCapturablePath(relativePath)) return;
+    if (invalidate) this._invalidateCapture(entry, relativePath);
+    entry.knownCapturePaths.delete(relativePath);
+    this._applyStoreOperation(entry, {
+      type: "delete",
+      relativePath,
+      deletedAt: this._now(),
+    }, this._hasPendingRenameTarget(entry, relativePath));
+  }
+
+  _acceptSharedHealth(
+    entry: MainEntry,
+    observation: Extract<WorkspaceObservation, { type: "workspace.health" }>,
+  ): void {
+    const repairCycle = normalizedRepairCycle(observation.repairCycle);
+    if (observation.health === "HEALTHY") {
+      this._reconcileBaselineCycle(entry, repairCycle);
+      for (const cycle of entry.unresolvedSharedCycles.keys()) {
+        if (cycle <= repairCycle) entry.unresolvedSharedCycles.delete(cycle);
+      }
+      this._recomputeHealth(entry);
+      return;
+    }
+    if (observation.health === "RECONCILING") this._baselineCycle(entry, repairCycle);
+    entry.unresolvedSharedCycles.set(repairCycle, observation.health);
+    this._recomputeHealth(entry);
+  }
+
+  _reconcileBaselineCycle(entry: MainEntry, repairCycle: number): void {
+    const operation: StoreOperation = { type: "reconcile", repairCycle };
+    const operationKey = storeOperationKey(operation);
+    if (
+      !this._isCurrentEntry(entry)
+      || repairCycle < entry.latestObservedRepairCycle
+      || repairCycle <= entry.lastReconciledBaselineCycle
+    ) {
+      entry.failedStoreOperations.delete(operationKey);
+      return;
+    }
+    const cycle = entry.baselineCycles.get(repairCycle) || { seenPaths: new Set<string>() };
+    const priorPaths = new Set(entry.knownCapturePaths);
     try {
-      entry.store.markDeleted(relativePath, this._now());
+      for (const file of entry.store.listFiles()) priorPaths.add(file.relPath);
     } catch (error) {
-      this._recordFailure("delete", error, "DEGRADED");
+      entry.failedStoreOperations.set(operationKey, operation);
+      this._logFailure("reconcile", error);
+      this._recomputeHealth(entry);
+      return;
+    }
+    for (const relativePath of priorPaths) {
+      if (!cycle.seenPaths.has(relativePath)) this._markDeleted(entry, relativePath);
+    }
+    entry.knownCapturePaths = new Set(cycle.seenPaths);
+    entry.lastReconciledBaselineCycle = repairCycle;
+    entry.baselineCycles.delete(repairCycle);
+    entry.failedStoreOperations.delete(operationKey);
+    for (const pendingCycle of entry.baselineCycles.keys()) {
+      if (pendingCycle < repairCycle) entry.baselineCycles.delete(pendingCycle);
     }
   }
 
@@ -381,52 +526,219 @@ export class FileHistoryService {
     operationContext: string | null,
     versionToken: string | null,
   ): void {
-    if (!isCapturablePath(relativePath)) return;
-    const prior = entry.pending.get(relativePath);
-    if (prior) clearTimeout(prior.timer);
-    const timer = setTimeout(() => {
-      entry.pending.delete(relativePath);
-      this._track(entry, this._capture(entry, relativePath, origin, operationContext, versionToken));
-    }, this._debounceMs);
-    timer.unref?.();
-    entry.pending.set(relativePath, { timer, relativePath, origin, operationContext, versionToken });
+    if (!isCapturablePath(relativePath) || !this._isCurrentEntry(entry)) return;
+    this._clearFailedStoreOperationsForCapture(entry, relativePath);
+    const pathGeneration = this._nextPathGeneration(entry, relativePath);
+    entry.failedCaptures.delete(relativePath);
+    entry.knownCapturePaths.add(relativePath);
+    entry.pending.set(relativePath, { relativePath, origin, operationContext, versionToken, pathGeneration });
+    this._scheduleDrain(entry);
   }
 
-  async _capture(
-    entry: MainEntry,
-    relativePath: string,
-    origin: SnapshotOrigin,
-    operationContext: string | null,
-    versionToken: string | null,
-  ): Promise<boolean> {
-    if (!this._isCurrentEntry(entry)) return false;
+  _scheduleDrain(entry: MainEntry): void {
+    if (!this._isCurrentEntry(entry) || entry.captureTimer || entry.drainPromise) return;
+    entry.captureTimer = setTimeout(() => {
+      entry.captureTimer = null;
+      const drain = this._drainCaptures(entry);
+      entry.drainPromise = drain;
+      this._track(entry, drain);
+      void drain.then(
+        () => this._finishDrain(entry, drain),
+        () => this._finishDrain(entry, drain),
+      );
+    }, this._debounceMs);
+    entry.captureTimer.unref?.();
+  }
+
+  _finishDrain(entry: MainEntry, drain: Promise<void>): void {
+    if (entry.drainPromise === drain) entry.drainPromise = null;
+    if (this._isCurrentEntry(entry) && entry.pending.size) this._scheduleDrain(entry);
+  }
+
+  async _drainCaptures(entry: MainEntry): Promise<void> {
+    let attemptedCapture = false;
+    while (this._isCurrentEntry(entry) && entry.pending.size) {
+      const requests: CaptureRequest[] = [];
+      for (const [relativePath, request] of entry.pending) {
+        entry.pending.delete(relativePath);
+        requests.push(request);
+        if (requests.length === CAPTURE_BATCH_SIZE) break;
+      }
+      attemptedCapture ||= requests.length > 0;
+      await this._captureRequests(entry, requests);
+    }
+    if (attemptedCapture && this._isCurrentEntry(entry)) this._enforceRetention(entry, "batch");
+  }
+
+  async _captureRequests(entry: MainEntry, requests: CaptureRequest[]): Promise<void> {
+    for (let index = 0; index < requests.length; index += MAX_CONCURRENT_CAPTURES) {
+      if (!this._isCurrentEntry(entry)) return;
+      await Promise.all(requests.slice(index, index + MAX_CONCURRENT_CAPTURES).map(request => this._capture(entry, request)));
+    }
+  }
+
+  async _capture(entry: MainEntry, request: CaptureRequest): Promise<boolean> {
+    if (!this._isCurrentCapture(entry, request)) return false;
     try {
-      const read = await entry.binding.read(relativePath);
-      if (!this._isCurrentEntry(entry)) return false;
-      if (!read || !Buffer.isBuffer(read.content)) return true;
-      if (read.content.length > MAX_SNAPSHOT_BYTES) return true;
+      const read = await entry.binding.read(request.relativePath, { maxBytes: MAX_SNAPSHOT_BYTES });
+      if (!this._isCurrentCapture(entry, request)) return false;
+      if (!read || read.truncated) {
+        this._clearFailedCapture(entry, request);
+        this._recomputeHealth(entry);
+        return true;
+      }
+      if (!Buffer.isBuffer(read.content)) throw new TypeError("file-history bounded reader returned no snapshot buffer");
+      if (read.content.length > MAX_SNAPSHOT_BYTES) {
+        throw new RangeError("file-history bounded reader exceeded the 5 MiB limit");
+      }
       entry.store.recordSnapshot({
-        relPath: relativePath,
+        relPath: request.relativePath,
         content: read.content,
-        origin,
-        opContext: operationContext,
-        versionToken: versionToken || read.versionToken || null,
+        origin: request.origin,
+        opContext: request.operationContext,
+        versionToken: request.versionToken || read.versionToken || null,
         capturedAt: this._now(),
       });
+      this._clearFailedCapture(entry, request);
+      this._recomputeHealth(entry);
+      return true;
+    } catch (error) {
+      if (!this._isCurrentCapture(entry, request)) return false;
+      entry.failedCaptures.set(request.relativePath, request);
+      this._recordEntryFailure(entry, "capture", error);
+      return false;
+    }
+  }
+
+  _invalidateCapture(entry: MainEntry, relativePath: string): void {
+    this._nextPathGeneration(entry, relativePath);
+    entry.pending.delete(relativePath);
+    entry.failedCaptures.delete(relativePath);
+    this._recomputeHealth(entry);
+  }
+
+  _clearFailedCapture(entry: MainEntry, request: CaptureRequest): void {
+    const failed = entry.failedCaptures.get(request.relativePath);
+    if (failed?.pathGeneration === request.pathGeneration) entry.failedCaptures.delete(request.relativePath);
+  }
+
+  _applyStoreOperation(entry: MainEntry, operation: StoreMutation, retainForRetry = false): boolean {
+    if (!this._isCurrentEntry(entry)) return false;
+    const operationKey = storeOperationKey(operation);
+    if (retainForRetry) {
+      // A dependent mutation must wait until its rename source is established.
+      entry.failedStoreOperations.set(operationKey, operation);
+      this._recomputeHealth(entry);
+      return true;
+    }
+    try {
+      if (operation.type === "delete") entry.store.markDeleted(operation.relativePath, operation.deletedAt);
+      else entry.store.renamePath(operation.oldRelativePath, operation.newRelativePath);
+      entry.failedStoreOperations.delete(operationKey);
+      this._recomputeHealth(entry);
+      return true;
+    } catch (error) {
+      entry.failedStoreOperations.set(operationKey, operation);
+      this._logFailure(operation.type, error);
+      this._recomputeHealth(entry);
+      return false;
+    }
+  }
+
+  _retryStoreOperations(entry: MainEntry, operations: StoreOperation[]): void {
+    for (const operation of operations) {
+      if (!this._isCurrentEntry(entry)) return;
+      if (entry.failedStoreOperations.get(storeOperationKey(operation)) !== operation) continue;
+      if (operation.type === "reconcile") {
+        this._reconcileBaselineCycle(entry, operation.repairCycle);
+        if (entry.failedStoreOperations.get(storeOperationKey(operation)) === operation) return;
+      } else if (!this._applyStoreOperation(entry, operation)) {
+        return;
+      }
+    }
+  }
+
+  _clearFailedStoreOperationsForCapture(entry: MainEntry, relativePath: string): void {
+    const invalidatedRenameTargets = new Set<string>();
+    for (const [operationKey, operation] of entry.failedStoreOperations) {
+      const removesDirectly = (
+        (operation.type === "delete" && operation.relativePath === relativePath)
+        || (operation.type === "rename" && operation.oldRelativePath === relativePath)
+      );
+      const removesAsRenameDependent = (
+        operation.type === "delete"
+          ? invalidatedRenameTargets.has(operation.relativePath)
+          : operation.type === "rename" && invalidatedRenameTargets.has(operation.oldRelativePath)
+      );
+      if (!removesDirectly && !removesAsRenameDependent) continue;
+      entry.failedStoreOperations.delete(operationKey);
+      if (operation.type === "rename") invalidatedRenameTargets.add(operation.newRelativePath);
+    }
+  }
+
+  _hasPendingRenameTarget(entry: MainEntry, relativePath: string): boolean {
+    for (const operation of entry.failedStoreOperations.values()) {
+      if (operation.type === "rename" && operation.newRelativePath === relativePath) return true;
+    }
+    return false;
+  }
+
+  _clearStaleReconciliations(entry: MainEntry, repairCycle: number): void {
+    for (const [operationKey, operation] of entry.failedStoreOperations) {
+      if (operation.type === "reconcile" && operation.repairCycle < repairCycle) {
+        entry.failedStoreOperations.delete(operationKey);
+      }
+    }
+  }
+
+  _nextPathGeneration(entry: MainEntry, relativePath: string): number {
+    const generation = (entry.pathGenerations.get(relativePath) || 0) + 1;
+    entry.pathGenerations.set(relativePath, generation);
+    return generation;
+  }
+
+  _baselineCycle(entry: MainEntry, repairCycle: number): BaselineCycle {
+    const normalizedCycle = normalizedRepairCycle(repairCycle);
+    let cycle = entry.baselineCycles.get(normalizedCycle);
+    if (!cycle) {
+      cycle = { seenPaths: new Set() };
+      entry.baselineCycles.set(normalizedCycle, cycle);
+    }
+    return cycle;
+  }
+
+  _enforceRetention(entry: MainEntry, stage: string): void {
+    if (!this._isCurrentEntry(entry)) return;
+    try {
       entry.store.enforceRetention({
         maxAgeMs: this._maxAgeMs,
         maxTotalBytes: this._maxTotalBytes,
         now: this._now(),
       });
-      if (this._health === "DEGRADED") this._health = "HEALTHY";
-      entry.failedCaptures.delete(relativePath);
-      return true;
+      entry.retentionFailed = false;
     } catch (error) {
-      if (!this._isCurrentEntry(entry)) return false;
-      entry.failedCaptures.set(relativePath, { relativePath, origin, operationContext, versionToken });
-      this._recordFailure("capture", error, "DEGRADED");
-      return false;
+      entry.retentionFailed = true;
+      this._logFailure(stage, error);
     }
+    this._recomputeHealth(entry);
+  }
+
+  _recordEntryFailure(entry: MainEntry, stage: string, error: unknown): void {
+    if (!this._isCurrentEntry(entry)) return;
+    this._logFailure(stage, error);
+    this._recomputeHealth(entry);
+  }
+
+  _recomputeHealth(entry: MainEntry): void {
+    if (!this._isCurrentEntry(entry)) return;
+    const sharedStates = [...entry.unresolvedSharedCycles.values()];
+    const hasSharedFailure = sharedStates.some(state => state === "DEGRADED" || state === "FAILED");
+    const hasSharedReconciliation = sharedStates.some(state => state === "RECONCILING");
+    if (hasSharedFailure || entry.failedCaptures.size > 0 || entry.failedStoreOperations.size > 0 || entry.retentionFailed) {
+      this._health = "DEGRADED";
+      return;
+    }
+    this._health = hasSharedReconciliation ? "RECONCILING" : "HEALTHY";
   }
 
   _track(entry: MainEntry, promise: Promise<unknown>): void {
@@ -443,18 +755,57 @@ export class FileHistoryService {
   }
 
   _isCurrentEntry(entry: MainEntry): boolean {
-    return this._entry === entry && !entry.retired;
+    return this._entry === entry
+      && !entry.retired
+      && entry.generation === this._lifecycleGeneration;
   }
 
-  _recordFailure(stage: string, error: unknown, health: FileHistoryHealth): void {
-    this._health = health;
+  _isCurrentCapture(entry: MainEntry, request: CaptureRequest): boolean {
+    return this._isCurrentEntry(entry)
+      && entry.pathGenerations.get(request.relativePath) === request.pathGeneration;
+  }
+
+  _nextLifecycleGeneration(): number {
+    this._lifecycleGeneration += 1;
+    return this._lifecycleGeneration;
+  }
+
+  _isCurrentLifecycle(generation: number): boolean {
+    return generation === this._lifecycleGeneration;
+  }
+
+  _withLifecycle<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this._lifecycleTail.then(operation, operation);
+    this._lifecycleTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  _logFailure(stage: string, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     this._log(`file-history ${stage} failed: ${message}`);
   }
 }
 
+function storeOperationKey(operation: StoreOperation): string {
+  if (operation.type === "delete") return JSON.stringify([operation.type, operation.relativePath]);
+  if (operation.type === "rename") {
+    return JSON.stringify([operation.type, operation.oldRelativePath, operation.newRelativePath]);
+  }
+  return JSON.stringify([operation.type, operation.repairCycle]);
+}
+
 export function historyStorePathForKey(privateStoreRoot: string, historyStoreKey: string): string {
-  if (typeof historyStoreKey !== "string" || !historyStoreKey || historyStoreKey.length > 512 || /[\\/\0]/.test(historyStoreKey)) {
+  if (
+    typeof historyStoreKey !== "string"
+    || !historyStoreKey
+    || historyStoreKey.length > 512
+    || /[\\/]/.test(historyStoreKey)
+    || CONTROL_CHARACTER.test(historyStoreKey)
+    || WINDOWS_DRIVE_PREFIX.test(historyStoreKey)
+  ) {
     throw new FileHistoryPrivateStoreError("file-history store key must be opaque");
   }
   const root = path.resolve(privateStoreRoot);
@@ -465,6 +816,10 @@ export function historyStorePathForKey(privateStoreRoot: string, historyStoreKey
     throw new FileHistoryPrivateStoreError("file-history store path escaped its private root");
   }
   return dbPath;
+}
+
+function normalizedRepairCycle(value: unknown): number {
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : 0;
 }
 
 function isCapturablePath(relativePath: unknown): relativePath is string {
