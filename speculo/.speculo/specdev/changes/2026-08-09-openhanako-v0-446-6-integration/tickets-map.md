@@ -139,14 +139,14 @@ T-01 [G0 fixed point / authorization]
 | T-11 | T-19 | 无 | 否 | 可并行；Workspace runtime 与 Extraction core 分离 |
 | T-18 | T-19 | 无 | 否 | 可并行；input UI 与 Extraction core 分离 |
 | T-12 | T-13 | 无 | 否 | 可并行；production assembly 与 History domain 分离 |
-| T-12 | T-14 | 无 | 否 | 可并行；production assembly 与 Knowledge domain 分离 |
+| T-12 | T-14 | `<Path>core/workspace-runtime/**</Path>` is T-12-only under D-T12-04; T-14 remains read-only | 否 | 可并行；production assembly 与 Knowledge domain 分离 |
 | T-13 | T-14 | 无 | 否 | 可并行；History 与 Knowledge stores/models 分离 |
 | T-16 | T-20 | 无 | 否 | 可并行；History UI 与 Office/Knowledge ingestion 分离 |
 | T-22 | T-23 | 无 | 否 | 可并行；Windows/macOS 专用 harness 分离 |
 | T-22 | T-24 | 无 | 否 | 可并行；Windows harness 与 docs 分离 |
 | T-23 | T-24 | 无 | 否 | 可并行；macOS harness 与 docs 分离 |
 
-T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能与任何后续 code Ticket 并行。T-15 跨 History/Knowledge 是显式 convergence owner，因此依赖 T-12/T-13/T-14 后才开始。任何执行时路径重命名或越界请求必须先修订 Ticket/Goal Plan，不以“解决 merge conflict”代替所有权。
+T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能与任何后续 code Ticket 并行。D-T12-04 在 T-11 integrated/removed 后把 `<Path>core/workspace-runtime/**</Path>` 的 production assembly extraction 单独授予 T-12；T-13/T-14 对该路径仍为只读。T-15 跨 History/Knowledge 是显式 convergence owner，因此依赖 T-12/T-13/T-14 后才开始。任何执行时路径重命名或越界请求必须先修订 Ticket/Goal Plan，不以“解决 merge conflict”代替所有权。
 
 ## 6. Gate、Wave 与集成点
 
