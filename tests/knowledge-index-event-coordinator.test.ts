@@ -436,6 +436,32 @@ describe("knowledge index event coordinator", () => {
     expect(fixture.index.health("main")).toMatchObject({ state: "ready" });
   });
 
+  it("coalesces an explicit rebuild into an automatic shared repair awaiting its baseline", async () => {
+    const fixture = createFixture("shared-repair-coalesce", {
+      "page.txt": document("page.txt", "stable"),
+    });
+    await supplySourceDifference(fixture, "main", 0);
+
+    fixture.events.accept("main", changed(2, "page.txt"));
+    expect(fixture.repairRequests).toHaveLength(1);
+
+    const rebuilding = fixture.events.rebuild("main");
+    expect(fixture.repairRequests).toHaveLength(1);
+
+    await fixture.events.acceptSharedBaseline({
+      type: "shared-baseline-difference",
+      sourceKey: "main",
+      cursor: 2,
+      coverage: "source",
+      changes: [{ relativePath: "page.txt", changeType: "upsert" }],
+    });
+    await rebuilding;
+    expect(fixture.index.health("main")).toMatchObject({
+      state: "ready",
+      sequence: 2,
+    });
+  });
+
   it("keeps the last committed generation readable when a shared repair read fails and retries", async () => {
     const fixture = createFixture("reader-retry", {
       "stable.txt": document("stable.txt", "stable"),

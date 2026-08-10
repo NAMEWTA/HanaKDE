@@ -148,6 +148,7 @@ type SourceState = {
   rebuildRequiredReason: string | null;
   repairRequested: boolean;
   repairReason: string | null;
+  sharedRepairRequestPending: boolean;
   sharedRepair: SharedRepairCycle | null;
   sharedBaselineQueued: number;
   lastReason: string | null;
@@ -333,6 +334,7 @@ export class KnowledgeIndexEventCoordinator {
       state.acceptedSharedCursor,
       baseline.cursor,
     );
+    state.sharedRepairRequestPending = false;
     state.lastSequence = Math.max(state.lastSequence, baseline.cursor);
     state.sharedBaselineQueued += 1;
     state.rebuilding = true;
@@ -363,7 +365,7 @@ export class KnowledgeIndexEventCoordinator {
       );
       return this.#waitForMountedRebuild(promise, state, options.signal);
     }
-    const requestIsNew = state.sharedRepair === null;
+    const requestIsNew = !state.sharedRepairRequestPending;
     const repair = this.#ensureSharedRepair(state);
     this.#requestSharedRepair(key, state, reason, requestIsNew);
     return this.#waitForSharedRepair(repair, options.signal);
@@ -458,6 +460,7 @@ export class KnowledgeIndexEventCoordinator {
       rebuildRequiredReason: null,
       repairRequested: false,
       repairReason: null,
+      sharedRepairRequestPending: false,
       sharedRepair: null,
       sharedBaselineQueued: 0,
       lastReason: null,
@@ -550,6 +553,7 @@ export class KnowledgeIndexEventCoordinator {
       const error = sharedBaselineUnavailable();
       state.repairRequested = false;
       state.repairReason = null;
+      state.sharedRepairRequestPending = false;
       this.#markDegraded(sourceKey, state, errorReason(error));
       this.#failSharedRepair(state, error);
       return;
@@ -560,17 +564,22 @@ export class KnowledgeIndexEventCoordinator {
       reason: state.repairReason,
     });
     try {
+      // A port may synchronously publish the requested baseline, so mark this
+      // before invoking it. acceptSharedBaseline clears the marker on receipt.
+      state.sharedRepairRequestPending = true;
       const result = this.#onScopedRepairRequested(request);
       consumeThenable(result, () => {
         const error = sharedRepairRequestFailed();
         state.repairRequested = false;
         state.repairReason = null;
+        state.sharedRepairRequestPending = false;
         this.#markDegraded(sourceKey, state, errorReason(error));
         this.#failSharedRepair(state, error);
       });
     } catch (error) {
       state.repairRequested = false;
       state.repairReason = null;
+      state.sharedRepairRequestPending = false;
       this.#markDegraded(sourceKey, state, errorReason(error));
       this.#failSharedRepair(state, error);
     }
