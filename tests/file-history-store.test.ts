@@ -7,6 +7,7 @@ import {
   FILE_HISTORY_SCHEMA_ID,
   FileHistoryStore,
 } from "../lib/file-history/history-store.ts";
+import { MAX_SNAPSHOT_BYTES } from "../lib/file-history/text-file-policy.ts";
 
 const tmpDirs: string[] = [];
 
@@ -48,6 +49,18 @@ describe("FileHistoryStore", () => {
       relPath: "a.md", content: Buffer.from("inconsistent-repeat"), origin: "event", versionToken: "v-1", capturedAt: 3_000,
     }).status).toBe("unchanged");
     expect(store.listVersions("a.md")).toHaveLength(1);
+    store.close();
+  });
+
+  it("rejects content beyond the file-history snapshot budget at the store boundary", () => {
+    const store = makeStore();
+
+    expect(() => store.recordSnapshot({
+      relPath: "large.md",
+      content: Buffer.alloc(MAX_SNAPSHOT_BYTES + 1),
+      origin: "event",
+    })).toThrow(/snapshot|size|large/i);
+
     store.close();
   });
 

@@ -59,6 +59,9 @@ describe("file-history route", () => {
     const { app, service } = makeApp();
     expect((await app.request("/api/file-history/versions?relPath=../../etc/passwd")).status).toBe(400);
     expect((await app.request("/api/file-history/versions?relPath=%2Fetc%2Fpasswd")).status).toBe(400);
+    expect((await app.request("/api/file-history/versions?relPath=C%3A%2FUsers%2Falice%2Fnotes.md")).status).toBe(400);
+    expect((await app.request("/api/file-history/versions?relPath=notes%2Funsafe%00.md")).status).toBe(400);
+    expect((await app.request("/api/file-history/versions?relPath=notes%2Funsafe%1f.md")).status).toBe(400);
     service.isAvailable.mockReturnValue(false);
     expect((await app.request("/api/file-history/files")).status).toBe(503);
   });

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { isSafeHistoryRelativePath } from "./text-file-policy.ts";
+import { MAX_SNAPSHOT_BYTES, isSafeHistoryRelativePath } from "./text-file-policy.ts";
 
 const require = createRequire(import.meta.url);
 let BetterSqliteDatabase: any = null;
@@ -150,6 +150,7 @@ export class FileHistoryStore {
     this._assertOpen();
     if (!isSafeHistoryRelativePath(relPath)) throw new Error("file-history snapshot path must be relative");
     if (!Buffer.isBuffer(content)) throw new TypeError("file-history snapshot content must be a Buffer");
+    if (content.length > MAX_SNAPSHOT_BYTES) throw new RangeError("file-history snapshot content exceeds the 5 MiB limit");
     if (versionToken != null && (typeof versionToken !== "string" || versionToken.length > 4_096)) {
       throw new TypeError("file-history version token is invalid");
     }

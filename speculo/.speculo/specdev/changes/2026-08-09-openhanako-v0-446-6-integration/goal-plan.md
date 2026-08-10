@@ -567,6 +567,8 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 - **Authorization / deviation / correction limit：** local changes/commit与Lead local merge/non-force cleanup自动授权；真实用户数据/remote/release/archive禁止；3轮。
 - **Return：** 状态、Evidence、workspace、candidate commit、schema/policy/scan、未验证项、Lead验收。
 
+- **Correction round 1 / acceptance:** `b9315d4b` remains rejected. Its non-rebased successor `e4600aff1fcd71285f8032fb610425ced5ead7cb` was independently accepted by Lead on 2026-08-10 after the Node 24 five-file History matrix passed 56 tests, scoped ESLint returned 0 errors (18 existing warnings), `git diff --check` passed, and the implement validator returned 0/0. The correction stays within the existing writable/read-only contract: path validation, bounded reads, baseline batching, shared health aggregation, delete/rename cancellation, lifecycle serialization, and baseline deletion/cycle completion. T-13 remains `review` until T-12 consumes it in production assembly; T-12 must not close W4 until the combined checkpoint is independently verified.
+
 #### Dispatch: T-14
 
 - **Goal / observable result：** Knowledge只消费统一事件/shared baseline differences，按source/resource scoped repair，保留独立DB/IR/Registry/Search并删除私有watch/full walk。

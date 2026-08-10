@@ -58,5 +58,10 @@ describe("file-history text policy", () => {
     expect(isSafeHistoryRelativePath("../outside.md")).toBe(false);
     expect(isSafeHistoryRelativePath("/etc/passwd")).toBe(false);
     expect(isSafeHistoryRelativePath("notes/../../outside.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("C:/Users/alice/notes.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("C:notes.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("notes/unsafe\u0000.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("notes/unsafe\u001f.md")).toBe(false);
+    expect(isSafeHistoryRelativePath("notes/unsafe\u0085.md")).toBe(false);
   });
 });
