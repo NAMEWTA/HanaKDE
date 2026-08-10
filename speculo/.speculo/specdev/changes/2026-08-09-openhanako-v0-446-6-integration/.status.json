@@ -34,6 +34,14 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-10T17:01:55+0800",
       "scope": "T-15 only: preserve the activation ProviderRootIdentity as private object-identity authority through ref normalization and compare it before native-proof capture; no second pathname revalidation, public API, helper/protocol, Spec, ADR, or path expansion."
+    },
+    {
+      "id": "D-T15-06",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T17:15:01+0800",
+      "scope": "T-15 only: derive ProviderRootIdentity public and private halves from one no-follow BigInt stat/handle snapshot; deterministic replacement injection; no second pathname compare, public API, helper/protocol, Spec, ADR, or path expansion."
     }
   ],
   "worktrees": [
