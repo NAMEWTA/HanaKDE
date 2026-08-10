@@ -96,6 +96,20 @@ describe("persistence schema tripwire", () => {
     expect(facts.runtimeSchema.objects.some((entry) => entry.name === "facts_fts")).toBe(true);
     expect(facts.runtimeSchema.objects.every((entry) => !entry.name.startsWith("facts_fts_"))).toBe(true);
 
+    const history = first.schemas.find((entry) => entry.storeId === "file-history-sqlite");
+    expect(history).toMatchObject({
+      kind: "sqlite-runtime",
+      module: "lib/file-history/history-store.ts",
+      runtimeSchema: { userVersion: 0 },
+    });
+    expect(history.runtimeSchema.objects.map((entry) => entry.name)).toEqual([
+      "idx_snapshots_file_time",
+      "idx_snapshots_time",
+      "files",
+      "meta",
+      "snapshots",
+    ]);
+
     const sessions = first.schemas.find((entry) => entry.storeId === "session-jsonl");
     expect(sessions).toMatchObject({
       kind: "external-versioned",

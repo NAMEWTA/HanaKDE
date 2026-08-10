@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-13
 title: 交付仅覆盖 main 的 File History
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "新 SQLite 数据模型、retention/quota、rename/delete 版本语义和安全 scope 属于共享持久化与数据完整性能力。"
 ready: true

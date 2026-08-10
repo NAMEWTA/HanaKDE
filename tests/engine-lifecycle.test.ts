@@ -341,9 +341,9 @@ describe("HanaEngine single-owner production cutover", () => {
     let inspectionFails = false;
     let coordinatorWatchers = 0;
     const cutover = createSingleOwnerProductionCutover({
-      isolatedProof: async () => order.push("isolated-proof"),
+      isolatedProof: async () => { order.push("isolated-proof"); },
       legacyOwner: {
-        stop: async () => order.push("legacy.stop"),
+        stop: async () => { order.push("legacy.stop"); },
         inspect: () => ({ watchers: 0, mutations: 0, baselines: 0 }),
       },
       newOwner: {

@@ -614,10 +614,6 @@
         "reason": "Renderer/service-worker code is not an Electron host persistence owner."
       },
       {
-        "id": "dormant-file-history-input",
-        "reason": "T-06 retains the upstream File History implementation as an unconnected input; it is not a production persistence owner until the later single-owner cutover."
-      },
-      {
         "id": "source-tests",
         "reason": "Test fixtures and test-only mutations are excluded from production ownership."
       }
@@ -634,7 +630,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:c306248ae7ea381f255987de08eb860ccbc166aa14682d3480df7a714823266a",
+  "payloadFingerprint": "sha256:02489b2e89a0bb62aa70f48326e1fdb92e68d8aaca17141fc3b6113f0c06f2a4",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -1535,6 +1531,45 @@
         "contract": "execution lease registry validator and atomic serializer",
         "kind": "runtime-contract",
         "module": "core/execution-lease-registry.ts"
+      }
+    },
+    {
+      "affectedByEpochMigration": false,
+      "bootstrapSafety": null,
+      "checkpointPolicy": "The private main-only history database is durable user history and remains an independently owned SQLite store until a coordinated checkpoint policy explicitly includes it.",
+      "epochPolicy": "epoch-managed",
+      "exemption": null,
+      "firstPossibleOpenPhase": "runtime_ready",
+      "firstPossibleWritePhase": "runtime_ready",
+      "format": "sqlite",
+      "id": "file-history-sqlite",
+      "identityContract": "historyStoreKey is opaque and root-derived; its SHA-256 directory is a private locator under HANA_HOME and the physical destination must remain outside main Workspace.",
+      "migrationEntry": [],
+      "openEntry": [
+        "new FileHistoryService",
+        "FileHistoryService.activateMain"
+      ],
+      "ownerModule": "lib/file-history/history-store.ts",
+      "pathExclusions": [],
+      "pathKind": "file",
+      "pathPattern": "file-history/{historyStoreKey}/history.sqlite",
+      "pathPatterns": [
+        "file-history/{historyStoreKey}/history.sqlite",
+        "file-history/{historyStoreKey}/history.sqlite-wal",
+        "file-history/{historyStoreKey}/history.sqlite-shm"
+      ],
+      "preCoordinatorReadProjection": null,
+      "protocolModules": [],
+      "restorePolicy": "Never accept a pre-baseline database; FileHistoryStore validates the sole main-only schema before opening, and restore must use its owning flow.",
+      "schemaContract": {
+        "compatibility": "The named runtime reader is canonical; this inventory does not imply stricter validation than runtime currently performs.",
+        "kind": "runtime-source",
+        "source": "lib/file-history/history-store.ts"
+      },
+      "schemaSource": {
+        "contract": "FileHistoryStore main-only baseline DDL, schema metadata, and runtime introspection",
+        "kind": "sqlite-runtime",
+        "module": "lib/file-history/history-store.ts"
       }
     },
     {
@@ -3103,8 +3138,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Registers two URL materialize temporary staging cleanup receipts only; persistent store registry, on-disk schemas, DATA_EPOCH, and data contracts are unchanged.",
-    "payloadFingerprint": "sha256:c306248ae7ea381f255987de08eb860ccbc166aa14682d3480df7a714823266a"
+    "compatibilityReason": "Registers the activated main-only File History SQLite baseline. The runtime accepts only its schema-v1 store; no released compatibility or migration contract exists.",
+    "payloadFingerprint": "sha256:02489b2e89a0bb62aa70f48326e1fdb92e68d8aaca17141fc3b6113f0c06f2a4"
   },
   "schemas": [
     {
@@ -3301,7 +3336,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:7849486d2bcd3c9fbe900b78a13e63063e53340f45c2f75c9eb7f5e31fa3e395",
+      "sourceHash": "sha256:f108bd0c1c18f5d7618ad025f847076208b67cffdb2c378dfa5484d9a83acabf",
       "storeId": "desktop-window-version-state"
     },
     {
@@ -3319,6 +3354,48 @@
       "storeId": "execution-leases"
     },
     {
+      "contract": "FileHistoryStore main-only baseline DDL, schema metadata, and runtime introspection",
+      "kind": "sqlite-runtime",
+      "module": "lib/file-history/history-store.ts",
+      "runtimeSchema": {
+        "objects": [
+          {
+            "name": "idx_snapshots_file_time",
+            "sql": "CREATE INDEX idx_snapshots_file_time ON snapshots(file_id, captured_at DESC, id DESC)",
+            "tableName": "snapshots",
+            "type": "index"
+          },
+          {
+            "name": "idx_snapshots_time",
+            "sql": "CREATE INDEX idx_snapshots_time ON snapshots(captured_at, id)",
+            "tableName": "snapshots",
+            "type": "index"
+          },
+          {
+            "name": "files",
+            "sql": "CREATE TABLE files( id INTEGER PRIMARY KEY AUTOINCREMENT, rel_path TEXT NOT NULL UNIQUE, deleted_at INTEGER )",
+            "tableName": "files",
+            "type": "table"
+          },
+          {
+            "name": "meta",
+            "sql": "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+            "tableName": "meta",
+            "type": "table"
+          },
+          {
+            "name": "snapshots",
+            "sql": "CREATE TABLE snapshots( id INTEGER PRIMARY KEY AUTOINCREMENT, file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE, content_hash TEXT NOT NULL, version_token TEXT, content BLOB NOT NULL, raw_size INTEGER NOT NULL, stored_size INTEGER NOT NULL, captured_at INTEGER NOT NULL, origin TEXT NOT NULL, op_context TEXT )",
+            "tableName": "snapshots",
+            "type": "table"
+          }
+        ],
+        "userVersion": 0
+      },
+      "sourceHash": "sha256:a0bf66f77fee80faf3f2f47ea7d6f6b1fe3d6c427121f5db4f05761da02b55a1",
+      "storeId": "file-history-sqlite"
+    },
+    {
       "contract": "installed manifest, install receipt, backup, and source-package directory protocols",
       "kind": "directory-contract",
       "module": "core/plugin-manager.ts",
@@ -3332,18 +3409,18 @@
       "protocolModules": [
         {
           "module": "core/knowledge-workspace/knowledge-index-coordinator.ts",
-          "sourceHash": "sha256:3083d227730dc28aefb405c7b4af2cdbfd0924a34b9dc25bdb962698c04ec272"
+          "sourceHash": "sha256:57f4749f34ca4724cc02e2c0e6bca76c2b1cc96112cec49f712dc73a6fdc48dd"
         },
         {
           "module": "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
-          "sourceHash": "sha256:5c04208ac35eb34e602b1c816f2661e2f8156d5e9e31d19d6ccaa49f7666e3d0"
+          "sourceHash": "sha256:0c984356ae6e8c41fde84251b3529663f79f296089197194e63f8a65ef266460"
         },
         {
           "module": "lib/knowledge-workspace/knowledge-query.ts",
           "sourceHash": "sha256:4020df9147ec434182f796ca5873b5450fec6c573c7034fcc746819f717c9fd3"
         }
       ],
-      "sourceHash": "sha256:cb108679694fbe71b1451ace27e358f757c33a2b4701190731c8f27cb82a09e6",
+      "sourceHash": "sha256:d98021c67a2f32a0a1f203c9ce126b208fdf7eb517ab87cf6c8b7252a28ad361",
       "storeId": "knowledge-index-generations"
     },
     {
@@ -4155,6 +4232,14 @@
       "reason": "Creates the channel root.",
       "sourceFile": "core/engine.ts",
       "storeId": "channels"
+    },
+    {
+      "exemptionId": null,
+      "kind": "persistent-store-constructor",
+      "ordinal": 0,
+      "reason": "Constructs the sole production FileHistoryService assembly owner.",
+      "sourceFile": "core/engine.ts",
+      "storeId": "file-history-sqlite"
     },
     {
       "exemptionId": null,
@@ -6787,6 +6872,30 @@
       "reason": "The ZIP codec creates caller-selected extraction directories and atomically publishes files there; the calling installer or import flow owns any durable state.",
       "sourceFile": "lib/extract-zip.ts",
       "storeId": null
+    },
+    {
+      "exemptionId": null,
+      "kind": "persistent-store-constructor",
+      "ordinal": 0,
+      "reason": "Constructs the canonical History SQLite store after its private path is verified.",
+      "sourceFile": "lib/file-history/file-history-service.ts",
+      "storeId": "file-history-sqlite"
+    },
+    {
+      "exemptionId": null,
+      "kind": "database-open",
+      "ordinal": 0,
+      "reason": "Creates the private History directory and opens the canonical main-only SQLite database.",
+      "sourceFile": "lib/file-history/history-store.ts",
+      "storeId": "file-history-sqlite"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "ordinal": 0,
+      "reason": "Creates the private History directory and opens the canonical main-only SQLite database.",
+      "sourceFile": "lib/file-history/history-store.ts",
+      "storeId": "file-history-sqlite"
     },
     {
       "exemptionId": "external-file-ref-io",

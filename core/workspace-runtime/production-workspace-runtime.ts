@@ -1,12 +1,34 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { resourceKeyForRef } from "../../lib/resource-io/resource-refs.ts";
 import type {
+  FileHistoryRead,
+  MainFileHistoryBinding,
+  MainFileHistoryEvent,
+} from "../../lib/file-history/file-history-service.ts";
+import { MAX_SNAPSHOT_BYTES } from "../../lib/file-history/text-file-policy.ts";
+import { resourceKeyForRef } from "../../lib/resource-io/resource-refs.ts";
+import { RESOURCE_READ_PROOF } from "../../lib/resource-io/types.ts";
+import type {
+  ProviderRootIdentity,
   ResourceChangedEvent,
   ResourceDeletedEvent,
   ResourceDescriptor,
+  ResourceEvent,
+  ResourceOpenReadOptions,
+  ResourceOpenReadResult,
+  ResourceOperationContext,
+  ResourceStat,
+  ResourceVersion,
 } from "../../lib/resource-io/types.ts";
 import type { WorkspaceObservation } from "../../shared/workspace-observation.ts";
+import type {
+  KnowledgeIndexSharedBaselinePort,
+} from "../knowledge-workspace/knowledge-index-runtime.ts";
+import type {
+  KnowledgeIndexScopedRepairRequest,
+  KnowledgeIndexSharedBaselineDifference,
+} from "../knowledge-workspace/knowledge-index-event-coordinator.ts";
 import {
   createMainWorkspaceRuntime,
   type MainWorkspaceRootAuthority,
@@ -61,23 +83,10 @@ const UNPROVEN_PRODUCTION_OWNER_COUNTS: ProductionHealthCounts = Object.freeze({
   baselines: null,
 });
 
-export type KnowledgeSharedBaselineChange = Readonly<{
-  relativePath: string;
-  changeType: "upsert" | "deleted";
-}>;
-
-export type KnowledgeSharedBaselineDifference = Readonly<{
-  type: "shared-baseline-difference";
-  sourceKey: "main";
-  cursor: number;
-  coverage: "source";
-  changes: readonly KnowledgeSharedBaselineChange[];
-}>;
-
 type KnowledgeSourceBaseline = Readonly<{
   generation: number;
   cursor: number;
-  changes: readonly KnowledgeSharedBaselineChange[];
+  changes: KnowledgeIndexSharedBaselineDifference["changes"];
 }>;
 
 type ActiveKnowledgeSourceBaseline = Readonly<{
@@ -88,17 +97,6 @@ type ActiveKnowledgeSourceBaseline = Readonly<{
 type KnowledgeBaselineRepair = Readonly<{
   cursor: number;
   promise: Promise<void>;
-}>;
-
-export type KnowledgeScopedRepairRequest = Readonly<{
-  sourceKey: string;
-  afterSequence: number;
-  reason: string;
-}>;
-
-export type KnowledgeSharedBaselinePort = Readonly<{
-  subscribe: (consumer: (input: KnowledgeSharedBaselineDifference) => void) => () => void;
-  requestRepair: (request: KnowledgeScopedRepairRequest) => Promise<void>;
 }>;
 
 type MainWorkspaceRuntimeForKnowledgeBaseline = Pick<
@@ -120,6 +118,7 @@ export type ProductionWorkspaceEventBus = Readonly<{
   latestSequence: () => number;
   changed: (input: ResourceChangedInput) => unknown;
   deleted: (input: ResourceDeletedInput) => unknown;
+  subscribe: (subscriber: (event: ResourceEvent) => unknown) => () => void;
 }>;
 
 type LegacyWatchEntry = Readonly<{
@@ -137,16 +136,286 @@ export type ProductionWorkspaceRuntimeAssembly = Readonly<{
   runtime: MainWorkspaceRuntime;
   sharedBaseline: MainWorkspaceKnowledgeSharedBaselineAdapter;
   cutover: SingleOwnerProductionCutover;
+  fileHistoryBinding: () => MainFileHistoryBinding | null;
 }>;
+
+type MainFileHistoryResourceIO = Readonly<{
+  stat: (input: unknown, options?: ResourceOperationContext) => Promise<ResourceStat>;
+  openRead: (
+    input: unknown,
+    readOptions?: ResourceOpenReadOptions,
+    options?: ResourceOperationContext,
+  ) => Promise<ResourceOpenReadResult>;
+}>;
+
+type MainFileHistoryEventBus = Readonly<{
+  subscribe: (subscriber: (event: ResourceEvent) => unknown) => () => void;
+}>;
+
+/**
+ * Adapts the canonical main coordinator and ResourceEventBus for History.
+ * It owns neither physical observation nor a filesystem traversal.
+ */
+export function createMainFileHistoryBinding({
+  rootProof,
+  runtime,
+  resourceEvents,
+  resourceIO,
+}: {
+  rootProof: MainWorkspaceRootProof;
+  runtime: MainWorkspaceRuntime;
+  resourceEvents: MainFileHistoryEventBus;
+  resourceIO: MainFileHistoryResourceIO;
+}): MainFileHistoryBinding {
+  if (rootProof?.root?.kind !== "local-file" || !path.isAbsolute(rootProof.root.path)) {
+    throw new TypeError("file-history main root must be absolute");
+  }
+  if (!isLocalMainRootIdentity(rootProof.identity)) {
+    throw new TypeError("file-history main root proof is unavailable");
+  }
+  // ResourceIO may canonicalize an alias such as /var while the authorized
+  // root ref preserves its submitted spelling. The coordinator's revalidated
+  // watch target is the physical root that both its baseline and ResourceIO
+  // reads use, so membership checks must use that same identity.
+  const resolvedRootPath = workspaceWatchTargetDirectory(rootProof, "file-history main");
+  const rootIdentity = rootProof.identity;
+  const historyStoreKey = historyStoreKeyForRoot(rootIdentity);
+
+  return Object.freeze({
+    sourceKey: "main" as const,
+    historyStoreKey,
+    verifyPrivateStorePath: (candidateStorePath) => isOutsideMainWorkspace(
+      resolvedRootPath,
+      candidateStorePath,
+      rootIdentity.caseMode,
+    ),
+    subscribe: (consumer) => runtime.subscribe(consumer),
+    subscribeEvents: (consumer) => resourceEvents.subscribe((event) => {
+      const projected = projectMainFileHistoryEvent(resolvedRootPath, rootIdentity.caseMode, event);
+      if (projected) return consumer(projected);
+      return undefined;
+    }),
+    read: (relativePath, request) => readMainFileHistoryContent({
+      rootPath: resolvedRootPath,
+      caseMode: rootIdentity.caseMode,
+      resourceIO,
+      relativePath,
+      request,
+    }),
+  });
+}
+
+function isLocalMainRootIdentity(value: ProviderRootIdentity): boolean {
+  return value.providerId === "local_fs"
+    && typeof value.identityNamespace === "string"
+    && value.identityNamespace.length > 0
+    && typeof value.opaqueRootId === "string"
+    && value.opaqueRootId.length > 0
+    && typeof value.scopeToken === "string"
+    && value.scopeToken.length > 0
+    && ["sensitive", "insensitive", "unknown"].includes(value.caseMode);
+}
+
+function historyStoreKeyForRoot(identity: ProviderRootIdentity): string {
+  const digest = createHash("sha256")
+    .update(identity.identityNamespace)
+    .update("\0")
+    .update(identity.opaqueRootId)
+    .update("\0")
+    .update(identity.scopeToken)
+    .digest("base64url");
+  return `main-${digest}`;
+}
+
+function isOutsideMainWorkspace(
+  rootPath: string,
+  candidateStorePath: unknown,
+  caseMode: ProviderRootIdentity["caseMode"],
+): boolean {
+  if (typeof candidateStorePath !== "string" || !path.isAbsolute(candidateStorePath)) return false;
+  const canonicalRoot = canonicalPhysicalWatchPath(rootPath);
+  const canonicalCandidate = canonicalPhysicalWatchPath(candidateStorePath);
+  if (!canonicalRoot || !canonicalCandidate) return false;
+  const relative = path.relative(
+    comparisonPath(canonicalRoot, caseMode),
+    comparisonPath(canonicalCandidate, caseMode),
+  );
+  return relative !== ""
+    && (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative));
+}
+
+function projectMainFileHistoryEvent(
+  rootPath: string,
+  caseMode: ProviderRootIdentity["caseMode"],
+  event: ResourceEvent,
+): MainFileHistoryEvent | null {
+  if (event.type === "resource.changed") {
+    const relativePath = mainRelativePath(rootPath, caseMode, event.resource);
+    if (!relativePath || event.resource.isDirectory === true) return null;
+    return Object.freeze({
+      type: "main.resource.changed" as const,
+      sourceKey: "main" as const,
+      relativePath,
+      versionToken: opaqueVersionToken(event.version),
+      operationContext: event.source,
+    });
+  }
+  if (event.type === "resource.deleted") {
+    const relativePath = mainRelativePath(rootPath, caseMode, event.resource);
+    if (!relativePath || event.resource.isDirectory === true) return null;
+    return Object.freeze({
+      type: "main.resource.deleted" as const,
+      sourceKey: "main" as const,
+      relativePath,
+    });
+  }
+
+  const oldRelativePath = mainRelativePath(rootPath, caseMode, event.oldResource);
+  const newRelativePath = mainRelativePath(rootPath, caseMode, event.newResource);
+  if (event.oldResource.isDirectory === true || event.newResource.isDirectory === true) return null;
+  if (oldRelativePath) {
+    return Object.freeze({
+      type: "main.resource.renamed" as const,
+      sourceKey: "main" as const,
+      oldRelativePath,
+      newRelativePath,
+      operationContext: event.source,
+    });
+  }
+  if (!newRelativePath) return null;
+  return Object.freeze({
+    type: "main.resource.changed" as const,
+    sourceKey: "main" as const,
+    relativePath: newRelativePath,
+    operationContext: event.source,
+  });
+}
+
+async function readMainFileHistoryContent({
+  rootPath,
+  caseMode,
+  resourceIO,
+  relativePath,
+  request,
+}: {
+  rootPath: string;
+  caseMode: ProviderRootIdentity["caseMode"];
+  resourceIO: MainFileHistoryResourceIO;
+  relativePath: string;
+  request: Readonly<{ maxBytes: number }>;
+}): Promise<FileHistoryRead | null> {
+  const maxBytes = boundedHistoryReadLimit(request?.maxBytes);
+  if (!maxBytes || !isSafeWorkspaceRelativePath(relativePath)) return null;
+  const filePath = path.resolve(rootPath, ...relativePath.split("/"));
+  const ref = Object.freeze({ kind: "local-file" as const, path: filePath });
+  if (mainRelativePath(rootPath, caseMode, ref) !== relativePath) return null;
+
+  const context = Object.freeze({ source: "provider_watch" as const, reason: "file_history" });
+  try {
+    const stat = await resourceIO.stat(ref, context);
+    if (
+      !stat.exists
+      || stat.isDirectory
+      || mainRelativePath(rootPath, caseMode, stat.resource) !== relativePath
+    ) {
+      return null;
+    }
+    const statSize = safeResourceSize(stat.version?.size);
+    if (statSize !== null && statSize > maxBytes) {
+      return Object.freeze({ truncated: true, versionToken: opaqueVersionToken(stat.version) });
+    }
+    const opened = await resourceIO.openRead(ref, boundedOpenReadOptions(stat, maxBytes), context);
+    if (
+      mainRelativePath(rootPath, caseMode, opened.resource) !== relativePath
+      || !Number.isSafeInteger(opened.size)
+      || opened.size < 0
+    ) {
+      return null;
+    }
+    const versionToken = opaqueVersionToken(opened.version);
+    if (opened.size > maxBytes) return Object.freeze({ truncated: true, versionToken });
+
+    const chunks: Buffer[] = [];
+    let length = 0;
+    for await (const chunk of opened.body) {
+      if (!(chunk instanceof Uint8Array)) return Object.freeze({ truncated: true, versionToken });
+      if (chunk.byteLength > maxBytes - length) return Object.freeze({ truncated: true, versionToken });
+      const bytes = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+      chunks.push(bytes);
+      length += bytes.byteLength;
+    }
+    if (length !== opened.size) return Object.freeze({ truncated: true, versionToken });
+    return Object.freeze({ content: Buffer.concat(chunks, length), versionToken });
+  } catch {
+    return null;
+  }
+}
+
+function boundedHistoryReadLimit(value: unknown): number | null {
+  if (!Number.isSafeInteger(value) || Number(value) <= 0) return null;
+  return Math.min(Number(value), MAX_SNAPSHOT_BYTES);
+}
+
+function boundedOpenReadOptions(stat: ResourceStat, maxBytes: number): ResourceOpenReadOptions {
+  const size = safeResourceSize(stat.version?.size);
+  return {
+    end: size === null ? maxBytes - 1 : Math.min(Math.max(size - 1, 0), maxBytes - 1),
+    ...(stat.version ? { expectedVersion: stat.version } : {}),
+    ...(stat[RESOURCE_READ_PROOF] ? { [RESOURCE_READ_PROOF]: stat[RESOURCE_READ_PROOF] } : {}),
+  };
+}
+
+function safeResourceSize(value: unknown): number | null {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+function mainRelativePath(
+  rootPath: string,
+  caseMode: ProviderRootIdentity["caseMode"],
+  resource: ResourceDescriptor,
+): string | null {
+  if (resource?.kind !== "local-file" || typeof resource.path !== "string" || !path.isAbsolute(resource.path)) {
+    return null;
+  }
+  const candidatePath = path.resolve(resource.path);
+  const comparisonRelative = path.relative(
+    comparisonPath(rootPath, caseMode),
+    comparisonPath(candidatePath, caseMode),
+  );
+  if (
+    !comparisonRelative
+    || comparisonRelative === ".."
+    || comparisonRelative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(comparisonRelative)
+  ) {
+    return null;
+  }
+  const relativePath = path.relative(rootPath, candidatePath).split(path.sep).join("/");
+  return isSafeWorkspaceRelativePath(relativePath) ? relativePath : null;
+}
+
+function comparisonPath(value: string, caseMode: ProviderRootIdentity["caseMode"]): string {
+  const resolved = path.resolve(value);
+  return caseMode === "insensitive"
+    ? resolved.normalize("NFC").toLocaleLowerCase("en-US")
+    : resolved;
+}
+
+function opaqueVersionToken(version: ResourceVersion | undefined): string | null {
+  if (!version) return null;
+  const values = [version.mtimeMs, version.size, version.sha256, version.etag, version.sequence];
+  if (values.every(value => value === undefined)) return null;
+  return createHash("sha256").update(JSON.stringify(values)).digest("base64url");
+}
 
 /**
  * Converts canonical main-workspace observations into the narrow baseline
  * port consumed by Knowledge. It never owns a watcher or source walk.
  */
 export class MainWorkspaceKnowledgeSharedBaselineAdapter {
-  readonly port: KnowledgeSharedBaselinePort;
+  readonly port: KnowledgeIndexSharedBaselinePort;
   readonly #currentResourceEventSequence: () => number;
-  readonly #consumers = new Set<(input: KnowledgeSharedBaselineDifference) => void>();
+  readonly #consumers = new Set<(input: KnowledgeIndexSharedBaselineDifference) => void>();
   readonly #entries = new Map<string, "upsert">();
   #runtime: MainWorkspaceRuntimeForKnowledgeBaseline | null = null;
   #healthy = false;
@@ -185,7 +454,7 @@ export class MainWorkspaceKnowledgeSharedBaselineAdapter {
     this.#clearBaseline();
   }
 
-  subscribe(consumer: (input: KnowledgeSharedBaselineDifference) => void): () => void {
+  subscribe(consumer: (input: KnowledgeIndexSharedBaselineDifference) => void): () => void {
     if (typeof consumer !== "function") {
       throw new TypeError("knowledge shared baseline consumer must be a function");
     }
@@ -218,7 +487,7 @@ export class MainWorkspaceKnowledgeSharedBaselineAdapter {
     }
   }
 
-  requestRepair(request: KnowledgeScopedRepairRequest): Promise<void> {
+  requestRepair(request: KnowledgeIndexScopedRepairRequest): Promise<void> {
     if (!isValidKnowledgeScopedRepairRequest(request)) {
       return Promise.reject(new TypeError("knowledge shared baseline repair request is invalid"));
     }
@@ -342,7 +611,7 @@ export class MainWorkspaceKnowledgeSharedBaselineAdapter {
     return cursor;
   }
 
-  #publish(input: KnowledgeSharedBaselineDifference): void {
+  #publish(input: KnowledgeIndexSharedBaselineDifference): void {
     for (const consumer of this.#consumers) {
       try {
         consumer(input);
@@ -505,6 +774,7 @@ export function createProductionWorkspaceRuntime({
   legacyWatchRegistry,
   isolatedProof,
   beforeCoordinatorStart,
+  historyResourceIO,
   sharedBaseline = new MainWorkspaceKnowledgeSharedBaselineAdapter({
     currentResourceEventSequence: () => resourceEvents.latestSequence(),
   }),
@@ -516,14 +786,36 @@ export function createProductionWorkspaceRuntime({
   legacyWatchRegistry: ProductionLegacyWatchRegistry;
   isolatedProof: () => Promise<void> | void;
   beforeCoordinatorStart: () => Promise<void> | void;
+  historyResourceIO: MainFileHistoryResourceIO;
   sharedBaseline?: MainWorkspaceKnowledgeSharedBaselineAdapter;
 }): ProductionWorkspaceRuntimeAssembly {
+  if (
+    !historyResourceIO
+    || typeof historyResourceIO.stat !== "function"
+    || typeof historyResourceIO.openRead !== "function"
+    || typeof resourceEvents?.subscribe !== "function"
+  ) {
+    throw new TypeError("production workspace file-history assembly is unavailable");
+  }
   if (!path.isAbsolute(rootPath)) {
     throw new TypeError("production workspace root must be absolute");
   }
   const resolvedRootPath = path.resolve(rootPath);
   const root = Object.freeze({ kind: "local-file" as const, path: resolvedRootPath });
-  const runtime = createMainWorkspaceRuntime({ rootAuthority, watchAdapter });
+  let mainRootProof: MainWorkspaceRootProof | null = null;
+  const coordinatorRootAuthority: MainWorkspaceRootAuthority = Object.freeze({
+    proveMain: async (candidate) => {
+      const proof = await rootAuthority.proveMain(candidate);
+      mainRootProof = proof;
+      return proof;
+    },
+    revalidateMain: async (proof) => {
+      const revalidated = await rootAuthority.revalidateMain(proof);
+      mainRootProof = revalidated;
+      return revalidated;
+    },
+  });
+  const runtime = createMainWorkspaceRuntime({ rootAuthority: coordinatorRootAuthority, watchAdapter });
   const legacyOwner = createLegacyProductionWorkspaceOwner({
     rootPath: resolvedRootPath,
     watchRegistry: legacyWatchRegistry,
@@ -567,11 +859,31 @@ export function createProductionWorkspaceRuntime({
     legacyOwner,
     newOwner,
   });
+  const fileHistoryBinding = (): MainFileHistoryBinding | null => {
+    const proof = mainRootProof;
+    const snapshot = runtime.snapshot();
+    if (
+      !proof
+      || !snapshot?.observing
+      || snapshot.health !== "HEALTHY"
+    ) {
+      return null;
+    }
+    return createMainFileHistoryBinding({
+      rootProof: proof,
+      runtime,
+      resourceEvents: {
+        subscribe: (subscriber) => resourceEvents.subscribe(subscriber),
+      },
+      resourceIO: historyResourceIO,
+    });
+  };
   return Object.freeze({
     canonicalRoot: canonicalPhysicalWatchPath(resolvedRootPath),
     runtime,
     sharedBaseline,
     cutover,
+    fileHistoryBinding,
   });
 }
 
@@ -764,7 +1076,7 @@ export function isSameOrPhysicalDescendant(rootPath: string, candidatePath: stri
 
 function isValidKnowledgeScopedRepairRequest(
   request: unknown,
-): request is KnowledgeScopedRepairRequest & { sourceKey: "main" } {
+): request is KnowledgeIndexScopedRepairRequest & { sourceKey: "main" } {
   if (!request || typeof request !== "object" || Array.isArray(request)) return false;
   const candidate = request as Record<string, unknown>;
   return candidate.sourceKey === "main"

@@ -596,6 +596,29 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     ],
   }),
   defineStore({
+    id: "file-history-sqlite",
+    ownerModule: "lib/file-history/history-store.ts",
+    pathPatterns: [
+      "file-history/{historyStoreKey}/history.sqlite",
+      "file-history/{historyStoreKey}/history.sqlite-wal",
+      "file-history/{historyStoreKey}/history.sqlite-shm",
+    ],
+    format: "sqlite",
+    schemaSource: { kind: "sqlite-runtime", module: "lib/file-history/history-store.ts", contract: "FileHistoryStore main-only baseline DDL, schema metadata, and runtime introspection" },
+    openEntry: ["new FileHistoryService", "FileHistoryService.activateMain"],
+    firstPossibleOpenPhase: "runtime_ready",
+    firstPossibleWritePhase: "runtime_ready",
+    checkpointPolicy: "The private main-only history database is durable user history and remains an independently owned SQLite store until a coordinated checkpoint policy explicitly includes it.",
+    restorePolicy: "Never accept a pre-baseline database; FileHistoryStore validates the sole main-only schema before opening, and restore must use its owning flow.",
+    affectedByEpochMigration: false,
+    identityContract: "historyStoreKey is opaque and root-derived; its SHA-256 directory is a private locator under HANA_HOME and the physical destination must remain outside main Workspace.",
+    siteRules: [
+      ...rules(["lib/file-history/history-store.ts"], "Creates the private History directory and opens the canonical main-only SQLite database.", ["mkdir", "database-open"]),
+      ...rules(["lib/file-history/file-history-service.ts"], "Constructs the canonical History SQLite store after its private path is verified.", ["persistent-store-constructor"], "FileHistoryStore"),
+      ...rules(["core/engine.ts"], "Constructs the sole production FileHistoryService assembly owner.", ["persistent-store-constructor"], "FileHistoryService"),
+    ],
+  }),
+  defineStore({
     id: "agent-memory",
     ownerModule: "lib/memory/compile.ts",
     pathPatterns: [

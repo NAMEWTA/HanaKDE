@@ -133,7 +133,12 @@ import {
 } from "./knowledge-workspace/knowledge-copy-service.ts";
 import type { SourceRegistry } from "./knowledge-workspace/source-registry.ts";
 import {
+  FileHistoryService,
+  type MainFileHistoryBinding,
+} from "../lib/file-history/file-history-service.ts";
+import {
   KnowledgeIndexRuntime,
+  type KnowledgeIndexRuntimeOptions,
 } from "./knowledge-workspace/knowledge-index-runtime.ts";
 import type {
   KnowledgeIndexCoordinator,
@@ -369,6 +374,9 @@ export class HanaEngine {
   declare _prefs: any;
   declare _resourceAccess: any;
   declare _resourceEventBus: any;
+  declare _fileHistoryService: FileHistoryService | null;
+  declare _mainFileHistoryBinding: (() => MainFileHistoryBinding | null) | null;
+  declare _fileHistoryStoreKey: string | null;
   declare _knowledgeIndexRuntime: KnowledgeIndexRuntime | null;
   declare _mainWorkspaceSharedBaseline: MainWorkspaceKnowledgeSharedBaselineAdapter | null;
   declare _mainWorkspaceRuntime: MainWorkspaceRuntime | null;
@@ -431,6 +439,9 @@ export class HanaEngine {
     this._resourceAccess = null;
     this._resourceIO = null;
     this._resourceEventBus = null;
+    this._fileHistoryService = new FileHistoryService({ privateStoreRoot: this.hanakoHome });
+    this._mainFileHistoryBinding = null;
+    this._fileHistoryStoreKey = null;
     this._knowledgeIndexRuntime = null;
     this._mainWorkspaceSharedBaseline = new MainWorkspaceKnowledgeSharedBaselineAdapter({
       currentResourceEventSequence: () => this._resourceEvents().latestSequence(),
@@ -1102,6 +1113,27 @@ export class HanaEngine {
   resourceEventsSince(sequence) {
     return this._resourceEvents().since(sequence);
   }
+  getFileHistoryService(): FileHistoryService | null {
+    return this._fileHistoryService ?? null;
+  }
+  async _closeFileHistoryService(): Promise<void> {
+    await this._fileHistoryService?.close();
+    this._fileHistoryStoreKey = null;
+  }
+  async _activateMainFileHistory(log: (message: string) => void = () => {}): Promise<void> {
+    const binding = this._mainFileHistoryBinding?.();
+    if (!binding) return;
+    const service = this._fileHistoryService;
+    if (!service) return;
+    if (service.isAvailable() && this._fileHistoryStoreKey === binding.historyStoreKey) return;
+    try {
+      await service.activateMain(binding);
+      this._fileHistoryStoreKey = service.isAvailable() ? binding.historyStoreKey : null;
+    } catch {
+      this._fileHistoryStoreKey = null;
+      log("[workspace] main file history failed to activate");
+    }
+  }
   getProductionWorkspaceHealth(): ProductionCutoverSnapshot {
     if (this._mainWorkspaceCutover?.snapshot) return this._mainWorkspaceCutover.snapshot();
     if (this._mainWorkspaceUnavailable) {
@@ -1158,6 +1190,7 @@ export class HanaEngine {
     if (this._mainWorkspaceCutover && this._mainWorkspaceRoot === rootPath) {
       try {
         await this._mainWorkspaceCutover.start();
+        if (this.getProductionWorkspaceHealth().state === "HEALTHY") await this._activateMainFileHistory(log);
       } catch {
         log("[workspace] main workspace coordinator failed to start");
       }
@@ -1173,28 +1206,34 @@ export class HanaEngine {
       isolatedProof: () => this._proveMainWorkspaceCutoverDescriptor(),
       beforeCoordinatorStart: () => this._repartitionActiveResourceWatches(),
       sharedBaseline: this._getMainWorkspaceSharedBaseline(),
+      historyResourceIO: this.getResourceIO(),
     });
     this._mainWorkspaceRuntime = assembly.runtime;
     this._mainWorkspaceCutover = assembly.cutover;
     this._mainWorkspaceRoot = rootPath;
     this._mainWorkspaceCanonicalRoot = assembly.canonicalRoot;
+    this._mainFileHistoryBinding = assembly.fileHistoryBinding;
 
     try {
       await assembly.cutover.start();
+      if (this.getProductionWorkspaceHealth().state === "HEALTHY") await this._activateMainFileHistory(log);
     } catch {
       log("[workspace] main workspace coordinator failed to start");
     }
     return this.getProductionWorkspaceHealth();
   }
   async _stopProductionWorkspaceRuntime() {
+    await this._closeFileHistoryService();
     const cutover = this._mainWorkspaceCutover;
     if (!cutover) {
+      this._mainFileHistoryBinding = null;
       this._mainWorkspaceSharedBaseline?.detach();
       this._mainWorkspaceCanonicalRoot = null;
       this._mainWorkspaceUnavailable = false;
       return this.getProductionWorkspaceHealth();
     }
     await cutover.stop();
+    this._mainFileHistoryBinding = null;
     this._mainWorkspaceRuntime = null;
     this._mainWorkspaceCutover = null;
     this._mainWorkspaceRoot = null;
@@ -1431,7 +1470,7 @@ export class HanaEngine {
       const runtime = this.getRuntimeContext();
       const hostId = runtime.serverNodeId || runtime.serverId;
       if (!hostId) throw new Error("knowledge index host identity is unavailable");
-      const options = {
+      const options: KnowledgeIndexRuntimeOptions = {
         hanakoHome: this.hanakoHome,
         hostId,
         pid: process.pid,
@@ -1440,10 +1479,7 @@ export class HanaEngine {
         sharedBaseline: this._getMainWorkspaceSharedBaseline().port,
         retainWatch: (resource) => this.retainResourceWatch(resource),
       };
-      const KnowledgeIndexRuntimeWithSharedBaseline = KnowledgeIndexRuntime as unknown as {
-        new (runtimeOptions: typeof options): KnowledgeIndexRuntime;
-      };
-      this._knowledgeIndexRuntime = new KnowledgeIndexRuntimeWithSharedBaseline(options);
+      this._knowledgeIndexRuntime = new KnowledgeIndexRuntime(options);
     }
     try {
       return await this._knowledgeIndexRuntime.bindWorkspace(sourceRegistry);

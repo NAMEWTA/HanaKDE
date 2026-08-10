@@ -33,7 +33,6 @@ export const SOURCE_EXCLUSIONS = Object.freeze([
   { id: "desktop-renderer-platform", pattern: /^desktop\/src\/(?:lib|modules)(?:\/|$)/, reason: "Renderer platform and i18n modules are not Electron host persistence owners." },
   { id: "desktop-renderer-entries", pattern: /^desktop\/src\/(?:browser-viewer-main|main|mobile-main|onboarding-main|quick-chat-main|settings-main|splash-main|viewer-window-entry)[.]tsx$/, reason: "Renderer entrypoints are not Electron host persistence owners." },
   { id: "desktop-renderer-workers", pattern: /^desktop\/src\/(?:mobile-sw[.]js|viewer-resource-events[.]ts)$/, reason: "Renderer/service-worker code is not an Electron host persistence owner." },
-  { id: "dormant-file-history-input", pattern: /^lib\/file-history(?:\/|$)/, reason: "T-06 retains the upstream File History implementation as an unconnected input; it is not a production persistence owner until the later single-owner cutover." },
   { id: "source-tests", pattern: /\/(?:tests|__tests__)(?:\/|$)|[.](?:test|spec)[.](?:[cm]?[jt]sx?)$/, reason: "Test fixtures and test-only mutations are excluded from production ownership." },
 ]);
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs"]);
@@ -91,6 +90,8 @@ const PERSISTENT_CONSTRUCTORS = new Set([
   "CronStore",
   "DeferredResultStore",
   "FactStore",
+  "FileHistoryService",
+  "FileHistoryStore",
   "InputDraftsStore",
   "LoopStore",
   "PreferencesManager",

@@ -4,19 +4,19 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-12
 title: 执行单 owner 生产切换
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "生产 watcher、mutation fan-out 与 baseline owner 的一次性 stop-then-start 切换具有全局事故半径且禁止双运行。"
 ready: true
 risk: critical
 blocked_by: [T-10, T-11, T-19]
 contract_ids: [AC-009, AC-010, AC-011, AC-012, AC-013]
-owner: unassigned
-expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
-writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
-read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>desktop/main.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
-shared_paths: ["<Path>core/engine.ts</Path>"]
-shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File Tool injection until W3 integration; T-12 owns later production cutover work"]
+owner: Worker-T-12
+expected_changes: ["<Path>core/engine.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>server/composition/open-root.ts</Path>", "<Path>server/http/route-security.ts</Path>", "<Path>shared/persistence/store-registry.ts</Path>", "<Path>scripts/scan-persistent-stores.mjs</Path>", "<Path>scripts/generate-persistence-schema-fingerprint.mjs</Path>", "<Path>build/persistence-store-inventory.json</Path>", "<Path>build/persistence-schema-fingerprint.json</Path>", "<Path>build/persistence-startup-receipt.json</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/persistence-store-registry.test.ts</Path>", "<Path>tests/persistence-schema-tripwire.test.ts</Path>", "<Path>tests/server-composition-boundary.test.ts</Path>", "<Path>tests/http-route-security.test.ts</Path>"]
+writable_paths: ["<Path>core/engine.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>server/composition/open-root.ts</Path>", "<Path>server/http/route-security.ts</Path>", "<Path>shared/persistence/store-registry.ts</Path>", "<Path>scripts/scan-persistent-stores.mjs</Path>", "<Path>scripts/generate-persistence-schema-fingerprint.mjs</Path>", "<Path>build/persistence-store-inventory.json</Path>", "<Path>build/persistence-schema-fingerprint.json</Path>", "<Path>build/persistence-startup-receipt.json</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/persistence-store-registry.test.ts</Path>", "<Path>tests/persistence-schema-tripwire.test.ts</Path>", "<Path>tests/server-composition-boundary.test.ts</Path>", "<Path>tests/http-route-security.test.ts</Path>"]
+read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>shared/workspace-observation.ts</Path>", "<Path>desktop/main.cjs</Path>"]
+shared_paths: ["<Path>core/engine.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>server/composition/open-root.ts</Path>", "<Path>server/http/route-security.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/server-composition-boundary.test.ts</Path>", "<Path>tests/http-route-security.test.ts</Path>"]
+shared_path_owners: ["<Path>core/engine.ts</Path> => T-12 W4 production assembly; preserve T-19 File Tool identity injection", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path> => T-12 W4 production assembly only", "<Path>server/composition/open-root.ts</Path> and <Path>tests/server-composition-boundary.test.ts</Path> => T-12 owns the one File History mount/inventory entry", "<Path>server/http/route-security.ts</Path> and <Path>tests/http-route-security.test.ts</Path> => T-12 owns the narrow file-history files.read/LOCAL_ONLY classification", "<Path>shared/persistence/store-registry.ts</Path>, <Path>scripts/scan-persistent-stores.mjs</Path>, <Path>scripts/generate-persistence-schema-fingerprint.mjs</Path>, generated persistence receipts, and their tests => D-T12-06 grants T-12 the production-registration correction and real SQLite introspector only; T-21 retains all other package/build ownership", "<Path>tests/file-history-production-boundary.test.ts</Path> => T-12 may authorize Engine assembly assertions only; T-13 exclusively owns lib/file-history/**"]
 ---
 
 # Ticket T-12: 执行单 owner 生产切换
@@ -90,6 +90,22 @@ shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File To
 - **共享路径：** 无；T-12 是 production assembly/cutover 唯一 owner。
 - **保留或不动：** History、Knowledge、Extraction 产品模型和平台 package。
 
+### D-T12-05: W4 File History production assembly authorization
+
+- **Checkpoint / accepted dependency：** T-12 creation base_sha 为 `e758c7a12d31e8385b4993c406ae5acc04b18635`；resume/current checkpoint 为 `e6a687ba17752b4b5da3d46d6000f68b29abeaa9`。T-13 的已接受治理 checkpoint 为 `eba0480fc46fb929ab4473ff514f96ea0ecab09a`，其已审查的 History domain candidate 为 `e4600aff1fcd71285f8032fb610425ced5ead7cb`。两者都是本轮 assembly 的固定输入，不重放、不 rebase 且不自行合并到 integration。
+- **授权与唯一 owner：** T-12 仅可修改 frontmatter 中的 ten assembly/composition/security/test paths。`core/engine.ts` 负责创建、rebind/root-switch teardown、dispose 和 `getFileHistoryService()`；`core/workspace-runtime/production-workspace-runtime.ts` 只构造经授权的 main binding。`server/composition/open-root.ts` 只挂载既有 route，`server/http/route-security.ts` 只把三个 read endpoint 列为 `files.read`、其余 `/api/file-history/*` fail closed 为 `LOCAL_ONLY`。T-12 不修改 History store、capture/policy、route implementation 或 Knowledge implementation。
+- **消费契约：** File History 必须成为 main-only 的 logical `WorkspaceObservation` 和 `ResourceEventBus` consumer：复用 canonical observation subscription、已缓存 shared baseline 与 root proof；只读 authorized `ResourceIO` relative path；不创建 watcher、baseline walk、full scan、raw root projection 或第二 EventBus fact。
+- **测试边界：** `tests/file-history-production-boundary.test.ts` 的原有 dormant-input 断言仅放宽到上述 narrow Engine assembly 和既有 route 的 production mount。`tests/server-composition-boundary.test.ts` 同步 frozen inventory，`tests/http-route-security.test.ts` 证明 `GET /api/file-history/{files,versions,diff}` 只需 `files.read`、其他 verb/path 为 `LOCAL_ONLY`。它们必须继续禁止 File History 自己拥有 watcher/baseline、直接 filesystem access、raw root/store leakage，且不得把 `lib/file-history/**` 交给 T-12。
+- **W4 状态：** T-12 为 `in_progress`。T-13 和 T-14 保持 `review`，直到本 Ticket 的真实 production seam 证明和 combined W4 regressions 通过；本授权不允许任一 W4 Ticket 标记 `done` 或合并 integration。
+- **W4 closure（2026-08-10）：** T-12 production seam 已与已接受的 T-13 和 T-14 candidates 完成 combined Node 24 matrix；14 files / 220 tests、project typecheck、authorized-path ESLint、SpecDev validator 与 two-axis review 全部通过。三个 W4 Ticket 现在为 `done`，并进入一次本地 integration merge；后续 G5 仍独立负责 restore convergence。
+
+### D-T12-06: File History production persistence registration
+
+- **等级与触发事实：** ticket deviation。`core/engine.ts` 已在健康的 main assembly 创建 `FileHistoryService`，但 `<Path>scripts/scan-persistent-stores.mjs</Path>` 仍以 `dormant-file-history-input` 排除 `<Path>lib/file-history/**</Path>`，而 `<Path>tests/file-history-production-boundary.test.ts</Path>` 仍断言 `file-history-sqlite` 不得注册。这使 production persistence census、inventory 与 schema fingerprint 和真实 owner 相互矛盾。
+- **选项与推荐：** 保持排除会把实际 SQLite owner 从生产清单中隐藏；把 registry/scanner 留给 T-21 会让 W4 的 production cutover 在错误清单下结束；推荐由 T-12 最小接管，并只注册已激活的 File History SQLite store、移除 dormant exclusion、增加 scanner constructor census，并在既有 fingerprint generator 中添加真实 `FileHistoryStore` runtime introspector 后刷新三份 receipt。
+- **批准、范围与所有权：** Root Lead 于 `2026-08-10T14:12:37+0800` 批准此 ticket 级 deviation。仅扩展本 Ticket frontmatter 的 persistence registry/scanner、generated inventory/fingerprint/startup receipt 和已列 persistence tests；`lib/file-history/**` 继续为 T-13 read-only，T-21 继续拥有非本项的 manifests、build 与 package inputs。
+- **安全不变量与验收：** `file-history-sqlite` 必须成为真实 production store，schema fingerprint 必须由 runtime DDL introspection 生成；禁止重新引入 dormant exclusion、private watcher/baseline，或把绝对 root/store locator 公开。物理 private-store destination 必须在 main Workspace 外，包含 Hana home 既有祖先 symlink 指向 Workspace 的链路。
+
 ## 8. 验证矩阵
 
 | 行为或风险 | 验证接缝 | 命令或步骤 | 预期结果 | Evidence |
@@ -109,8 +125,8 @@ shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File To
 
 ## 10. 验收标准
 
-- [ ] `AC-009`：N consumers 对 canonical root 始终只有一个 physical watcher。
-- [ ] `AC-010`：cutover 与恢复全过程 watcher/mutation/baseline overlap 为 0。
-- [ ] `AC-011`/`AC-012`：production mutation、observation 与 catch-up 进入唯一 EventBus/baseline owner。
-- [ ] `AC-013`：failure/retry health state 可见且正确。
-- [ ] 重复 production owner 与兼容开关扫描为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>`。
+- [x] `AC-009`：N consumers 对 canonical root 始终只有一个 physical watcher。
+- [x] `AC-010`：cutover 与恢复全过程 watcher/mutation/baseline overlap 为 0。
+- [x] `AC-011`/`AC-012`：production mutation、observation 与 catch-up 进入唯一 EventBus/baseline owner。
+- [x] `AC-013`：failure/retry health state 可见且正确。
+- [x] 重复 production owner 与兼容开关扫描为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>`。

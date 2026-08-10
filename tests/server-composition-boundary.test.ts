@@ -31,7 +31,7 @@ const root = process.cwd();
 //
 // Golden list captured from server/index.ts *before* the composition
 // split plus the HanaKDE Knowledge Workspace and upstream MCP routes added
-// since (44 `app.route(prefix, headExpression)` call sites, sorted). Every
+// since (46 `app.route(prefix, headExpression)` call sites, sorted). Every
 // entry is `${prefix} :: ${firstIdentifierOfSecondArg}` — enough to prove
 // "same factory mounted at the same prefix", independent of exactly how
 // many lines its (unchanged) argument object spans or which file now
@@ -60,6 +60,7 @@ const PRE_REFACTOR_MOUNT_CALLS = Object.freeze([
   '"/api" :: createDiaryRoute',
   '"/api" :: createDmRoute',
   '"/api" :: createExperimentsRoute',
+  '"/api" :: createFileHistoryRoute',
   '"/api" :: createFsRoute',
   '"/api" :: createInputDraftsRoute',
   '"/api" :: createKnowledgeWorkspaceRoute',
@@ -72,6 +73,7 @@ const PRE_REFACTOR_MOUNT_CALLS = Object.freeze([
   '"/api" :: createModelsRoute',
   '"/api" :: createPluginsRoute',
   '"/api" :: createPreferencesRoute',
+  '"/api" :: createProductionWorkspaceHealthRoute',
   '"/api" :: createProvidersRoute',
   '"/api" :: createResourceIoRoute',
   '"/api" :: createResourcesRoute',
@@ -100,7 +102,7 @@ function extractMountCalls(filePath: string): string[] {
 }
 
 describe("composition boundary behavior lock: sorted mount-call inventory", () => {
-  it("server/index.ts + composition/open-root.ts + composition/full-root.ts mount the frozen 44 route factories at the expected prefixes", () => {
+  it("server/index.ts + composition/open-root.ts + composition/full-root.ts mount the frozen 46 route factories at the expected prefixes", () => {
     const combined = [
       ...extractMountCalls(path.join(root, "server", "index.ts")),
       ...extractMountCalls(path.join(root, "server", "composition", "open-root.ts")),

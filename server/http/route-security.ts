@@ -104,6 +104,8 @@ export function classifyHttpRoute({ method = "GET", path = "" } = {}) {
   if (knowledgeWorkspacePolicy) return knowledgeWorkspacePolicy;
   const resourceIoPolicy = classifyResourceIoRoute(verb, routePath);
   if (resourceIoPolicy) return resourceIoPolicy;
+  const fileHistoryPolicy = classifyFileHistoryRoute(verb, routePath);
+  if (fileHistoryPolicy) return fileHistoryPolicy;
   if (isWorkbenchFileReadRoute(verb, routePath)) return scoped("files.read");
   if (isWorkbenchFileWriteRoute(verb, routePath)) return scoped("files.write");
   if (isStudioWorkspaceReadRoute(verb, routePath)) return scoped("files.read");
@@ -376,6 +378,17 @@ function classifyResourceIoRoute(verb, routePath) {
     )
   ) {
     return scoped("files.write");
+  }
+  return LOCAL_ONLY;
+}
+
+function classifyFileHistoryRoute(verb, routePath) {
+  if (!routePath.startsWith("/api/file-history/")) return null;
+  if (
+    verb === "GET"
+    && /^\/api\/file-history\/(?:files|versions|diff)$/.test(routePath)
+  ) {
+    return scoped("files.read");
   }
   return LOCAL_ONLY;
 }

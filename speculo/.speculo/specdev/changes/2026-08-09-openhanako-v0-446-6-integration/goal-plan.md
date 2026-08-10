@@ -76,7 +76,7 @@ T-01 [G0]
 | W1 Staged Upstream | T-02—T-09 严格串行 | 首项为 G0 SHA，后续为前一 Ticket 的 integrated SHA | 1 | 每 Ticket 独立 native Worker | 每个 release checkpoint 验证、提交、合并后才发布下一 SHA |
 | G2 Resource Contract | T-10 | T-09 integrated SHA | 1 | native Worker | 关闭 Resource/Root/Event/Materialize/Transfer Gate |
 | W3 Shared Foundations | T-11, T-18, T-19 | T-10 integrated SHA | 3 | 三个独立 native Worker | 三个候选均验证后合并，发布唯一 W3 SHA |
-| W4 Single-Owner Consumers | T-12, T-13, T-14 | W3 integrated SHA | 3 | 三个独立 native Worker | overlap=0 且 History/Knowledge 分离后发布 W4 SHA |
+| W4 Single-Owner Consumers | T-12, T-13, T-14 | W3 integrated SHA | 3 | 三个独立 native Worker | **closed 2026-08-10:** 14-file/220-test Node 24 matrix, typecheck, authorized-path lint, persistence census `63 stores, 762 sites`, and two-axis review pass; publish one local W4 merge SHA |
 | G5 Restore Convergence | T-15 | W4 integrated SHA | 1 | native Worker | secure restore 与六读面收敛 Gate |
 | W6 Product/Office | T-16, T-20 | T-15 integrated SHA | 2 | 两个独立 native Worker | Lead 执行适用 UI/Office E2E 后发布 W6 SHA |
 | W7 Agent Projection | T-17 | W6 integrated SHA | 1 | native Worker | Agent/Workspace 入口分离且共享 primitive |
@@ -103,7 +103,7 @@ T-01 [G0]
 | T-11 | main Workspace infrastructure | T-10 | W3 | Worker-T-11 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
 | T-12 | single-owner production cutover | T-10,T-11 | W4 | Worker-T-12 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
 | T-13 | main-only File History | T-10,T-11 | W4 | Worker-T-13 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-13.md</Path>` |
-| T-14 | Knowledge events/scoped repair | T-10,T-11 | W4 | Worker-T-14 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-14.md</Path>` |
+| T-14 | Knowledge events/scoped repair | T-10,T-11 | W4 | Worker-T-14 / Lead | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-14.md</Path>` |
 | T-15 | secure restore convergence | T-12,T-13,T-14 | G5 | Worker-T-15；Lead Gate owner | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-15.md</Path>` |
 | T-16 | Workspace History UI | T-13,T-15 | W6 | Worker-T-16 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-16.md</Path>` |
 | T-17 | Agent file-change projection | T-15,T-16 | W7 | Worker-T-17 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-17.md</Path>` |
@@ -253,6 +253,8 @@ DISPATCH ticket=T-18 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 b
 DEVIATION id=D-T18-02 level=ticket resolved=T-18 checkpoint=16712d425c3a3d23d0f8f5617ac4170982d68079 recovery=Ticket grants exact <Path>desktop/src/react/components/InputArea.tsx</Path>; no W3 writable overlap; Lead re-audited candidate paths and accepted the integrated checkpoint
 DISPATCH ticket=T-19 wave=W3 baseline=2018ce1dc671f0d9bb3c6f61f4078625c7863001 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-19 workspace=specdev-worktree/T-19
 DEVIATION id=D-T19-02 level=ticket owner=T-19 path=<Path>core/engine.ts</Path> test=<Path>tests/engine-build-tools.test.ts</Path> contract=only-object-identity-matched-File-Tool-receives-session-sandbox-ResourceIO; other-custom-plugin-MCP-bridge-contexts-must-not-receive-it; T-12-resumes-core-engine-production-owner-after-W3
+W4_RESUME ticket=T-12 creation_base=e758c7a12d31e8385b4993c406ae5acc04b18635 resume_checkpoint=e6a687ba17752b4b5da3d46d6000f68b29abeaa9 workspace=specdev-worktree/T-12 dependency=T-13-accepted:eba0480fc46fb929ab4473ff514f96ea0ecab09a candidate:e4600aff1fcd71285f8032fb610425ced5ead7cb preserve-uncommitted-seams=yes rebase=no integration-merge=no
+AUTHORIZATION ticket=T-12 owner=Worker-T-12 writable=<Path>core/engine.ts</Path>,<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>,<Path>server/composition/open-root.ts</Path>,<Path>server/http/route-security.ts</Path>,<Path>tests/engine-resource-events.test.ts</Path>,<Path>tests/engine-lifecycle.test.ts</Path>,<Path>tests/production-workspace-runtime.test.ts</Path>,<Path>tests/file-history-production-boundary.test.ts</Path>,<Path>tests/server-composition-boundary.test.ts</Path>,<Path>tests/http-route-security.test.ts</Path> readonly=<Path>lib/file-history/**</Path>,<Path>server/routes/file-history.ts</Path>,<Path>core/knowledge-workspace/**</Path>,<Path>lib/resource-io/**</Path> contract=main-only-logical-observation-and-EventBus-consumer/no-private-watcher-baseline-or-full-scan;GET-file-history=files.read;other-file-history=LOCAL_ONLY T-13,T-14=review until combined-W4-proof
 ```
 
 规划阶段已验证：Spec Ready；25 个 Ticket 全部 Ready；DAG 无环；AC-001..AC-028 全覆盖；最大并发 3；initial planning HEAD 与 `origin/hanakde` 在冻结时均为 `5f819b1233d6acdc0893363d4647bf1d53af8355` 且工作树当时干净；冻结 target 对象为 `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`。此后出现的其他 change/用户修改属于并发工作，只保留、不读取为实施输入；T-01 至 T-08 已完成 Lead 独立验收，产品集成 checkpoint 为 `2bc78b4599d79183c6a0a086f48c47385b914291`，验收记录为 `0593aac16723d1cd518825e716180c23bf10cf97`；T-02/T-03/T-04/T-05/T-06/T-07/T-08 worktree 与候选分支已非强制清理，T-09 已从 cleanup checkpoint `adda1f5806f125a9de7943ab782103c593311144` 以独立 worktree 启动。T-10 已由 Lead 合入 `2018ce1dc671f0d9bb3c6f61f4078625c7863001`，完成独立 Resource/persistence 回归与 Node 24.16.0 typecheck；T-10 worktree/branch 已非强制清理，该 SHA 是 W3 三个并行 Ticket 的唯一 dispatch base。
@@ -260,6 +262,29 @@ DEVIATION id=D-T19-02 level=ticket owner=T-19 path=<Path>core/engine.ts</Path> t
 ### Pending Decisions and Blockers
 
 无未决产品决定或启动 blocker。未来只有超出本计划授权边界、或无法在三轮修正和 owning artifact 内收敛的 Spec/architecture/security/release 偏差才需要用户裁决。
+
+### W4 T-12 File History Production Assembly Authorization
+
+- **Fixed inputs:** T-12 resumes from `e6a687ba17752b4b5da3d46d6000f68b29abeaa9`. The accepted T-13 governance checkpoint is `eba0480fc46fb929ab4473ff514f96ea0ecab09a`; its reviewed domain candidate is `e4600aff1fcd71285f8032fb610425ced5ead7cb`. This is a local T-12 assembly checkpoint, not an integration or W4-close claim.
+- **Path owner:** T-12 alone owns the Engine, production-runtime adapter, the one `open-root.ts` mount, its frozen inventory, and the narrow route-security/test classification in the ten listed paths. T-13 remains the sole owner of `<Path>lib/file-history/**</Path>` and the existing `<Path>server/routes/file-history.ts</Path>` domain route. T-14 remains the sole owner of `<Path>core/knowledge-workspace/**</Path>`. `ResourceIO` and `WorkspaceObservation` contracts are read-only inputs.
+- **Required assembly:** Engine owns FileHistoryService creation, main rebind/switch teardown, disposal, and the public getter. The production-runtime adapter may provide only the authorized binding: canonical WorkspaceObservation subscription, cached baseline replay, main-safe bounded ResourceIO read, and one EventBus projection. Neither Engine nor History may add a physical watcher, baseline owner, direct filesystem read, full scan, or raw-root output.
+- **Route posture:** only `GET /api/file-history/{files,versions,diff}` enters the existing open composition and is classified `files.read`; all other `/api/file-history/*` verb/path combinations are `LOCAL_ONLY`. The frozen route inventory must name the new mount.
+- **Proof gate:** real production tests must show activation, bounded read, EventBus projection, lifecycle cleanup, one physical watcher/baseline while History and Knowledge are logical consumers, route mount, and the intended authorization posture. T-13 and T-14 remain `review`; no W4 Ticket becomes `done` and no candidate is merged to integration from this authorization.
+
+#### 落点裁决：W4 File History production assembly
+
+**功能本质**：消费既有 main Workspace observation、ResourceEventBus 和 ResourceIO root proof，新增 Engine-managed History 生命周期和供下游复用的 logical consumer binding；产物是跨 Engine lifecycle 的系统级 History capture state。
+
+**落点**：HanaKDE 系统本体（`core/engine.ts` 与 `core/workspace-runtime/production-workspace-runtime.ts`）。
+
+**关键判据**
+- 支持该落点：破盒硬门 1、2、3 均命中。Engine/Workspace lifecycle 和唯一 watcher/baseline 触及特权子系统，定义多个消费者依赖的 shared binding，并必须在 main workspace 生命周期中常驻。
+- 支持该落点：删除该 assembly 会使 core lifecycle 和 logical consumer contract 失效；插件贡献面不能安全拥有 root authority 或 stop-then-start teardown。
+- 反对该落点（最强反方）：History 查询/UI 可作为上层可选能力，但它们只能消费这里提供的契约，不能拥有其 physical observation lifecycle。
+
+**边界风险**：判据一边倒，风险低；边界以 T-13 History domain 和 T-14 Knowledge domain 的只读 ownership 防止系统 assembly 吞并产品逻辑。
+
+**落点建议**：`core/engine.ts` 管生命周期，`core/workspace-runtime/production-workspace-runtime.ts` 暴露受授权 binding；上层只获取 main-only logical consumer 和 opaque query service，不获取 root、watcher 或 baseline owner。
 
 ### T-10 Feature Placement Decision
 
@@ -546,10 +571,10 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 - **Implement / Ticket：** `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>`；`<Path>{roots.state}/specdev/changes/{change}/ticket/12-perform-single-owner-production-cutover.md</Path>`。
 - **Authority / dependencies：** AC-009—AC-013、ADR-005/006、T-10/T-11 Evidence和W3 Gate SHA。
 - **Wave / Gate / hard constraints：** W4；isolated proof→stop old→prove release→start new；失败时stop new后恢复；无shadow watcher/dual write/dual baseline/compat flag。
-- **Writable / read-only / shared owner：** writable=`<Path>core/engine.ts</Path>`, `<Path>server/composition/**</Path>`, `<Path>server/resource-events-ws.ts</Path>`, `<Path>desktop/src/react/services/resource-events.ts</Path>`, Ticket tests；read-only=Kernel/workspace/desktop main/consumers；shared owner=T-12 production assembly。
+- **Writable / read-only / shared owner：** writable=`<Path>core/engine.ts</Path>`, `<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>`, `<Path>server/composition/**</Path>`, `<Path>server/resource-events-ws.ts</Path>`, `<Path>desktop/src/react/services/resource-events.ts</Path>`, Ticket tests；D-T12-06 additionally grants only `<Path>shared/persistence/store-registry.ts</Path>`, `<Path>scripts/scan-persistent-stores.mjs</Path>`, `<Path>scripts/generate-persistence-schema-fingerprint.mjs</Path>`, their generated receipts and persistence tests so the activated History SQLite owner is registered and introspected from its real store; read-only=Kernel/workspace/desktop main/History domain/consumers；shared owner=T-12 production assembly and this narrow registry correction, T-21 retains all other build/package ownership。
 - **Baseline / branch / workspace or session locator / package hash：** base_sha=`W3_INTEGRATED_SHA`；branch=`speculo/2026-08-09-openhanako-v0-446-6-integration/T-12`；workspace_ref=`specdev-worktree/T-12`；package hash=`n/a-local-git`。
 - **Preflight receipt：** `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` 不超过10行，核对 W3、cutover descriptor、并行paths和最大双owner风险。
-- **Verification / baseline / reverse check：** lifecycle state machine、stop/start/release failure injection、subscriber churn、structure scan；任何 owner overlap或旧factory调用必须失败。
+- **Verification / baseline / reverse check：** lifecycle state machine、stop/start/release failure injection、subscriber churn、structure scan、production persistence scan/schema tripwire；任何 owner overlap、旧factory调用、dormant History exclusion、缺失 `file-history-sqlite` 或 physical-private-store symlink escape 必须失败。
 - **Authorization / deviation / correction limit：** local changes/commit与Lead local merge/non-force cleanup自动授权；不执行真实生产切换/远程/发布；3轮，no-overlap不可waive。
 - **Return：** 状态、Evidence、workspace、candidate commit、时序/overlap scan、未验证项、Lead验收。
 

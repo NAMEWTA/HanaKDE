@@ -306,9 +306,20 @@ async function factStoreSchema(rootDir) {
   );
 }
 
+async function fileHistorySchema(rootDir) {
+  const modulePath = "lib/file-history/history-store.ts";
+  const runtime = await import(pathToFileURL(path.join(rootDir, ...modulePath.split("/"))).href);
+  return withTemporaryDatabase(
+    "hana-file-history-schema-",
+    (tempDir) => new runtime.FileHistoryStore({ dbPath: path.join(tempDir, "history.sqlite") }),
+    (store) => readSqliteRuntimeSchema(store._db),
+  );
+}
+
 async function introspectSqliteStore(rootDir, storeId) {
   if (storeId === "session-manifest-sqlite") return sessionManifestSchema(rootDir);
   if (storeId === "agent-facts-sqlite") return factStoreSchema(rootDir);
+  if (storeId === "file-history-sqlite") return fileHistorySchema(rootDir);
   throw new Error(
     `SQLite store ${storeId} has no runtime introspector. Add one that opens the real store; do not copy DDL into the fingerprint generator.`,
   );

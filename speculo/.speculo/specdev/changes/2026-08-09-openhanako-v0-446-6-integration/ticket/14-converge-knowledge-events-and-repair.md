@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-14
 title: 收敛 Knowledge 事件消费与 scoped repair
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "Knowledge 索引状态、event cursor、generation 与跨模块一致性依赖共享核心事件并涉及可重建持久化模型。"
 ready: true
 risk: critical
 blocked_by: [T-10, T-11]
 contract_ids: [AC-003, AC-011, AC-012, AC-013, AC-017]
-owner: unassigned
+owner: "Worker-T-14 / Lead"
 expected_changes: ["<Path>core/knowledge-workspace/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>server/routes/knowledge-workspace.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
 writable_paths: ["<Path>core/knowledge-workspace/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>server/routes/knowledge-workspace.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>core/engine.ts</Path>", "<Path>lib/file-history/**</Path>", "<Path>desktop/src/react/**</Path>"]
