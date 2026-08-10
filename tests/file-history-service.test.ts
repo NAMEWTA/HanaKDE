@@ -1,167 +1,238 @@
-import { afterEach, describe, expect, it } from "vitest";
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { FileHistoryService, workspaceHashForRoot } from "../lib/file-history/file-history-service.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  FileHistoryService,
+  FileHistoryStore,
+  historyStorePathForKey,
+} from "../lib/file-history/file-history-service.ts";
+import { MAX_SNAPSHOT_BYTES } from "../lib/file-history/text-file-policy.ts";
 
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cleanups: Array<() => Promise<void> | void> = [];
+
 afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-type FakeWatcher = {
-  ready: Promise<void>;
-  close: () => Promise<void>;
-  emitChanged: (rel: string) => void;
-  emitDeleted: (rel: string) => void;
-};
+type ObservationListener = (observation: any) => void | Promise<void>;
+type EventListener = (event: any) => void | Promise<void>;
 
-function makeFixture() {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "hana-fh-ws-"));
-  const historyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-fh-root-"));
-  cleanups.push(() => fs.rmSync(workspace, { recursive: true, force: true }));
-  cleanups.push(() => fs.rmSync(historyRoot, { recursive: true, force: true }));
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
+}
 
-  const fakeWatchers = new Map<string, FakeWatcher>();
-  const createWatcher = ({ root, onChanged, onDeleted }: any): FakeWatcher => {
-    const watcher: FakeWatcher = {
-      ready: Promise.resolve(),
-      close: async () => {},
-      emitChanged: onChanged,
-      emitDeleted: onDeleted,
-    };
-    fakeWatchers.set(path.resolve(root), watcher);
-    return watcher;
-  };
+function makeFixture({
+  privateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-private-")),
+  createStore,
+  allowPrivateStore = true,
+}: {
+  privateRoot?: string;
+  createStore?: (input: any) => FileHistoryStore;
+  allowPrivateStore?: boolean;
+} = {}) {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-main-"));
+  const contents = new Map<string, { content: Buffer; versionToken?: string }>();
+  let observationListener: ObservationListener | null = null;
+  let eventListener: EventListener | null = null;
+  const release = vi.fn(async () => {});
+  const subscribe = vi.fn(async (listener: ObservationListener) => {
+    observationListener = listener;
+    return { release };
+  });
+  const eventRelease = vi.fn(() => {});
+  const subscribeEvents = vi.fn((listener: EventListener) => {
+    eventListener = listener;
+    return eventRelease;
+  });
 
   const service = new FileHistoryService({
-    historyRoot,
-    createWatcher: createWatcher as any,
+    privateStoreRoot: privateRoot,
+    createStore,
     debounceMs: 0,
     mergeWindowMs: 0,
   });
+  const binding = {
+    sourceKey: "main" as const,
+    historyStoreKey: "opaque-main-history-key-01",
+    verifyPrivateStorePath: vi.fn(async (candidate: string) => (
+      allowPrivateStore && path.resolve(candidate).startsWith(`${path.resolve(privateRoot)}${path.sep}`)
+    )),
+    subscribe,
+    subscribeEvents,
+    read: vi.fn(async (relativePath: string) => contents.get(relativePath) ?? null),
+  };
+
   cleanups.push(() => service.close());
-  return { workspace, historyRoot, service, fakeWatchers };
+  cleanups.push(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  cleanups.push(() => fs.rmSync(privateRoot, { recursive: true, force: true }));
+  return {
+    workspace,
+    privateRoot,
+    contents,
+    service,
+    binding,
+    subscribe,
+    subscribeEvents,
+    release,
+    emitObservation: async (observation: unknown) => observationListener?.(observation),
+    emitEvent: async (event: unknown) => eventListener?.(event),
+  };
 }
 
 describe("FileHistoryService", () => {
-  it("sweeps existing text files into the store on workspace sync", async () => {
-    const { workspace, service } = makeFixture();
-    fs.mkdirSync(path.join(workspace, "notes"));
-    fs.writeFileSync(path.join(workspace, "notes", "a.md"), "hello");
-    fs.writeFileSync(path.join(workspace, "photo.png"), "binary-ish");
-    fs.mkdirSync(path.join(workspace, "node_modules"));
-    fs.writeFileSync(path.join(workspace, "node_modules", "x.js"), "noise");
+  it("captures only shared main baseline facts into a private opaque-key store", async () => {
+    const fixture = makeFixture();
+    fixture.contents.set("notes/a.md", { content: Buffer.from("hello"), versionToken: "v1" });
 
-    await service.syncWorkspaces([workspace]);
-    await service.waitForIdle();
+    await fixture.service.activateMain(fixture.binding);
+    await fixture.emitObservation({
+      type: "workspace.baseline",
+      sourceKey: "main",
+      relativePath: "notes/a.md",
+      entryKind: "file",
+      cursor: 1,
+      repairCycle: 1,
+    });
+    await fixture.service.waitForIdle();
 
-    const files = service.listFiles(workspace);
-    expect(files.map(f => f.relPath)).toEqual(["notes/a.md"]);
-    const versions = service.listVersions(workspace, "notes/a.md");
-    expect(versions).toHaveLength(1);
-    expect(versions[0].origin).toBe("sweep");
+    expect(fixture.service.listFiles()).toMatchObject([{ relPath: "notes/a.md", deletedAt: null }]);
+    expect(fixture.service.listVersions("notes/a.md")[0]).toMatchObject({ origin: "baseline", versionToken: "v1" });
+    const dbPath = historyStorePathForKey(fixture.privateRoot, fixture.binding.historyStoreKey);
+    expect(dbPath).toContain(path.join(fixture.privateRoot, "file-history"));
+    expect(dbPath).not.toContain(fixture.workspace);
+    expect(fixture.binding.verifyPrivateStorePath).toHaveBeenCalledWith(dbPath);
   });
 
-  it("captures watcher-reported changes and deletions", async () => {
-    const { workspace, service, fakeWatchers } = makeFixture();
-    await service.syncWorkspaces([workspace]);
-    await service.waitForIdle();
+  it("uses projected main events for rename continuity and move-out deletion", async () => {
+    const fixture = makeFixture();
+    fixture.contents.set("old.md", { content: Buffer.from("before"), versionToken: "v1" });
+    await fixture.service.activateMain(fixture.binding);
+    await fixture.emitObservation({ type: "workspace.baseline", sourceKey: "main", relativePath: "old.md", entryKind: "file", cursor: 1, repairCycle: 1 });
+    await fixture.service.waitForIdle();
 
-    fs.writeFileSync(path.join(workspace, "b.md"), "v1");
-    const watcher = fakeWatchers.get(path.resolve(workspace))!;
-    watcher.emitChanged("b.md");
-    await service.waitForIdle();
-    expect(service.listVersions(workspace, "b.md")).toHaveLength(1);
-    expect(service.listVersions(workspace, "b.md")[0].origin).toBe("watcher");
+    fixture.contents.delete("old.md");
+    fixture.contents.set("renamed.md", { content: Buffer.from("after"), versionToken: "v2" });
+    await fixture.emitEvent({
+      type: "main.resource.renamed",
+      sourceKey: "main",
+      oldRelativePath: "old.md",
+      newRelativePath: "renamed.md",
+      versionToken: "v2",
+      operationContext: "agent_tool",
+    });
+    await fixture.service.waitForIdle();
+    expect(fixture.service.listVersions("old.md")).toHaveLength(0);
+    expect(fixture.service.listVersions("renamed.md")).toHaveLength(2);
 
-    watcher.emitDeleted("b.md");
-    await service.waitForIdle();
-    const entry = service.listFiles(workspace).find(f => f.relPath === "b.md");
-    expect(entry?.deletedAt).not.toBeNull();
+    await fixture.emitEvent({
+      type: "main.resource.renamed",
+      sourceKey: "main",
+      oldRelativePath: "renamed.md",
+      newRelativePath: null,
+    });
+    expect(fixture.service.listFiles().find(file => file.relPath === "renamed.md")?.deletedAt).not.toBeNull();
   });
 
-  it("captures resource events routed to the owning workspace", async () => {
-    const { workspace, service } = makeFixture();
-    await service.syncWorkspaces([workspace]);
-    await service.waitForIdle();
-
-    fs.writeFileSync(path.join(workspace, "c.md"), "from-event");
-    service.handleResourceEvent({
-      type: "resource.changed",
-      changeType: "modified",
-      resourceKey: "k",
-      resource: { kind: "local-file", path: path.join(workspace, "c.md"), filePath: path.join(workspace, "c.md") },
-      source: "agent_tool",
-      sequence: 1,
-      occurredAt: new Date().toISOString(),
-    } as any);
-    await service.waitForIdle();
-
-    const versions = service.listVersions(workspace, "c.md");
-    expect(versions).toHaveLength(1);
-    expect(versions[0].origin).toBe("event");
-    expect(versions[0].opContext).toBe("agent_tool");
+  it("rejects mount and remote bindings before subscribing or creating a store", async () => {
+    for (const sourceKey of ["mount", "remote"]) {
+      const fixture = makeFixture();
+      await expect(fixture.service.activateMain({ ...fixture.binding, sourceKey } as any)).rejects.toThrow(/main/i);
+      expect(fixture.subscribe).not.toHaveBeenCalled();
+      expect(fs.existsSync(path.join(fixture.privateRoot, "file-history"))).toBe(false);
+    }
   });
 
-  it("ignores events for paths outside every workspace", async () => {
-    const { workspace, service } = makeFixture();
-    await service.syncWorkspaces([workspace]);
-    await service.waitForIdle();
-    service.handleResourceEvent({
-      type: "resource.changed",
-      changeType: "modified",
-      resourceKey: "k",
-      resource: { kind: "local-file", path: "/tmp/outside.md", filePath: "/tmp/outside.md" },
-      source: "api",
-      sequence: 2,
-      occurredAt: new Date().toISOString(),
-    } as any);
-    await service.waitForIdle();
-    expect(service.listFiles(workspace)).toHaveLength(0);
+  it("rejects a workspace-local store before store initialization", async () => {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "hana-file-history-main-"));
+    const fixture = makeFixture({ privateRoot: workspace, allowPrivateStore: false });
+    await expect(fixture.service.activateMain(fixture.binding)).rejects.toThrow(/private/i);
+    expect(fixture.subscribe).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(workspace, "file-history"))).toBe(false);
   });
 
-  it("follows rename events", async () => {
-    const { workspace, service } = makeFixture();
-    fs.writeFileSync(path.join(workspace, "old.md"), "v1");
-    await service.syncWorkspaces([workspace]);
-    await service.waitForIdle();
+  it("does not capture mount-tagged events, noise, or oversized snapshots", async () => {
+    const fixture = makeFixture();
+    fixture.contents.set("node_modules/noise.ts", { content: Buffer.from("ignored") });
+    fixture.contents.set("large.md", { content: Buffer.alloc(MAX_SNAPSHOT_BYTES + 1, 1) });
+    fixture.contents.set("mount.md", { content: Buffer.from("must-not-capture") });
+    await fixture.service.activateMain(fixture.binding);
 
-    service.handleResourceEvent({
-      type: "resource.renamed",
-      oldResourceKey: "k1",
-      newResourceKey: "k2",
-      oldResource: { kind: "local-file", path: path.join(workspace, "old.md"), filePath: path.join(workspace, "old.md") },
-      newResource: { kind: "local-file", path: path.join(workspace, "new.md"), filePath: path.join(workspace, "new.md") },
-      source: "api",
-      sequence: 3,
-      occurredAt: new Date().toISOString(),
-    } as any);
-    await service.waitForIdle();
-    expect(service.listVersions(workspace, "new.md")).toHaveLength(1);
-    expect(service.listVersions(workspace, "old.md")).toHaveLength(0);
+    await fixture.emitObservation({ type: "workspace.changed", sourceKey: "main", relativePath: "node_modules/noise.ts", changeType: "modified", cursor: 1, repairCycle: 1 });
+    await fixture.emitObservation({ type: "workspace.changed", sourceKey: "main", relativePath: "large.md", changeType: "modified", cursor: 2, repairCycle: 1 });
+    await fixture.emitEvent({ type: "main.resource.changed", sourceKey: "mount", relativePath: "mount.md" } as any);
+    await fixture.service.waitForIdle();
+
+    expect(fixture.service.listFiles()).toEqual([]);
+    expect(fixture.binding.read).toHaveBeenCalledTimes(1);
+    expect(fixture.binding.read).toHaveBeenCalledWith("large.md");
   });
 
-  it("captureNow records a restore-origin snapshot", async () => {
-    const { workspace, service } = makeFixture();
-    await service.syncWorkspaces([workspace]);
-    await service.waitForIdle();
-    fs.writeFileSync(path.join(workspace, "d.md"), "restored");
-    await service.captureNow(workspace, "d.md", "restore");
-    expect(service.listVersions(workspace, "d.md")[0].origin).toBe("restore");
+  it("isolates store initialization and capture failures, then retries without touching the workspace lifecycle", async () => {
+    let failStore = true;
+    const fixture = makeFixture({
+      createStore: (input) => {
+        if (failStore) {
+          failStore = false;
+          throw new Error("private-store-unavailable");
+        }
+        return new FileHistoryStore(input);
+      },
+    });
+
+    await expect(fixture.service.activateMain(fixture.binding)).resolves.toBe("FAILED");
+    expect(fixture.service.getHealth()).toBe("FAILED");
+    expect(fixture.subscribe).not.toHaveBeenCalled();
+
+    await expect(fixture.service.retryMainHistory()).resolves.toBe("HEALTHY");
+    expect(fixture.subscribe).toHaveBeenCalledTimes(1);
+    fixture.contents.set("retry.md", { content: Buffer.from("retry") });
+    fixture.binding.read.mockRejectedValueOnce(new Error("transient-read-failure"));
+    await fixture.emitObservation({ type: "workspace.changed", sourceKey: "main", relativePath: "retry.md", changeType: "modified", cursor: 2, repairCycle: 1 });
+    await fixture.service.waitForIdle();
+    expect(fixture.service.getHealth()).toBe("DEGRADED");
+    await expect(fixture.service.retryMainHistory()).resolves.toBe("HEALTHY");
+    expect(fixture.binding.read).toHaveBeenCalledTimes(2);
+    expect(fixture.service.listFiles()).toMatchObject([{ relPath: "retry.md" }]);
   });
 
-  it("stops watching removed workspaces on re-sync", async () => {
-    const { workspace, service, fakeWatchers } = makeFixture();
-    await service.syncWorkspaces([workspace]);
-    expect(fakeWatchers.has(path.resolve(workspace))).toBe(true);
-    await service.syncWorkspaces([]);
-    expect(() => service.listFiles(workspace)).toThrow();
+  it("does not write a retired main store after an in-flight read resolves", async () => {
+    const fixture = makeFixture();
+    const slowRead = deferred<{ content: Buffer }>();
+    fixture.binding.read.mockImplementationOnce(async () => slowRead.promise);
+    const recordSnapshot = vi.spyOn(FileHistoryStore.prototype, "recordSnapshot");
+    await fixture.service.activateMain(fixture.binding);
+    await fixture.emitObservation({ type: "workspace.changed", sourceKey: "main", relativePath: "slow.md", changeType: "modified", cursor: 1, repairCycle: 1 });
+    await vi.waitFor(() => expect(fixture.binding.read).toHaveBeenCalledTimes(1));
+
+    const nextBinding = {
+      ...fixture.binding,
+      historyStoreKey: "opaque-main-history-key-02",
+      read: vi.fn(async () => null),
+    };
+    const switchPromise = fixture.service.activateMain(nextBinding);
+    await expect(Promise.race([
+      switchPromise,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("main switch waited for retired read")), 50)),
+    ])).resolves.toBe("HEALTHY");
+
+    slowRead.resolve({ content: Buffer.from("old-main-content") });
+    await switchPromise;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(recordSnapshot).not.toHaveBeenCalled();
+    recordSnapshot.mockRestore();
   });
 
-  it("workspaceHashForRoot is stable and path-separator-insensitive", () => {
-    const a = workspaceHashForRoot("/Users/x/space");
-    expect(a).toBe(workspaceHashForRoot("/Users/x/space"));
-    expect(a).toMatch(/^[0-9a-f]{16}$/);
+  it("has no private watcher or baseline sweep entrypoint", () => {
+    const source = fs.readFileSync(path.join(ROOT, "lib/file-history/file-history-service.ts"), "utf-8");
+    const fixture = makeFixture();
+    expect(source).not.toContain("workspace-watcher");
+    expect(source).not.toContain("createWorkspaceWatcher");
+    expect(source).not.toContain("_sweep");
+    expect((fixture.service as any).syncWorkspaces).toBeUndefined();
   });
 });
