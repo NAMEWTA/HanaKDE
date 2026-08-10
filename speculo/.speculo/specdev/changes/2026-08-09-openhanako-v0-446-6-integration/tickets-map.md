@@ -148,6 +148,8 @@ T-01 [G0 fixed point / authorization]
 
 T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能与任何后续 code Ticket 并行。D-T12-04 在 T-11 integrated/removed 后把 `<Path>core/workspace-runtime/**</Path>` 的 production assembly extraction 单独授予 T-12；T-13/T-14 对该路径仍为只读。T-15 跨 History/Knowledge 是显式 convergence owner，因此依赖 T-12/T-13/T-14 后才开始。任何执行时路径重命名或越界请求必须先修订 Ticket/Goal Plan，不以“解决 merge conflict”代替所有权。
 
+G5 的 D-T15-04 已获 ticket-level 批准：T-15 必须把 restore 的 current token 绑定到有界内容、将 History dedupe 收紧为 content hash authority，并把 completed-read proof 连续携带至 provider preflight。该修订不改变 AC、DAG、T-15 可写路径或任何公开接口；在四项 focused red/green proof 完成前，native helper 保持冻结，W6/W7/G8 不得因先前 runner 绿色而前进。
+
 ## 6. Gate、Wave 与集成点
 
 | Wave/Gate | Tickets | 进入条件 | 退出条件 |

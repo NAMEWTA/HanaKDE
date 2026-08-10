@@ -18,6 +18,14 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-10T14:12:37+0800",
       "scope": "Register the activated File History SQLite production store; remove the dormant scanner exclusion; regenerate persistence receipts; test physical private-store symlink isolation."
+    },
+    {
+      "id": "D-T15-04",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T16:29:40+0800",
+      "scope": "T-15 only: bind restore current tokens to bounded content, make History dedupe content-hash-only, fresh-read before restore, and preserve the attested read proof through provider preflight; no public API, Spec, ADR, or path expansion."
     }
   ],
   "worktrees": [
