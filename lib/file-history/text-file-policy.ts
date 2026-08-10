@@ -1,7 +1,14 @@
 // 工作区文件历史的采集准入策略：只对代码/文本存全量快照，噪音目录整棵排除。
 // 与前端 EXT_TO_KIND（呈现分类）语义不同，这里回答"值不值得存全量历史"，两表独立维护。
 
-export const MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024;
+export const FILE_HISTORY_POLICY = Object.freeze({
+  mergeWindowMs: 60_000,
+  maxSnapshotBytes: 5 * 1024 * 1024,
+  maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
+  maxTotalBytes: 500 * 1024 * 1024,
+});
+
+export const MAX_SNAPSHOT_BYTES = FILE_HISTORY_POLICY.maxSnapshotBytes;
 
 const TEXT_EXTENSIONS = new Set([
   "txt", "md", "markdown", "mdx", "rst", "tex",
@@ -38,6 +45,12 @@ function extOf(name: string): string | null {
   const idx = name.lastIndexOf(".");
   if (idx <= 0 || idx === name.length - 1) return null;
   return name.slice(idx + 1).toLowerCase();
+}
+
+export function isSafeHistoryRelativePath(value: unknown): value is string {
+  if (typeof value !== "string" || !value || value.includes("\\")) return false;
+  const segments = value.split("/");
+  return !segments.some(segment => !segment || segment === "." || segment === "..");
 }
 
 /** relPath 使用 POSIX 分隔符（"/"）。任一目录段命中忽略表或以 "." 开头即整棵排除。 */
