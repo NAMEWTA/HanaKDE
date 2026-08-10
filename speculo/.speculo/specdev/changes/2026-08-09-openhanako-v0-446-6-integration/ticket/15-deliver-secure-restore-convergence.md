@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-15
 title: 交付安全 restore 与全读面收敛
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "restore 会覆盖用户文件，跨 ResourceIO、History、Knowledge、Preview、Search 与 Agent Read，涉及 TOCTOU 和数据完整性。"
 ready: true
 risk: critical
 blocked_by: [T-12, T-13, T-14]
 contract_ids: [AC-015, AC-016, AC-017, AC-026]
-owner: unassigned
+owner: Worker-T-15
 expected_changes: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
 writable_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>core/engine.ts</Path>", "<Path>desktop/src/react/components/**</Path>"]
