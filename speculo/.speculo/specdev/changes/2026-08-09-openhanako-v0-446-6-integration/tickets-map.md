@@ -86,7 +86,7 @@ T-01 [G0 fixed point / authorization]
 
 - T-02..T-09 的每条边都是 Git ancestry 与可恢复 checkpoint 的开始条件。
 - T-10 是所有 Resource authority/event/materialize 消费者的 shared-contract prefactor；T-11 建立 physical observation/baseline 接缝。
-- T-12、T-13、T-14 可在 T-11 后于互不相交路径并行；T-15 必须等待 production owner、History 与 Knowledge 三方汇合。批准的 D-T15-01 仅允许 T-15 在 G5 串行期间扩展 main-bound runtime adapter 与 focused runtime test；其余 production owner 路径仍不转移。
+- T-12、T-13、T-14 可在 T-11 后于互不相交路径并行；T-15 必须等待 production owner、History 与 Knowledge 三方汇合。批准的 D-T15-01 允许 T-15 在 G5 串行期间扩展 main-bound runtime adapter 与 focused runtime test；D-T15-02 进一步只允许 hardened generic local-provider conditional-write proof 与 focused provider test。其余 production owner、ResourceIO public contract 和 route authority 路径仍不转移。
 - T-19 可与 T-11/T-18 并行；T-20 必须等待 Extraction、Knowledge repair 和 restore event convergence。
 - T-21 在最终产品切片后唯一修改 manifests/build/CI；T-22/T-23/T-24 随后并行，T-25 是最终收缩 Gate。
 

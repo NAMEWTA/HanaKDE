@@ -12,10 +12,10 @@ risk: critical
 blocked_by: [T-12, T-13, T-14]
 contract_ids: [AC-015, AC-016, AC-017, AC-026]
 owner: Worker-T-15
-deviations: [D-T15-01]
-expected_changes: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
-writable_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
-read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/engine.ts</Path>", "<Path>desktop/src/react/components/**</Path>"]
+deviations: [D-T15-01, D-T15-02]
+expected_changes: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>lib/resource-io/providers/local-fs-provider.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/resource-io-local-fs-provider.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
+writable_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>lib/resource-io/providers/local-fs-provider.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/utils/preview-document-refresh.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/resource-io-local-fs-provider.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
+read_only_paths: ["<Path>lib/resource-io/resource-io.ts</Path>", "<Path>lib/resource-io/types.ts</Path>", "<Path>core/engine.ts</Path>", "<Path>desktop/src/react/components/**</Path>"]
 shared_paths: []
 shared_path_owners: []
 ---
@@ -119,7 +119,16 @@ shared_path_owners: []
 
 - **等级与状态：** ticket / approved。
 - **触发事实：** `MainFileHistoryBinding` 只提供订阅和有界读取；`server/routes/file-history.ts` 只能获得已经激活的 History service，不能安全地取得或重建 main root。若 route 直接组装 filesystem path 或 ResourceIO ref，将绕过 `MainWorkspaceRootProof` 的 canonical root authority，无法在 effect time 保证 AC-015/AC-016。
-- **受影响路径与工件：** 唯一新增可写生产路径为 `<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>`，且只新增 main-bound restore adapter；唯一新增测试路径为 `<Path>tests/production-workspace-runtime.test.ts</Path>`。`<Path>lib/resource-io/**</Path>`、`<Path>core/engine.ts</Path>` 和 renderer component paths 仍只读。
-- **批准路线：** 在现有 `MainFileHistoryBinding` 上增加窄 `restore` operation。它必须在 sole write 前重新取得并比对 main root identity、重新 stat/canonicalize target、验证 authorized relative path 与 opaque expected-version token；随后仅调用既有 `ResourceIO.writeExpectedVersion`，并带 `source: "system"`、`reason: "history_restore"` 和 operation correlation。route 只能提交 opaque `snapshotId`/expected token，不能构造 raw root/path 或 fan-out refresh。
-- **不变约束：** 不改 ResourceIO 合同、不新增 watcher/baseline/EventBus、不使用 direct filesystem/DB restore、不新增 workspaceId、迁移或 compatibility mode。successful restore 必须由 canonical event 驱动 consumers，并以 `origin: "restore"` 写入可反悔 History boundary；T-16 仍独占 UI E2E。
+- **受影响路径与工件：** 唯一新增可写生产路径为 `<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>`，且只新增 main-bound restore adapter；唯一新增测试路径为 `<Path>tests/production-workspace-runtime.test.ts</Path>`。ResourceIO 路径初始只读，D-T15-02 仅额外授权 local provider implementation 与其 focused test；`<Path>core/engine.ts</Path>` 和 renderer component paths 仍只读。
+- **批准路线：** 在现有 `MainFileHistoryBinding` 上增加窄 `restore` operation。它必须在 sole write 前重新取得并比对 main root identity、重新 stat/canonicalize target、验证 authorized relative path 与 opaque expected-version token；随后仅调用既有 `ResourceIO.writeExpectedVersion`，并带 `source: "api"`、`reason: "history_restore"` 和 operation correlation。route 只能提交 opaque `snapshotId`/expected token，不能构造 raw root/path 或 fan-out refresh。
+- **不变约束：** 不改 ResourceIO public contract、不新增 watcher/baseline/EventBus、不使用 direct filesystem/DB restore、不新增 workspaceId、迁移或 compatibility mode。successful restore 必须由 canonical event 驱动 consumers，并以 `origin: "restore"` 写入可反悔 History boundary；T-16 仍独占 UI E2E。D-T15-02 仅替代本条对 local provider implementation 的只读限制。
 - **批准：** Root Lead，2026-08-10T15:13:18+0800；范围仅为上述路径授权、adapter 设计与相应 focused tests。Spec/ADR 的外部行为、AC 和 Gate 依赖不变。
+
+## 12. 偏差 D-T15-02：provider-held conditional-write proof
+
+- **等级与状态：** architecture/security / approved；外部合同和 AC 不变。
+- **触发事实：** D-T15-01 的 binding proof 不能单独封闭 AC-016 所要求的 effect-time root/ancestor/final symlink TOCTOU。既有 `LocalFsProvider.writeExpectedVersion` 会在 binding 检查后再次 resolve target，并在 `write()` 中再次 resolve；没有 provider-held ancestry/identity/no-follow proof 时，same-mtime/size replacement 仍可能写入替换后的 root。
+- **受影响路径与工件：** 新增且仅新增 `<Path>lib/resource-io/providers/local-fs-provider.ts</Path>` 与 `<Path>tests/resource-io-local-fs-provider.test.ts</Path>` 可写。`<Path>lib/resource-io/resource-io.ts</Path>` 和 `<Path>lib/resource-io/types.ts</Path>` 继续只读；若已有方法签名无法承载 provider-owned proof，必须再次停止并建立更小的后续 deviation，不能隐式扩展。
+- **批准路线：** 强化现有通用 `writeExpectedVersion` provider boundary：复用 provider-owned ancestry/identity/no-follow proof 并在写入 effect time 重新验证 root、ancestor 和 final target。不得新增 restore-special write API、route-provided proof、shadow authority 或第二 mutation path。若 Node file API 无法诚实封闭最后 race，升级到最小 native helper/handle-bound primitive，仍不得弱化 AC-016。
+- **验证升级：** 在隔离 fixtures 中 fault-inject proof 后的 root、ancestor 和 final symlink swaps，以及 same-mtime/size replacement；每种情况均断言 no disk write。验证必须在 macOS/Windows 语义下可阻断；T-15 只证明 backend/event seam，T-16 仍拥有 UI E2E。
+- **批准：** Root Lead，2026-08-10T15:21:16+0800；范围仅为上述 provider hardening、focused tests 与恢复收敛的既有 T-15 paths。任何 public ResourceIO API、native helper、route DTO 或 product contract 扩展必须重新停下裁决。

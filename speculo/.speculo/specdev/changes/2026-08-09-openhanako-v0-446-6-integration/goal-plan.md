@@ -77,7 +77,7 @@ T-01 [G0]
 | G2 Resource Contract | T-10 | T-09 integrated SHA | 1 | native Worker | 关闭 Resource/Root/Event/Materialize/Transfer Gate |
 | W3 Shared Foundations | T-11, T-18, T-19 | T-10 integrated SHA | 3 | 三个独立 native Worker | 三个候选均验证后合并，发布唯一 W3 SHA |
 | W4 Single-Owner Consumers | T-12, T-13, T-14 | W3 integrated SHA | 3 | 三个独立 native Worker | **closed 2026-08-10:** 14 files / 220 tests、typecheck、authorized-path lint、persistence census `63 stores, 762 sites` 与独立 standards/specification review 通过；发布一次本地 W4 merge SHA |
-| G5 Restore Convergence | T-15 | W4 integrated SHA | 1 | native Worker | secure restore 与六读面收敛 Gate；D-T15-01 仅授权 main-bound runtime adapter |
+| G5 Restore Convergence | T-15 | W4 integrated SHA | 1 | native Worker | secure restore 与六读面收敛 Gate；D-T15-01 main-bound adapter + D-T15-02 provider-held proof |
 | W6 Product/Office | T-16, T-20 | T-15 integrated SHA | 2 | 两个独立 native Worker | Lead 执行适用 UI/Office E2E 后发布 W6 SHA |
 | W7 Agent Projection | T-17 | W6 integrated SHA | 1 | native Worker | Agent/Workspace 入口分离且共享 primitive |
 | G8 Production Inputs | T-21 | T-17 integrated SHA | 1 | native Worker；T-21 为 shared path owner | clean build/native/package input Gate |
@@ -227,6 +227,8 @@ Lead 接收每个候选时必须读取 Dispatch、Ticket、Evidence、实际 dif
 遵循 `<Path>{roots.workflows}/specdev/common/rules/deviation-control.md</Path>`。local deviation 可在 Evidence 内收敛；ticket deviation 暂停当前 Ticket 和相交候选，由 Lead 修订 Ticket/Plan 后重发同 Gate baseline；spec/architecture/security/release deviation 暂停全部受影响 Wave，并且只有确实无法在已批准合同内收敛时才升级用户。普通实现选择、修正轮次、候选 merge、状态同步和非强制清理由 Lead 自主处理，不向用户请求例行确认。
 
 **D-T15-01 (approved, Root Lead, 2026-08-10T15:13:18+0800):** G5 may modify only `<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>` and `<Path>tests/production-workspace-runtime.test.ts</Path>` beyond its original T-15 contract. The extension is a narrow main-bound `MainFileHistoryBinding` restore adapter that revalidates root identity/scope and performs the sole existing ResourceIO conditional write. It does not transfer ResourceIO, Engine, watcher, baseline, EventBus, route path authority, or UI ownership to T-15; no other Wave is paused because G5 is serial and no active writable-path overlap exists.
+
+**D-T15-02 (approved, Root Lead, 2026-08-10T15:21:16+0800):** A binding-only check cannot close the final local-provider root/symlink TOCTOU gap in AC-016. G5 may additionally modify only `<Path>lib/resource-io/providers/local-fs-provider.ts</Path>` and `<Path>tests/resource-io-local-fs-provider.test.ts</Path>` to make the existing generic `writeExpectedVersion` use provider-held ancestry/identity/no-follow proof at effect time. ResourceIO public APIs, route DTO authority, Engine, watcher/baseline/EventBus, UI, migration and compatibility ownership remain unchanged. If the existing signatures cannot carry a correct proof, the Worker must stop for another explicitly approved minimal deviation; no scope or AC weakening is permitted.
 
 ## 6. Progress and Decisions
 
