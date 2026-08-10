@@ -12,9 +12,9 @@ risk: critical
 blocked_by: [T-10, T-11, T-19]
 contract_ids: [AC-009, AC-010, AC-011, AC-012, AC-013]
 owner: Worker-T-12
-expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
-writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
-read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>desktop/main.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
+expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
+writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
+read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
 shared_paths: ["<Path>core/engine.ts</Path>"]
 shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File Tool injection until W3 integration; T-12 owns later production cutover work"]
 ---
@@ -89,6 +89,14 @@ shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File To
 - **只读上下文：** Resource Kernel、workspace coordinator、Desktop main 与下游 consumers。
 - **共享路径：** 无；T-12 是 production assembly/cutover 唯一 owner。
 - **保留或不动：** History、Knowledge、Extraction 产品模型和平台 package。
+
+### D-T12-01: legacy IPC watcher owner path correction
+
+- **等级 / 触发事实：** ticket；`<Path>desktop/main.cjs</Path>` 的 `watch-workspace`/`unwatch-workspace` IPC 处理器可对任意 absolute root 创建 `chokidar` physical watcher，且 `<Path>desktop/preload.cjs</Path>` 将该能力暴露给任意 renderer。当前 React 没有调用点不改变其作为可调用生产 owner 的事实。
+- **批准与范围：** Lead 于 2026-08-10 批准仅将 `<Path>desktop/main.cjs</Path>`、`<Path>desktop/preload.cjs</Path>`、`<Path>desktop/src/react/types.ts</Path>` 和 `<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>` 加入 T-12；原有 T-12 engine tests 仍是定向生命周期测试。此修订只移除 legacy absolute-root IPC owner，并将 renderer 保持为 logical EventBus consumer。
+- **并行 / 所有权审计：** T-13 仅拥有 `<Path>lib/file-history/**</Path>`、`<Path>server/routes/file-history.ts</Path>` 和 file-history tests；T-14 仅拥有 Knowledge core/lib/route/tests；均与新增 T-12 路径不交叉。T-11 曾拥有 `<Path>desktop/main.cjs</Path>` 的 isolated proof，但已 integrated/removed，且 Evidence 明确将 production cutover 留给 T-12。
+- **不扩大内容：** 不修改 `<Path>desktop/workspace-watch-registry.cjs</Path>`、`<Path>desktop/src/modules/platform.js</Path>` 或其测试；这些路径不再从 production main/preload reachable。不得保留 disabled fallback、compat flag 或另一条 root watch IPC。
+- **反向验证：** 在 source/behavior tests 中证明 main 和 preload 不再注册、暴露或可调用 `watch-workspace`，renderer 不发起 `/api/resource-io/subscribe` physical watch lease，且 Engine stop-old/prove-release/start-new 的 overlap count 始终为 0。
 
 ## 8. 验证矩阵
 
