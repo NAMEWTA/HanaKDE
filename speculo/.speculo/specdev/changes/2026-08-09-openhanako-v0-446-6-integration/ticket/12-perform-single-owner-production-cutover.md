@@ -114,6 +114,14 @@ shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File To
 - **Preserve green behavior：** explicit unavailable `desk.home_folder` remains fail-closed across restart; `last_cwd` never becomes main; renderer lease cleanup and resource subscriptions remain idempotent; mount and disjoint preview retain physical registry behavior; legacy absolute-root IPC remains removed; stop-old/prove-release/start-new ordering remains mandatory.
 - **Required proof before review：** focused lifecycle/resource/route/renderer tests cover the listed failure states, A/B repartition, session switch, actual main shared-port wiring, a baseline-in-flight later-ResourceEvent replay with deliberately unequal workspace and bus cursors, persisted sequence 8/new bus 0/source baseline 0/event 1 restart recovery, and safe catch-up projection; path and fallback scans plus Evidence must name commands and results.
 
+### W4 correction record: round 2/3
+
+- **Checkpoint / workspace：** immutable W4 base `e758c7a12d31e8385b4993c406ae5acc04b18635`; `<Path>specdev-worktree/T-12</Path>`; this correction preserves every round-1 requirement and the candidate remains uncommitted and unmergeable.
+- **Single fact flow：** A normal `workspace.changed` must bridge exactly one fact through `ResourceEventBus`; the shared-baseline adapter must not additionally emit `coverage: "resources"` for that same change. The shared port is source bind/repair only.
+- **Fresh repair semantics：** An initial subscriber may receive an already completed source baseline. A repair caused by `sequence_gap`, `catch_up_stale`, `event_hint_invalid`, or `event_hint_unresolvable` must run canonical `reportGap` or `retryMain`, await the next healthy source baseline, and never satisfy the request by replaying cached entries.
+- **Cursor and directory semantics：** A source baseline cursor must equal the stable `ResourceEventBus.latestSequence()` at its revalidated publication point. Do not raise it with a prior cursor or request minimum; a mismatch fails closed. Directory create, modify, and delete must request source reconciliation (or an equivalent complete descendant reconciliation) so no old descendants remain indexed; a file-only reread is insufficient.
+- **Required proof before review：** show one normal change produces only its EventBus fact; each repair reason causes a fresh canonical baseline; an attempted stale/high cursor cannot suppress a later event; and directory mutations reconcile descendants. Keep the real T-14 port, A/B ownership, restart, renderer safety, and prior round proof green.
+
 ## 8. 验证矩阵
 
 | 行为或风险 | 验证接缝 | 命令或步骤 | 预期结果 | Evidence |
