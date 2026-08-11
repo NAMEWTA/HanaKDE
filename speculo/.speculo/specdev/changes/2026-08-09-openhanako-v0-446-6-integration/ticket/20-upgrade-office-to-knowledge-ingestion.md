@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-20
 title: 升级 Office 到 Knowledge ingestion
-status: in_progress
+status: done
 planning_depth: deep
 planning_depth_reason: "共享 Extraction 输出需进入 Semantic IR/source-partitioned index，并处理 source/extractor version、Office差异适配与循环风险。"
 ready: true
 risk: critical
 blocked_by: [T-14, T-15, T-19]
 contract_ids: [AC-003, AC-017, AC-021, AC-022]
-owner: Worker-T-20
+owner: Worker-T-20 / Lead
 expected_changes: ["<Path>plugins/office/**</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>tests/office-*.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/office-knowledge.spec.ts</Path>"]
 writable_paths: ["<Path>plugins/office/**</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>tests/office-*.test.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/office-knowledge.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/document-extract/**</Path>", "<Path>lib/resource-io/**</Path>", "<Path>lib/file-history/**</Path>", "<Path>package.json</Path>", "<Path>package-lock.json</Path>"]
