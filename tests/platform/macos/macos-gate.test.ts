@@ -17,6 +17,25 @@ describe("macOS blocking gate runner", () => {
       suspendResumeObserved: true,
     });
     expect(result.fixture.recursiveEvents).toBeGreaterThan(0);
+    expect(result.productWorkspace).toMatchObject({
+      logicalConsumers: 2,
+      legacyCloseBeforeCoordinatorOpen: true,
+      maxActiveFsWatchers: 1,
+      activeFsWatchersAfterStop: 0,
+      cutoverOverlap: 0,
+      baselineRuns: 2,
+      lostNativeCallbackSuppressed: true,
+      lostAbsentFromEventBus: true,
+      lostIndexedAfterReconcile: true,
+      observedEventAfterReconcile: true,
+      observedIndexedAfterReconcile: true,
+    });
+    expect(result.productWorkspace.healthTransitions).toEqual([
+      "HEALTHY",
+      "DEGRADED",
+      "RECONCILING",
+      "HEALTHY",
+    ]);
     expect(fs.existsSync(root)).toBe(false);
   }, 30_000);
 

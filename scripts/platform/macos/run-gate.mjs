@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -79,6 +80,19 @@ function inspectAppBundle(packageDir) {
   };
 }
 
+function runProductWorkspaceMatrix(rootPath) {
+  const probePath = fileURLToPath(new URL("./production-workspace-probe.ts", import.meta.url));
+  const output = execFileSync(process.execPath, ["--experimental-strip-types", probePath, rootPath], {
+    encoding: "utf8",
+    env: { ...process.env, NODE_NO_WARNINGS: "1" },
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const marker = "T23_PRODUCT_WORKSPACE_RESULT=";
+  const resultLine = output.split(/\r?\n/).find((line) => line.startsWith(marker));
+  if (!resultLine) throw new Error("[macos-gate] product workspace probe returned no result");
+  return JSON.parse(resultLine.slice(marker.length));
+}
+
 export async function runMacosGate({ rootDir, packageDir = null, cleanup = true } = {}) {
   if (process.platform !== "darwin") {
     throw new Error(`[macos-gate] blocking gate requires darwin, got ${process.platform}`);
@@ -127,6 +141,8 @@ export async function runMacosGate({ rootDir, packageDir = null, cleanup = true 
     const atomicReplaceObserved = true;
     watcher.close();
 
+    const productWorkspace = await runProductWorkspaceMatrix(path.join(workspace, "ProductWorkspace"));
+
     const originalRoot = fs.statSync(workspace);
     const movedRoot = `${workspace}.replaced`;
     fs.renameSync(workspace, movedRoot);
@@ -170,6 +186,7 @@ export async function runMacosGate({ rootDir, packageDir = null, cleanup = true 
         symlinkEscapeDetected: true,
         suspendResumeObserved: true,
       },
+      productWorkspace,
       package: packageDir ? inspectAppBundle(packageDir) : null,
     };
   } finally {
