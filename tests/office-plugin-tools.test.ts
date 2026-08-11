@@ -140,10 +140,12 @@ describe("office plugin tools", () => {
   it("reads documents from ResourceIO refs by materializing through plugin resources", async () => {
     const filePath = path.join(tempDir, "resource-note.md");
     fs.writeFileSync(filePath, "hello from resource ref", "utf-8");
+    const cleanup = vi.fn();
     const materialize = vi.fn(async () => ({
       filePath,
       resourceKey: "mount:docs/resource-note.md",
       resource: { kind: "mount", mountId: "docs", path: "resource-note.md" },
+      cleanup,
     }));
 
     const result = await readDocument({
@@ -158,6 +160,7 @@ describe("office plugin tools", () => {
       filePath,
       resourceKey: "mount:docs/resource-note.md",
     });
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
   it("uses canonical extraction for full Office resource reads while preserving product adapters", async () => {
