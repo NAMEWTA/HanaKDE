@@ -787,6 +787,20 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 - **Authorization / deviation / correction limit：** Worker只读验收；Lead可提交Evidence/status、完成local change并非强制清理；不得push/PR/deploy/release/archive；失败回owning Ticket，单项最多3轮。
 - **Return：** `review`/`blocked`、T-25 Evidence、workspace、final checkpoint、commit仅Evidence、完整AC/DoD verdict、残余风险、待Lead final acceptance。
 
+#### Dispatch: T-26
+
+- **Goal / observable result：** 闭合T-17 producer residual：只有同一次成功、authoritative、当前main-bound的Agent `write`/`edit` mutation才能生成严格conversation/operation/resource fact，并经同一file block支持live与同进程reload History入口。
+- **Priority on conflict：** current main authority > exact mutation correlation > fail-closed privacy > SessionFile兼容 > E2E速度。
+- **Implement / Ticket：** `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>`；`<Path>{roots.state}/specdev/changes/{change}/ticket/26-close-agent-mutation-producer-correlation.md</Path>`。
+- **Authority / dependencies：** AC-008/015—017/024/026、T-17 strict consumer与Evidence residual；T-15/T-16只读复用。
+- **Wave / Gate / hard constraints：** W7-CORRECTION；one UUID per invocation、exactly one successful ResourceIO receipt、main proof first；zero/multiple/failure/mount/root-replaced/no-hub均无fact；无raw path/Agent id/durable workspace binding/第二event/store/watcher/route。
+- **Writable / read-only / shared owner：** writable=Ticket列出的Pi-tool/sandbox/Engine/production runtime/ActivityHub/block extractor/renderer activity type与focused tests/E2E fixture；read-only=ResourceIO public kernel、History/restore domain/routes/UI、T-17 fact shape、package/CI；shared owner=T-26/Root Lead。
+- **Baseline / branch / workspace or session locator / package hash：** base_sha=`febcee45`后的T-26治理提交；branch=`speculo/2026-08-09-openhanako-v0-446-6-integration/T-26`；workspace_ref=`specdev-worktree/T-26`；package hash=`n/a-local-git`。
+- **Preflight receipt：** `<Path>{roots.state}/specdev/changes/{change}/evidence/T-26.md</Path>` 核对T-17 residual、main classifier、receipt并发隔离、live/reload语义与最大cross-main泄漏风险。
+- **Verification / baseline / reverse check：** sandbox/production runtime/ActivityHub/Engine/block extractor/sessions route/T-17 regressions；fact只从mutation resource产生；删除operationId或main revalidation必须红；固定skip只有真实无外部模型production-chain E2E存在后才可解除。
+- **Authorization / deviation / correction limit：** D-T17-01只授权本Ticket exact paths与live-only correlation；local changes/commit与Lead local merge/non-force cleanup自动授权；不得改History/restore public contract、push/PR/sign/release/archive；3轮。
+- **Return：** `review`、T-26 Evidence、workspace、base/final SHA、candidate commit、focused/direct-flow结果、未运行E2E与Lead验收。
+
 ### Candidate Delivery Return and Lead Integration
 
 Worker 完成时必须先把 Ticket 推进到 `review`，并返回：Ticket ID、Evidence 路径、workspace_ref、exact base/final checkpoint、candidate commit、修改路径、验证命令/退出状态、未验证项、建议 Lead E2E 和任何 deviation。禁止 Worker 自报 `done`、自行合并 integration line、删除分支/worktree或关闭 Gate。

@@ -22,7 +22,7 @@ status: in_progress
 1. T-01 冻结真实 fixed point 与授权门；T-02 至 T-09 串行形成 release checkpoint，每一步可审计、可停止、可恢复。
 2. T-10/T-11/T-12 先建立 Resource/Workspace 稳定接缝并完成 stop-then-start production cutover，它们是后续产品能力的 prefactor。
 3. T-13 至 T-20 按用户可观察行为交付 main-only History、restore convergence、Workspace/Agent 两类入口、`@` lifecycle、Extraction 与 Office Knowledge ingestion；不按数据库/后端/前端做水平分层。
-4. T-21 统一拥有 manifests/build/CI，T-22/T-23 分别形成 Windows/macOS 阻断 Evidence，T-24 发布架构/ledger，T-25 汇合 28 AC 与 15 项 DoD。
+4. T-21 统一拥有 manifests/build/CI，T-22/T-23 分别形成 Windows/macOS 阻断 Evidence，T-24 发布架构/ledger；T-26 闭合最终审计发现的 T-17 producer residual，T-25 汇合 28 AC 与 15 项 DoD。
 
 本 change 不采用 expand-contract：HanaKDE 未发布且用户要求一步到位；同用途 owner 的替换只允许 isolated proof 后 stop old/start new。已有外部 Resource/Knowledge/Workbench 合同作为回归保护，不等同于保留 fork 内部兼容壳。
 
@@ -54,7 +54,8 @@ status: in_progress
 | T-22 | `<Path>{roots.state}/specdev/changes/{change}/ticket/22-windows-blocking-gate.md</Path>` | Windows native/security/restore/extraction/NSIS Gate 通过 | T-21 | deep | critical | no | Worker-T-22 / Lead平台验收 | AC-009, AC-010, AC-014—AC-023, AC-027 | W9-WIN/G9 | blocked |
 | T-23 | `<Path>{roots.state}/specdev/changes/{change}/ticket/23-macos-blocking-gate.md</Path>` | macOS native/watch/restore/extraction/DMG Gate 通过 | T-21 | deep | critical | yes | Worker-T-23 / Lead平台验收 | AC-009, AC-010, AC-012—AC-023, AC-027 | W9-MAC/G9 | review |
 | T-24 | `<Path>{roots.state}/specdev/changes/{change}/ticket/24-architecture-and-upstream-sync-ledger.md</Path>` | 当前架构、恢复与 upstream sync ledger 进入项目 docs | T-21 | standard | medium | yes | Worker-T-24 / Lead审查 | AC-001, AC-028 | W9-DOCS | done |
-| T-25 | `<Path>{roots.state}/specdev/changes/{change}/ticket/25-final-umbrella-acceptance.md</Path>` | 28 AC、15 DoD、双平台与去冗余最终 verdict | T-22, T-23, T-24 | deep | critical | no | Worker-T-25 / Lead final owner | AC-001—AC-028 | G10-FINAL | blocked |
+| T-25 | `<Path>{roots.state}/specdev/changes/{change}/ticket/25-final-umbrella-acceptance.md</Path>` | 28 AC、15 DoD、双平台与去冗余最终 verdict | T-22, T-23, T-24, T-26 | deep | critical | no | Worker-T-25 / Lead final owner | AC-001—AC-028 | G10-FINAL | blocked |
+| T-26 | `<Path>{roots.state}/specdev/changes/{change}/ticket/26-close-agent-mutation-producer-correlation.md</Path>` | Agent write/edit mutation receipt形成严格main History correlation | T-17 | deep | critical | yes | Worker-T-26 / Root Lead | AC-008, AC-015—AC-017, AC-024, AC-026 | W7-CORRECTION | ready |
 
 Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；本表的 Worker/Lead、Wave/Gate 是 `<Path>{roots.state}/specdev/changes/{change}/goal-plan.md</Path>` 的委派执行投影，不改变 Ticket 产品 owner 或路径合同，也不得独立修改出另一套真相。
 
@@ -80,6 +81,7 @@ T-01 [G0 fixed point / authorization]
                                                                                                                               └────┬────┘
                                                                                                                                    ↓
                                                                                                                               T-25 [FINAL]
+T-17 ─→ T-26 [Agent producer correction] ───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 真实边说明：
@@ -88,7 +90,7 @@ T-01 [G0 fixed point / authorization]
 - T-10 是所有 Resource authority/event/materialize 消费者的 shared-contract prefactor；T-11 建立 physical observation/baseline 接缝。
 - T-12、T-13、T-14 可在 T-11 后于互不相交路径并行；T-15 必须等待 production owner、History 与 Knowledge 三方汇合。批准的 D-T15-01 允许 T-15 在 G5 串行期间扩展 main-bound runtime adapter 与 focused runtime test；D-T15-02 确认 Node-only provider proof 不足；D-T15-03 只允许一个 fail-closed system-core secure conditional-write primitive 和 dev/test build。其余 production owner、ResourceIO public contract、route authority 与 T-21 production package ownership仍不转移。
 - T-19 可与 T-11/T-18 并行；T-20 必须等待 Extraction、Knowledge repair 和 restore event convergence。
-- T-21 在最终产品切片后唯一修改 manifests/build/CI；T-22/T-23/T-24 随后并行，T-25 是最终收缩 Gate。
+- T-21 在最终产品切片后唯一修改 manifests/build/CI；T-22/T-23/T-24 随后并行。T-26 是最终审计发现的 T-17 producer correction，依赖 T-17 consumer contract 且不接管 T-15/T-16；T-25 等待 T-22/T-23/T-24/T-26 后重新执行最终收缩 Gate。
 
 ## 4. 合同覆盖矩阵
 
@@ -101,7 +103,7 @@ T-01 [G0 fixed point / authorization]
 | AC-005 | T-11, T-13, T-25 | mount/main scope tests | covered | mount 保持功能但无 Workspace History |
 | AC-006 | T-13, T-16, T-25 | History store/service/UI | covered | capture/delete/rename/timeline/diff |
 | AC-007 | T-13, T-16, T-25 | deterministic policy/UI | covered | 60s/5MiB/30d/500MiB/noise |
-| AC-008 | T-17, T-25 | Agent projection + shared History | covered | 对话过滤且无第二事实源 |
+| AC-008 | T-17, T-26, T-25 | Agent projection + authoritative mutation producer + shared History | covered | 对话过滤且无第二事实源 |
 | AC-009 | T-11, T-12, T-22, T-23, T-25 | watcher factory/descriptor | covered | N consumers, one physical watcher |
 | AC-010 | T-12, T-22, T-23, T-25 | cutover state machine | covered | stop-before-start，overlap=0 |
 | AC-011 | T-10, T-12, T-14, T-25 | ResourceEventBus contracts | covered | ordering/dedupe/isolation/since |
@@ -117,7 +119,7 @@ T-01 [G0 fixed point / authorization]
 | AC-021 | T-20—T-23, T-25 | Office Knowledge integration/E2E | covered | versioned re-extract/re-index/Search |
 | AC-022 | T-19—T-23, T-25 | filesystem/OCR/loop assertions | covered | 不落盘、不 OCR、不循环 |
 | AC-023 | T-10, T-19, T-21—T-23, T-25 | copy/transfer/materialize | covered | 独立生命周期与 fixed budgets |
-| AC-024 | T-16—T-18, T-25 | component + Playwright flows | covered | Workspace/Agent 分离、@ lifecycle、无 shadow truth |
+| AC-024 | T-16—T-18, T-26, T-25 | component + producer/direct-flow tests | covered | Workspace/Agent 分离、@ lifecycle、无 shadow truth |
 | AC-025 | T-11, T-13, T-25 | new-store initialization | covered | 唯一新基线、FAILED/retry、无 migration |
 | AC-026 | T-10, T-11, T-13, T-15, T-19, T-25 | route/event security | covered | no raw root/public workspaceId/path leak |
 | AC-027 | T-21—T-23, T-25 | package/native Gates | covered | Windows/macOS blocking，Linux non-blocking |
@@ -145,6 +147,7 @@ T-01 [G0 fixed point / authorization]
 | T-22 | T-23 | 无 | 否 | 可并行；Windows/macOS 专用 harness 分离 |
 | T-22 | T-24 | 无 | 否 | 可并行；Windows harness 与 docs 分离 |
 | T-23 | T-24 | 无 | 否 | 可并行；macOS harness 与 docs 分离 |
+| T-26 | T-22/T-23 | 无 | 否 | 可并行；Agent producer core与平台harness分离，平台Evidence须在T-26集成后重跑才可提升为final-SHA证据 |
 
 T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能与任何后续 code Ticket 并行。D-T12-04 在 T-11 integrated/removed 后把 `<Path>core/workspace-runtime/**</Path>` 的 production assembly extraction 单独授予 T-12；T-13/T-14 对该路径仍为只读。T-15 跨 History/Knowledge 是显式 convergence owner，因此依赖 T-12/T-13/T-14 后才开始。任何执行时路径重命名或越界请求必须先修订 Ticket/Goal Plan，不以“解决 merge conflict”代替所有权。
 
@@ -162,9 +165,10 @@ G5 的 D-T15-04/D-T15-05/D-T15-06 均已获 ticket-level 批准：T-15 必须把
 | G5 Restore Convergence | T-15 | T-12/T-13/T-14 完成 | secure restore 和六读面一致 |
 | W6 Product/Office | T-16, T-20 | T-15、各自前置完成 | Workspace UI 与 Office Knowledge E2E 绿色 |
 | W7 Agent Projection | T-17 | T-16 完成 | Agent/Workspace semantics 分离且共享 primitives |
+| W7-CORRECTION Agent Producer | T-26 | T-17 完成且T-25识别producer residual | authoritative mutation correlation、live/replay serializer与owner验证绿色 |
 | G8 Production Inputs | T-21 | T-12/T-16/T-17/T-18/T-20 完成 | clean build、native assets、package inputs 就绪 |
 | W9 Blocking Platforms/Docs | T-22, T-23, T-24 | T-21 完成 | Windows/macOS blocking Evidence 与 current docs 完成 |
-| G10 Final | T-25 | T-22/T-23/T-24 完成 | 28 AC、15 DoD、structure/package/Evidence 全部通过 |
+| G10 Final | T-25 | T-22/T-23/T-24/T-26 完成 | 28 AC、15 DoD、structure/package/Evidence 全部通过 |
 
 需要正式 Goal Plan：Ticket 数量 25、Deep/critical 多、存在整仓 staged merge、shared manifests、单 owner cutover、双平台 Gate 和多个汇合点。下一 Work 必须是 `<Path>{roots.workflows}/specdev/P-goal-plan/P-goal-plan.md</Path>`，不能直接开始实现。
 
