@@ -124,7 +124,6 @@ describe("Windows blocking gate runner", () => {
   });
 
   it("requires a real executable for the NSIS inventory", () => {
-    if (process.platform === "win32") return;
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-t22-installer-"));
     try {
       const installer = path.join(root, "HanaAgent-0.446.6.exe");

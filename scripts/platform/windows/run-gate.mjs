@@ -314,6 +314,7 @@ async function runFilesystemMatrix(fixtureRoot) {
   }
 
   const locked = await runLockedFileProbe(workspace);
+  fs.unlinkSync(path.join(movedRoot, "junction-outside"));
   fs.rmSync(movedRoot, { recursive: true, force: true });
   return {
     caseInsensitive: true,
@@ -326,6 +327,18 @@ async function runFilesystemMatrix(fixtureRoot) {
     watcherClosed: true,
     outsideUntouched: true,
   };
+}
+
+function cleanupFixtureRoot(fixtureRoot) {
+  for (const relative of ["main/junction-outside", "main.replaced/junction-outside"]) {
+    const junction = path.join(fixtureRoot, ...relative.split("/"));
+    try {
+      if (fs.lstatSync(junction).isSymbolicLink()) fs.unlinkSync(junction);
+    } catch {
+      // The fixture may have failed before the junction was created.
+    }
+  }
+  fs.rmSync(fixtureRoot, { recursive: true, force: true });
 }
 
 export async function runWindowsGate({
@@ -352,7 +365,7 @@ export async function runWindowsGate({
       installer: installerResult,
     };
   } finally {
-    if (cleanup) fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    if (cleanup) cleanupFixtureRoot(fixtureRoot);
   }
 }
 
