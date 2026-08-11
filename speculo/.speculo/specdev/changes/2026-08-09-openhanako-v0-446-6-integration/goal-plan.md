@@ -266,8 +266,8 @@ DISPATCH ticket=T-24 wave=W9-DOCS baseline=aa476d23 branch=speculo/2026-08-09-op
 DELIVERY ticket=T-24 state=integrated workspace=specdev-worktree/T-24 checkpoint=e7530fb2 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-24.md</Path> residual=platform-gates-remain-for-T-22-T-23-T-25
 W9_DOCS_CLOSURE ticket=T-24 state=integrated checkpoint=e7530fb2 acceptance=Lead-standards-and-specification-pass residual=platform-gates-remain-for-T-22-T-23-T-25 next=T-22/T-23/T-25
 DISPATCH ticket=T-25 wave=G10-FINAL baseline=10a79be8 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-25 workspace=specdev-worktree/T-25 placement=system-core-final-umbrella-audit
-DELIVERY ticket=T-25 state=blocked workspace=specdev-worktree/T-25 checkpoint=291d6231 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-25.md</Path> residual=T-22-missing-windows-runner-and-T-23-review
-G10_FINAL ticket=T-25 state=blocked checkpoint=291d6231 verdict=BLOCKED next=T-22/T-23 re-run-T-25
+DELIVERY ticket=T-25 state=blocked workspace=specdev-worktree/T-25 checkpoint=e06a5230 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-25.md</Path> residual=T-22-windows-runtime-and-T-23-review
+G10_FINAL ticket=T-25 state=blocked checkpoint=e06a5230 verdict=BLOCKED next=T-22/T-23 re-run-T-25
 DISPATCH ticket=T-22 wave=W9-WIN baseline=4231ec3f branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-22 workspace=specdev-worktree/T-22 placement=system-core-windows-platform-gate
 DELIVERY ticket=T-22 state=blocked workspace=specdev-worktree/T-22 checkpoint=35cb5e7a evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-22.md</Path> residual=windows-real-runner-unavailable
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5
