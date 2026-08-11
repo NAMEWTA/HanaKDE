@@ -913,6 +913,12 @@ describe("HanaEngine.buildTools", () => {
     const engine = Object.create(HanaEngine.prototype);
     engine.hanakoHome = tmpDir;
     engine.registerSessionFile = registerSessionFile;
+    engine.getSessionIdForPath = vi.fn(() => "sess_touch");
+    engine._activityHub = { upsert: vi.fn((entry) => entry) };
+    engine._projectAgentFileChangeResource = vi.fn(async (resource) => ({
+      sourceKey: "main",
+      relativePath: path.basename(resource.path),
+    }));
     engine.getAgent = vi.fn(() => ({ id: "focus", agentDir, tools: [] }));
     engine._pluginManager = null;
     engine._prefs = { getFileBackup: () => ({ enabled: false }) };
@@ -966,30 +972,48 @@ describe("HanaEngine.buildTools", () => {
       filePath: path.join(workspace, "draft.md"),
       origin: "agent_edit",
     });
-    expect(engine._emitEvent).toHaveBeenCalledWith(expect.objectContaining({
-      type: "resource.changed",
-      source: "agent_tool",
-      reason: "agent_write",
-      sessionPath,
-      fileId: "sf_created",
-      origin: "agent_write",
-      operation: "created",
-      resource: expect.objectContaining({
-        filePath: path.join(workspace, "draft.md"),
-      }),
-    }), sessionPath);
-    expect(engine._emitEvent).toHaveBeenCalledWith(expect.objectContaining({
-      type: "resource.changed",
-      source: "agent_tool",
-      reason: "agent_edit",
-      sessionPath,
-      fileId: "sf_modified",
-      origin: "agent_edit",
-      operation: "modified",
-      resource: expect.objectContaining({
-        filePath: path.join(workspace, "draft.md"),
-      }),
-    }), sessionPath);
+    expect(writeResult.details.agentFileChange).toMatchObject({
+      sessionId: "sess_touch",
+      operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      resource: { sourceKey: "main", relativePath: "draft.md" },
+    });
+    expect(editResult.details.agentFileChange).toMatchObject({
+      sessionId: "sess_touch",
+      operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      resource: { sourceKey: "main", relativePath: "draft.md" },
+    });
+    expect(engine._activityHub.upsert).toHaveBeenCalledTimes(2);
+    for (const [entry] of engine._activityHub.upsert.mock.calls) {
+      expect(entry).toMatchObject({
+        kind: "agent_tool",
+        status: "done",
+        sessionId: "sess_touch",
+        sessionPath,
+        operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      });
+    }
+    const resourceChanges = engine._emitEvent.mock.calls
+      .filter(([event]) => event?.type === "resource.changed")
+      .map(([event, routedSessionPath]) => ({ event, routedSessionPath }));
+    expect(resourceChanges).toHaveLength(2);
+    expect(resourceChanges.map(({ event }) => event.reason)).toEqual([
+      "agent_write",
+      "agent_edit",
+    ]);
+    const authoritativeDraftPath = path.join(fs.realpathSync(workspace), "draft.md");
+    for (const { event, routedSessionPath } of resourceChanges) {
+      expect(routedSessionPath).toBe(sessionPath);
+      expect(event).toMatchObject({
+        source: "agent_tool",
+        sessionPath,
+        operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+        resource: expect.objectContaining({
+          path: authoritativeDraftPath,
+        }),
+      });
+      expect(event).not.toHaveProperty("fileId");
+      expect(event).not.toHaveProperty("sessionFile");
+    }
   });
 
   it("registers write and edit session files when Pi SDK uses the file_path alias", async () => {

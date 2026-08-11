@@ -19,6 +19,7 @@ import { createManagedConfigWriteGuard } from "./managed-config-guard.ts";
 import { t } from "../i18n.ts";
 import fs from "fs";
 import path, { extname } from "path";
+import { randomUUID } from "node:crypto";
 import {
   createReadTool,
   createWriteTool,
@@ -34,6 +35,7 @@ import { wrapResourceIoFileTools } from "../resource-io/agent-tools.ts";
 import { createMaterializeTool } from "../resource-io/materialize-tool.ts";
 import { createResourceIoToolOperations } from "../resource-io/pi-tool-operations.ts";
 import { createSandboxResourceIO } from "../resource-io/sandbox-resource-io.ts";
+import type { ResourceMutationResult } from "../resource-io/types.ts";
 import { createExecCommandTools } from "../exec-command/tool.ts";
 import { detectWin32PowerShellFlavor } from "./win32-runtime-cache.ts";
 import {
@@ -64,6 +66,7 @@ import {
  * @param {(sessionPath: string) => string|null} [opts.getSessionIdForPath]  sessionPath locator → sessionId
  * @param {(fileId: string, options?: {sessionPath?: string|null}) => object|null} [opts.resolveSessionFile]  SessionFile resolver
  * @param {(entry: object) => void} [opts.recordFileOperation]  记录 write/edit 触达的 session file
+ * @param {(entry: object) => Promise<object|null>|object|null} [opts.recordAgentFileChange]  投影 authoritative main mutation correlation
  * @param {() => object|null} [opts.getVisionBridge]  辅助视觉桥
  * @param {() => boolean} [opts.isVisionAuxiliaryEnabled]  辅助视觉开关
  * @param {() => object|null} [opts.getTerminalSessionManager]  当前 engine 的 terminal session manager
@@ -86,6 +89,7 @@ export function createSandboxedTools(cwd, customTools, {
   getSessionIdForPath,
   resolveSessionFile,
   recordFileOperation,
+  recordAgentFileChange,
   getVisionBridge,
   isVisionAuxiliaryEnabled,
   getTerminalSessionManager,
@@ -198,13 +202,19 @@ export function createSandboxedTools(cwd, customTools, {
     origin: "agent_edit",
     operationForPath: () => "modified",
     getSessionPath,
+    getSessionIdForPath,
     recordFileOperation,
+    recordAgentFileChange,
+    withMutationCapture: resourceOps.withMutationCapture,
   });
   const writeToolWithResourceIO = wrapFileTouchTool(createWriteTool(cwd, { operations: resourceOps.write }), cwd, {
     origin: "agent_write",
     operationForPath: (filePath) => fs.existsSync(filePath) ? "modified" : "created",
     getSessionPath,
+    getSessionIdForPath,
     recordFileOperation,
+    recordAgentFileChange,
+    withMutationCapture: resourceOps.withMutationCapture,
   });
   const readTool = wrapReadImageWithVisionBridge(wrapReadOfficeMedia(createReadTool(cwd, { operations: readOps }), cwd, {
     hanakoHome,
@@ -381,42 +391,107 @@ function normalizeFileTouchToolParams(params) {
   return { ...params, path: rawPath };
 }
 
+type FileTouchToolOptions = {
+  origin?: string;
+  operationForPath?: (filePath: string) => string | null;
+  getSessionPath?: () => string | null;
+  getSessionIdForPath?: (sessionPath: string) => string | null;
+  recordFileOperation?: (entry: {
+    sessionPath: string;
+    filePath: string;
+    label: string;
+    origin?: string;
+    operation: string | null;
+  }) => unknown;
+  recordAgentFileChange?: (entry: {
+    sessionId: string;
+    sessionPath: string;
+    operationId: string;
+    mutation: ResourceMutationResult;
+  }) => Promise<unknown> | unknown;
+  withMutationCapture?: <T>(context: {
+    operationId: string;
+    sessionId: string | null;
+    sessionPath: string | null;
+  }, fn: () => Promise<T>) => Promise<{
+    result: T;
+    mutations: readonly ResourceMutationResult[];
+  }>;
+};
+
 function wrapFileTouchTool(tool, cwd, {
   origin,
   operationForPath,
   getSessionPath,
+  getSessionIdForPath,
   recordFileOperation,
-}: { origin?: any; operationForPath?: any; getSessionPath?: any; recordFileOperation?: any } = {}) {
+  recordAgentFileChange,
+  withMutationCapture,
+}: FileTouchToolOptions = {}) {
   return {
     ...tool,
     execute: async (toolCallId, params, ...rest) => {
       const normalizedParams = normalizeFileTouchToolParams(params);
       const absolutePath = resolveToolPath(fileTouchToolPathParam(normalizedParams), cwd);
       const operation = absolutePath ? operationForPath?.(absolutePath) : null;
+      const sessionPath = getSessionPath?.() || null;
+      const sessionId = sessionPath && typeof getSessionIdForPath === "function"
+        ? getSessionIdForPath(sessionPath)
+        : null;
+      const operationId = randomUUID();
       let result;
+      let mutations: readonly ResourceMutationResult[] = [];
       try {
-        result = await tool.execute(toolCallId, normalizedParams, ...rest);
+        if (typeof withMutationCapture === "function") {
+          const captured = await withMutationCapture({
+            operationId,
+            sessionId,
+            sessionPath,
+          }, () => tool.execute(toolCallId, normalizedParams, ...rest));
+          result = captured.result;
+          mutations = captured.mutations;
+        } else {
+          result = await tool.execute(toolCallId, normalizedParams, ...rest);
+        }
       } catch (err) {
         return {
           content: [{ type: "text", text: err?.message || String(err) }],
         };
       }
-      const sessionPath = getSessionPath?.() || null;
       if (!absolutePath || !sessionPath || typeof recordFileOperation !== "function") {
         return result;
       }
       if (!fs.existsSync(absolutePath)) return result;
+      let sessionFile;
       try {
-        const sessionFile = serializeSessionFile(recordFileOperation({
+        sessionFile = serializeSessionFile(recordFileOperation({
           sessionPath,
           filePath: absolutePath,
           label: path.basename(absolutePath),
           origin,
           operation,
         }));
-        return appendSessionFileDetails(result, sessionFile, absolutePath);
       } catch (err) {
         return appendRegistrationWarning(result, err);
+      }
+      const registeredResult = appendSessionFileDetails(result, sessionFile, absolutePath);
+      if (
+        !sessionId
+        || mutations.length !== 1
+        || typeof recordAgentFileChange !== "function"
+      ) {
+        return registeredResult;
+      }
+      try {
+        const agentFileChange = await recordAgentFileChange({
+          sessionId,
+          sessionPath,
+          operationId,
+          mutation: mutations[0],
+        });
+        return appendSessionFileDetails(result, sessionFile, absolutePath, agentFileChange);
+      } catch {
+        return appendCorrelationWarning(registeredResult);
       }
     },
   };
@@ -433,7 +508,7 @@ function writableLocalRef(filePath) {
     : null;
 }
 
-function appendSessionFileDetails(result, sessionFile, filePath = null) {
+function appendSessionFileDetails(result, sessionFile, filePath = null, agentFileChange = null) {
   if (!sessionFile) return result;
   const sessionRef = sessionFileRef(sessionFile);
   const writableRef = writableLocalRef(filePath);
@@ -444,12 +519,22 @@ function appendSessionFileDetails(result, sessionFile, filePath = null) {
       sessionFile,
       ...(sessionRef ? { sessionFileRef: sessionRef } : {}),
       ...(writableRef ? { writableLocalRef: writableRef } : {}),
+      ...(agentFileChange ? { agentFileChange } : {}),
     },
   };
 }
 
 function appendRegistrationWarning(result, err) {
   const message = `Session file registration failed: ${err?.message || String(err)}`;
+  const content = Array.isArray(result?.content) ? [...result.content] : [];
+  return {
+    ...(result || {}),
+    content: [...content, { type: "text", text: message }],
+  };
+}
+
+function appendCorrelationWarning(result) {
+  const message = "Agent file change correlation unavailable.";
   const content = Array.isArray(result?.content) ? [...result.content] : [];
   return {
     ...(result || {}),

@@ -801,6 +801,8 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 - **Authorization / deviation / correction limit：** D-T17-01授权本Ticket producer paths与live-only correlation；D-T26-01仅追加desktop session factory的现有session identity callback注入及focused test；D-T26-02仅追加首次授权WS session subscription的一次既有ActivityHub重播及focused test；local changes/commit与Lead local merge/non-force cleanup自动授权；不得改History/restore public contract、push/PR/sign/release/archive；3轮。
 - **Return：** `review`、T-26 Evidence、workspace、base/final SHA、candidate commit、focused/direct-flow结果、未运行E2E与Lead验收。
 
+**Worker return (2026-08-11T22:46:49+0800):** candidate `4cfd37f35e0b1ab853bc0480a89f713f620a79a9` in `specdev-worktree/T-26`; 12 focused files / 411 tests, full typecheck, scoped zero-error lint, client build, SpecDev validator and the deterministic desktop Agent write/reload/History E2E are green. Ticket and Evidence are `review`. The separate current T-16 restore E2E returns the same pre-write 503 on this candidate and clean integration `e28c0c42`; Lead must classify or correct that baseline independently and must not claim a fresh combined restore pass from T-26.
+
 ### Candidate Delivery Return and Lead Integration
 
 Worker 完成时必须先把 Ticket 推进到 `review`，并返回：Ticket ID、Evidence 路径、workspace_ref、exact base/final checkpoint、candidate commit、修改路径、验证命令/退出状态、未验证项、建议 Lead E2E 和任何 deviation。禁止 Worker 自报 `done`、自行合并 integration line、删除分支/worktree或关闭 Gate。

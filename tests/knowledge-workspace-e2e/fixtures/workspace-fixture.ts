@@ -7,6 +7,7 @@ import {
   ensureLocalIdentityRegistries,
   loadServerIdentity,
 } from "../../../core/server-identity.ts";
+import { seedEngineToolHarness } from "./engine-tool-harness.ts";
 
 export type KnowledgeWorkspaceSandbox = {
   rootDir: string;
@@ -24,6 +25,7 @@ export type KnowledgeWorkspaceSandbox = {
 
 export async function createKnowledgeWorkspaceSandbox(
   workerIndex: number,
+  options: { engineToolHarness?: boolean } = {},
 ): Promise<KnowledgeWorkspaceSandbox> {
   const rootDir = await fs.mkdtemp(
     path.join(os.tmpdir(), `hana-knowledge-e2e-w${workerIndex}-`),
@@ -94,7 +96,11 @@ export async function createKnowledgeWorkspaceSandbox(
       hanaHome,
       mainSource,
       productRoot: process.cwd(),
+      allowFullAccessPlugins: options.engineToolHarness === true,
     });
+    if (options.engineToolHarness === true) {
+      await seedEngineToolHarness(hanaHome);
+    }
 
     return {
       rootDir,
@@ -131,10 +137,12 @@ async function seedPrimaryAgent({
   hanaHome,
   mainSource,
   productRoot,
+  allowFullAccessPlugins,
 }: {
   hanaHome: string;
   mainSource: string;
   productRoot: string;
+  allowFullAccessPlugins: boolean;
 }): Promise<void> {
   const agentDir = path.join(hanaHome, "agents", "hanako");
   await Promise.all([
@@ -178,6 +186,7 @@ async function seedPrimaryAgent({
       primaryAgent: "hanako",
       locale: "en",
       setupComplete: true,
+      ...(allowFullAccessPlugins ? { allow_full_access_plugins: true } : {}),
     }, null, 2)}\n`,
     "utf8",
   );

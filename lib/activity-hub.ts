@@ -9,7 +9,9 @@
  * 例外：workflow / workflow_agent / subagent 通过可选的 store 做持久化背书（重启不丢右侧卡）。
  */
 
-const VALID_KINDS = new Set(["subagent", "workflow", "workflow_agent", "workflow_step", "heartbeat", "cron"]);
+import { isOperationCorrelationId } from "../shared/knowledge-diagnostics.ts";
+
+const VALID_KINDS = new Set(["subagent", "workflow", "workflow_agent", "workflow_step", "heartbeat", "cron", "agent_tool"]);
 const VALID_STATUSES = new Set(["running", "done", "failed", "aborted"]);
 
 // 右侧活动卡的持久化背书（重启不丢卡）：workflow / workflow_agent / subagent 都写穿。
@@ -105,6 +107,9 @@ function normalizeEntry(entry: any, existing: any, resolveSessionIdForPath = nul
     tokens: pickNum(entry.tokens, existing?.tokens ?? null),
     // workflow_step 专属：步骤类型（parallel / pipeline / log）。
     stepKind: pickStr(entry.stepKind, existing?.stepKind ?? null),
+    operationId: isOperationCorrelationId(entry.operationId)
+      ? entry.operationId
+      : (isOperationCorrelationId(existing?.operationId) ? existing.operationId : null),
     forkedFromActivityId: pickStr(entry.forkedFromActivityId, existing?.forkedFromActivityId ?? null),
     // startedAt 取首次（existing 优先），finishedAt 取最新
     startedAt: pickNum(existing?.startedAt, pickNum(entry.startedAt, null)),

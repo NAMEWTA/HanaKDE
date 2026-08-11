@@ -10,7 +10,23 @@
 import path from "path";
 import { t } from "../lib/i18n.ts";
 import { materializeExecutorIdentity } from "../lib/subagent-executor-metadata.ts";
+import { parseAgentFileChangeFact } from "../shared/workspace-history.ts";
 import { buildAutomationSuggestionBlock } from "./suggestion-blocks.ts";
+
+function extractAgentFileMutationBlock(details) {
+  const sessionFile = details?.sessionFile;
+  const fields = sessionFileFields(sessionFile);
+  if (!fields.filePath) return null;
+  const agentFileChange = parseAgentFileChangeFact(details?.agentFileChange);
+  return [{
+    type: "file",
+    ...fields,
+    filePath: fields.filePath,
+    label: fields.label || path.basename(fields.filePath),
+    ext: fields.ext || path.extname(fields.filePath).replace(/^\./, ""),
+    ...(agentFileChange ? { agentFileChange } : {}),
+  }];
+}
 
 export const BLOCK_EXTRACTORS = {
   // COMPAT(present_files, remove no earlier than v0.133):
@@ -28,6 +44,9 @@ export const BLOCK_EXTRACTORS = {
       ext: f.ext || "",
     }));
   },
+
+  write: extractAgentFileMutationBlock,
+  edit: extractAgentFileMutationBlock,
 
   create_artifact: (details) => {
     if (!details.content) return null;

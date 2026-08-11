@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-26
 title: 闭合 Agent mutation producer correlation
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "同一次 Agent write/edit 必须把 ResourceIO mutation receipt、conversation operation、当前 main scope 与持久 file block 精确绑定；错误关联会造成跨 main History 泄漏或第二事实源。"
 ready: true
@@ -116,10 +116,10 @@ Agent 对 main 文件执行 `write` 或 `edit` 时，sandbox 在调用开始冻�
 
 ## 10. 验收标准
 
-- [ ] `AC-008`：同 conversation/operation 的 main `write`/`edit` 才获得共享 History；mount/remote只保留operation impact。
-- [ ] `AC-015`—`AC-017`：producer只链接现有T-16/T-15 flow，restore/convergence无第二写入口。
-- [ ] `AC-024`：Workspace/Agent UI语义仍分离，底层共享，server restart与scope变化fail closed。
-- [ ] `AC-026`：无raw root/public workspaceId/绝对路径或私有identity进入fact/activity/public响应。
-- [ ] unique/failed/multiple/root-replaced/mount/reload矩阵与focused regression绿色。
-- [ ] owner E2E只有在无外部模型、真实调用production write/edit链时才可解除skip；否则Ticket保持`review`且T-25继续blocked。
-- [ ] 实际修改不越过`writable_paths`，Evidence与双轴review完整。
+- [x] `AC-008`：同 conversation/operation 的 main `write`/`edit` 才获得共享 History；mount/remote只保留operation impact。
+- [x] `AC-015`—`AC-017`：producer只链接现有T-16/T-15 flow，restore/convergence无第二写入口。
+- [x] `AC-024`：Workspace/Agent UI语义仍分离，底层共享，server restart与scope变化fail closed。
+- [x] `AC-026`：无raw root/public workspaceId/绝对路径或私有identity进入fact/activity/public响应。
+- [x] unique/failed/multiple/root-replaced/mount/reload矩阵与focused regression绿色。
+- [x] owner E2E只有在无外部模型、真实调用production write/edit链时才可解除skip；否则Ticket保持`review`且T-25继续blocked。
+- [x] 实际修改不越过`writable_paths`，Evidence与双轴review完整。

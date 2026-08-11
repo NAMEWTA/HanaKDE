@@ -2,6 +2,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ResourceIO } from "../lib/resource-io/resource-io.ts";
+import { createResourceIoToolOperations } from "../lib/resource-io/pi-tool-operations.ts";
 import { createSandboxedTools } from "../lib/sandbox/index.ts";
 
 describe("ResourceIO sandbox file tools", () => {
@@ -28,8 +30,10 @@ describe("ResourceIO sandbox file tools", () => {
       hanakoHome,
       getSandboxEnabled: () => true,
       getSessionPath: () => sessionPath,
+      getSessionIdForPath: options.getSessionIdForPath,
       emitEvent,
       recordFileOperation: options.recordFileOperation,
+      recordAgentFileChange: options.recordAgentFileChange,
     } as any);
     return { workspace, emitEvent, sessionPath, tools: result.tools };
   }
@@ -86,6 +90,76 @@ describe("ResourceIO sandbox file tools", () => {
     }), expect.any(String));
   });
 
+  it("isolates concurrent mutation captures and preserves multiple receipts", async () => {
+    const pending = new Map<string, () => void>();
+    const resourceIO = {
+      write: vi.fn(async (ref, content, context) => {
+        await new Promise<void>((resolve) => pending.set(String(content), resolve));
+        return {
+          changeType: "updated",
+          resourceKey: `local_fs:${ref.path}`,
+          resource: { ...ref, provider: "local_fs" },
+          version: { size: String(content).length, mtimeMs: 1 },
+          operationId: context.operationId,
+        };
+      }),
+    };
+    const operations = createResourceIoToolOperations({
+      cwd: "/workspace",
+      resourceIO: resourceIO as unknown as ResourceIO,
+    });
+    const operationA = "11111111-1111-4111-8111-111111111111";
+    const operationB = "22222222-2222-4222-8222-222222222222";
+    const captureA = operations.withMutationCapture({
+      operationId: operationA,
+      sessionId: "sess_a",
+      sessionPath: "/sessions/a.jsonl",
+    }, async () => operations.write.writeFile("a.md", "a"));
+    const captureB = operations.withMutationCapture({
+      operationId: operationB,
+      sessionId: "sess_b",
+      sessionPath: "/sessions/b.jsonl",
+    }, async () => operations.write.writeFile("b.md", "b"));
+
+    await vi.waitFor(() => expect(pending.size).toBe(2));
+    pending.get("b")?.();
+    pending.get("a")?.();
+    const [resultA, resultB] = await Promise.all([captureA, captureB]);
+
+    expect(resultA.mutations).toHaveLength(1);
+    expect(resultA.mutations[0]).toMatchObject({ operationId: operationA });
+    expect(resultB.mutations).toHaveLength(1);
+    expect(resultB.mutations[0]).toMatchObject({ operationId: operationB });
+    expect(resourceIO.write.mock.calls.map((call) => call[2])).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operationId: operationA, sessionId: "sess_a" }),
+      expect.objectContaining({ operationId: operationB, sessionId: "sess_b" }),
+    ]));
+
+    resourceIO.write.mockImplementation(async (ref, content, context) => ({
+      changeType: "updated",
+      resourceKey: `local_fs:${ref.path}`,
+      resource: { ...ref, provider: "local_fs" },
+      version: { size: String(content).length, mtimeMs: 2 },
+      operationId: context.operationId,
+    }));
+    const multiple = await operations.withMutationCapture({
+      operationId: operationA,
+      sessionId: "sess_a",
+      sessionPath: "/sessions/a.jsonl",
+    }, async () => {
+      await operations.write.writeFile("a.md", "first");
+      await operations.write.writeFile("a.md", "second");
+    });
+    expect(multiple.mutations).toHaveLength(2);
+
+    resourceIO.write.mockRejectedValueOnce(new Error("write failed"));
+    await expect(operations.withMutationCapture({
+      operationId: operationA,
+      sessionId: "sess_a",
+      sessionPath: "/sessions/a.jsonl",
+    }, async () => operations.write.writeFile("a.md", "failed"))).rejects.toThrow("write failed");
+  });
+
   it("returns separate SessionFile identity and writable local refs for write outputs", async () => {
     const recordFileOperation = vi.fn(({ sessionPath, filePath, label, origin, operation }) => ({
       id: "sf_notes",
@@ -118,6 +192,132 @@ describe("ResourceIO sandbox file tools", () => {
       sessionFileRef: { kind: "session-file", fileId: "sf_notes" },
       writableLocalRef: { kind: "local-file", path: targetPath },
     });
+  });
+
+  it("correlates a write from its authoritative ResourceIO mutation receipt", async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-resource-sandbox-tools-"));
+    const workspace = path.join(tempRoot, "workspace");
+    const hanakoHome = path.join(tempRoot, "hana-home");
+    const agentDir = path.join(hanakoHome, "agents", "hana");
+    const sessionPath = path.join(agentDir, "sessions", "main.jsonl");
+    const requestedPath = path.join(workspace, "notes", "requested.md");
+    const authoritativePath = path.join(workspace, "notes", "authoritative.md");
+    fs.mkdirSync(agentDir, { recursive: true });
+    fs.mkdirSync(path.dirname(requestedPath), { recursive: true });
+
+    const resourceIO = {
+      stat: vi.fn(async () => ({
+        resourceKey: `local_fs:${requestedPath}`,
+        resource: { kind: "local-file", provider: "local_fs", path: requestedPath },
+        exists: false,
+        isDirectory: false,
+      })),
+      mkdir: vi.fn(async () => ({
+        changeType: "created",
+        resourceKey: `local_fs:${path.dirname(requestedPath)}`,
+        resource: { kind: "local-file", provider: "local_fs", path: path.dirname(requestedPath) },
+      })),
+      write: vi.fn(async (_ref, content, context) => {
+        fs.writeFileSync(requestedPath, content);
+        return {
+          changeType: "created",
+          resourceKey: `local_fs:${authoritativePath}`,
+          resource: { kind: "local-file", provider: "local_fs", path: authoritativePath },
+          version: { size: Buffer.byteLength(content), mtimeMs: 2 },
+          operationId: context.operationId,
+        };
+      }),
+    };
+    const recordAgentFileChange = vi.fn(async ({ sessionId, operationId, mutation }) => ({
+      sessionId,
+      operationId,
+      resource: { sourceKey: "main", relativePath: path.basename(mutation.resource.path) },
+    }));
+    const recordFileOperation = vi.fn(({ filePath }) => ({
+      id: "sf_authoritative",
+      fileId: "sf_authoritative",
+      sessionPath,
+      filePath,
+      label: path.basename(filePath),
+      storageKind: "external",
+      status: "available",
+    }));
+    const result = createSandboxedTools(workspace, [], {
+      agentDir,
+      workspace,
+      workspaceFolders: [],
+      hanakoHome,
+      getSandboxEnabled: () => true,
+      getSessionPath: () => sessionPath,
+      getSessionIdForPath: () => "sess_main",
+      resourceIO,
+      recordFileOperation,
+      recordAgentFileChange,
+    } as any);
+    const write = result.tools.find((tool) => tool.name === "write");
+
+    const writeResult = await write.execute("write-correlated", {
+      path: "notes/requested.md",
+      content: "hello",
+    });
+
+    const operationId = resourceIO.write.mock.calls[0][2].operationId;
+    expect(operationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(recordAgentFileChange).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "sess_main",
+      sessionPath,
+      operationId,
+      mutation: expect.objectContaining({
+        resource: expect.objectContaining({ path: authoritativePath }),
+      }),
+    }));
+    expect(writeResult.details.agentFileChange).toEqual({
+      sessionId: "sess_main",
+      operationId,
+      resource: { sourceKey: "main", relativePath: "authoritative.md" },
+    });
+  });
+
+  it("preserves successful SessionFile details when optional correlation fails", async () => {
+    const recordFileOperation = vi.fn(({ filePath }) => ({
+      id: "sf_notes",
+      fileId: "sf_notes",
+      filePath,
+      label: path.basename(filePath),
+      storageKind: "external",
+      status: "available",
+    }));
+    const recordAgentFileChange = vi.fn(async () => {
+      throw new Error("main projection unavailable at /private/secret/main");
+    });
+    const { tools } = makeTools({
+      getSessionIdForPath: () => "sess_main",
+      recordFileOperation,
+      recordAgentFileChange,
+    });
+    const write = tools.find((tool) => tool.name === "write");
+
+    const result = await write.execute("write-correlation-failure", {
+      path: "notes/a.md",
+      content: "hello",
+    });
+
+    expect(result.details).toMatchObject({
+      sessionFile: { fileId: "sf_notes" },
+      sessionFileRef: { kind: "session-file", fileId: "sf_notes" },
+    });
+    expect(result.details).not.toHaveProperty("agentFileChange");
+    expect(result.content).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "text",
+        text: "Agent file change correlation unavailable.",
+      }),
+    ]));
+    expect(result.content).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        text: expect.stringContaining("/private/secret/main"),
+      }),
+    ]));
   });
 
   it("routes mount ResourceRefs through ResourceIO instead of local workspace paths", async () => {

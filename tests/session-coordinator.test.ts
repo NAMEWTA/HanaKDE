@@ -1948,9 +1948,21 @@ describe("SessionCoordinator", () => {
       buildSystemPrompt: () => "BASE",
       tools: [{ name: "write" }],
     };
-    const buildTools = vi.fn((_cwd, customTools) => ({ tools: [], customTools }));
+    const buildTools = vi.fn((_cwd, customTools, _buildOpts: any = {}) => ({ tools: [], customTools }));
     const homeCwd = path.join(tempDir, "agent-home");
     const sessionCwd = path.join(tempDir, "session-cwd");
+    const sessionFile = path.join(agent.sessionDir, "tool-identity.jsonl");
+    sessionManagerCreateMock.mockReturnValueOnce({
+      getCwd: () => sessionCwd,
+      getSessionFile: () => sessionFile,
+    });
+    createAgentSessionMock.mockResolvedValueOnce({
+      session: {
+        sessionManager: { getSessionFile: () => sessionFile },
+        subscribe: vi.fn(() => vi.fn()),
+        setActiveToolsByName: vi.fn(),
+      },
+    });
 
     const coordinator = new SessionCoordinator({
       agentsDir: path.join(tempDir, "agents"),
@@ -1991,6 +2003,8 @@ describe("SessionCoordinator", () => {
         workspace: sessionCwd,
       }),
     );
+    const buildOptions = buildTools.mock.calls[0][2] as { getSessionPath?: () => string | null };
+    expect(buildOptions.getSessionPath?.()).toBe(sessionFile);
   });
 
   it("passes the frozen experience state into the agent tool snapshot", async () => {

@@ -167,6 +167,37 @@ describe('stage_files', () => {
   });
 });
 
+describe('Agent file mutations', () => {
+  it.each(['write', 'edit'])('projects %s SessionFile details into one correlated file block', (toolName) => {
+    const agentFileChange = {
+      sessionId: 'sess_main',
+      operationId: '4f53a0f2-9b10-4f93-8f7b-9c8f73de6182',
+      resource: { sourceKey: 'main', relativePath: 'notes/a.md' },
+    };
+
+    expect(extractBlocks(toolName, {
+      sessionFile: {
+        fileId: 'sf_notes',
+        filePath: '/workspace/notes/a.md',
+        label: 'a.md',
+        ext: 'md',
+        storageKind: 'external',
+        status: 'available',
+      },
+      agentFileChange,
+    }, undefined)).toEqual([{
+      type: 'file',
+      fileId: 'sf_notes',
+      filePath: '/workspace/notes/a.md',
+      label: 'a.md',
+      ext: 'md',
+      storageKind: 'external',
+      status: 'available',
+      agentFileChange,
+    }]);
+  });
+});
+
 // ─── present_files alias ─────────────────────────────────────────────────────
 
 describe('present_files', () => {

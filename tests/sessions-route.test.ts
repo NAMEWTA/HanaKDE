@@ -3355,6 +3355,62 @@ describe("sessions route", () => {
     expect(engine.listSessionFiles).toHaveBeenCalledWith(sessionPath, { references: activeMessages });
   });
 
+  it("rebuilds a correlated Agent write file block from persisted tool details", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const msgUtils = await import("../core/message-utils.ts");
+    const app = new Hono();
+    const sessionPath = "/tmp/agents/hana/sessions/agent-write.jsonl";
+    const agentFileChange = {
+      sessionId: "sess_main",
+      operationId: "4f53a0f2-9b10-4f93-8f7b-9c8f73de6182",
+      resource: { sourceKey: "main", relativePath: "notes/a.md" },
+    };
+    vi.mocked(msgUtils.extractTextContent)
+      .mockReturnValueOnce({ text: "updated notes", images: [], thinking: "", toolUses: [] });
+    vi.mocked(msgUtils.loadSessionHistoryMessages).mockResolvedValueOnce([
+      { role: "assistant", content: "updated notes" },
+      {
+        role: "toolResult",
+        toolName: "write",
+        details: {
+          sessionFile: {
+            fileId: "sf_notes",
+            filePath: "/workspace/notes/a.md",
+            label: "a.md",
+            ext: "md",
+          },
+          agentFileChange,
+        },
+      },
+    ] as never);
+    const engine = {
+      agentsDir: "/tmp/agents",
+      currentSessionPath: sessionPath,
+      runtimeContext: { studioId: "studio_route" },
+      deferredResults: null,
+      getSessionFile: vi.fn(() => ({
+        id: "sf_notes",
+        filePath: "/workspace/notes/a.md",
+        label: "a.md",
+        ext: "md",
+        storageKind: "external",
+        status: "available",
+      })),
+    };
+    app.route("/api", createSessionsRoute(engine));
+
+    const res = await app.request(`/api/sessions/messages?path=${encodeURIComponent(sessionPath)}`);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.blocks).toEqual([expect.objectContaining({
+      type: "file",
+      afterIndex: 0,
+      fileId: "sf_notes",
+      agentFileChange,
+    })]);
+  });
+
   it("preserves repeated stage_files cards for the same SessionFile in history", async () => {
     const { createSessionsRoute } = await import("../server/routes/sessions.ts");
     const msgUtils = await import("../core/message-utils.ts");

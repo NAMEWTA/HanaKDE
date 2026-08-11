@@ -14,7 +14,7 @@ import {
 
 export interface AgentActivityEntry {
   id: string;
-  kind: 'subagent' | 'workflow' | 'workflow_agent' | 'workflow_step' | 'heartbeat' | 'cron';
+  kind: 'subagent' | 'workflow' | 'workflow_agent' | 'workflow_step' | 'heartbeat' | 'cron' | 'agent_tool';
   status: 'running' | 'done' | 'failed' | 'aborted';
   sessionId?: string | null;
   sessionPath: string | null;

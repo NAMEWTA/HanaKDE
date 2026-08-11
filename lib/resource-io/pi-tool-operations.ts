@@ -3,7 +3,7 @@ import { constants } from "fs";
 import { AsyncLocalStorage } from "async_hooks";
 import type { ResourceIO } from "./resource-io.ts";
 import { normalizeResourceRef } from "./resource-refs.ts";
-import type { ResourceRef } from "./types.ts";
+import type { ResourceMutationResult, ResourceRef } from "./types.ts";
 
 type ToolOperationsOptions = {
   cwd: string;
@@ -29,6 +29,15 @@ type BoundTargetOptions = {
 };
 
 const targetBindingStorage = new AsyncLocalStorage<TargetBinding[]>();
+
+type MutationCapture = {
+  operationId: string;
+  sessionId: string | null;
+  sessionPath: string | null;
+  mutations: ResourceMutationResult[];
+};
+
+const mutationCaptureStorage = new AsyncLocalStorage<MutationCapture>();
 
 function localRef(filePath: string): ResourceRef {
   return { kind: "local-file" as const, path: filePath };
@@ -91,13 +100,15 @@ export function createResourceIoToolOperations({
   detectImageMimeType,
 }: ToolOperationsOptions) {
   const operationContext = (reason: string, extra: Record<string, unknown> = {}) => {
+    const capture = mutationCaptureStorage.getStore();
     const identity = typeof getSessionIdentity === "function"
       ? getSessionIdentity() || {}
       : { sessionPath: getSessionPath() };
-    const sessionPath = identity.sessionPath ?? getSessionPath() ?? null;
-    const sessionId = identity.sessionId ?? null;
+    const sessionPath = capture?.sessionPath ?? identity.sessionPath ?? getSessionPath() ?? null;
+    const sessionId = capture?.sessionId ?? identity.sessionId ?? null;
     return {
       ...extra,
+      ...(capture ? { operationId: capture.operationId } : {}),
       source: "agent_tool" as const,
       reason,
       sessionId,
@@ -137,6 +148,25 @@ export function createResourceIoToolOperations({
     return targetBindingStorage.run([...current, binding], fn);
   };
 
+  const withMutationCapture = async <T>({
+    operationId,
+    sessionId,
+    sessionPath,
+  }: {
+    operationId: string;
+    sessionId: string | null;
+    sessionPath: string | null;
+  }, fn: () => Promise<T>): Promise<{ result: T; mutations: readonly ResourceMutationResult[] }> => {
+    const capture: MutationCapture = {
+      operationId,
+      sessionId,
+      sessionPath,
+      mutations: [],
+    };
+    const result = await mutationCaptureStorage.run(capture, fn);
+    return { result, mutations: Object.freeze([...capture.mutations]) };
+  };
+
   const readFile = async (filePath: string) => {
     const result = await resourceIO.read(refForPath(filePath));
     return result.content;
@@ -148,11 +178,13 @@ export function createResourceIoToolOperations({
   };
 
   const writeFile = async (filePath: string, content: string | Buffer) => {
-    await resourceIO.write(refForPath(filePath), content, operationContext("agent_write"));
+    const mutation = await resourceIO.write(refForPath(filePath), content, operationContext("agent_write"));
+    mutationCaptureStorage.getStore()?.mutations.push(mutation);
   };
 
   const editWriteFile = async (filePath: string, content: string | Buffer) => {
-    await resourceIO.write(refForPath(filePath), content, operationContext("agent_edit"));
+    const mutation = await resourceIO.write(refForPath(filePath), content, operationContext("agent_edit"));
+    mutationCaptureStorage.getStore()?.mutations.push(mutation);
   };
 
   const mkdir = async (dirPath: string) => {
@@ -198,6 +230,7 @@ export function createResourceIoToolOperations({
       exists: async (filePath: string) => (await resourceIO.stat(refForPath(filePath))).exists,
     },
     withResourceTarget,
+    withMutationCapture,
     hasBoundTarget,
   };
 }
