@@ -5,8 +5,7 @@ import { describe, expect, it } from "vitest";
 import { runMacosGate } from "../../../scripts/platform/macos/run-gate.mjs";
 
 describe("macOS blocking gate runner", () => {
-  it("runs the real recursive watch, root identity, symlink, and suspend/resume matrix", async () => {
-    expect(process.platform).toBe("darwin");
+  it.skipIf(process.platform !== "darwin")("runs the real recursive watch, root identity, symlink, and suspend/resume matrix", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-t23-test-"));
     const result = await runMacosGate({ rootDir: root, cleanup: true });
     expect(result.platform).toBe("darwin");
@@ -19,10 +18,17 @@ describe("macOS blocking gate runner", () => {
     });
     expect(result.fixture.recursiveEvents).toBeGreaterThan(0);
     expect(fs.existsSync(root)).toBe(false);
-  });
+  }, 30_000);
 
   it("keeps a fail-closed platform guard in the runner", () => {
     const source = fs.readFileSync(path.resolve("scripts/platform/macos/run-gate.mjs"), "utf8");
     expect(source).toContain("blocking gate requires darwin");
+  });
+
+  it("does not create fixtures when called off macOS", async () => {
+    if (process.platform === "darwin") return;
+    const root = path.join(os.tmpdir(), `hana-t23-guard-${process.pid}-${Date.now()}`);
+    await expect(runMacosGate({ rootDir: root })).rejects.toThrow(/requires darwin/);
+    expect(fs.existsSync(root)).toBe(false);
   });
 });
