@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-26
 title: 闭合 Agent mutation producer correlation
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "同一次 Agent write/edit 必须把 ResourceIO mutation receipt、conversation operation、当前 main scope 与持久 file block 精确绑定；错误关联会造成跨 main History 泄漏或第二事实源。"
 ready: true

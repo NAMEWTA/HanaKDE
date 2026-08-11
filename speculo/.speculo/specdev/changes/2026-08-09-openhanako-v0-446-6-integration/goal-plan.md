@@ -803,6 +803,8 @@ Lead 在整个执行链中唯一拥有 integration line、Gate checkpoint、work
 
 **Worker return (2026-08-11T22:46:49+0800):** candidate `4cfd37f35e0b1ab853bc0480a89f713f620a79a9` in `specdev-worktree/T-26`; 12 focused files / 411 tests, full typecheck, scoped zero-error lint, client build, SpecDev validator and the deterministic desktop Agent write/reload/History E2E are green. Ticket and Evidence are `review`. The separate current T-16 restore E2E returns the same pre-write 503 on this candidate and clean integration `e28c0c42`; Lead must classify or correct that baseline independently and must not claim a fresh combined restore pass from T-26.
 
+**Lead acceptance (2026-08-11T22:52:23+0800):** merged reviewed branch tip `92a4f4eb` into authoritative integration at `feb906d6`; final-SHA 411-test matrix, full typecheck, scoped lint, client build, SpecDev validator and deterministic desktop Agent E2E all pass. T-26 is `done`; T-17's producer/fixed-skip residual is closed. T-22/T-23/T-25 and the independently reproduced current T-16 fixture 503 remain for owning Gate classification.
+
 ### Candidate Delivery Return and Lead Integration
 
 Worker 完成时必须先把 Ticket 推进到 `review`，并返回：Ticket ID、Evidence 路径、workspace_ref、exact base/final checkpoint、candidate commit、修改路径、验证命令/退出状态、未验证项、建议 Lead E2E 和任何 deviation。禁止 Worker 自报 `done`、自行合并 integration line、删除分支/worktree或关闭 Gate。
