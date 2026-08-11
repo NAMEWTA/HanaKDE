@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-16
 title: 交付 Workspace History 用户界面
-status: done
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "UI 串联 deleted files、timeline、diff、restore、health 与安全冲突，并跨 renderer/server contract 和真实用户流程。"
 ready: true
@@ -12,8 +12,8 @@ risk: high
 blocked_by: [T-13, T-15]
 contract_ids: [AC-006, AC-007, AC-013, AC-015, AC-016, AC-017, AC-024]
 owner: Worker-T-16 / Lead
-expected_changes: ["<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>"]
-writable_paths: ["<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
+expected_changes: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>"]
+writable_paths: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>desktop/src/react/components/knowledge-workspace/**</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -114,3 +114,12 @@ shared_path_owners: []
 - [ ] `AC-015`—`AC-017`：restore 携带 expected version，冲突安全，成功后读面一致。
 - [ ] `AC-024`：Workspace 入口语义独立、异步 lifecycle 正确、无 UI shadow truth。
 - [ ] Component/E2E/a11y Evidence 记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-16.md</Path>`。
+
+## 11. 偏差 D-T16-01：全局 store 与 modal host 接入
+
+- **等级：** ticket；`status=approved`。
+- **触发事实：** 已交付的 `FileHistoryEntryButton` 调用全局 `useStore` 的 `openFileHistoryModal`，但 `<Path>desktop/src/react/stores/index.ts</Path>` 未组合 T-16 slice；同时生产 React 树没有挂载 `FileHistoryModal`。点击现有 Agent History 入口会调用缺失 action，且即使打开状态存在也没有 modal host。
+- **受影响路径：** 新增授权 `<Path>desktop/src/react/App.tsx</Path>`、`<Path>desktop/src/react/stores/index.ts</Path>`、`<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>` 与 `<Path>tests/file-history-production-boundary.test.ts</Path>`；保留原 T-16 组件/API/E2E 路径。
+- **选项：** 保持 fixed skip 会让 AC-006/AC-017/AC-024 无生产入口；插件化无法表达全局 store/顶层 modal 生命周期；推荐在 renderer 系统本体完成最小宿主接入。
+- **批准：** Root Lead，2026-08-11T19:04:48+0800；仅组合既有 T-16 slice、挂载单一 main-only modal host、更新边界/store 回归并启用现有 E2E。禁止新增 server 语义、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
+- **处理结果：** 待实现与 Evidence 回写；完成前 T-16 状态恢复为 `in_progress`。
