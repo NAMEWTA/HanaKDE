@@ -51,6 +51,17 @@ export type ExtractSavedMarkdownIndexFactsInput = Readonly<{
   signal?: AbortSignal;
 }>;
 
+export type ExtractDerivedMarkdownIndexFactsInput = Readonly<{
+  relativePath: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  versionToken: string;
+  indexedAtMs: number;
+  markdown: string;
+  kind?: KnowledgeIndexResourceDocument["resource"]["kind"];
+  signal?: AbortSignal;
+}>;
+
 export class MarkdownIndexVersionConflictError extends Error {
   readonly code = "resource_version_conflict";
 
@@ -101,6 +112,25 @@ export async function extractSavedMarkdownIndexFacts(
   if (source.startsWith("\ufeff")) source = source.slice(1);
   throwIfAborted(input.signal);
 
+  return extractDerivedMarkdownIndexFacts({
+    relativePath: input.relativePath,
+    sizeBytes: input.sizeBytes,
+    mtimeMs: input.mtimeMs,
+    versionToken: input.versionToken,
+    indexedAtMs: input.indexedAtMs,
+    markdown: source,
+    signal: input.signal,
+  });
+}
+
+export function extractDerivedMarkdownIndexFacts(
+  input: ExtractDerivedMarkdownIndexFactsInput,
+): KnowledgeIndexResourceDocument {
+  const metadata = validateDerivedInput(input);
+  throwIfAborted(input.signal);
+  const source = input.markdown.startsWith("\ufeff")
+    ? input.markdown.slice(1)
+    : input.markdown;
   const ir = parseMarkdownKnowledgeIr(source, { signal: input.signal });
   const frontmatterToken = ir.tokens.find(
     (token): token is MarkdownFrontmatterToken =>
@@ -133,7 +163,7 @@ export async function extractSavedMarkdownIndexFacts(
   return {
     resource: {
       ...metadata,
-      kind: "page",
+      kind: input.kind ?? "page",
       contentState: "indexed",
       contentReason: null,
     },
@@ -212,6 +242,45 @@ function validateInput(
       : path.posix.dirname(input.relativePath),
     basename,
     extension: basename.slice(-3),
+    sizeBytes: input.sizeBytes,
+    mtimeMs: input.mtimeMs,
+    versionToken: input.versionToken,
+    indexedAtMs: input.indexedAtMs,
+  };
+}
+
+function validateDerivedInput(
+  input: ExtractDerivedMarkdownIndexFactsInput,
+): ValidatedMetadata {
+  if (!input || typeof input !== "object") {
+    throw new TypeError("derived Markdown index input is required");
+  }
+  const canonical = canonicalKnowledgeRelativePath(input.relativePath);
+  if (!canonical.ok || canonical.value !== input.relativePath) {
+    throw new TypeError("derived Markdown relativePath must be canonical");
+  }
+  const basename = path.posix.basename(input.relativePath);
+  if (
+    !Number.isSafeInteger(input.sizeBytes)
+    || input.sizeBytes < 0
+    || !Number.isFinite(input.mtimeMs)
+    || typeof input.versionToken !== "string"
+    || input.versionToken.length === 0
+    || !Number.isSafeInteger(input.indexedAtMs)
+    || typeof input.markdown !== "string"
+    || (input.kind !== undefined && ![
+      "page", "text", "image", "pdf", "audio", "video", "binary", "link", "unknown",
+    ].includes(input.kind))
+  ) {
+    throw new TypeError("derived Markdown metadata is invalid");
+  }
+  return {
+    relativePath: input.relativePath,
+    parentPath: path.posix.dirname(input.relativePath) === "."
+      ? ""
+      : path.posix.dirname(input.relativePath),
+    basename,
+    extension: path.posix.extname(basename),
     sizeBytes: input.sizeBytes,
     mtimeMs: input.mtimeMs,
     versionToken: input.versionToken,

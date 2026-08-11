@@ -16,6 +16,11 @@ import {
   extractSafeTextIndexFacts,
 } from "../../lib/knowledge-workspace/safe-text-index-extractor.ts";
 import {
+  extractDocumentIndexFacts,
+  isCanonicalDocumentPath,
+  type DocumentIndexExtractionPort,
+} from "../../lib/knowledge-workspace/document-index-extractor.ts";
+import {
   canonicalKnowledgeRelativePath,
 } from "../../lib/knowledge-workspace/knowledge-address.ts";
 import type { ResourceIO } from "../../lib/resource-io/resource-io.ts";
@@ -1136,6 +1141,7 @@ export class KnowledgeIndexEventCoordinator {
 
 type ResourceIOReaderOptions = Readonly<{
   resourceIO: Pick<ResourceIO, "stat" | "list" | "openRead">;
+  documentExtraction?: DocumentIndexExtractionPort;
   root: ResourceRef;
   eventRoots?: readonly ResourceRef[];
   resolveAddress(relativePath: string): ResourceRef | Promise<ResourceRef>;
@@ -1146,6 +1152,7 @@ type ResourceIOReaderOptions = Readonly<{
 export class ResourceIOKnowledgeIndexSourceReader
 implements KnowledgeIndexEventSource {
   readonly #resourceIO: Pick<ResourceIO, "stat" | "list" | "openRead">;
+  readonly #documentExtraction?: DocumentIndexExtractionPort;
   readonly #root: ResourceRef;
   readonly #eventRoots: readonly ResourceRef[];
   readonly #resolveAddress: (
@@ -1167,6 +1174,7 @@ implements KnowledgeIndexEventSource {
       throw new TypeError("ResourceIO knowledge index reader is invalid");
     }
     this.#resourceIO = options.resourceIO;
+    this.#documentExtraction = options.documentExtraction;
     this.#root = normalizeResourceRef(options.root);
     if (!["local-file", "mount"].includes(this.#root.kind)) {
       throw new TypeError("knowledge index source root is not hierarchical");
@@ -1260,6 +1268,18 @@ implements KnowledgeIndexEventSource {
     });
     throwIfAborted(signal);
     if (!stat.exists || stat.isDirectory) return null;
+    if (this.#documentExtraction && isCanonicalDocumentPath(canonical)) {
+      const document = await extractDocumentIndexFacts({
+        resourceIO: this.#resourceIO,
+        extraction: this.#documentExtraction,
+        resource: ref,
+        relativePath: canonical,
+        indexedAtMs: this.#now(),
+        signal,
+      });
+      await this.#assertAddressStable(canonical, ref);
+      return document;
+    }
     if (/\.md$/iu.test(canonical)) {
       const sizeBytes = stat.version?.size;
       const mtimeMs = stat.version?.mtimeMs;

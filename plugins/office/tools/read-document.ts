@@ -1,4 +1,5 @@
 import { readOfficeDocument } from "../lib/read-document.ts";
+import { createDocumentExtractionService } from "../../../lib/document-extract/index.ts";
 
 export { isOfficeEnabledForAgentConfig as isEnabledForAgentConfig } from "../lib/availability.ts";
 
@@ -59,8 +60,19 @@ export const parameters = {
 
 export async function execute(input, ctx: any = {}) {
   try {
+    const resources = ctx?.resources;
+    const documentExtraction = resources
+      && typeof resources.stat === "function"
+      && (
+        typeof resources.openRead === "function"
+        || typeof resources.materialize === "function"
+        || typeof resources.withMaterialized === "function"
+      )
+      ? createDocumentExtractionService({ resourceIO: resources })
+      : undefined;
     const result = await readOfficeDocument(input, {
-      resources: ctx?.resources,
+      resources,
+      documentExtraction,
     });
     const text = result.format === "json"
       ? JSON.stringify(result.workbook, null, 2)

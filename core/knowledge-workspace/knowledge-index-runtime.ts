@@ -15,6 +15,12 @@ import {
 import {
   SAFE_TEXT_INDEX_EXTRACTOR_CONTRACT_VERSION,
 } from "../../lib/knowledge-workspace/safe-text-index-extractor.ts";
+import {
+  DOCUMENT_INDEX_EXTRACTOR_CONTRACT_VERSION,
+} from "../../lib/knowledge-workspace/document-index-extractor.ts";
+import {
+  createDocumentExtractionService,
+} from "../../lib/document-extract/index.ts";
 import type {
   KnowledgeIndexHealth,
 } from "../../lib/knowledge-workspace/knowledge-index-store.ts";
@@ -27,7 +33,7 @@ import type {
 } from "../../lib/resource-io/types.ts";
 
 export const KNOWLEDGE_INDEX_EXTRACTOR_CONTRACT_VERSION =
-  `${MARKDOWN_INDEX_EXTRACTOR_CONTRACT_VERSION}+${SAFE_TEXT_INDEX_EXTRACTOR_CONTRACT_VERSION}`;
+  `${MARKDOWN_INDEX_EXTRACTOR_CONTRACT_VERSION}+${SAFE_TEXT_INDEX_EXTRACTOR_CONTRACT_VERSION}+${DOCUMENT_INDEX_EXTRACTOR_CONTRACT_VERSION}`;
 
 export type KnowledgeIndexSharedBaselinePort = Readonly<{
   subscribe(
@@ -61,6 +67,7 @@ export class KnowledgeIndexRuntime {
   readonly #hanakoHome: string;
   readonly #hostId: string;
   readonly #resourceIO: ResourceIO;
+  readonly #documentExtraction: ReturnType<typeof createDocumentExtractionService>;
   readonly #resourceEvents: ResourceEventBus;
   readonly #sharedBaseline?: KnowledgeIndexSharedBaselinePort;
   readonly #retainWatch?: (resource: ResourceRef) => () => void;
@@ -96,6 +103,9 @@ export class KnowledgeIndexRuntime {
     this.#hanakoHome = options.hanakoHome;
     this.#hostId = options.hostId;
     this.#resourceIO = options.resourceIO;
+    this.#documentExtraction = createDocumentExtractionService({
+      resourceIO: options.resourceIO,
+    });
     this.#resourceEvents = options.resourceEvents;
     this.#sharedBaseline = options.sharedBaseline;
     this.#retainWatch = options.retainWatch;
@@ -235,6 +245,7 @@ export class KnowledgeIndexRuntime {
       binding.eventRoots.set(sourceKey, sourceEventRoots);
       binding.readers.set(sourceKey, new ResourceIOKnowledgeIndexSourceReader({
         resourceIO: this.#resourceIO,
+        documentExtraction: this.#documentExtraction,
         root,
         eventRoots: sourceEventRoots,
         resolveAddress: (relativePath) =>
