@@ -404,11 +404,14 @@ export async function restoreHistorySnapshot(
       version: parseVersion(body.version),
     };
   }
-  if (body.ok !== true) throw new FileHistoryApiError('invalid_restore_response', 502);
+  const changeType = body.changeType === 'created' || body.changeType === 'modified'
+    ? body.changeType
+    : null;
+  if (!changeType) throw new FileHistoryApiError('invalid_restore_response', 502);
   return {
     ok: true,
     relPath: safePath,
-    changeType: body.changeType === 'created' || body.changeType === 'modified' ? body.changeType : undefined,
+    changeType,
     version: parseVersion(body.version),
   };
 }
