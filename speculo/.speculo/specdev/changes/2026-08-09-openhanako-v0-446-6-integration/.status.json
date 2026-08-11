@@ -251,13 +251,13 @@
     },
     {
       "ticket_id": "T-17",
-      "owner": "Worker-T-17",
+      "owner": "Worker-T-17 / Lead",
       "provider": "git",
       "base_sha": "2465ccc4f453372a170ba86b2336985889e1ff2b",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-17",
       "workspace_ref": "specdev-worktree/T-17",
-      "status": "review",
-      "updated_at": "2026-08-11T13:32:00+0800"
+      "status": "integrated",
+      "updated_at": "2026-08-11T13:41:38+0800"
     }
   ]
 }
