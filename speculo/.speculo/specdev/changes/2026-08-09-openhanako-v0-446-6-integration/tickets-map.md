@@ -44,7 +44,7 @@ status: in_progress
 | T-12 | `<Path>{roots.state}/specdev/changes/{change}/ticket/12-perform-single-owner-production-cutover.md</Path>` | stop-then-start production cutover，overlap 永远为 0 | T-10, T-11, T-19 | deep | critical | yes | Worker-T-12 / Lead集成 | AC-009—AC-013 | W4 | done |
 | T-13 | `<Path>{roots.state}/specdev/changes/{change}/ticket/13-deliver-main-only-file-history.md</Path>` | main-only capture/deleted/timeline/diff/retention/quota | T-10, T-11 | deep | critical | yes | Worker-T-13 / Lead集成 | AC-005—AC-007, AC-025, AC-026 | W4 | done |
 | T-14 | `<Path>{roots.state}/specdev/changes/{change}/ticket/14-converge-knowledge-events-and-repair.md</Path>` | Knowledge 只消费统一事件/shared baseline differences，按 scoped repair 收敛 | T-10, T-11 | deep | critical | yes | Worker-T-14 / Lead集成 | AC-003, AC-011—AC-013, AC-017 | W4 | done |
-| T-15 | `<Path>{roots.state}/specdev/changes/{change}/ticket/15-deliver-secure-restore-convergence.md</Path>` | expected-version/TOCTOU 安全 restore 与六读面一致 | T-12, T-13, T-14 | deep | critical | yes | Worker-T-15 / Lead Gate | AC-015—AC-017, AC-026 | G5 | in_progress |
+| T-15 | `<Path>{roots.state}/specdev/changes/{change}/ticket/15-deliver-secure-restore-convergence.md</Path>` | expected-version/TOCTOU 安全 restore 与六读面一致 | T-12, T-13, T-14 | deep | critical | yes | Worker-T-15 / Lead Gate | AC-015—AC-017, AC-026 | G5 | review |
 | T-16 | `<Path>{roots.state}/specdev/changes/{change}/ticket/16-deliver-workspace-history-ui.md</Path>` | Workbench History/deleted/diff/restore/health 用户流程 | T-13, T-15 | deep | high | yes | Worker-T-16 / Lead E2E | AC-006, AC-007, AC-013, AC-015—AC-017, AC-024 | W6 | ready |
 | T-17 | `<Path>{roots.state}/specdev/changes/{change}/ticket/17-deliver-agent-file-change-projection.md</Path>` | 对话/操作过滤的 Agent 影响与 main 共享 History | T-15, T-16 | deep | high | yes | Worker-T-17 / Lead E2E | AC-008, AC-015—AC-017, AC-024 | W7 | ready |
 | T-18 | `<Path>{roots.state}/specdev/changes/{change}/ticket/18-fuse-at-search-lifecycle.md</Path>` | `@` query/loading/cancel/stale-response lifecycle 正确 | T-09 | standard | medium | yes | Worker-T-18 / Lead E2E | AC-024 | W3 | done |
@@ -147,6 +147,8 @@ T-01 [G0 fixed point / authorization]
 | T-23 | T-24 | 无 | 否 | 可并行；macOS harness 与 docs 分离 |
 
 T-02 至 T-09 的 `<Path>**</Path>` 写范围有意严格串行；它们不能与任何后续 code Ticket 并行。D-T12-04 在 T-11 integrated/removed 后把 `<Path>core/workspace-runtime/**</Path>` 的 production assembly extraction 单独授予 T-12；T-13/T-14 对该路径仍为只读。T-15 跨 History/Knowledge 是显式 convergence owner，因此依赖 T-12/T-13/T-14 后才开始。任何执行时路径重命名或越界请求必须先修订 Ticket/Goal Plan，不以“解决 merge conflict”代替所有权。
+
+G5 的 D-T15-04/D-T15-05/D-T15-06 均已获 ticket-level 批准：T-15 必须把 restore 的 current token 绑定到有界内容、将 History dedupe 收紧为 content hash authority、把 completed-read proof 连续携带至 provider preflight，并把 activation 时的 `ProviderRootIdentity` 作为不可伪造的私有 object-identity authority 保留到 native proof capture 前；其 public 与 private identity halves 必须由同一 no-follow BigInt snapshot 派生。该修订不改变 AC、DAG、T-15 可写路径或任何公开接口；不得以第二次 pathname revalidate/compare 代替 identity comparison。在新增 root-replacement 与 identity-snapshot red/green proof 完成前，native helper 保持冻结，W6/W7/G8 不得因先前 runner 绿色而前进。
 
 ## 6. Gate、Wave 与集成点
 

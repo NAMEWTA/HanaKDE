@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   createMainFileHistoryBinding,
@@ -13,11 +14,16 @@ import {
 } from "../lib/file-history/file-history-service.ts";
 import { MAX_SNAPSHOT_BYTES } from "../lib/file-history/text-file-policy.ts";
 import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
+import { ResourceIO } from "../lib/resource-io/resource-io.ts";
+import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import type {
   ResourceOpenReadResult,
   ResourceStat,
 } from "../lib/resource-io/types.ts";
 import { MAIN_WORKSPACE_SOURCE_KEY, type WorkspaceSnapshot } from "../shared/workspace-observation.ts";
+
+const TEST_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SECURE_FS_HELPER_FIXTURE_ROOT = path.join(TEST_ROOT, "tests", "fixtures", "secure-fs-helper");
 
 const HISTORY_RUNTIME_SNAPSHOT: WorkspaceSnapshot = Object.freeze({
   sourceKey: MAIN_WORKSPACE_SOURCE_KEY,
@@ -402,6 +408,199 @@ describe("production workspace runtime assembly", () => {
       versionToken: expect.any(String),
     });
     expect(bodyConsumed).toBe(false);
+  });
+
+  it("binds completed-read tokens to bytes when public version metadata repeats", async () => {
+    const rawRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-history-content-token-"));
+    const root = fs.realpathSync(rawRoot);
+    try {
+      const target = path.join(root, "notes", "a.md");
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, "before", "utf8");
+      const resourceIO = new ResourceIO({
+        providers: { local_fs: new LocalFsProvider({ cwd: root }) },
+      });
+      const binding = createMainFileHistoryBinding({
+        rootProof: {
+          root: { kind: "local-file", path: root },
+          identity: {
+            providerId: "local_fs",
+            identityNamespace: "local_fs",
+            opaqueRootId: "opaque-main-root",
+            scopeToken: "scope",
+            caseMode: "sensitive",
+          },
+          watchTarget: {
+            ref: { kind: "local-file", path: root },
+            filePath: root,
+            isDirectory: true,
+          },
+        },
+        runtime: createHistoryRuntime(),
+        resourceEvents: { subscribe: vi.fn(() => () => undefined) },
+        resourceIO,
+      });
+
+      const first = await binding.read("notes/a.md", { maxBytes: MAX_SNAPSHOT_BYTES });
+      expect(first?.versionToken).toEqual(expect.any(String));
+      const original = fs.statSync(target);
+      fs.renameSync(target, `${target}.before-replacement`);
+      fs.writeFileSync(target, "evil!!", "utf8");
+      fs.utimesSync(target, original.mtime, original.mtime);
+      expect(fs.statSync(target).mtime.getTime()).toBe(original.mtime.getTime());
+      expect(fs.statSync(target).size).toBe(original.size);
+
+      const replacement = await binding.read("notes/a.md", { maxBytes: MAX_SNAPSHOT_BYTES });
+      expect(replacement?.versionToken).toEqual(expect.any(String));
+      expect(replacement?.versionToken).not.toBe(first?.versionToken);
+    } finally {
+      fs.rmSync(rawRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a restore when the UI-seen current object is replaced with same-version bytes", async () => {
+    const rawRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-history-restore-token-"));
+    const root = fs.realpathSync(rawRoot);
+    try {
+      const target = path.join(root, "notes", "a.md");
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, "before", "utf8");
+      const resourceIO = new ResourceIO({
+        providers: { local_fs: new LocalFsProvider({ cwd: root }) },
+      });
+      const binding = createMainFileHistoryBinding({
+        rootProof: {
+          root: { kind: "local-file", path: root },
+          identity: {
+            providerId: "local_fs",
+            identityNamespace: "local_fs",
+            opaqueRootId: "opaque-main-root",
+            scopeToken: "scope",
+            caseMode: "sensitive",
+          },
+          watchTarget: {
+            ref: { kind: "local-file", path: root },
+            filePath: root,
+            isDirectory: true,
+          },
+        },
+        runtime: createHistoryRuntime(),
+        resourceEvents: { subscribe: vi.fn(() => () => undefined) },
+        resourceIO,
+      });
+
+      const uiSeen = await binding.read("notes/a.md", { maxBytes: MAX_SNAPSHOT_BYTES });
+      expect(uiSeen?.versionToken).toEqual(expect.any(String));
+      const original = fs.statSync(target);
+      const displacedTarget = `${target}.before-replacement`;
+      fs.renameSync(target, displacedTarget);
+      fs.writeFileSync(target, "evil!!", "utf8");
+      fs.utimesSync(target, original.mtime, original.mtime);
+      expect(fs.statSync(target).mtime.getTime()).toBe(original.mtime.getTime());
+      expect(fs.statSync(target).size).toBe(original.size);
+
+      if (!binding.restore || typeof uiSeen?.versionToken !== "string") {
+        throw new Error("test fixture did not expose the main-bound restore seam");
+      }
+      await expect(binding.restore(
+        "notes/a.md",
+        Buffer.from("restore"),
+        uiSeen.versionToken,
+      )).rejects.toMatchObject({ code: "resource_version_conflict", status: 409 });
+      expect(fs.readFileSync(target, "utf8")).toBe("evil!!");
+      expect(fs.readFileSync(displacedTarget, "utf8")).toBe("before");
+    } finally {
+      fs.rmSync(rawRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an equal-metadata root replacement after revalidation and before the restore read", async () => {
+    const rawWorkspaceParent = fs.mkdtempSync(path.join(os.tmpdir(), "hana-history-root-replacement-"));
+    const workspaceParent = fs.realpathSync(rawWorkspaceParent);
+    const root = path.join(workspaceParent, "main");
+    const displacedRoot = path.join(workspaceParent, "main-before-replacement");
+    const target = path.join(root, "notes", "a.md");
+    const replacementTarget = path.join(root, "notes", "a.md");
+    const helperMarker = path.join(workspaceParent, "helper-was-invoked");
+    try {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, "before", "utf8");
+      const originalTargetStat = fs.statSync(target);
+      const originalRootStat = fs.statSync(root);
+      const resourceIO = new ResourceIO({
+        providers: { local_fs: new LocalFsProvider({ cwd: root }) },
+      });
+      const rootIdentity = await resourceIO.getRootIdentity({ kind: "local-file", path: root });
+      const rootProof = {
+        root: { kind: "local-file" as const, path: root },
+        identity: rootIdentity,
+        watchTarget: {
+          ref: { kind: "local-file" as const, path: root },
+          filePath: root,
+          isDirectory: true,
+        },
+      };
+      let replaceBeforeNextStat = false;
+      const historyResourceIO = {
+        stat: async (input: unknown, options?: object) => {
+          if (replaceBeforeNextStat) {
+            replaceBeforeNextStat = false;
+            fs.renameSync(root, displacedRoot);
+            fs.mkdirSync(path.dirname(replacementTarget), { recursive: true });
+            fs.writeFileSync(replacementTarget, "before", "utf8");
+            fs.chmodSync(replacementTarget, originalTargetStat.mode & 0o777);
+            fs.utimesSync(replacementTarget, originalTargetStat.atime, originalTargetStat.mtime);
+            fs.chmodSync(root, originalRootStat.mode & 0o777);
+            fs.utimesSync(root, originalRootStat.atime, originalRootStat.mtime);
+          }
+          return resourceIO.stat(input, options);
+        },
+        openRead: (input: unknown, readOptions?: object, options?: object) => resourceIO.openRead(
+          input,
+          readOptions,
+          options,
+        ),
+        writeExpectedVersion: (
+          input: unknown,
+          content: string | Buffer,
+          expectedVersion: object | null,
+          options?: object,
+        ) => resourceIO.writeExpectedVersion(input, content, expectedVersion, options),
+      };
+      const revalidateRoot = vi.fn(async (candidate) => {
+        expect(candidate).toBe(rootProof);
+        return rootProof;
+      });
+      const binding = createMainFileHistoryBinding({
+        rootProof,
+        runtime: createHistoryRuntime(),
+        resourceEvents: { subscribe: vi.fn(() => () => undefined) },
+        resourceIO: historyResourceIO,
+        revalidateRoot,
+      });
+
+      const uiSeen = await binding.read("notes/a.md", { maxBytes: MAX_SNAPSHOT_BYTES });
+      if (!binding.restore || typeof uiSeen?.versionToken !== "string") {
+        throw new Error("test fixture did not expose the main-bound restore seam");
+      }
+      vi.stubEnv("NODE_ENV", "test");
+      vi.stubEnv("HANA_SECURE_FS_HELPER_PATH", path.join(SECURE_FS_HELPER_FIXTURE_ROOT, "written.cjs"));
+      vi.stubEnv("HANA_SECURE_FS_HELPER_MARKER", helperMarker);
+      replaceBeforeNextStat = true;
+
+      await expect(binding.restore(
+        "notes/a.md",
+        Buffer.from("restore"),
+        uiSeen.versionToken,
+      )).rejects.toMatchObject({ code: "resource_version_conflict", status: 409 });
+      expect(revalidateRoot).toHaveBeenCalledWith(rootProof);
+      expect(fs.existsSync(helperMarker)).toBe(false);
+      expect(fs.readFileSync(path.join(displacedRoot, "notes", "a.md"), "utf8")).toBe("before");
+      expect(fs.readFileSync(replacementTarget, "utf8")).toBe("before");
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(rawWorkspaceParent, { recursive: true, force: true });
+    }
   });
 
   it("rejects a private store path that enters the main workspace through a symlink", async () => {

@@ -38,7 +38,7 @@ describe("FileHistoryStore", () => {
     store.close();
   });
 
-  it("dedupes a repeated content hash or opaque resource version", () => {
+  it("dedupes only repeated content, never a repeated opaque version with different bytes", () => {
     const store = makeStore({ mergeWindowMs: 0 });
     store.recordSnapshot({ relPath: "a.md", content: Buffer.from("one"), origin: "event", versionToken: "v-1", capturedAt: 1_000 });
 
@@ -47,8 +47,8 @@ describe("FileHistoryStore", () => {
     }).status).toBe("unchanged");
     expect(store.recordSnapshot({
       relPath: "a.md", content: Buffer.from("inconsistent-repeat"), origin: "event", versionToken: "v-1", capturedAt: 3_000,
-    }).status).toBe("unchanged");
-    expect(store.listVersions("a.md")).toHaveLength(1);
+    }).status).toBe("inserted");
+    expect(store.listVersions("a.md")).toHaveLength(2);
     store.close();
   });
 

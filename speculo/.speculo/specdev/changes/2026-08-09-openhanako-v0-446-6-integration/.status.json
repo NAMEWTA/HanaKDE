@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-10T15:38:11+0800",
+  "updated_at": "2026-08-11T11:58:58+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -42,6 +42,30 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-10T15:38:11+0800",
       "scope": "Authorize a single fail-closed system-core secure conditional-write primitive: ResourceIO internal runner/types/ref/root-identity seam, local provider, desktop/native/HanaSecureFsHelper, dev/test helper build script and a narrow package.json dev build entry with focused fixtures/tests. Existing writeExpectedVersion remains the sole upper mutation interface; private proofs stay non-serializable. T-21 retains production artifact/package, lockfile and CI ownership. No Node fallback, new plugin/route authority, migration, compatibility mode, or public raw root/native identity."
+    },
+    {
+      "id": "D-T15-04",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T16:29:40+0800",
+      "scope": "T-15 only: bind restore current tokens to bounded content, make History dedupe content-hash-only, fresh-read before restore, and preserve the attested read proof through provider preflight; no public API, Spec, ADR, or path expansion."
+    },
+    {
+      "id": "D-T15-05",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T17:01:55+0800",
+      "scope": "T-15 only: preserve the activation ProviderRootIdentity as private object-identity authority through ref normalization and compare it before native-proof capture; no second pathname revalidation, public API, helper/protocol, Spec, ADR, or path expansion."
+    },
+    {
+      "id": "D-T15-06",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T17:15:01+0800",
+      "scope": "T-15 only: derive ProviderRootIdentity public and private halves from one no-follow BigInt stat/handle snapshot; deterministic replacement injection; no second pathname compare, public API, helper/protocol, Spec, ADR, or path expansion."
     }
   ],
   "worktrees": [
@@ -202,8 +226,8 @@
       "base_sha": "90f122329c1b3104c4176962f900b3af50fe98f3",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-15",
       "workspace_ref": "specdev-worktree/T-15",
-      "status": "active",
-      "updated_at": "2026-08-10T15:02:30+0800"
+      "status": "review",
+      "updated_at": "2026-08-11T11:58:58+0800"
     }
   ]
 }

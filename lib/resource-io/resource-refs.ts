@@ -1,6 +1,24 @@
 import path from "path";
-import { RESOURCE_SCOPE_ROOT } from "./types.ts";
-import type { ResourceProviderId, ResourceRef } from "./types.ts";
+import { RESOURCE_READ_PROOF, RESOURCE_SCOPE_ROOT } from "./types.ts";
+import type {
+  ProviderRootIdentity,
+  ResourceProviderId,
+  ResourceReadProof,
+  ResourceRef,
+} from "./types.ts";
+
+type LocalResourceRef = Extract<ResourceRef, { kind: "local-file" }>;
+
+type InternalLocalResourceAuthority = Readonly<{
+  scopeRoot?: string;
+  readProof?: ResourceReadProof;
+  activationRootIdentity?: ProviderRootIdentity;
+}>;
+
+const RESOURCE_ACTIVATION_ROOT_IDENTITY = Symbol("hana.resource-io.activation-root-identity");
+const internalScopeRoots = new WeakMap<object, string>();
+const internalReadProofs = new WeakMap<object, ResourceReadProof>();
+const internalActivationRootIdentities = new WeakMap<object, ProviderRootIdentity>();
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -66,7 +84,7 @@ export function normalizeResourceRef(input: unknown): ResourceRef {
   if (fileId) return { kind: "session-file", fileId };
   if (resourceId) return { kind: "resource", resourceId };
   if (mountId) return { kind: "mount", mountId, path: pathValue || "" };
-  if (pathValue) return { kind: "local-file", path: pathValue };
+  if (pathValue) return preserveInternalScope(value, { kind: "local-file", path: pathValue });
   throw new Error("unsupported ResourceRef");
 }
 
@@ -74,15 +92,113 @@ function preserveInternalScope<T extends ResourceRef>(
   source: Record<PropertyKey, unknown>,
   ref: T,
 ): T {
-  const scopeRoot = source[RESOURCE_SCOPE_ROOT];
-  if (typeof scopeRoot !== "string" || scopeRoot.length === 0) return ref;
-  Object.defineProperty(ref, RESOURCE_SCOPE_ROOT, {
-    value: scopeRoot,
+  const scopeRoot = trustedInternalAuthority(source, RESOURCE_SCOPE_ROOT, internalScopeRoots);
+  const readProof = trustedInternalAuthority(source, RESOURCE_READ_PROOF, internalReadProofs);
+  const activationRootIdentity = trustedInternalAuthority(
+    source,
+    RESOURCE_ACTIVATION_ROOT_IDENTITY,
+    internalActivationRootIdentities,
+  );
+  if (scopeRoot === undefined && readProof === undefined && activationRootIdentity === undefined) return ref;
+  if (ref.kind !== "local-file") throw new Error("internal ResourceRef authority requires a local file");
+  attachInternalLocalResourceAuthority(ref, { scopeRoot, readProof, activationRootIdentity });
+  return ref;
+}
+
+/**
+ * Internal producers use this to preserve local-only authority through
+ * ResourceRef normalization. The WeakMaps make copied Symbol properties
+ * insufficient to gain scope, read, or activation-root authority.
+ */
+export function attachInternalLocalResourceAuthority<T extends LocalResourceRef>(
+  ref: T,
+  authority: InternalLocalResourceAuthority,
+): T {
+  if (!ref || typeof ref !== "object" || ref.kind !== "local-file") {
+    throw new TypeError("internal ResourceRef authority requires a local file");
+  }
+  if (authority.scopeRoot !== undefined) {
+    if (typeof authority.scopeRoot !== "string" || !path.isAbsolute(authority.scopeRoot)) {
+      throw new TypeError("internal ResourceRef scope root must be absolute");
+    }
+    attachInternalAuthority(ref, RESOURCE_SCOPE_ROOT, authority.scopeRoot, internalScopeRoots);
+  }
+  if (authority.readProof !== undefined) {
+    if (!authority.readProof || typeof authority.readProof !== "object") {
+      throw new TypeError("internal ResourceRef read proof is invalid");
+    }
+    attachInternalAuthority(ref, RESOURCE_READ_PROOF, authority.readProof, internalReadProofs);
+  }
+  if (authority.activationRootIdentity !== undefined) {
+    if (!authority.activationRootIdentity || typeof authority.activationRootIdentity !== "object") {
+      throw new TypeError("internal ResourceRef activation root identity is invalid");
+    }
+    attachInternalAuthority(
+      ref,
+      RESOURCE_ACTIVATION_ROOT_IDENTITY,
+      authority.activationRootIdentity,
+      internalActivationRootIdentities,
+    );
+  }
+  return ref;
+}
+
+/**
+ * This remains module-private authority even though the provider imports the
+ * accessor. It never projects to ResourceIO DTOs and only exists for refs
+ * that passed the WeakMap attestation during normalization.
+ */
+export function internalActivationRootIdentity(
+  ref: ResourceRef,
+): ProviderRootIdentity | undefined {
+  return ref.kind === "local-file"
+    ? internalActivationRootIdentities.get(ref)
+    : undefined;
+}
+
+function trustedInternalAuthority<T>(
+  source: Record<PropertyKey, unknown>,
+  symbol: symbol,
+  authorities: WeakMap<object, T>,
+): T | undefined {
+  const trusted = authorities.get(source);
+  const hasProperty = Reflect.has(source, symbol);
+  if (trusted === undefined) {
+    if (hasProperty) throw new Error("untrusted internal ResourceRef authority");
+    return undefined;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(source, symbol);
+  if (
+    !descriptor
+    || descriptor.value !== trusted
+    || descriptor.enumerable
+    || descriptor.configurable
+    || descriptor.writable
+  ) {
+    throw new Error("untrusted internal ResourceRef authority");
+  }
+  return trusted;
+}
+
+function attachInternalAuthority<T>(
+  ref: object,
+  symbol: symbol,
+  value: T,
+  authorities: WeakMap<object, T>,
+): void {
+  const existing = authorities.get(ref);
+  if (existing !== undefined) {
+    if (existing !== value) throw new Error("internal ResourceRef authority cannot be replaced");
+    return;
+  }
+  if (Reflect.has(ref, symbol)) throw new Error("untrusted internal ResourceRef authority");
+  Object.defineProperty(ref, symbol, {
+    value,
     enumerable: false,
     configurable: false,
     writable: false,
   });
-  return ref;
+  authorities.set(ref, value);
 }
 
 export function resourceKeyForRef(ref: ResourceRef): string {

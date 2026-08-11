@@ -162,7 +162,7 @@ export class FileHistoryStore {
       FROM snapshots WHERE file_id = ? ORDER BY captured_at DESC, id DESC LIMIT 1
     `).get(file.id);
 
-    if (latest && (latest.content_hash === hash || (versionToken && latest.version_token === versionToken))) {
+    if (latest && latest.content_hash === hash) {
       this._clearDeleted(file.id);
       return { status: "unchanged", snapshotId: latest.id };
     }

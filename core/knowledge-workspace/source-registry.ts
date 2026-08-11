@@ -16,7 +16,7 @@ import {
 import {
   ProviderRootIdentityBroker,
 } from "../../lib/resource-io/root-identity.ts";
-import { RESOURCE_SCOPE_ROOT } from "../../lib/resource-io/types.ts";
+import { attachInternalLocalResourceAuthority } from "../../lib/resource-io/resource-refs.ts";
 import type {
   ProviderRootIdentity,
   ResourceOperationContext,
@@ -210,16 +210,10 @@ export class SourceRegistry {
         );
       }
       const resolved = {
-        kind: "local-file",
+        kind: "local-file" as const,
         path: candidatePath,
-      } as ResourceRef;
-      Object.defineProperty(resolved, RESOURCE_SCOPE_ROOT, {
-        value: rootPath,
-        enumerable: false,
-        configurable: false,
-        writable: false,
-      });
-      return resolved;
+      };
+      return attachInternalLocalResourceAuthority(resolved, { scopeRoot: rootPath });
     }
     if (root.kind === "mount") {
       return {
