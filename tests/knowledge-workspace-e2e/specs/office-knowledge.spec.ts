@@ -7,6 +7,25 @@ async function json(response: Response): Promise<Record<string, unknown>> {
   return await response.json() as Record<string, unknown>;
 }
 
+async function waitForInitialMainIndex(
+  apiFetch: (pathname: string, init?: RequestInit) => Promise<Response>,
+): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  let lastState = "unknown";
+  while (Date.now() < deadline) {
+    const status = await json(await apiFetch(
+      "/api/knowledge-workspace/index/status?sourceKey=main",
+    ));
+    const health = status.health;
+    lastState = health && typeof health === "object" && !Array.isArray(health)
+      ? String((health as Record<string, unknown>).state || "unknown")
+      : "unknown";
+    if (lastState === "ready") return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Knowledge main index did not reach ready before Office E2E (${lastState})`);
+}
+
 test("T-20 indexes an Office resource through shared extraction without a derived Workspace file", async ({
   knowledgeApp,
   workspaceSandbox,
@@ -15,6 +34,7 @@ test("T-20 indexes an Office resource through shared extraction without a derive
     knowledgeApp.runtime === "web-full",
     "Office Knowledge ingestion is a local-source gate",
   );
+  await waitForInitialMainIndex(knowledgeApp.apiFetch);
   await fs.copyFile(
     path.resolve("tests/fixtures/document-extract/sample.docx"),
     path.join(workspaceSandbox.mainSource, "Quarterly.docx"),
