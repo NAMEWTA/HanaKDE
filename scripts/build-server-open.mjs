@@ -88,6 +88,8 @@ export function declaredOpenBuildInputPaths() {
     "cli/entry.ts",
     "server/bootstrap.ts",
     "package.json",
+    "lib/document-extract/anydoc-child.cjs",
+    "lib/document-extract/html-child.ts",
     ...OPEN_LIB_DATA_FILES.map((f) => `lib/${f}`),
     ...OPEN_LIB_TEMPLATE_DIRS.map((d) => `lib/${d}`),
   ];

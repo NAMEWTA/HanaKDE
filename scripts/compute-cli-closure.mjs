@@ -318,6 +318,24 @@ export const DYNAMIC_CALL_ALLOWLIST = Object.freeze([
       + "xdg-open); cmd is a local variable holding one of those literals, not an "
       + "import target.",
   },
+  {
+    file: "lib/document-extract/anydoc-process-runner.ts",
+    callee: "fork",
+    argText: "this.childScript",
+    reason:
+      "The isolated document conversion runner forks one of the two declared child runtime "
+      + "assets beside bundle/index.js. Tests may inject a fixture path through the existing "
+      + "internal runner seam; production defaults are anydoc-child.cjs and html-child.ts.",
+  },
+  {
+    file: "lib/resource-io/native-secure-write.ts",
+    callee: "spawn",
+    argText: "command.command",
+    reason:
+      "resolveHelperCommand returns the fixed packaged secure helper under HANA_ROOT. The only "
+      + "override is test-only and still passes through the same framed fail-closed protocol; "
+      + "this process boundary does not reference another repository module.",
+  },
 ]);
 
 const SPAWN_FAMILY_NAMES = new Set([
@@ -339,6 +357,16 @@ const SPAWN_FAMILY_NAMES = new Set([
 // ---------------------------------------------------------------------------
 
 export const RUNTIME_ASSETS = Object.freeze([
+  {
+    path: "lib/document-extract/anydoc-child.cjs",
+    kind: "file",
+    reason: "lib/document-extract/anydoc-process-runner.ts forks this child by path at runtime; it is staged beside the server bundle.",
+  },
+  {
+    path: "lib/document-extract/html-child.ts",
+    kind: "file",
+    reason: "lib/document-extract/anydoc-process-runner.ts forks this HTML child by path at runtime; it is bundled and staged beside the server bundle.",
+  },
   {
     path: "package.json",
     kind: "file",

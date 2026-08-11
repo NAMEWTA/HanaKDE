@@ -265,7 +265,11 @@ function resolveHelperCommand(): HelperCommand {
 function defaultHelperPath(): string {
   const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform;
   const extension = process.platform === "win32" ? ".exe" : "";
-  return path.join(MODULE_ROOT, "dist-secure-fs", `${platform}-${process.arch}`, `hana-secure-fs-helper${extension}`);
+  const runtimeRoot = typeof process.env.HANA_ROOT === "string"
+    && path.isAbsolute(process.env.HANA_ROOT)
+    ? path.resolve(process.env.HANA_ROOT)
+    : MODULE_ROOT;
+  return path.join(runtimeRoot, "dist-secure-fs", `${platform}-${process.arch}`, `hana-secure-fs-helper${extension}`);
 }
 
 function runHelper(command: HelperCommand, request: Buffer): Promise<Buffer> {

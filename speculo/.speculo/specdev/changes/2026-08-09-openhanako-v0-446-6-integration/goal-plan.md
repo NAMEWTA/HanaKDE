@@ -257,7 +257,7 @@ DISPATCH ticket=T-17 wave=W7 baseline=2465ccc4f453372a170ba86b2336985889e1ff2b b
 DELIVERY ticket=T-17 state=integrated workspace=specdev-worktree/T-17 checkpoint=65699d2bafb7d63e8051eafb0a0bdd69b8d907c5 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-17.md</Path> residual=producer-session-operation-resource-envelope-and-owner-E2E
 W7_CLOSURE ticket=T-17 state=integrated checkpoint=65699d2bafb7d63e8051eafb0a0bdd69b8d907c5 acceptance=Lead-standards-and-specification-pass residual=producer-session-operation-resource-envelope-and-owner-E2E next=T-21
 DISPATCH ticket=T-21 wave=G8 baseline=4aa188af branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-21 workspace=specdev-worktree/T-21 placement=system-core-production-packaging
-DELIVERY ticket=T-21 state=in_progress workspace=specdev-worktree/T-21 checkpoint=4aa188af evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-21.md</Path> residual=server-child-runtime-assets-and-native-helper-package-closure
+DELIVERY ticket=T-21 state=review workspace=specdev-worktree/T-21 checkpoint=2fd7acd2 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-21.md</Path> residual=windows-native-platform-and-release-notarization
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5
 W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-11,T-18,T-19
 W3_GATE_CLASSIFICATION product_gate=2018ce1dc671f0d9bb3c6f61f4078625c7863001 management_only=e1b11c6d72d2d069e3bc8f4646692f2e504d5a3e
