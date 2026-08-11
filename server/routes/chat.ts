@@ -1749,12 +1749,15 @@ export function createChatRoute(engine: any, hub: any, {
             wsSend(ws, { type: "error", message: "insufficient_scope", sessionPath: msg.sessionPath });
             return;
           }
+          let addedSessionSubscription = false;
           if (msg.sessionPath && requestContext.studioId) {
+            const previousSubscriptionCount = client.subscriptions.length;
             client = subscribeWsClientToSession(client, {
               studioId: requestContext.studioId,
               sessionPath: msg.sessionPath,
               sessionId: sessionIdForPath(msg.sessionPath),
             });
+            addedSessionSubscription = client.subscriptions.length > previousSubscriptionCount;
             clients.set(ws, client);
           }
 
@@ -1884,6 +1887,9 @@ export function createChatRoute(engine: any, hub: any, {
             if (msg.type === "context_usage") {
               const usageCtx = requireWsSessionContext(msg, ws); if (!usageCtx) return;
               const usagePath = usageCtx.sessionPath;
+              if (addedSessionSubscription) {
+                engine.activityHub?.rebroadcastSession?.(usagePath);
+              }
               const usage = engine.getSessionContextUsage?.(usagePath)
                 || engine.getSessionByPath(usagePath)?.getContextUsage?.();
               wsSend(ws, {

@@ -146,18 +146,22 @@ import type {
 import type {
   KnowledgeIndexHealth,
 } from "../lib/knowledge-workspace/knowledge-index-store.ts";
-import type {
-  KnowledgeResourceAddress,
+import {
+  parseKnowledgeResourceAddress,
+  type KnowledgeResourceAddress,
 } from "../shared/knowledge-workspace-contract.ts";
+import { isOperationCorrelationId } from "../shared/knowledge-diagnostics.ts";
+import { isAgentFileChangeSessionId } from "../shared/workspace-history.ts";
 import {
   createKnowledgeWorkspaceError,
   isKnowledgeWorkspaceError,
 } from "../shared/knowledge-workspace-errors.ts";
 import type {
+  ResourceDescriptor,
+  ResourceMutationResult,
   ResourceOperationContext,
 } from "../lib/resource-io/types.ts";
 import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
-import { resourceKeyForRef } from "../lib/resource-io/resource-refs.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
 import {
   createResourceMainRootAuthority,
@@ -383,6 +387,9 @@ export class HanaEngine {
   declare _mainWorkspaceCutover: SingleOwnerProductionCutover | null;
   declare _mainWorkspaceRoot: string | null;
   declare _mainWorkspaceCanonicalRoot: string | null;
+  declare _projectAgentFileChangeResource: ((
+    resource: ResourceDescriptor,
+  ) => Promise<KnowledgeResourceAddress | null>) | null;
   declare _mainWorkspaceUnavailable: boolean;
   declare _resourceLoader: any;
   declare _resourceIO: any;
@@ -450,6 +457,7 @@ export class HanaEngine {
     this._mainWorkspaceCutover = null;
     this._mainWorkspaceRoot = null;
     this._mainWorkspaceCanonicalRoot = null;
+    this._projectAgentFileChangeResource = null;
     this._mainWorkspaceUnavailable = false;
     this.agentsDir = path.join(hanakoHome, "agents");
     this.userDir = path.join(hanakoHome, "user");
@@ -1089,9 +1097,50 @@ export class HanaEngine {
     });
   }
   recordSessionFileOperation(entry) {
-    const file = this.registerSessionFile(entry);
-    this._emitResourceChangedForSessionFileOperation(file, entry);
-    return file;
+    return this.registerSessionFile(entry);
+  }
+  async recordAgentFileChange(entry: {
+    sessionId?: unknown;
+    sessionPath?: unknown;
+    operationId?: unknown;
+    mutation?: ResourceMutationResult | null;
+  }) {
+    const sessionId = entry?.sessionId;
+    const sessionPath = entry?.sessionPath;
+    const operationId = entry?.operationId;
+    const mutation = entry?.mutation;
+    if (
+      !isAgentFileChangeSessionId(sessionId)
+      || typeof sessionPath !== "string"
+      || !sessionPath
+      || !isOperationCorrelationId(operationId)
+      || !mutation?.resource
+      || typeof this._projectAgentFileChangeResource !== "function"
+      || !this._activityHub
+    ) {
+      return null;
+    }
+    const projected = await this._projectAgentFileChangeResource(mutation.resource);
+    const parsedResource = parseKnowledgeResourceAddress(projected);
+    if (!parsedResource.ok || parsedResource.value.sourceKey !== "main") return null;
+
+    const now = Date.now();
+    const activity = this._activityHub.upsert({
+      id: `agent-tool:${operationId}`,
+      kind: "agent_tool",
+      status: "done",
+      sessionId,
+      sessionPath,
+      operationId,
+      startedAt: now,
+      finishedAt: now,
+    });
+    if (activity?.operationId !== operationId || activity?.sessionId !== sessionId) return null;
+    return Object.freeze({
+      sessionId,
+      operationId,
+      resource: Object.freeze({ ...parsedResource.value }),
+    });
   }
   _resourceEvents() {
     if (!this._resourceEventBus) {
@@ -1213,6 +1262,7 @@ export class HanaEngine {
     this._mainWorkspaceRoot = rootPath;
     this._mainWorkspaceCanonicalRoot = assembly.canonicalRoot;
     this._mainFileHistoryBinding = assembly.fileHistoryBinding;
+    this._projectAgentFileChangeResource = assembly.projectAgentFileChangeResource;
 
     try {
       await assembly.cutover.start();
@@ -1229,6 +1279,7 @@ export class HanaEngine {
       this._mainFileHistoryBinding = null;
       this._mainWorkspaceSharedBaseline?.detach();
       this._mainWorkspaceCanonicalRoot = null;
+      this._projectAgentFileChangeResource = null;
       this._mainWorkspaceUnavailable = false;
       return this.getProductionWorkspaceHealth();
     }
@@ -1238,6 +1289,7 @@ export class HanaEngine {
     this._mainWorkspaceCutover = null;
     this._mainWorkspaceRoot = null;
     this._mainWorkspaceCanonicalRoot = null;
+    this._projectAgentFileChangeResource = null;
     this._mainWorkspaceUnavailable = false;
     return this.getProductionWorkspaceHealth();
   }
@@ -1253,41 +1305,6 @@ export class HanaEngine {
     ) {
       throw new Error("main workspace cutover proof is unavailable");
     }
-  }
-  _emitResourceChangedForSessionFileOperation(file, entry: any = {}) {
-    const origin = typeof file?.origin === "string" ? file.origin : entry?.origin;
-    if (origin !== "agent_write" && origin !== "agent_edit") return;
-
-    const sessionPath = file?.sessionPath || entry?.sessionPath;
-    const filePath = file?.filePath || entry?.filePath;
-    if (!sessionPath || !filePath) return;
-
-    const fileId = file?.id || file?.fileId || null;
-    const operation = entry?.operation || file?.operation || (
-      Array.isArray(file?.operations) ? file.operations[file.operations.length - 1] : null
-    );
-    this._resourceEvents().changed({
-      changeType: operation === "created" ? "created" : "modified",
-      resourceKey: resourceKeyForRef({ kind: "local-file", path: filePath }),
-      resource: {
-        kind: "local-file",
-        provider: "local_fs",
-        path: filePath,
-        filePath,
-      },
-      version: {
-        ...(file?.mtimeMs !== undefined ? { mtimeMs: file.mtimeMs } : {}),
-        ...(file?.size !== undefined ? { size: file.size } : {}),
-        ...(file?.version ? { sequence: file.version } : {}),
-      },
-      source: "agent_tool",
-      reason: origin,
-      sessionPath,
-      fileId,
-      origin,
-      operation,
-      sessionFile: file,
-    } as any);
   }
   _sessionFileOptionsWithLocator(options: any = {}) {
     const next = { ...(options || {}) };
@@ -3703,6 +3720,7 @@ export class HanaEngine {
       getSessionIdForPath: (sessionPath) => this.getSessionIdForPath(sessionPath),
       resolveSessionFile: resolveRuntimeSessionFile,
       recordFileOperation: (entry) => this.recordSessionFileOperation(entry),
+      recordAgentFileChange: (entry) => this.recordAgentFileChange(entry),
       getVisionBridge: () => this.getVisionBridge(),
       isVisionAuxiliaryEnabled: () => this.isVisionAuxiliaryEnabled(),
       getTerminalSessionManager: () => this._terminalSessions,

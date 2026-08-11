@@ -2124,6 +2124,7 @@ export class SessionCoordinator {
         workspaceFolders: workspaceScope.workspaceFolders,
         authorizedFolders: folderScope.authorizedFolders,
         getAuthorizedFolders: () => this.getSessionAuthorizedFolders(sessionPathRef.current || sessionPathForMeta),
+        getSessionPath: () => sessionPathRef.current || sessionPathForMeta || null,
         agentDir: agent.agentDir,
         // Sizes the deferred-tool listing against the model this session froze.
         modelContextWindowTokens: effectiveModel?.contextWindow ?? null,

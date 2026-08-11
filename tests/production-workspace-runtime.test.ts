@@ -57,6 +57,7 @@ describe("production workspace runtime assembly", () => {
       onGap(): void;
       onError(): void;
     } | null = null;
+    const revalidateMain = vi.fn(async (proof) => proof);
     const legacyWatchRegistry = {
       entries: new Map([
         ["legacy-main", {
@@ -92,7 +93,7 @@ describe("production workspace runtime assembly", () => {
             },
           };
         },
-        revalidateMain: async (proof) => proof,
+        revalidateMain,
       },
       watchAdapter: {
         open: (_proof, nextListener) => {
@@ -132,6 +133,22 @@ describe("production workspace runtime assembly", () => {
       coordinator: { watchers: 1, mutations: 0, baselines: 1 },
     });
     expect(runtime.fileHistoryBinding()).toMatchObject({ sourceKey: "main" });
+    const revalidationsBeforeProjection = revalidateMain.mock.calls.length;
+    await expect(runtime.projectAgentFileChangeResource({
+      kind: "local-file",
+      provider: "local_fs",
+      path: "/workspace/notes/event.md",
+    })).resolves.toEqual({
+      sourceKey: "main",
+      relativePath: "notes/event.md",
+    });
+    expect(revalidateMain).toHaveBeenCalledTimes(revalidationsBeforeProjection + 1);
+    await expect(runtime.projectAgentFileChangeResource({
+      kind: "mount",
+      provider: "mount",
+      mountId: "mount_docs",
+      path: "notes/event.md",
+    })).resolves.toBeNull();
     const historyEvents = vi.fn();
     const releaseHistoryEvents = runtime.fileHistoryBinding()!.subscribeEvents!(historyEvents);
     resourceEvents.changed({
@@ -155,6 +172,13 @@ describe("production workspace runtime assembly", () => {
         source: "provider_watch",
       }));
     });
+
+    revalidateMain.mockResolvedValueOnce(null);
+    await expect(runtime.projectAgentFileChangeResource({
+      kind: "local-file",
+      provider: "local_fs",
+      path: "/workspace/notes/replaced.md",
+    })).resolves.toBeNull();
 
     await runtime.cutover.stop();
     expect(order).toContain("watch-close");

@@ -16,6 +16,51 @@ describe("chat route model switch guard", () => {
     expect(resolveDisconnectAbortGraceMs("bad")).toBe(DEFAULT_DISCONNECT_ABORT_GRACE_MS);
   });
 
+  it("rebroadcasts in-memory Agent activity once after the first session subscription", async () => {
+    let createHandlers;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const sessionPath = "/tmp/agent-history-reload.jsonl";
+    const sessionId = "sess_agent_history_reload";
+    const rebroadcastSession = vi.fn();
+    const hub = {
+      subscribe: vi.fn(),
+      send: vi.fn(async () => {}),
+      eventBus: { emit: vi.fn() },
+    };
+    const engine = {
+      getRuntimeContext: vi.fn(() => ({ studioId: "studio_test" })),
+      activityHub: { rebroadcastSession },
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionIdForPath: vi.fn(() => sessionId),
+      getSessionManifest: vi.fn(() => ({ currentLocator: { path: sessionPath } })),
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "hana", agentDeleted: false })),
+      getSessionContextUsage: vi.fn(() => null),
+      getSessionByPath: vi.fn(() => null),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+    const message = {
+      data: JSON.stringify({ type: "context_usage", sessionId, sessionPath }),
+    };
+    handlers.onMessage(message, ws);
+    handlers.onMessage(message, ws);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rebroadcastSession).toHaveBeenCalledOnce();
+    expect(rebroadcastSession).toHaveBeenCalledWith(sessionPath);
+  });
+
   it("adds persisted user and assistant entry ids to turn_end", () => {
     let createHandlers;
     let subscriber;

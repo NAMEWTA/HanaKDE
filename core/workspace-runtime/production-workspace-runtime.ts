@@ -143,6 +143,9 @@ export type ProductionWorkspaceRuntimeAssembly = Readonly<{
   sharedBaseline: MainWorkspaceKnowledgeSharedBaselineAdapter;
   cutover: SingleOwnerProductionCutover;
   fileHistoryBinding: () => MainFileHistoryBinding | null;
+  projectAgentFileChangeResource: (
+    resource: ResourceDescriptor,
+  ) => Promise<Readonly<{ sourceKey: "main"; relativePath: string }> | null>;
 }>;
 
 type MainFileHistoryResourceIO = Readonly<{
@@ -1105,12 +1108,48 @@ export function createProductionWorkspaceRuntime({
       revalidateRoot: (candidate) => rootAuthority.revalidateMain(candidate),
     });
   };
+  const projectAgentFileChangeResource = async (
+    resource: ResourceDescriptor,
+  ): Promise<Readonly<{ sourceKey: "main"; relativePath: string }> | null> => {
+    const proof = mainRootProof;
+    const before = runtime.snapshot();
+    if (!proof || !before?.observing || before.health !== "HEALTHY") return null;
+
+    let currentProof: MainWorkspaceRootProof | null;
+    try {
+      currentProof = await coordinatorRootAuthority.revalidateMain(proof);
+    } catch {
+      return null;
+    }
+    const after = runtime.snapshot();
+    if (
+      !currentProof
+      || mainRootProof !== currentProof
+      || !after?.observing
+      || after.health !== "HEALTHY"
+    ) {
+      return null;
+    }
+    const currentRootPath = canonicalPhysicalWatchPath(
+      workspaceWatchTargetDirectory(currentProof, "agent file change main"),
+    );
+    if (!currentRootPath) return null;
+    const relativePath = mainRelativePath(
+      currentRootPath,
+      currentProof.identity.caseMode,
+      resource,
+    );
+    return relativePath
+      ? Object.freeze({ sourceKey: "main" as const, relativePath })
+      : null;
+  };
   return Object.freeze({
     canonicalRoot: canonicalPhysicalWatchPath(resolvedRootPath),
     runtime,
     sharedBaseline,
     cutover,
     fileHistoryBinding,
+    projectAgentFileChangeResource,
   });
 }
 
