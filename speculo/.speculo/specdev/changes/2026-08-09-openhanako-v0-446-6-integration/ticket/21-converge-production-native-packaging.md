@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-21
 title: 收敛 production 与 native packaging
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "根依赖、lockfile、native converter assets、Electron/server build 与双平台生产包是共享发布核心和供应链边界。"
 ready: true
