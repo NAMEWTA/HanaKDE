@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-17
 title: 交付 Agent 对话文件变化投影
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "对话/操作相关性、main 共享版本与挂载边界跨 Agent runtime、renderer 与安全 restore，同时必须避免第二历史事实源。"
 ready: true
 risk: high
 blocked_by: [T-15, T-16]
 contract_ids: [AC-008, AC-015, AC-016, AC-017, AC-024]
-owner: unassigned
+owner: Worker-T-17
 expected_changes: ["<Path>shared/workspace-history.ts</Path>", "<Path>desktop/src/react/services/file-change-events.ts</Path>", "<Path>desktop/src/react/utils/history-builder.ts</Path>", "<Path>desktop/src/react/components/chat/**</Path>", "<Path>desktop/src/react/stores/agent-activity-slice.ts</Path>"]
 writable_paths: ["<Path>shared/workspace-history.ts</Path>", "<Path>desktop/src/react/services/file-change-events.ts</Path>", "<Path>desktop/src/react/utils/history-builder.ts</Path>", "<Path>desktop/src/react/components/chat/**</Path>", "<Path>desktop/src/react/stores/agent-activity-slice.ts</Path>", "<Path>desktop/src/react/__tests__/utils/history-builder*.test.ts</Path>", "<Path>tests/agent-file-change-projection.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/agent-file-changes.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>lib/resource-io/**</Path>"]

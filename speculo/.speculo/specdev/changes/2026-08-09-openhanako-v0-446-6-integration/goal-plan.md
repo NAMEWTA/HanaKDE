@@ -253,6 +253,7 @@ DELIVERY ticket=T-18 state=removed workspace=specdev-worktree/T-18 checkpoint=16
 DELIVERY ticket=T-12 state=integrated workspace=specdev-worktree/T-12 checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>
 DELIVERY ticket=T-13 state=integrated workspace=specdev-worktree/T-13 checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-13.md</Path>
 DELIVERY ticket=T-14 state=integrated workspace=specdev-worktree/T-14 checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-14.md</Path>
+DISPATCH ticket=T-17 wave=W7 baseline=2465ccc4f453372a170ba86b2336985889e1ff2b branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-17 workspace=specdev-worktree/T-17 placement=system-core-agent-history-projection
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5
 W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-11,T-18,T-19
 W3_GATE_CLASSIFICATION product_gate=2018ce1dc671f0d9bb3c6f61f4078625c7863001 management_only=e1b11c6d72d2d069e3bc8f4646692f2e504d5a3e
