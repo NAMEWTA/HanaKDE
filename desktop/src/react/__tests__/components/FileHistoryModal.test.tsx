@@ -60,7 +60,7 @@ function installHealthyRoutes() {
       return response({ content: 'new\n', encoding: 'utf-8', version: { mtimeMs: 10, size: 4, etag: 'current' } });
     }
     if (path === '/api/resource-io/write-expected-version') {
-      return response({ ok: true, changeType: 'modified', version: { mtimeMs: 11, size: 4, etag: 'restored' } });
+      return response({ changeType: 'modified', version: { mtimeMs: 11, size: 4, etag: 'restored' } });
     }
     throw new Error(`unexpected request: ${path} ${JSON.stringify(options)}`);
   });
@@ -203,7 +203,7 @@ describe('FileHistoryModal', { sequential: true }, () => {
       if (path === '/api/file-history/diff?snapshotId=1') return response({ diff: [{ kind: 'added', text: 'old\n' }] });
       if (path === '/api/file-history/diff?snapshotId=2') return response({ diff: [{ kind: 'removed', text: 'old\n' }, { kind: 'added', text: 'new\n' }] });
       if (path === '/api/resource-io/read') return response({ content: 'new\n', version: { mtimeMs: 10, size: 4, etag: 'current' } });
-      if (path === '/api/resource-io/write-expected-version') return response({ ok: true, changeType: 'modified', version: { mtimeMs: 11, size: 4, etag: 'restored' } });
+      if (path === '/api/resource-io/write-expected-version') return response({ changeType: 'modified', version: { mtimeMs: 11, size: 4, etag: 'restored' } });
       throw new Error(`unexpected request: ${path}`);
     });
 
@@ -223,7 +223,7 @@ describe('FileHistoryModal', { sequential: true }, () => {
         versions: [{ id: 3, capturedAt: 1_000, origin: 'event', opContext: null, rawSize: 4, versionToken: null }],
       });
       if (path === '/api/file-history/diff?snapshotId=3') return response({ diff: [{ kind: 'added', text: 'old\n' }] });
-      if (path === '/api/resource-io/write-expected-version') return response({ ok: true, changeType: 'created', version: { mtimeMs: 11, size: 4 } });
+      if (path === '/api/resource-io/write-expected-version') return response({ changeType: 'created', version: { mtimeMs: 11, size: 4 } });
       throw new Error(`unexpected request: ${path}`);
     });
 
