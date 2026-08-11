@@ -42,6 +42,25 @@ function assertDirectory(target, label) {
   if (!stat.isDirectory()) throw new Error(`[windows-gate] required ${label} is not a directory`);
 }
 
+function assertPortableExecutable(target, label) {
+  const descriptor = fs.openSync(target, "r");
+  try {
+    const dosHeader = Buffer.alloc(64);
+    const dosBytes = fs.readSync(descriptor, dosHeader, 0, dosHeader.length, 0);
+    if (dosBytes < dosHeader.length || dosHeader.toString("ascii", 0, 2) !== "MZ") {
+      throw new Error(`[windows-gate] required ${label} is not a PE executable`);
+    }
+    const peOffset = dosHeader.readUInt32LE(0x3c);
+    const peSignature = Buffer.alloc(4);
+    const peBytes = fs.readSync(descriptor, peSignature, 0, peSignature.length, peOffset);
+    if (peBytes < peSignature.length || peSignature.toString("ascii") !== "PE\u0000\u0000") {
+      throw new Error(`[windows-gate] required ${label} is not a PE executable`);
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 function identityOf(target) {
   const stat = fs.statSync(target);
   const identity = {
@@ -96,7 +115,9 @@ export function inspectWindowsPackage(
   assertSupportedArch(arch);
   const packageRoot = path.resolve(packageDir);
   assertDirectory(packageRoot, "unpacked package");
-  assertFile(path.join(packageRoot, "HanaAgent.exe"), "HanaAgent.exe");
+  const executablePath = path.join(packageRoot, "HanaAgent.exe");
+  assertFile(executablePath, "HanaAgent.exe");
+  assertPortableExecutable(executablePath, "HanaAgent.exe");
 
   const resources = path.join(packageRoot, "resources");
   const seed = path.join(resources, "seed");
@@ -150,7 +171,8 @@ export function inspectWindowsInstaller(installerPath) {
   if (path.extname(installerPath).toLowerCase() !== ".exe") {
     throw new Error("[windows-gate] NSIS installer must be an .exe");
   }
-  return { installer: path.basename(installerPath) };
+  assertPortableExecutable(installerPath, "NSIS installer");
+  return { installer: path.basename(installerPath), peHeaderVerified: true };
 }
 
 async function runLockedFileProbe(workspace) {

@@ -10,6 +10,14 @@ import {
 
 const sourcePath = path.resolve("scripts/platform/windows/run-gate.mjs");
 
+function writePeFixture(target: string) {
+  const bytes = Buffer.alloc(128);
+  bytes.write("MZ", 0, "ascii");
+  bytes.writeUInt32LE(64, 0x3c);
+  bytes.write("PE\0\0", 64, "ascii");
+  fs.writeFileSync(target, bytes);
+}
+
 describe("Windows blocking gate runner", () => {
   it.skipIf(process.platform !== "win32")("runs the real Windows filesystem matrix", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-t22-real-"));
@@ -60,7 +68,8 @@ describe("Windows blocking gate runner", () => {
       ]) {
         const target = path.join(root, relative);
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, "fixture", "utf8");
+        if (relative === "HanaAgent.exe") writePeFixture(target);
+        else fs.writeFileSync(target, "fixture", "utf8");
       }
       const result = inspectWindowsPackage(root, {
         archiveLister: () => [
@@ -95,7 +104,8 @@ describe("Windows blocking gate runner", () => {
       ]) {
         const target = path.join(root, relative);
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, "fixture", "utf8");
+        if (relative === "HanaAgent.exe") writePeFixture(target);
+        else fs.writeFileSync(target, "fixture", "utf8");
       }
       expect(() => inspectWindowsPackage(root, {
         archiveLister: () => [
@@ -118,8 +128,11 @@ describe("Windows blocking gate runner", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-t22-installer-"));
     try {
       const installer = path.join(root, "HanaAgent-0.446.6.exe");
-      fs.writeFileSync(installer, "fixture", "utf8");
-      expect(inspectWindowsInstaller(installer)).toEqual({ installer: "HanaAgent-0.446.6.exe" });
+      writePeFixture(installer);
+      expect(inspectWindowsInstaller(installer)).toEqual({
+        installer: "HanaAgent-0.446.6.exe",
+        peHeaderVerified: true,
+      });
       const wrongExtension = path.join(root, "not-an-installer.zip");
       fs.writeFileSync(wrongExtension, "fixture", "utf8");
       expect(() => inspectWindowsInstaller(wrongExtension)).toThrow(/\.exe/);
