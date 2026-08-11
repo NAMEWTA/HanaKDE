@@ -338,6 +338,16 @@
       "updated_at": "2026-08-11T15:26:00+0800"
     },
     {
+      "ticket_id": "T-22",
+      "owner": "Worker-T-22 / Lead platform owner",
+      "provider": "git",
+      "base_sha": "4231ec3f4ed93167ab3c7a69b8c2160d886113ff",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-22",
+      "workspace_ref": "specdev-worktree/T-22",
+      "status": "blocked",
+      "updated_at": "2026-08-11T15:24:22+0800"
+    },
+    {
       "ticket_id": "T-25",
       "owner": "Worker-T-25 / Lead final owner",
       "provider": "git",
