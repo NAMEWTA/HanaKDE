@@ -12,9 +12,9 @@ risk: critical
 blocked_by: [T-21]
 contract_ids: [AC-009, AC-010, AC-012, AC-013, AC-014, AC-015, AC-016, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-027]
 owner: Worker-T-23 / Lead平台验收
-expected_changes: ["<Path>scripts/platform/macos/**</Path>", "<Path>tests/platform/macos/**</Path>"]
-writable_paths: ["<Path>scripts/platform/macos/**</Path>", "<Path>tests/platform/macos/**</Path>"]
-read_only_paths: ["<Path>package.json</Path>", "<Path>package-lock.json</Path>", "<Path>desktop/**</Path>", "<Path>lib/**</Path>", "<Path>core/**</Path>", "<Path>server/**</Path>"]
+expected_changes: ["<Path>scripts/platform/macos/**</Path>", "<Path>tests/platform/macos/**</Path>", "<Path>core/plugin-context.ts</Path>", "<Path>tests/plugin-context.test.ts</Path>"]
+writable_paths: ["<Path>scripts/platform/macos/**</Path>", "<Path>tests/platform/macos/**</Path>", "<Path>core/plugin-context.ts</Path>", "<Path>tests/plugin-context.test.ts</Path>"]
+read_only_paths: ["<Path>package.json</Path>", "<Path>package-lock.json</Path>", "<Path>desktop/**</Path>", "<Path>lib/**</Path>", "<Path>server/**</Path>"]
 shared_paths: []
 shared_path_owners: []
 ---

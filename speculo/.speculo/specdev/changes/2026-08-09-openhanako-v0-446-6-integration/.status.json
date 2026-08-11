@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-11T16:14:19+0800",
+  "updated_at": "2026-08-11T16:20:52+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -114,6 +114,15 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-11T14:07:00+0800",
       "scope": "T-21 server bundle configuration only: set vite.config.server.js ssr.noExternal=true so SSR packaging bundles ordinary dependencies while preserving the existing explicit rollup external allowlist and target-node install contract. No runtime API or dependency version change."
+    },
+    {
+      "id": "D-T23-02",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-23 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T16:20:52+0800",
+      "scope": "T-23 only: allow the plugin boundary adapter in <Path>core/plugin-context.ts</Path> and its regression test <Path>tests/plugin-context.test.ts</Path> to implement the already-declared type-first HanaEventBus emit/subscribe overloads. Preserve callback-first behavior, EventBus ownership, permissions and route contracts; no edit to hub/event-bus.ts, external plugins, public SDK types, package manifests or release paths."
     }
   ],
   "worktrees": [
@@ -325,7 +334,7 @@
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-23",
       "workspace_ref": "specdev-worktree/T-23",
       "status": "integrated",
-      "updated_at": "2026-08-11T16:14:19+0800"
+      "updated_at": "2026-08-11T16:20:52+0800"
     },
     {
       "ticket_id": "T-24",
@@ -355,7 +364,7 @@
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-25",
       "workspace_ref": "specdev-worktree/T-25",
       "status": "blocked",
-      "updated_at": "2026-08-11T16:14:19+0800"
+      "updated_at": "2026-08-11T16:20:52+0800"
     }
   ]
 }
