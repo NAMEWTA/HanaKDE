@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-24
 title: 发布架构文档与 upstream sync ledger
-status: in_progress
+status: review
 planning_depth: standard
 planning_depth_reason: "跨模块架构和后续 upstream sync 审计涉及多来源事实，但仅修改文档且不改变运行时公共契约。"
 ready: true
