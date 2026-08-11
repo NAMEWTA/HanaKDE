@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-11T22:21:42+0800",
+  "updated_at": "2026-08-11T22:28:16+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -168,6 +168,15 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-11T22:21:42+0800",
       "scope": "T-26 only: allow core/session-coordinator.ts and tests/session-coordinator.test.ts to inject the already-created desktop SessionManager path into Engine.buildTools through its existing getSessionPath callback. Preserve background and bridge session identity, the public SessionRef contract, History routes/UI, persistence model and all other session lifecycle behavior."
+    },
+    {
+      "id": "D-T26-02",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-26 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T22:28:16+0800",
+      "scope": "T-26 only: allow server/routes/chat.ts and tests/chat-route-switching.test.ts to invoke the existing in-memory ActivityHub rebroadcast exactly when an authorized websocket client first adds a session subscription. Repeated messages must not rebroadcast; no new route, wire message, store, durable correlation, History permission or public API."
     }
   ],
   "worktrees": [
