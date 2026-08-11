@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-11T20:41:35+0800",
+  "updated_at": "2026-08-11T20:44:19+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -132,6 +132,15 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-11T20:37:00+0800",
       "scope": "T-18 only: allow desktop/src/react/stores/desk-actions.ts and desktop/src/react/__tests__/stores/desk-actions.test.ts to accept the lifecycle's existing optional AbortSignal and pass it to hanaFetch. Preserve Desk routes, providers, backend, ResourceRef selection and all unrelated Desk actions."
+    },
+    {
+      "id": "D-G10-01",
+      "level": "quality-gate",
+      "status": "approved",
+      "owner": "G10 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T20:44:19+0800",
+      "scope": "G10 quality closure only: allow eslint.config.js to classify speculo/**/*.{js,mjs,ts} as Node-side sources. No lint rule weakening, ignore expansion, source behavior, dependency, package, workflow contract or product API change."
     }
   ],
   "worktrees": [
