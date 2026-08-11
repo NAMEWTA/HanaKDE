@@ -12,13 +12,16 @@ const MAX_RESPONSE_FRAME_BYTES = 512;
 const HELPER_TIMEOUT_MS = 10_000;
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-const enum HelperStatus {
-  Written = 1,
-  Conflict = 2,
-  Unsafe = 3,
-  Unavailable = 4,
-  ProtocolFailure = 5,
-}
+// Keep this runtime-compatible with Node's strip-only TypeScript loader. The
+// server bootstrap imports this module directly in the Knowledge E2E fixture,
+// where enum syntax is intentionally unsupported.
+const HelperStatus = Object.freeze({
+  Written: 1,
+  Conflict: 2,
+  Unsafe: 3,
+  Unavailable: 4,
+  ProtocolFailure: 5,
+} as const);
 
 export type NativeFileIdentity = Readonly<{
   device: string;

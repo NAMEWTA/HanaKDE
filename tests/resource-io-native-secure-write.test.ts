@@ -1,7 +1,8 @@
+import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   secureConditionalWrite,
@@ -29,6 +30,23 @@ describe("native secure conditional write", () => {
     if (tempRoot) fs.rmSync(tempRoot, { recursive: true, force: true });
     tempRoot = null;
     vi.unstubAllEnvs();
+  });
+
+  it("loads through Node's strip-only TypeScript runtime used by the E2E server", () => {
+    const moduleUrl = pathToFileURL(
+      path.join(ROOT, "lib", "resource-io", "native-secure-write.ts"),
+    ).href;
+    const output = execFileSync(process.execPath, [
+      "--experimental-strip-types",
+      "--input-type=module",
+      "-e",
+      `import(${JSON.stringify(moduleUrl)}).then((module) => console.log(typeof module.secureConditionalWrite)).catch((error) => { console.error(error); process.exit(1); })`,
+    ], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    expect(output.trim()).toBe("function");
   });
 
   it("delegates once and fails closed when the native runner is unavailable", async () => {
