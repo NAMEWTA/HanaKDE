@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-16
 title: 交付 Workspace History 用户界面
-status: in_progress
+status: done
 planning_depth: deep
 planning_depth_reason: "UI 串联 deleted files、timeline、diff、restore、health 与安全冲突，并跨 renderer/server contract 和真实用户流程。"
 ready: true
@@ -122,7 +122,7 @@ shared_path_owners: []
 - **受影响路径：** 新增授权 `<Path>desktop/src/react/App.tsx</Path>`、`<Path>desktop/src/react/stores/index.ts</Path>`、`<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>` 与 `<Path>tests/file-history-production-boundary.test.ts</Path>`；保留原 T-16 组件/API/E2E 路径。
 - **选项：** 保持 fixed skip 会让 AC-006/AC-017/AC-024 无生产入口；插件化无法表达全局 store/顶层 modal 生命周期；推荐在 renderer 系统本体完成最小宿主接入。
 - **批准：** Root Lead，2026-08-11T19:04:48+0800；仅组合既有 T-16 slice、挂载单一 main-only modal host、更新边界/store 回归并启用现有 E2E。禁止新增 server 语义、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
-- **处理结果：** 待实现与 Evidence 回写；完成前 T-16 状态恢复为 `in_progress`。
+- **处理结果：** `1c7474a4` 已组合共享 store 并挂载单一全局 modal，integration checkpoint `3175d2f1`；store/production-boundary 回归通过。
 
 ## 12. 偏差 D-T16-02：Workbench 可见入口接入
 
@@ -131,4 +131,4 @@ shared_path_owners: []
 - **受影响路径：** 新增授权 `<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>`、`<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>` 与 `<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>`；继续使用已授权的 File History 组件和 E2E 路径。
 - **选项：** 依赖 Agent 投影会错误耦合 Workspace 与 conversation correlation；浮动全局按钮不符合现有 Workbench 信息架构；推荐在已有 workspace header 工具区挂载同一个 main-only entry。
 - **批准：** Root Lead，2026-08-11T19:11:30+0800；仅增加 main-only、可访问、固定尺寸的 Workbench History 命令及交互回归。禁止新增 route、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
-- **处理结果：** 待实现与 E2E/Evidence 回写；完成前 T-16 保持 `in_progress`。
+- **处理结果：** `2421bfed` 已在 workspace header 挂载紧凑 main-only History 命令；desktop-full owner E2E 通过真实 60 秒 merge-window timeline、diff、expected-version restore 与 ResourceIO 回读。
