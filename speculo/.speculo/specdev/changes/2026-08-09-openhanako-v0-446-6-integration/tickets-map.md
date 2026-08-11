@@ -54,7 +54,7 @@ status: in_progress
 | T-22 | `<Path>{roots.state}/specdev/changes/{change}/ticket/22-windows-blocking-gate.md</Path>` | Windows native/security/restore/extraction/NSIS Gate 通过 | T-21 | deep | critical | yes | Worker-T-22 / Lead平台验收 | AC-009, AC-010, AC-014—AC-023, AC-027 | W9-WIN/G9 | ready |
 | T-23 | `<Path>{roots.state}/specdev/changes/{change}/ticket/23-macos-blocking-gate.md</Path>` | macOS native/watch/restore/extraction/DMG Gate 通过 | T-21 | deep | critical | yes | Worker-T-23 / Lead平台验收 | AC-009, AC-010, AC-012—AC-023, AC-027 | W9-MAC/G9 | review |
 | T-24 | `<Path>{roots.state}/specdev/changes/{change}/ticket/24-architecture-and-upstream-sync-ledger.md</Path>` | 当前架构、恢复与 upstream sync ledger 进入项目 docs | T-21 | standard | medium | yes | Worker-T-24 / Lead审查 | AC-001, AC-028 | W9-DOCS | done |
-| T-25 | `<Path>{roots.state}/specdev/changes/{change}/ticket/25-final-umbrella-acceptance.md</Path>` | 28 AC、15 DoD、双平台与去冗余最终 verdict | T-22, T-23, T-24 | deep | critical | yes | Worker-T-25 / Lead final owner | AC-001—AC-028 | G10-FINAL | in_progress |
+| T-25 | `<Path>{roots.state}/specdev/changes/{change}/ticket/25-final-umbrella-acceptance.md</Path>` | 28 AC、15 DoD、双平台与去冗余最终 verdict | T-22, T-23, T-24 | deep | critical | no | Worker-T-25 / Lead final owner | AC-001—AC-028 | G10-FINAL | blocked |
 
 Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；本表的 Worker/Lead、Wave/Gate 是 `<Path>{roots.state}/specdev/changes/{change}/goal-plan.md</Path>` 的委派执行投影，不改变 Ticket 产品 owner 或路径合同，也不得独立修改出另一套真相。
 
