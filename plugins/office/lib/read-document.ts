@@ -2,6 +2,9 @@ import fs from "fs/promises";
 import path from "path";
 
 import { readPdfDocument } from "./read-pdf.ts";
+import {
+  isCanonicalDocumentPath,
+} from "../../../lib/knowledge-workspace/document-index-extractor.ts";
 
 const TEXT_EXTS = new Set([".txt", ".md", ".markdown", ".csv", ".tsv", ".html", ".htm"]);
 const DOCX_EXTS = new Set([".docx"]);
@@ -11,6 +14,24 @@ const DEFAULT_MAX_CHARS = 20000;
 const DEFAULT_SHEET_LIMIT = 8;
 const DEFAULT_ROW_LIMIT = 200;
 const DEFAULT_COLUMN_LIMIT = 50;
+
+function resourceFilename(resource) {
+  if (resource?.kind === "local-file" || resource?.kind === "mount") {
+    return path.basename(resource.path || "");
+  }
+  if (resource?.kind === "url") {
+    try {
+      return path.basename(new URL(resource.url).pathname);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function resourceKind(filename) {
+  return path.extname(filename).toLowerCase() === ".pdf" ? "pdf" : "binary";
+}
 
 function asPositiveInt(value, fallback, max) {
   const n = Number(value);
@@ -165,11 +186,45 @@ async function readTextLike(filePath, ext) {
 }
 
 export async function readOfficeDocument(input: any = {}, options: any = {}) {
-  const { filePath, resourceKey, resource } = await resolveInputPath(input, options);
-  const ext = path.extname(filePath).toLowerCase();
-  const outputFormat = input.outputFormat === "html" || input.outputFormat === "json" || input.outputFormat === "markdown"
+  const requestedOutputFormat = input.outputFormat === "html" || input.outputFormat === "json" || input.outputFormat === "markdown"
     ? input.outputFormat
     : "text";
+  const resourceName = resourceFilename(input.resource);
+  if (
+    input?.resource
+    && options?.documentExtraction
+    && isCanonicalDocumentPath(resourceName)
+    && requestedOutputFormat !== "html"
+    && requestedOutputFormat !== "json"
+    && !input.pageRange
+  ) {
+    const extraction = await options.documentExtraction.extract({
+      resource: input.resource,
+      filenameHint: resourceName,
+      context: { auditRead: true, reason: "office-read-document-extract" },
+    });
+    if (extraction.ok === false) {
+      const error = new Error(extraction.message);
+      (error as any).code = `OFFICE_DOCUMENT_EXTRACTION_${extraction.reason.replace(/-/g, "_").toUpperCase()}`;
+      throw error;
+    }
+    const maxChars = asPositiveInt(input.maxChars, DEFAULT_MAX_CHARS, 200000);
+    const truncated = truncateText(extraction.markdown, maxChars);
+    return {
+      resource: input.resource,
+      filename: resourceName,
+      ext: path.extname(resourceName).toLowerCase(),
+      kind: resourceKind(resourceName),
+      format: requestedOutputFormat,
+      content: truncated.text,
+      truncated: truncated.truncated,
+      warnings: extraction.warnings,
+      extractorVersion: extraction.extractorVersion,
+    };
+  }
+  const { filePath, resourceKey, resource } = await resolveInputPath(input, options);
+  const ext = path.extname(filePath).toLowerCase();
+  const outputFormat = requestedOutputFormat;
   const maxChars = asPositiveInt(input.maxChars, DEFAULT_MAX_CHARS, 200000);
 
   let result;
