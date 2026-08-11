@@ -22,6 +22,7 @@ import { ChatResourceCard } from './ChatResourceCard';
 import { FileResourceIcon, SkillResourceIcon } from './ChatResourceIcons';
 import { BLOCK_RENDERERS } from './block-renderers';
 import { FileOutputActions } from './FileOutputActions';
+import { AgentFileChangeHistoryAction } from './AgentFileChangeHistoryAction';
 const lazyScreenshot = () => import('../../utils/screenshot').then(m => m.takeScreenshot);
 import type { ChatMessage, ContentBlock } from '../../stores/chat-types';
 import { useStore } from '../../stores';
@@ -692,15 +693,30 @@ const FileBlock = memo(function FileBlock({ block, sessionPath, messageId, block
   blockIdx: number;
 }) {
   const ctx: FileBlockCtx = { sessionPath, messageId, blockIdx };
+  const historyAction = block.agentFileChange ? (
+    <AgentFileChangeHistoryAction
+      fact={block.agentFileChange}
+      sessionPath={sessionPath}
+    />
+  ) : null;
   // 扩展名识别统一走中心表（inferKindByExt via isImageOrSvgExt）
   const kind = inferKindByExt(block.ext);
   if (isImageOrSvgExt(block.ext)) {
-    return <ImageOutputCard fileId={block.fileId} filePath={block.filePath} label={block.label} ext={block.ext} status={block.status} ctx={ctx} />;
+    return <>
+      <ImageOutputCard fileId={block.fileId} filePath={block.filePath} label={block.label} ext={block.ext} status={block.status} ctx={ctx} />
+      {historyAction}
+    </>;
   }
   if (kind === 'video') {
-    return <VideoOutputCard fileId={block.fileId} filePath={block.filePath} label={block.label} ext={block.ext} status={block.status} ctx={ctx} />;
+    return <>
+      <VideoOutputCard fileId={block.fileId} filePath={block.filePath} label={block.label} ext={block.ext} status={block.status} ctx={ctx} />
+      {historyAction}
+    </>;
   }
-  return <FileOutputCard fileId={block.fileId} filePath={block.filePath} label={block.label} ext={block.ext} status={block.status} ctx={ctx} />;
+  return <>
+    <FileOutputCard fileId={block.fileId} filePath={block.filePath} label={block.label} ext={block.ext} status={block.status} ctx={ctx} />
+    {historyAction}
+  </>;
 });
 
 // COMPAT(create_artifact, remove no earlier than v0.133):
