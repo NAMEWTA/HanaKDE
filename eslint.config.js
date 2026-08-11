@@ -64,6 +64,7 @@ export default [
       'scripts/**/*.{js,mjs,ts}',
       'server/**/*.{js,ts}',
       'shared/**/*.{js,ts}',
+      'speculo/**/*.{js,mjs,ts}',
       'tests/**/*.{js,ts,tsx}',
     ],
     languageOptions: {
