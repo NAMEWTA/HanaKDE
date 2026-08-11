@@ -260,14 +260,14 @@ DISPATCH ticket=T-21 wave=G8 baseline=4aa188af branch=speculo/2026-08-09-openhan
 DELIVERY ticket=T-21 state=integrated workspace=specdev-worktree/T-21 checkpoint=e1b232b3 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-21.md</Path> residual=windows-native-platform-and-release-notarization
 G8_CLOSURE ticket=T-21 state=integrated checkpoint=e1b232b3 acceptance=Lead-standards-and-specification-pass residual=windows-native-platform-and-release-notarization next=T-22/T-23
 DISPATCH ticket=T-23 wave=W9-MAC baseline=fa569c0c branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-23 workspace=specdev-worktree/T-23 placement=system-core-macos-platform-gate
-DELIVERY ticket=T-23 state=integrated workspace=specdev-worktree/T-23 checkpoint=7d15baea evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-23.md</Path> residual=macos-x64-runtime-dmg-and-hardware-sleep-resume-and-launch-event-bus-warning
-G9_MAC_STATUS ticket=T-23 state=review checkpoint=7d15baea result=arm64-macos-harness-dmg-seed-inventory-pass-atomic-event-proof-tightened residual=macos-x64-runtime-dmg-hardware-sleep-resume-interactive-E2E-event-bus-warning next=T-22/T-24
+DELIVERY ticket=T-23 state=integrated workspace=specdev-worktree/T-23 checkpoint=c58c3c23 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-23.md</Path> residual=macos-x64-runtime-dmg-and-hardware-sleep-resume-and-launch-event-bus-contract-mismatch
+G9_MAC_STATUS ticket=T-23 state=review checkpoint=c58c3c23 result=arm64-macos-harness-dmg-seed-inventory-pass-atomic-event-proof-cross-platform-spec-guard residual=macos-x64-runtime-dmg-hardware-sleep-resume-interactive-E2E-event-bus-contract-mismatch next=T-22/T-24
 DISPATCH ticket=T-24 wave=W9-DOCS baseline=aa476d23 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-24 workspace=specdev-worktree/T-24 placement=system-core-architecture-sync-docs
 DELIVERY ticket=T-24 state=integrated workspace=specdev-worktree/T-24 checkpoint=e7530fb2 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-24.md</Path> residual=platform-gates-remain-for-T-22-T-23-T-25
 W9_DOCS_CLOSURE ticket=T-24 state=integrated checkpoint=e7530fb2 acceptance=Lead-standards-and-specification-pass residual=platform-gates-remain-for-T-22-T-23-T-25 next=T-22/T-23/T-25
 DISPATCH ticket=T-25 wave=G10-FINAL baseline=10a79be8 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-25 workspace=specdev-worktree/T-25 placement=system-core-final-umbrella-audit
-DELIVERY ticket=T-25 state=blocked workspace=specdev-worktree/T-25 checkpoint=edb832ce evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-25.md</Path> residual=T-22-windows-runtime-and-T-23-review
-G10_FINAL ticket=T-25 state=blocked checkpoint=edb832ce verdict=BLOCKED next=T-22/T-23 re-run-T-25
+DELIVERY ticket=T-25 state=blocked workspace=specdev-worktree/T-25 checkpoint=c58c3c23 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-25.md</Path> residual=T-22-windows-runtime-and-T-23-review
+G10_FINAL ticket=T-25 state=blocked checkpoint=c58c3c23 verdict=BLOCKED next=T-22/T-23 re-run-T-25
 DISPATCH ticket=T-22 wave=W9-WIN baseline=4231ec3f branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-22 workspace=specdev-worktree/T-22 placement=system-core-windows-platform-gate
 DELIVERY ticket=T-22 state=blocked workspace=specdev-worktree/T-22 checkpoint=9112df7e evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-22.md</Path> residual=windows-real-runner-unavailable
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5
