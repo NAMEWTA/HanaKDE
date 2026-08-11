@@ -5,8 +5,12 @@ type ApiFetch = (pathname: string, init?: RequestInit) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
 
 async function json(response: Response): Promise<JsonRecord> {
-  expect(response.ok, `History E2E API returned ${response.status}`).toBe(true);
-  return await response.json() as JsonRecord;
+  const body = await response.json() as JsonRecord;
+  expect(
+    response.ok,
+    `History E2E API returned ${response.status}: ${JSON.stringify(body)}`,
+  ).toBe(true);
+  return body;
 }
 
 async function writeMainText(
