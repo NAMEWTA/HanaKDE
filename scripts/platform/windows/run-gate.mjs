@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { assertRuntimeComplete } from "../../mingit-runtime.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -123,6 +124,16 @@ export function inspectWindowsPackage(
   const seed = path.join(resources, "seed");
   assertFile(path.join(resources, "app.asar"), "resources/app.asar");
   assertDirectory(seed, "resources/seed");
+  const gitRuntime = path.join(resources, "git");
+  assertDirectory(gitRuntime, "resources/git");
+  try {
+    assertRuntimeComplete(gitRuntime);
+  } catch {
+    throw new Error("[windows-gate] packaged MinGit runtime is incomplete");
+  }
+  const sandboxHelper = path.join(resources, "sandbox", "windows", "hana-win-sandbox.exe");
+  assertFile(sandboxHelper, "resources/sandbox/windows/hana-win-sandbox.exe");
+  assertPortableExecutable(sandboxHelper, "resources/sandbox/windows/hana-win-sandbox.exe");
 
   const entries = fs.readdirSync(seed, { withFileTypes: true });
   const serverArchives = entries
@@ -161,6 +172,8 @@ export function inspectWindowsPackage(
     rendererArchive: rendererArchives[0],
     manifest: manifests[0],
     signature: signatures[0],
+    minGitRuntime: "resources/git",
+    sandboxHelper: "resources/sandbox/windows/hana-win-sandbox.exe",
     secureHelper: `dist-secure-fs/win-${arch}/hana-secure-fs-helper.exe`,
   };
 }
@@ -314,6 +327,7 @@ async function runFilesystemMatrix(fixtureRoot) {
   }
 
   const locked = await runLockedFileProbe(workspace);
+  fs.unlinkSync(path.join(movedRoot, "junction-outside"));
   fs.rmSync(movedRoot, { recursive: true, force: true });
   return {
     caseInsensitive: true,
@@ -326,6 +340,18 @@ async function runFilesystemMatrix(fixtureRoot) {
     watcherClosed: true,
     outsideUntouched: true,
   };
+}
+
+function cleanupFixtureRoot(fixtureRoot) {
+  for (const relative of ["main/junction-outside", "main.replaced/junction-outside"]) {
+    const junction = path.join(fixtureRoot, ...relative.split("/"));
+    try {
+      if (fs.lstatSync(junction).isSymbolicLink()) fs.unlinkSync(junction);
+    } catch {
+      // The fixture may have failed before the junction was created.
+    }
+  }
+  fs.rmSync(fixtureRoot, { recursive: true, force: true });
 }
 
 export async function runWindowsGate({
@@ -352,7 +378,7 @@ export async function runWindowsGate({
       installer: installerResult,
     };
   } finally {
-    if (cleanup) fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    if (cleanup) cleanupFixtureRoot(fixtureRoot);
   }
 }
 
