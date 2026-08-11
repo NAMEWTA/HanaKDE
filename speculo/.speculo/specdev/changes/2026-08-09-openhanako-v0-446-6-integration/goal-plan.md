@@ -263,7 +263,7 @@ DISPATCH ticket=T-23 wave=W9-MAC baseline=fa569c0c branch=speculo/2026-08-09-ope
 DELIVERY ticket=T-23 state=integrated workspace=specdev-worktree/T-23 checkpoint=477a1b6a evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-23.md</Path> residual=macos-x64-and-hardware-sleep-resume-and-launch-event-bus-warning
 G9_MAC_STATUS ticket=T-23 state=review checkpoint=477a1b6a result=arm64-macos-harness-dmg-seed-inventory-pass residual=macos-x64-hardware-sleep-resume-interactive-E2E-event-bus-warning next=T-22/T-24
 DISPATCH ticket=T-24 wave=W9-DOCS baseline=aa476d23 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-24 workspace=specdev-worktree/T-24 placement=system-core-architecture-sync-docs
-DELIVERY ticket=T-24 state=in_progress workspace=specdev-worktree/T-24 checkpoint=aa476d23 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-24.md</Path> residual=documentation-evidence-calibration
+DELIVERY ticket=T-24 state=review workspace=specdev-worktree/T-24 checkpoint=aa476d23 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-24.md</Path> residual=documentation-evidence-calibration-and-platform-gates
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5
 W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-11,T-18,T-19
 W3_GATE_CLASSIFICATION product_gate=2018ce1dc671f0d9bb3c6f61f4078625c7863001 management_only=e1b11c6d72d2d069e3bc8f4646692f2e504d5a3e
