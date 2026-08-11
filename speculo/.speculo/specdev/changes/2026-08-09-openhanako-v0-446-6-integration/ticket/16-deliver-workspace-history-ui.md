@@ -134,9 +134,10 @@ shared_path_owners: []
 - **批准：** Root Lead，2026-08-11T19:11:30+0800；仅增加 main-only、可访问、固定尺寸的 Workbench History 命令及交互回归。禁止新增 route、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
 - **处理结果：** `2421bfed` 已在 workspace header 挂载紧凑 main-only History 命令；desktop-full owner E2E 通过真实 60 秒 merge-window timeline、diff、expected-version restore 与 ResourceIO 回读。
 
-## 13. 偏差 D-T16-03：确定性 session/main context 建立
+## 13. 偏差 D-T16-03：final-SHA native helper 前置诊断
 
 - **等级：** ticket；`status=approved`；correction round 3/3。
-- **触发事实：** 在 T-26 集成后的 fresh final-SHA 复核中，owner spec 在候选和 clean integration `e28c0c42` 均于第一次 `write-expected-version` 返回 503。Desktop fixture 明确设置 `HANA_CREATE_STARTUP_SESSION=0`，但测试仍假设 active session/main context 已存在，因此没有进入 History 或 restore 逻辑。
-- **受影响路径：** 仅既有 writable `<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>`；复用 T-26 已集成的 opt-in deterministic model fixture，不修改 fixture、生产代码或 route。
-- **批准：** Root Lead，2026-08-11T22:52:23+0800。Spec 必须先通过正常模型选择和 authenticated `/api/sessions/new` 建立 `cwd=mainSource` 的 session，再原样执行真实 60 秒 merge-window、diff、expected-version restore 与 ResourceIO 回读。禁止 raw root 注入、production test route、私有 History 写入、跳过 merge window 或弱化断言。
+- **触发事实：** 在 T-26 集成后的 fresh final-SHA 复核中，owner spec 在候选和 clean integration `e28c0c42` 均于第一次 `write-expected-version` 返回 503。最初怀疑 desktop fixture 的无 startup-session 模式没有建立 main context；authenticated `/api/sessions/new` 已证明 session `cwd` 正确，但 503 不变。
+- **根因：** T-15 将条件写入切换到 fail-closed native helper；单独调用 Playwright 时跳过了 `build:server`/CI 的 `build-secure-fs-helper` 前置。错误由 ResourceIO 边界规范化为 `knowledge_resource_unavailable`。按生产脚本构建 `dist-secure-fs/mac-arm64/hana-secure-fs-helper` 后，未经 session/model 绕行的原 owner flow 在 `6687c150` 完整通过。
+- **受影响路径：** 仅既有 writable `<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>`，增强非成功响应的 JSON envelope 诊断；不修改 fixture、生产代码或 route，生成 helper 不进入 Git。
+- **批准与结果：** Root Lead，2026-08-11T22:52:23+0800；2026-08-11T23:04:33+0800 复核关闭。原 session/model 假设被否定且未交付。真实 60 秒 merge-window、diff、expected-version restore 与 ResourceIO 回读保持不变；禁止 raw root 注入、production test route、私有 History 写入、跳过 merge window 或弱化断言。
