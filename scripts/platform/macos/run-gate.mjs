@@ -123,7 +123,8 @@ export async function runMacosGate({ rootDir, packageDir = null, cleanup = true 
     fs.renameSync(atomicTemp, atomicTarget);
     fs.writeFileSync(atomicTemp, "atomic-2");
     fs.renameSync(atomicTemp, atomicTarget);
-    await waitFor(() => events.length > 0, 1500, "recursive watcher event");
+    await waitFor(() => events.some((entry) => entry.includes("atomic.md")), 3000, "recursive watcher atomic replacement event");
+    const atomicReplaceObserved = true;
     watcher.close();
 
     const originalRoot = fs.statSync(workspace);
@@ -164,7 +165,7 @@ export async function runMacosGate({ rootDir, packageDir = null, cleanup = true 
       fixture: {
         caseInsensitive: true,
         recursiveEvents: events.length,
-        atomicReplaceObserved: events.length > 0,
+        atomicReplaceObserved,
         rootReplacementIdentityChanged: true,
         symlinkEscapeDetected: true,
         suspendResumeObserved: true,
