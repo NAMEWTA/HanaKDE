@@ -2194,7 +2194,7 @@ function validateResourceDocument(
     ? resource.contentState === "indexed"
       ? document.page === null
       : document.page !== null
-    : document.page !== null;
+    : resource.contentState !== "indexed" && document.page !== null;
   const metadataOnlyHasDerivedContent =
     resource.contentState !== "indexed"
     && (
@@ -2204,15 +2204,19 @@ function validateResourceDocument(
       || document.tasks.length > 0
       || document.search.bodyFold.length > 0
     );
-  const nonPageHasStructure =
-    resource.kind !== "page"
+  const contentWithoutPageHasStructure =
+    document.page === null
     && (
       document.headings.length > 0
       || document.links.length > 0
       || document.tags.length > 0
       || document.tasks.length > 0
     );
-  if (pageContentInvalid || metadataOnlyHasDerivedContent || nonPageHasStructure) {
+  if (
+    pageContentInvalid
+    || metadataOnlyHasDerivedContent
+    || contentWithoutPageHasStructure
+  ) {
     throw new TypeError("knowledge index content state is inconsistent");
   }
 }

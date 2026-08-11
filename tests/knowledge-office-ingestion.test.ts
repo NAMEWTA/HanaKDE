@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   extractDocumentIndexFacts,
@@ -7,6 +10,9 @@ import {
 } from "../core/knowledge-workspace/knowledge-index-event-coordinator.ts";
 import type { ResourceRef, ResourceStat } from "../lib/resource-io/types.ts";
 import type { ExtractResult } from "../lib/document-extract/types.ts";
+import {
+  KnowledgeIndexStore,
+} from "../lib/knowledge-workspace/knowledge-index-store.ts";
 
 const resource: ResourceRef = {
   kind: "mount",
@@ -63,6 +69,62 @@ describe("Office Knowledge ingestion", () => {
       resource,
       filenameHint: "quarterly.docx",
     }));
+  });
+
+  it("accepts an extracted Office document through the incremental index path", async () => {
+    const document = await extractDocumentIndexFacts({
+      resourceIO: { stat: vi.fn(async () => stat()) },
+      extraction: extraction(),
+      resource,
+      relativePath: "reports/quarterly.docx",
+      indexedAtMs: 500,
+    });
+    expect(document).not.toBeNull();
+
+    const hanakoHome = fs.mkdtempSync(path.join(os.tmpdir(), "hana-office-index-"));
+    try {
+      const store = new KnowledgeIndexStore({
+        hanakoHome,
+        workspaceFingerprint: "a".repeat(64),
+        sourceFingerprint: "b".repeat(64),
+        extractorContractVersion: "office-test-v1",
+        hostId: "office-test",
+        pid: process.pid,
+      });
+      store.beginRebuild({
+        rebuildId: "initial",
+        generationId: "generation-1",
+        startedSequence: 0,
+      }).publish({ lastCompleteSequence: 0 });
+
+      store.applyIncremental({
+        lastCompleteSequence: 1,
+        changes: [{ kind: "replace", document: document! }],
+      });
+
+      expect(store.health()).toEqual({
+        state: "ready",
+        generationId: "generation-1",
+        sequence: 1,
+      });
+      const lease = store.acquireQueryLease();
+      expect(lease.inspect().rowCounts).toMatchObject({
+        resources: 1,
+        pages: 1,
+        headings: 1,
+      });
+      lease.release();
+
+      expect(() => store.applyIncremental({
+        lastCompleteSequence: 2,
+        changes: [{
+          kind: "replace",
+          document: { ...document!, page: null },
+        }],
+      })).toThrow(/knowledge index incremental update failed/);
+    } finally {
+      fs.rmSync(hanakoHome, { recursive: true, force: true });
+    }
   });
 
   it("re-extracts when the ResourceIO version changes and fails closed for scanned PDFs", async () => {
