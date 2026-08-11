@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -7,7 +7,11 @@ import type {
   MainFileHistoryEvent,
 } from "../../lib/file-history/file-history-service.ts";
 import { MAX_SNAPSHOT_BYTES } from "../../lib/file-history/text-file-policy.ts";
-import { resourceKeyForRef } from "../../lib/resource-io/resource-refs.ts";
+import {
+  attachInternalLocalResourceAuthority,
+  resourceKeyForRef,
+} from "../../lib/resource-io/resource-refs.ts";
+import { ResourceIOError } from "../../lib/resource-io/errors.ts";
 import { RESOURCE_READ_PROOF } from "../../lib/resource-io/types.ts";
 import type {
   ProviderRootIdentity,
@@ -18,8 +22,10 @@ import type {
   ResourceOpenReadOptions,
   ResourceOpenReadResult,
   ResourceOperationContext,
+  ResourceRef,
   ResourceStat,
   ResourceVersion,
+  ResourceWriteExpectedVersionResult,
 } from "../../lib/resource-io/types.ts";
 import type { WorkspaceObservation } from "../../shared/workspace-observation.ts";
 import type {
@@ -146,6 +152,29 @@ type MainFileHistoryResourceIO = Readonly<{
     readOptions?: ResourceOpenReadOptions,
     options?: ResourceOperationContext,
   ) => Promise<ResourceOpenReadResult>;
+  writeExpectedVersion?: (
+    input: unknown,
+    content: string | Buffer,
+    expectedVersion: ResourceVersion | null,
+    options?: ResourceOperationContext,
+  ) => Promise<ResourceWriteExpectedVersionResult>;
+}>;
+
+type MainFileHistoryRootRevalidator = (
+  proof: MainWorkspaceRootProof,
+) => Promise<MainWorkspaceRootProof | null>;
+
+type CompletedMainFileHistoryRead = Readonly<{
+  kind: "completed";
+  content: Buffer;
+  version: ResourceVersion;
+  versionToken: string;
+  ref: Extract<ResourceRef, { kind: "local-file" }>;
+}>;
+
+type MainFileHistoryReadAttempt = CompletedMainFileHistoryRead | Readonly<{
+  kind: "truncated";
+  versionToken: string | null;
 }>;
 
 type MainFileHistoryEventBus = Readonly<{
@@ -161,11 +190,13 @@ export function createMainFileHistoryBinding({
   runtime,
   resourceEvents,
   resourceIO,
+  revalidateRoot,
 }: {
   rootProof: MainWorkspaceRootProof;
   runtime: MainWorkspaceRuntime;
   resourceEvents: MainFileHistoryEventBus;
   resourceIO: MainFileHistoryResourceIO;
+  revalidateRoot?: MainFileHistoryRootRevalidator;
 }): MainFileHistoryBinding {
   if (rootProof?.root?.kind !== "local-file" || !path.isAbsolute(rootProof.root.path)) {
     throw new TypeError("file-history main root must be absolute");
@@ -177,7 +208,10 @@ export function createMainFileHistoryBinding({
   // root ref preserves its submitted spelling. The coordinator's revalidated
   // watch target is the physical root that both its baseline and ResourceIO
   // reads use, so membership checks must use that same identity.
-  const resolvedRootPath = workspaceWatchTargetDirectory(rootProof, "file-history main");
+  const resolvedRootPath = canonicalPhysicalWatchPath(
+    workspaceWatchTargetDirectory(rootProof, "file-history main"),
+  );
+  if (!resolvedRootPath) throw new TypeError("file-history main root is unavailable");
   const rootIdentity = rootProof.identity;
   const historyStoreKey = historyStoreKeyForRoot(rootIdentity);
 
@@ -197,10 +231,21 @@ export function createMainFileHistoryBinding({
     }),
     read: (relativePath, request) => readMainFileHistoryContent({
       rootPath: resolvedRootPath,
+      rootIdentity,
       caseMode: rootIdentity.caseMode,
       resourceIO,
       relativePath,
       request,
+    }),
+    restore: (relativePath, content, expectedVersionToken) => restoreMainFileHistoryContent({
+      rootProof,
+      rootPath: resolvedRootPath,
+      caseMode: rootIdentity.caseMode,
+      resourceIO,
+      revalidateRoot,
+      relativePath,
+      content,
+      expectedVersionToken,
     }),
   });
 }
@@ -256,7 +301,9 @@ function projectMainFileHistoryEvent(
       type: "main.resource.changed" as const,
       sourceKey: "main" as const,
       relativePath,
-      versionToken: opaqueVersionToken(event.version),
+      // Event metadata schedules capture only. A completed bounded read mints
+      // the token that History stores and restore later compares.
+      versionToken: versionSchedulingHint(event.version),
       operationContext: event.source,
     });
   }
@@ -293,21 +340,56 @@ function projectMainFileHistoryEvent(
 
 async function readMainFileHistoryContent({
   rootPath,
+  rootIdentity,
   caseMode,
   resourceIO,
   relativePath,
   request,
 }: {
   rootPath: string;
+  rootIdentity: ProviderRootIdentity;
   caseMode: ProviderRootIdentity["caseMode"];
   resourceIO: MainFileHistoryResourceIO;
   relativePath: string;
   request: Readonly<{ maxBytes: number }>;
 }): Promise<FileHistoryRead | null> {
+  const attempt = await readCompletedMainFileHistoryContent({
+    rootPath,
+    rootIdentity,
+    caseMode,
+    resourceIO,
+    relativePath,
+    request,
+  });
+  if (!attempt) return null;
+  if (attempt.kind === "truncated") {
+    return Object.freeze({ truncated: true, versionToken: attempt.versionToken });
+  }
+  return Object.freeze({ content: attempt.content, versionToken: attempt.versionToken });
+}
+
+async function readCompletedMainFileHistoryContent({
+  rootPath,
+  rootIdentity,
+  caseMode,
+  resourceIO,
+  relativePath,
+  request,
+}: {
+  rootPath: string;
+  rootIdentity: ProviderRootIdentity;
+  caseMode: ProviderRootIdentity["caseMode"];
+  resourceIO: MainFileHistoryResourceIO;
+  relativePath: string;
+  request: Readonly<{ maxBytes: number }>;
+}): Promise<MainFileHistoryReadAttempt | null> {
   const maxBytes = boundedHistoryReadLimit(request?.maxBytes);
   if (!maxBytes || !isSafeWorkspaceRelativePath(relativePath)) return null;
   const filePath = path.resolve(rootPath, ...relativePath.split("/"));
-  const ref = Object.freeze({ kind: "local-file" as const, path: filePath });
+  const ref = attachInternalLocalResourceAuthority(
+    { kind: "local-file" as const, path: filePath },
+    { scopeRoot: rootPath, activationRootIdentity: rootIdentity },
+  );
   if (mainRelativePath(rootPath, caseMode, ref) !== relativePath) return null;
 
   const context = Object.freeze({ source: "provider_watch" as const, reason: "file_history" });
@@ -322,8 +404,12 @@ async function readMainFileHistoryContent({
     }
     const statSize = safeResourceSize(stat.version?.size);
     if (statSize !== null && statSize > maxBytes) {
-      return Object.freeze({ truncated: true, versionToken: opaqueVersionToken(stat.version) });
+      return Object.freeze({ kind: "truncated" as const, versionToken: versionSchedulingHint(stat.version) });
     }
+    if (stat[RESOURCE_READ_PROOF]) {
+      attachInternalLocalResourceAuthority(ref, { readProof: stat[RESOURCE_READ_PROOF] });
+    }
+    Object.freeze(ref);
     const opened = await resourceIO.openRead(ref, boundedOpenReadOptions(stat, maxBytes), context);
     if (
       mainRelativePath(rootPath, caseMode, opened.resource) !== relativePath
@@ -332,22 +418,130 @@ async function readMainFileHistoryContent({
     ) {
       return null;
     }
-    const versionToken = opaqueVersionToken(opened.version);
-    if (opened.size > maxBytes) return Object.freeze({ truncated: true, versionToken });
+    const versionHint = versionSchedulingHint(opened.version);
+    if (opened.size > maxBytes) {
+      return Object.freeze({ kind: "truncated" as const, versionToken: versionHint });
+    }
 
     const chunks: Buffer[] = [];
     let length = 0;
     for await (const chunk of opened.body) {
-      if (!(chunk instanceof Uint8Array)) return Object.freeze({ truncated: true, versionToken });
-      if (chunk.byteLength > maxBytes - length) return Object.freeze({ truncated: true, versionToken });
+      if (!(chunk instanceof Uint8Array)) {
+        return Object.freeze({ kind: "truncated" as const, versionToken: versionHint });
+      }
+      if (chunk.byteLength > maxBytes - length) {
+        return Object.freeze({ kind: "truncated" as const, versionToken: versionHint });
+      }
       const bytes = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
       chunks.push(bytes);
       length += bytes.byteLength;
     }
-    if (length !== opened.size) return Object.freeze({ truncated: true, versionToken });
-    return Object.freeze({ content: Buffer.concat(chunks, length), versionToken });
+    if (length !== opened.size) {
+      return Object.freeze({ kind: "truncated" as const, versionToken: versionHint });
+    }
+    const version = Object.freeze({ ...opened.version });
+    if (!hasVersionAuthority(version)) return null;
+    const content = Buffer.concat(chunks, length);
+    return Object.freeze({
+      kind: "completed" as const,
+      content,
+      version,
+      versionToken: contentBoundVersionToken(version, content),
+      ref,
+    });
   } catch {
     return null;
+  }
+}
+
+async function restoreMainFileHistoryContent({
+  rootProof,
+  rootPath,
+  caseMode,
+  resourceIO,
+  revalidateRoot,
+  relativePath,
+  content,
+  expectedVersionToken,
+}: {
+  rootProof: MainWorkspaceRootProof;
+  rootPath: string;
+  caseMode: ProviderRootIdentity["caseMode"];
+  resourceIO: MainFileHistoryResourceIO;
+  revalidateRoot?: MainFileHistoryRootRevalidator;
+  relativePath: string;
+  content: Buffer;
+  expectedVersionToken: string;
+}): Promise<ResourceWriteExpectedVersionResult> {
+  if (
+    !Buffer.isBuffer(content)
+    || typeof expectedVersionToken !== "string"
+    || expectedVersionToken.length === 0
+    || expectedVersionToken.length > 4_096
+  ) {
+    throw restoreVersionConflict();
+  }
+  await revalidateMainHistoryRoot({ rootProof, rootPath, revalidateRoot });
+  const read = await readCompletedMainFileHistoryContent({
+    rootPath,
+    rootIdentity: rootProof.identity,
+    caseMode,
+    resourceIO,
+    relativePath,
+    request: { maxBytes: MAX_SNAPSHOT_BYTES },
+  });
+  if (!read || read.kind !== "completed" || read.versionToken !== expectedVersionToken) {
+    throw restoreVersionConflict();
+  }
+  if (typeof resourceIO.writeExpectedVersion !== "function") {
+    throw new ResourceIOError("File-history restore is unavailable", {
+      code: "provider_not_available",
+      status: 503,
+    });
+  }
+  return resourceIO.writeExpectedVersion(
+    read.ref,
+    content,
+    read.version,
+    Object.freeze({
+      source: "api" as const,
+      reason: "history_restore",
+      operationId: randomUUID(),
+    }),
+  );
+}
+
+async function revalidateMainHistoryRoot({
+  rootProof,
+  rootPath,
+  revalidateRoot,
+}: {
+  rootProof: MainWorkspaceRootProof;
+  rootPath: string;
+  revalidateRoot?: MainFileHistoryRootRevalidator;
+}): Promise<void> {
+  let currentProof = rootProof;
+  try {
+    if (revalidateRoot) {
+      const revalidated = await revalidateRoot(rootProof);
+      if (!revalidated) throw restoreVersionConflict();
+      currentProof = revalidated;
+    }
+    const currentRootPath = canonicalPhysicalWatchPath(
+      workspaceWatchTargetDirectory(currentProof, "file-history restore"),
+    );
+    if (
+      !currentRootPath
+      || !sameMainRootIdentity(rootProof.identity, currentProof.identity)
+      || comparisonPath(currentRootPath, rootProof.identity.caseMode)
+        !== comparisonPath(rootPath, rootProof.identity.caseMode)
+      || !fs.statSync(currentRootPath).isDirectory()
+    ) {
+      throw restoreVersionConflict();
+    }
+  } catch (error) {
+    if (error instanceof ResourceIOError) throw error;
+    throw restoreVersionConflict();
   }
 }
 
@@ -401,11 +595,43 @@ function comparisonPath(value: string, caseMode: ProviderRootIdentity["caseMode"
     : resolved;
 }
 
-function opaqueVersionToken(version: ResourceVersion | undefined): string | null {
+function versionSchedulingHint(version: ResourceVersion | undefined): string | null {
   if (!version) return null;
   const values = [version.mtimeMs, version.size, version.sha256, version.etag, version.sequence];
   if (values.every(value => value === undefined)) return null;
   return createHash("sha256").update(JSON.stringify(values)).digest("base64url");
+}
+
+function contentBoundVersionToken(version: ResourceVersion, content: Buffer): string {
+  const values = [version.mtimeMs, version.size, version.sha256, version.etag, version.sequence];
+  return createHash("sha256")
+    .update(JSON.stringify(values))
+    .update("\0")
+    .update(content)
+    .digest("base64url");
+}
+
+function hasVersionAuthority(version: ResourceVersion): boolean {
+  return [version.mtimeMs, version.size, version.sha256, version.etag, version.sequence]
+    .some(value => value !== undefined);
+}
+
+function sameMainRootIdentity(
+  left: ProviderRootIdentity,
+  right: ProviderRootIdentity,
+): boolean {
+  return left.providerId === right.providerId
+    && left.identityNamespace === right.identityNamespace
+    && left.opaqueRootId === right.opaqueRootId
+    && left.scopeToken === right.scopeToken
+    && left.caseMode === right.caseMode;
+}
+
+function restoreVersionConflict(): ResourceIOError {
+  return new ResourceIOError("File-history restore conflict", {
+    code: "resource_version_conflict",
+    status: 409,
+  });
 }
 
 /**
@@ -876,6 +1102,7 @@ export function createProductionWorkspaceRuntime({
         subscribe: (subscriber) => resourceEvents.subscribe(subscriber),
       },
       resourceIO: historyResourceIO,
+      revalidateRoot: (candidate) => rootAuthority.revalidateMain(candidate),
     });
   };
   return Object.freeze({

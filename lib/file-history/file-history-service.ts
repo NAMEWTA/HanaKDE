@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
+import type { ResourceWriteExpectedVersionResult } from "../resource-io/types.ts";
 import type { WorkspaceObservation } from "../../shared/workspace-observation.ts";
 import {
   FileHistoryStore,
@@ -73,6 +74,11 @@ export type MainFileHistoryBinding = Readonly<{
   subscribeEvents?: (consumer: (event: MainFileHistoryEvent) => void | Promise<void>) => (() => void);
   // The adapter must honor maxBytes before materializing content and signal a truncated read.
   read: (relativePath: string, request: FileHistoryReadRequest) => Promise<FileHistoryRead | null>;
+  restore?: (
+    relativePath: string,
+    content: Buffer,
+    expectedVersionToken: string,
+  ) => Promise<ResourceWriteExpectedVersionResult>;
 }>;
 
 type CreateStore = (input: {
@@ -596,7 +602,9 @@ export class FileHistoryService {
         content: read.content,
         origin: request.origin,
         opContext: request.operationContext,
-        versionToken: request.versionToken || read.versionToken || null,
+        // Event metadata only schedules capture; the completed bounded read is
+        // the authority for any snapshot version token.
+        versionToken: read.versionToken || request.versionToken || null,
         capturedAt: this._now(),
       });
       this._clearFailedCapture(entry, request);
