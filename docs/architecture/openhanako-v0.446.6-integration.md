@@ -104,7 +104,7 @@ verify 和 local DMG；Windows native runtime/NSIS 仍由 T-22 阻断，macOS x6
 |---|---|---|
 | T-21 / G8 | integrated/done | merge `e1b232b3`，Lead standards/specification pass |
 | T-22 / W9-WIN | ready | 当前 macOS 主机没有真实 Windows runner，不能声称通过 |
-| T-23 / W9-MAC | review | merge `477a1b6a`；arm64 harness/DMG pass，x64、硬件 sleep、interactive E2E 和 event-bus warning 尚未收口 |
+| T-23 / W9-MAC | review | final harness merge `7d15baea`；arm64 harness/DMG pass，x64、硬件 sleep、interactive E2E 和 event-bus warning 尚未收口 |
 | T-24 / W9-DOCS | in progress | 本文、ledger、troubleshooting 正在提交 |
 | T-25 / G10 | ready/blocked by upstream gates | 只有 T-22/T-23/T-24 完成后才能做最终 verdict |
 

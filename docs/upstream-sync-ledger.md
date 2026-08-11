@@ -33,7 +33,7 @@
 | T-17 | `65699d2b` | HanaKDE projection integration | keep strict Agent envelope; no raw-path fallback | 35 focused tests; producer gap explicit |
 | T-18/T-19/T-20 | `271da295` | HanaKDE lifecycle/extraction integration | keep shared Extraction and Office adapter; no second parser | extraction/Office Evidence |
 | T-21 | `e1b232b3` | production packaging integration | keep target helper/closure/manifest; no release side effect | clean package/open rehearsal, 48 independent tests |
-| T-23 | `477a1b6a` | platform harness integration | keep macOS runner; do not promote arm64-only review to done | 20 independent tests, arm64 DMG inventory |
+| T-23 | `7d15baea` | platform harness integration | keep macOS runner; do not promote arm64-only review to done | 20 independent tests plus atomic-event hardening, arm64 DMG inventory |
 | T-24 | `de0eb983` | documentation work baseline | this ledger is candidate documentation, not final completion | docs/link/terminology review |
 
 ## Five-way decision vocabulary
