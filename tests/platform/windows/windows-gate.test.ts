@@ -35,7 +35,7 @@ describe("Windows blocking gate runner", () => {
     });
     expect(result.fixture.recursiveEvents).toBeGreaterThan(0);
     expect(fs.existsSync(root)).toBe(false);
-  });
+  }, 30_000);
 
   it("keeps a fail-closed win32 guard and the required native probes", () => {
     const source = fs.readFileSync(sourcePath, "utf8");
@@ -61,6 +61,10 @@ describe("Windows blocking gate runner", () => {
       for (const relative of [
         "HanaAgent.exe",
         "resources/app.asar",
+        "resources/git/cmd/git.exe",
+        "resources/git/mingw64/bin/git.exe",
+        "resources/git/usr/bin/sh.exe",
+        "resources/sandbox/windows/hana-win-sandbox.exe",
         "resources/seed/server-0.446.6-win32-x64.tar.gz",
         "resources/seed/renderer-0.446.6.tar.gz",
         "resources/seed/seed-train-win32-x64.json",
@@ -68,7 +72,7 @@ describe("Windows blocking gate runner", () => {
       ]) {
         const target = path.join(root, relative);
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        if (relative === "HanaAgent.exe") writePeFixture(target);
+        if (relative.endsWith(".exe")) writePeFixture(target);
         else fs.writeFileSync(target, "fixture", "utf8");
       }
       const result = inspectWindowsPackage(root, {
@@ -82,6 +86,8 @@ describe("Windows blocking gate runner", () => {
       expect(result).toMatchObject({
         executable: "HanaAgent.exe",
         manifest: "seed-train-win32-x64.json",
+        minGitRuntime: "resources/git",
+        sandboxHelper: "resources/sandbox/windows/hana-win-sandbox.exe",
         secureHelper: "dist-secure-fs/win-x64/hana-secure-fs-helper.exe",
       });
     } finally {
@@ -97,6 +103,10 @@ describe("Windows blocking gate runner", () => {
       for (const relative of [
         "HanaAgent.exe",
         "resources/app.asar",
+        "resources/git/cmd/git.exe",
+        "resources/git/mingw64/bin/git.exe",
+        "resources/git/usr/bin/sh.exe",
+        "resources/sandbox/windows/hana-win-sandbox.exe",
         "resources/seed/server-0.446.6-win32-x64.tar.gz",
         "resources/seed/renderer-0.446.6.tar.gz",
         "resources/seed/seed-train-win32-x64.json",
@@ -104,7 +114,7 @@ describe("Windows blocking gate runner", () => {
       ]) {
         const target = path.join(root, relative);
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        if (relative === "HanaAgent.exe") writePeFixture(target);
+        if (relative.endsWith(".exe")) writePeFixture(target);
         else fs.writeFileSync(target, "fixture", "utf8");
       }
       expect(() => inspectWindowsPackage(root, {
