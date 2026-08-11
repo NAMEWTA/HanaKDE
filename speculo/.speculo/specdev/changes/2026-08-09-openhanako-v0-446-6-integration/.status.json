@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-11T23:04:33+0800",
+  "updated_at": "2026-08-11T23:17:09+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -177,6 +177,15 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-11T20:54:22+0800",
       "scope": "G10 deterministic quality sync only: replace the two T-16 style ratchet additions with existing shadow/spacing tokens, and regenerate build/persistence-store-inventory.json, build/persistence-startup-receipt.json and build/persistence-schema-fingerprint.json for already-authorized T-15 external-resource write sites. No style baseline increase, schema or DATA_EPOCH change, migration, persistence owner, product behavior or package change."
+    },
+    {
+      "id": "D-G10-03",
+      "level": "quality-gate",
+      "status": "approved",
+      "owner": "G10 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T23:17:09+0800",
+      "scope": "G10 correction round 3/3 after T-26: regenerate build/cli-runtime-closure.json, build/open-boundary-baseline.json and build/persistence-schema-fingerprint.json from their existing deterministic generators; update only tests/engine-resource-events.test.ts for ResourceIO-only Agent mutation ownership and desktop/src/react/__tests__/components/FileHistoryModal.test.tsx for explicit async state waits. No production behavior, baseline weakening, schema or DATA_EPOCH change, migration, package, route, public API or new owner."
     },
     {
       "id": "D-T17-01",
