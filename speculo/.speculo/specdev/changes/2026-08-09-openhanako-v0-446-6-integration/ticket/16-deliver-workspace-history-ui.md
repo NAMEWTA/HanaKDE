@@ -12,8 +12,8 @@ risk: high
 blocked_by: [T-13, T-15]
 contract_ids: [AC-006, AC-007, AC-013, AC-015, AC-016, AC-017, AC-024]
 owner: Worker-T-16 / Lead
-expected_changes: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>"]
-writable_paths: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
+expected_changes: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>"]
+writable_paths: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>desktop/src/react/components/knowledge-workspace/**</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -123,3 +123,12 @@ shared_path_owners: []
 - **选项：** 保持 fixed skip 会让 AC-006/AC-017/AC-024 无生产入口；插件化无法表达全局 store/顶层 modal 生命周期；推荐在 renderer 系统本体完成最小宿主接入。
 - **批准：** Root Lead，2026-08-11T19:04:48+0800；仅组合既有 T-16 slice、挂载单一 main-only modal host、更新边界/store 回归并启用现有 E2E。禁止新增 server 语义、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
 - **处理结果：** 待实现与 Evidence 回写；完成前 T-16 状态恢复为 `in_progress`。
+
+## 12. 偏差 D-T16-02：Workbench 可见入口接入
+
+- **等级：** ticket；`status=approved`。
+- **触发事实：** D-T16-01 已组合 store 并挂载全局 modal，但生产入口仍只存在于要求严格 Agent correlation envelope 的消息投影；普通 Workbench 没有可见入口，T-16 owner E2E 仍无法从用户界面打开 History。
+- **受影响路径：** 新增授权 `<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>`、`<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>` 与 `<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>`；继续使用已授权的 File History 组件和 E2E 路径。
+- **选项：** 依赖 Agent 投影会错误耦合 Workspace 与 conversation correlation；浮动全局按钮不符合现有 Workbench 信息架构；推荐在已有 workspace header 工具区挂载同一个 main-only entry。
+- **批准：** Root Lead，2026-08-11T19:11:30+0800；仅增加 main-only、可访问、固定尺寸的 Workbench History 命令及交互回归。禁止新增 route、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
+- **处理结果：** 待实现与 E2E/Evidence 回写；完成前 T-16 保持 `in_progress`。
