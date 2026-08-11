@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-23
 title: 通过 macOS 阻断门
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "macOS recursive watcher、sleep/resume、case/symlink、native extraction 与 DMG/app production package 是独立原生阻断 Gate。"
 ready: true
 risk: critical
 blocked_by: [T-21]
 contract_ids: [AC-009, AC-010, AC-012, AC-013, AC-014, AC-015, AC-016, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-027]
-owner: unassigned
+owner: Worker-T-23 / Lead平台验收
 expected_changes: ["<Path>scripts/platform/macos/**</Path>", "<Path>tests/platform/macos/**</Path>"]
 writable_paths: ["<Path>scripts/platform/macos/**</Path>", "<Path>tests/platform/macos/**</Path>"]
 read_only_paths: ["<Path>package.json</Path>", "<Path>package-lock.json</Path>", "<Path>desktop/**</Path>", "<Path>lib/**</Path>", "<Path>core/**</Path>", "<Path>server/**</Path>"]
