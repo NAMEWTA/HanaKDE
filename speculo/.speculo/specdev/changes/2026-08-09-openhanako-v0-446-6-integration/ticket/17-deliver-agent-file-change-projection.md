@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-17
 title: 交付 Agent 对话文件变化投影
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "对话/操作相关性、main 共享版本与挂载边界跨 Agent runtime、renderer 与安全 restore，同时必须避免第二历史事实源。"
 ready: true
