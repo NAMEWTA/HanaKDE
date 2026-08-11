@@ -6946,15 +6946,6 @@
     {
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "kind": "mkdir",
-      "excerpt": "fs.mkdirSync(path.dirname(filePath), { recursive: true })",
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "storeId": null,
-      "exemptionId": "external-resource-io",
-      "ordinal": 3
-    },
-    {
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "kind": "mkdir",
       "excerpt": "fs.mkdirSync(path.dirname(targetPath), { recursive: true })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "storeId": null,
@@ -7217,15 +7208,6 @@
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "kind": "write-file",
       "excerpt": "fs.writeFileSync(descriptor, `${JSON.stringify(receipt)}\\n`, \"utf8\")",
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "storeId": null,
-      "exemptionId": "external-resource-io",
-      "ordinal": 0
-    },
-    {
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "kind": "write-file",
-      "excerpt": "fs.writeFileSync(filePath, content, { flag: \"wx\" })",
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "storeId": null,
       "exemptionId": "external-resource-io",

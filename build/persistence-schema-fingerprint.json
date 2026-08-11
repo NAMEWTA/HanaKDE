@@ -630,7 +630,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:02489b2e89a0bb62aa70f48326e1fdb92e68d8aaca17141fc3b6113f0c06f2a4",
+  "payloadFingerprint": "sha256:e0dbef79607578b42e2ade4d2c692333437b52f1fad120c397c8332239aeb2f4",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3138,8 +3138,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Registers the activated main-only File History SQLite baseline. The runtime accepts only its schema-v1 store; no released compatibility or migration contract exists.",
-    "payloadFingerprint": "sha256:02489b2e89a0bb62aa70f48326e1fdb92e68d8aaca17141fc3b6113f0c06f2a4"
+    "compatibilityReason": "Repins deterministic receipts after the authorized T-15 native secure-write path removed two stale Node external-resource sites and integrated File History/Knowledge sources changed digest; runtime-introspected schemas, persistence owners, DATA_EPOCH, migration, checkpoint and restore contracts are unchanged.",
+    "payloadFingerprint": "sha256:e0dbef79607578b42e2ade4d2c692333437b52f1fad120c397c8332239aeb2f4"
   },
   "schemas": [
     {
@@ -3392,7 +3392,7 @@
         ],
         "userVersion": 0
       },
-      "sourceHash": "sha256:a0bf66f77fee80faf3f2f47ea7d6f6b1fe3d6c427121f5db4f05761da02b55a1",
+      "sourceHash": "sha256:b336f59117e52e6d7080b95bf13ccb4fb47ed976f7fc80ca7b4560f3761b04f5",
       "storeId": "file-history-sqlite"
     },
     {
@@ -3413,14 +3413,14 @@
         },
         {
           "module": "core/knowledge-workspace/knowledge-index-event-coordinator.ts",
-          "sourceHash": "sha256:0c984356ae6e8c41fde84251b3529663f79f296089197194e63f8a65ef266460"
+          "sourceHash": "sha256:7e5629325e56bd775859f96d9724a9449e2d40536b66849454f1e3255d6495fe"
         },
         {
           "module": "lib/knowledge-workspace/knowledge-query.ts",
           "sourceHash": "sha256:4020df9147ec434182f796ca5873b5450fec6c573c7034fcc746819f717c9fd3"
         }
       ],
-      "sourceHash": "sha256:d98021c67a2f32a0a1f203c9ce126b208fdf7eb517ab87cf6c8b7252a28ad361",
+      "sourceHash": "sha256:418b1da002f242660117f572f84bcbc95eaa52abcfd60687259c8fbd80e79df2",
       "storeId": "knowledge-index-generations"
     },
     {
@@ -3452,7 +3452,7 @@
       "contract": "schemaVersion 1 source binding history validator and atomic serializer",
       "kind": "runtime-contract",
       "module": "core/knowledge-workspace/source-registry.ts",
-      "sourceHash": "sha256:4b2331aa346ce25f8d406a18d25431aebb122eaca5e9480cd8ce2f3f1c7de68a",
+      "sourceHash": "sha256:26b6509d36355a56fe5080929767dc6df0c1200d3a1c80d27e0098b752a55a9c",
       "storeId": "knowledge-source-bindings"
     },
     {
@@ -7723,14 +7723,6 @@
     },
     {
       "exemptionId": "external-resource-io",
-      "kind": "mkdir",
-      "ordinal": 3,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
       "kind": "remove-path",
       "ordinal": 0,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
@@ -7925,14 +7917,6 @@
       "exemptionId": "external-resource-io",
       "kind": "rename",
       "ordinal": 2,
-      "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
-      "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "external-resource-io",
-      "kind": "write-file",
-      "ordinal": 0,
       "reason": "Writes explicit user-selected local filesystem resource targets outside Hana persistence ownership.",
       "sourceFile": "lib/resource-io/providers/local-fs-provider.ts",
       "storeId": null
