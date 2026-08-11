@@ -46,10 +46,8 @@ describe("file-history production boundary", () => {
     const service = source("lib/file-history/file-history-service.ts");
     const rendererEntrypoints = [
       "server/routes/agents.ts",
-      "desktop/src/react/App.tsx",
       "desktop/src/react/components/desk/DeskTree.tsx",
       "desktop/src/react/components/preview/FloatingActions.tsx",
-      "desktop/src/react/stores/index.ts",
     ];
 
     expect(openRoot.match(/createFileHistoryRoute\(engine\)/g)).toHaveLength(1);
@@ -65,6 +63,11 @@ describe("file-history production boundary", () => {
       expect(text).not.toContain("FileHistory");
       expect(text).not.toContain("openFileHistory");
     }
+
+    const app = source("desktop/src/react/App.tsx");
+    const store = source("desktop/src/react/stores/index.ts");
+    expect(app.match(/<FileHistoryModal\s*\/>/g)).toHaveLength(1);
+    expect(store.match(/\.\.\.createFileHistorySlice\(set, _get\)/g)).toHaveLength(1);
   });
 
   it("registers the activated SQLite owner in the production persistence census", () => {
