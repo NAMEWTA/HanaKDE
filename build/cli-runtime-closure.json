@@ -8831,16 +8831,11 @@
         },
         {
           "root": "server-bootstrap",
-          "from": "core/engine.ts",
-          "kind": "import-statement"
-        },
-        {
-          "root": "server-bootstrap",
           "from": "core/knowledge-workspace/source-registry.ts",
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by lib/document-extract/index.ts (import-statement); lib/resource-io/pi-tool-operations.ts (import-statement); lib/resource-io/providers/local-fs-provider.ts (import-statement); +11 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by lib/document-extract/index.ts (import-statement); lib/resource-io/pi-tool-operations.ts (import-statement); lib/resource-io/providers/local-fs-provider.ts (import-statement); +10 more importer(s)."
     },
     {
       "path": "lib/resource-io/resource-watch-registry.ts",
@@ -112082,6 +112077,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "core/engine.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/resource-events-ws.ts",
           "kind": "import-statement"
         },
@@ -112099,9 +112099,14 @@
           "root": "server-bootstrap",
           "from": "server/routes/resource-io.ts",
           "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "lib/activity-hub.ts",
+          "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by shared/workspace-history.ts (import-statement); lib/resource-io/providers/local-fs-provider.ts (import-statement); lib/resource-io/resource-io.ts (import-statement); +5 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by shared/workspace-history.ts (import-statement); lib/resource-io/providers/local-fs-provider.ts (import-statement); lib/resource-io/resource-io.ts (import-statement); +7 more importer(s)."
     },
     {
       "path": "shared/knowledge-workspace-contract.ts",
@@ -112140,6 +112145,11 @@
         {
           "root": "server-bootstrap",
           "from": "lib/knowledge-workspace/resource-open-policy.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "core/engine.ts",
           "kind": "import-statement"
         },
         {
@@ -112183,7 +112193,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); shared/workspace-history.ts (import-statement); +12 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by shared/knowledge-workspace-errors.ts (import-statement); shared/knowledge-diagnostics.ts (import-statement); shared/workspace-history.ts (import-statement); +13 more importer(s)."
     },
     {
       "path": "shared/knowledge-workspace-errors.ts",
@@ -113545,6 +113555,16 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "core/engine.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "server/block-extractors.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/routes/sessions.ts",
           "kind": "import-statement"
         },
@@ -113564,7 +113584,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by shared/workspace-ui-state.ts (import-statement); shared/workspace-persistence-gc.ts (import-statement); core/preferences-manager.ts (import-statement); +5 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by shared/workspace-ui-state.ts (import-statement); shared/workspace-persistence-gc.ts (import-statement); core/preferences-manager.ts (import-statement); +7 more importer(s)."
     },
     {
       "path": "shared/workspace-observation.ts",

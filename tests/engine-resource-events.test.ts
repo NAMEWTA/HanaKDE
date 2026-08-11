@@ -167,7 +167,7 @@ function createMemoryHistoryStore(onClose: () => void = () => {}): FileHistorySt
 }
 
 describe("HanaEngine ResourceEvent emission", () => {
-  it("emits agent SessionFile writes as resource.changed without a legacy app-event projection", () => {
+  it("does not emit a second resource.changed event from the SessionFile projection", () => {
     const engine = Object.create(HanaEngine.prototype);
     const listener = vi.fn();
     engine._eventBus = null;
@@ -194,22 +194,7 @@ describe("HanaEngine ResourceEvent emission", () => {
     });
 
     expect(result).toBe(file);
-    const events = listener.mock.calls.map(([event]) => event);
-    expect(events[0]).toMatchObject({
-      type: "resource.changed",
-      source: "agent_tool",
-      reason: "agent_write",
-      sessionPath,
-      fileId: "sf_created",
-      operation: "created",
-      resource: {
-        kind: "local-file",
-        provider: "local_fs",
-        path: filePath,
-        filePath,
-      },
-    });
-    expect(events).toHaveLength(1);
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it("emits bare ResourceIO resource.changed without a legacy app-event projection", () => {

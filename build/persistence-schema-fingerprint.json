@@ -630,7 +630,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:e0dbef79607578b42e2ade4d2c692333437b52f1fad120c397c8332239aeb2f4",
+  "payloadFingerprint": "sha256:33f6572889557b0cdac4f3f75f5d1ca737dfdb13f7323833ce28505e20e7d327",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3138,8 +3138,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Repins deterministic receipts after the authorized T-15 native secure-write path removed two stale Node external-resource sites and integrated File History/Knowledge sources changed digest; runtime-introspected schemas, persistence owners, DATA_EPOCH, migration, checkpoint and restore contracts are unchanged.",
-    "payloadFingerprint": "sha256:e0dbef79607578b42e2ade4d2c692333437b52f1fad120c397c8332239aeb2f4"
+    "compatibilityReason": "Repins deterministic source receipts after the authorized T-26 Agent mutation correlation changed Engine, ActivityHub and session serialization imports; runtime-introspected schemas, persistence owners, DATA_EPOCH, migration, checkpoint and restore contracts are unchanged.",
+    "payloadFingerprint": "sha256:33f6572889557b0cdac4f3f75f5d1ca737dfdb13f7323833ce28505e20e7d327"
   },
   "schemas": [
     {
@@ -3613,7 +3613,7 @@
         {
           "contract": "core/session-coordinator.ts Hana metadata extensions",
           "module": "core/session-coordinator.ts",
-          "sourceHash": "sha256:9291ba90a08340f0b4071d0935e4d4abf55103bf9257296f7acedd32ae14b83e"
+          "sourceHash": "sha256:2a8552569f98d831d742da0c00a6fad4ea73409330b562cdbffa2629f3f29de9"
         },
         {
           "contract": "core/session-jsonl-file.ts repair contract",

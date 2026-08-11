@@ -112,7 +112,7 @@ describe('FileHistoryModal', { sequential: true }, () => {
     render(<FileHistoryModal />);
     await screen.findByTestId('fh-version-2');
     expect(screen.getByText('In-app edit')).toBeInTheDocument();
-    expect(screen.getByText('new')).toBeInTheDocument();
+    expect(await screen.findByText('new')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('fh-restore'));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path === '/api/resource-io/write-expected-version')).toBe(true));
@@ -139,6 +139,7 @@ describe('FileHistoryModal', { sequential: true }, () => {
     });
     render(<FileHistoryModal />);
     await screen.findByTestId('fh-version-2');
+    await screen.findByText('new');
     fireEvent.click(screen.getByTestId('fh-restore'));
     await waitFor(() => expect(screen.getByText('Operation failed')).toBeInTheDocument());
     expect(screen.getByText('Operation failed')).toHaveAttribute('data-error-code', 'resource_conflict');
