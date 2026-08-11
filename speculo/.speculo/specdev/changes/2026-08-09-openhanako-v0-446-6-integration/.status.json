@@ -74,6 +74,46 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-11T13:45:00+0800",
       "scope": "T-21 packaging correctness only: allow lib/resource-io/native-secure-write.ts to prefer the trusted absolute HANA_ROOT runtime root for locating the packaged secure helper. No public API, fallback, product behavior, or ownership expansion; the helper must still be copied into and signed with the server seed."
+    },
+    {
+      "id": "D-T21-02",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T13:52:00+0800",
+      "scope": "T-21 open-package closure only: add the exact T-19/T-20 document extraction runner, child runtimes, and document index extractor paths to export-manifest.json so the existing open composition can be materialized and built. No product classification, API, or source behavior change."
+    },
+    {
+      "id": "D-T21-03",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T13:58:00+0800",
+      "scope": "T-21 closure receipt sync only: regenerate build/cli-runtime-closure.json and build/open-boundary-baseline.json from the authorized compute-cli-closure change so dynamic document child assets and the zero-edge open-boundary ratchet remain deterministic."
+    },
+    {
+      "id": "D-T21-04",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T14:02:00+0800",
+      "scope": "T-21 manifest hygiene only: remove the sole stale export-manifest.json entry lib/file-history/workspace-watcher.ts after clean open export proved that the upstream-integrated source no longer exists. No replacement watcher or source edit is authorized."
+    },
+    {
+      "id": "D-T21-05",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T14:04:00+0800",
+      "scope": "T-21 open-package closure only: add the seven deterministic source-graph paths for Workspace runtime, ResourceIO native runner, production workspace health, and shared workspace observation that are required by server/main-open.ts and classified with zero open-boundary coupling. No closed route/content or product behavior change."
+    },
+    {
+      "id": "D-T21-06",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T14:07:00+0800",
+      "scope": "T-21 server bundle configuration only: set vite.config.server.js ssr.noExternal=true so SSR packaging bundles ordinary dependencies while preserving the existing explicit rollup external allowlist and target-node install contract. No runtime API or dependency version change."
     }
   ],
   "worktrees": [

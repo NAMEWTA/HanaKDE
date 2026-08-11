@@ -12,6 +12,12 @@ const nodeBuiltins = builtinModules.flatMap((m) => [m, `node:${m}`]);
 const bundleEntry = process.env.HANA_SERVER_BUNDLE_ENTRY || "server/main-full.ts";
 
 export default defineConfig({
+  ssr: {
+    // SSR mode normally externalizes every dependency. Production server
+    // packaging installs only the audited rollupOptions.external set, so all
+    // other bare imports must remain bundled exactly as in the prior lib build.
+    noExternal: true,
+  },
   build: {
     lib: {
       // main-full.ts is the thin closed composition entry: it statically

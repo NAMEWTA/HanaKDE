@@ -60,7 +60,7 @@
     "test:knowledge:e2e:open": "playwright test -c tests/knowledge-workspace-e2e/playwright.config.ts --project=web-open",
     "test:knowledge:e2e:full": "playwright test -c tests/knowledge-workspace-e2e/playwright.config.ts --project=web-full",
     "benchmark:knowledge:reference": "node --experimental-strip-types scripts/run-knowledge-performance-reference.ts",
-    "build:server": "node scripts/build-server.mjs",
+    "build:server": "npm run build:secure-fs-helper && node scripts/build-server.mjs",
     "build:server:open": "node scripts/build-server-open.mjs",
     "smoke:server:open": "node scripts/smoke-open-server.mjs",
     "export:open": "node scripts/export-open-tree.mjs",

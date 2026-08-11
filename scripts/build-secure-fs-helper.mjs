@@ -43,6 +43,25 @@ export function buildSecureFsCompileCommand({ source, output } = {}) {
   ].join(" ");
 }
 
+function darwinTargetArch(arch) {
+  if (arch === "arm64") return "arm64";
+  if (arch === "x64") return "x86_64";
+  throw new Error(`[secure-fs-helper] unsupported macOS architecture: ${arch}`);
+}
+
+export function verifyDarwinSecureFsHelperArchitecture({ output, arch, execFile = execFileSync } = {}) {
+  if (!output) throw new Error("output is required");
+  const targetArch = darwinTargetArch(arch);
+  try {
+    execFile("lipo", [output, "-verify_arch", targetArch], { stdio: "ignore" });
+  } catch (error) {
+    throw new Error(
+      `[secure-fs-helper] ${output} is not a ${targetArch} macOS binary; refusing to package it`,
+      { cause: error },
+    );
+  }
+}
+
 function findVsDevCmd() {
   const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
   const vswhere = path.join(programFilesX86, "Microsoft Visual Studio", "Installer", "vswhere.exe");
@@ -106,20 +125,57 @@ export function buildSecureFsHelper({
     buildWindows({ rootDir, arch, source, output });
   } else {
     const compiler = env.CXX || "clang++";
+    const targetArch = darwinTargetArch(arch);
     execFileSync(compiler, [
       "-std=c++17",
       "-O2",
       "-Wall",
       "-Wextra",
       "-Werror",
+      "-arch",
+      targetArch,
       source,
       "-o",
       output,
     ], { cwd: rootDir, stdio: "inherit" });
     fs.chmodSync(output, 0o755);
+    verifyDarwinSecureFsHelperArchitecture({ output, arch });
   }
   if (!fs.existsSync(output)) throw new Error(`[secure-fs-helper] build did not produce ${output}`);
   return { skipped: false, target: output };
+}
+
+/**
+ * Copies the already-built helper into the server seed before signing/packing.
+ * The helper is intentionally absent on unsupported platforms so ResourceIO
+ * remains fail-closed there instead of silently shipping a host binary.
+ */
+export function copySecureFsHelperRuntime({
+  rootDir = scriptRoot,
+  outDir,
+  platform = process.platform,
+  arch = process.arch,
+} = {}) {
+  if (!outDir) throw new Error("outDir is required");
+  if (!shouldBuildSecureFsHelper({ platform })) {
+    console.log(`[secure-fs-helper] runtime copy skipped on ${platform}`);
+    return { skipped: true };
+  }
+  const sourceDir = secureFsHelperOutputDir({ rootDir, outputRoot: rootDir, platform, arch });
+  const extension = platform === "win32" ? ".exe" : "";
+  const source = path.join(sourceDir, `hana-secure-fs-helper${extension}`);
+  if (!fs.existsSync(source)) {
+    throw new Error(`[secure-fs-helper] built helper missing; run build-secure-fs-helper first: ${source}`);
+  }
+  const targetDir = secureFsHelperOutputDir({ rootDir, outputRoot: outDir, platform, arch });
+  fs.rmSync(targetDir, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+  fs.cpSync(sourceDir, targetDir, { recursive: true });
+  const target = path.join(targetDir, path.basename(source));
+  if (!fs.existsSync(target)) throw new Error(`[secure-fs-helper] runtime copy missing: ${target}`);
+  if (platform !== "win32") fs.chmodSync(target, 0o755);
+  console.log(`[secure-fs-helper] runtime helper staged at ${path.relative(outDir, target)}`);
+  return { skipped: false, source, target };
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
