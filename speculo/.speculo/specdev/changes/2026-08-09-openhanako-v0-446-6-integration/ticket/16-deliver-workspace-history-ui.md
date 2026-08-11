@@ -12,6 +12,7 @@ risk: high
 blocked_by: [T-13, T-15]
 contract_ids: [AC-006, AC-007, AC-013, AC-015, AC-016, AC-017, AC-024]
 owner: Worker-T-16 / Lead
+deviations: [D-T16-01, D-T16-02, D-T16-03]
 expected_changes: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>"]
 writable_paths: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>desktop/src/react/components/knowledge-workspace/**</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>"]
@@ -132,3 +133,10 @@ shared_path_owners: []
 - **选项：** 依赖 Agent 投影会错误耦合 Workspace 与 conversation correlation；浮动全局按钮不符合现有 Workbench 信息架构；推荐在已有 workspace header 工具区挂载同一个 main-only entry。
 - **批准：** Root Lead，2026-08-11T19:11:30+0800；仅增加 main-only、可访问、固定尺寸的 Workbench History 命令及交互回归。禁止新增 route、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
 - **处理结果：** `2421bfed` 已在 workspace header 挂载紧凑 main-only History 命令；desktop-full owner E2E 通过真实 60 秒 merge-window timeline、diff、expected-version restore 与 ResourceIO 回读。
+
+## 13. 偏差 D-T16-03：确定性 session/main context 建立
+
+- **等级：** ticket；`status=approved`；correction round 3/3。
+- **触发事实：** 在 T-26 集成后的 fresh final-SHA 复核中，owner spec 在候选和 clean integration `e28c0c42` 均于第一次 `write-expected-version` 返回 503。Desktop fixture 明确设置 `HANA_CREATE_STARTUP_SESSION=0`，但测试仍假设 active session/main context 已存在，因此没有进入 History 或 restore 逻辑。
+- **受影响路径：** 仅既有 writable `<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>`；复用 T-26 已集成的 opt-in deterministic model fixture，不修改 fixture、生产代码或 route。
+- **批准：** Root Lead，2026-08-11T22:52:23+0800。Spec 必须先通过正常模型选择和 authenticated `/api/sessions/new` 建立 `cwd=mainSource` 的 session，再原样执行真实 60 秒 merge-window、diff、expected-version restore 与 ResourceIO 回读。禁止 raw root 注入、production test route、私有 History 写入、跳过 merge window 或弱化断言。

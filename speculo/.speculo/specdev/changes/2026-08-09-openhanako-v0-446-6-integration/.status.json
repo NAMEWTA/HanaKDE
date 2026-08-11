@@ -5,12 +5,39 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-11T22:28:16+0800",
+  "updated_at": "2026-08-11T22:52:23+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
   "blockers": [],
   "deviations": [
+    {
+      "id": "D-T16-01",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-16 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T19:04:48+0800",
+      "scope": "T-16 only: compose the existing main-only History slice into the global store, mount one modal host, and cover the store/production boundary. No server, mount History, raw path, second store/cache or kernel change."
+    },
+    {
+      "id": "D-T16-02",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-16 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T19:11:30+0800",
+      "scope": "T-16 only: mount the existing main-only History command in the Workbench header with focused interaction coverage. No server, mount History, raw path, second store/cache or kernel change."
+    },
+    {
+      "id": "D-T16-03",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-16 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T22:52:23+0800",
+      "scope": "T-16 correction round 3/3: modify only tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts to opt into the integrated deterministic model fixture and create a main-bound session through authenticated /api/sessions/new before the unchanged merge-window/diff/restore/read-back flow. No fixture, product, route, raw-root, private History write or assertion weakening."
+    },
     {
       "id": "D-T12-06",
       "level": "ticket",
