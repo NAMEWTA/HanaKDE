@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-15
 title: 交付安全 restore 与全读面收敛
-status: review
+status: done
 planning_depth: deep
 planning_depth_reason: "restore 会覆盖用户文件，跨 ResourceIO、History、Knowledge、Preview、Search 与 Agent Read，涉及 TOCTOU 和数据完整性。"
 ready: true
@@ -109,11 +109,11 @@ shared_path_owners: ["<Path>package.json</Path> => T-15 (dev/test secure-helper 
 
 ## 10. 验收标准
 
-- [ ] `AC-015`：合法 restore 只经 ResourceIO，带 correlation 且产生可反悔版本。
-- [ ] `AC-016`：stale/root/scope/TOCTOU 请求拒绝且磁盘不变。
-- [ ] `AC-017`：所有六个读取面最终一致。
-- [ ] `AC-026`：restore route 不接受 raw root/public workspaceId 且不泄漏绝对路径。
-- [ ] 验证与结构 scan 记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-15.md</Path>`。
+- [x] `AC-015`：合法 restore 只经 ResourceIO，带 correlation 且产生可反悔版本。
+- [x] `AC-016`：stale/root/scope/TOCTOU 请求拒绝且磁盘不变。
+- [x] `AC-017`：所有六个读取面最终一致。
+- [x] `AC-026`：restore route 不接受 raw root/public workspaceId 且不泄漏绝对路径。
+- [x] 验证与结构 scan 记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-15.md</Path>`。
 
 ## 11. 偏差 D-T15-01：主 Workspace restore authority 接缝
 
