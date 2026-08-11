@@ -1344,6 +1344,22 @@ describe('desk-actions workspace roots', () => {
     ]);
   });
 
+  it('passes the caller AbortSignal to workspace search transport', async () => {
+    useStore.setState({
+      deskBasePath: '/workspace',
+    } as never);
+    mockHanaFetch.mockResolvedValueOnce(jsonResponse({ results: [] }));
+    const controller = new AbortController();
+
+    const { searchDeskFiles } = await import('../../stores/desk-actions');
+    await searchDeskFiles('Desk', { signal: controller.signal });
+
+    expect(mockHanaFetch).toHaveBeenCalledWith(
+      '/api/desk/search-files?dir=%2Fworkspace&q=Desk',
+      { signal: controller.signal },
+    );
+  });
+
   it('jumps to a search result by expanding ancestors and selecting the real tree path', async () => {
     useStore.setState({
       deskBasePath: '/workspace',

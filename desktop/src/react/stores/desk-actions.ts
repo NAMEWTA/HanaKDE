@@ -734,7 +734,10 @@ export async function loadDeskTreeFiles(subdir = '', options: { force?: boolean;
   }
 }
 
-export async function searchDeskFiles(query: string): Promise<DeskSearchResult[]> {
+export async function searchDeskFiles(
+  query: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<DeskSearchResult[]> {
   const s = useStore.getState();
   if (!hasServerConnection(s)) return [];
   const trimmed = query.trim();
@@ -750,11 +753,15 @@ export async function searchDeskFiles(query: string): Promise<DeskSearchResult[]
     }
     if (!mountId) addSelectedDeskAgentParam(params, s);
     params.set('q', trimmed);
-    const res = await hanaFetch(`${mountId ? '/api/workbench/search' : '/api/desk/search-files'}?${params}`);
+    const url = `${mountId ? '/api/workbench/search' : '/api/desk/search-files'}?${params}`;
+    const res = options.signal
+      ? await hanaFetch(url, { signal: options.signal })
+      : await hanaFetch(url);
     const data = await res.json();
     if (data.error) throw new Error(String(data.error));
     return Array.isArray(data.results) ? data.results : [];
   } catch (err) {
+    if (options.signal?.aborted) return [];
     console.error('[desk] search failed:', err);
     return [];
   }

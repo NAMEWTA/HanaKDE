@@ -11,13 +11,18 @@ import { InputArea } from '../../components/InputArea';
 import { useStore } from '../../stores';
 import type { DeskSearchResult } from '../../types';
 
+type DeskSearchOptions = { signal?: AbortSignal };
+
 const mocks = vi.hoisted(() => ({
   editorOptions: undefined as undefined | Record<string, unknown>,
   editorText: '',
   editorJson: undefined as undefined | JSONContent,
   editorState: undefined as undefined | EditorState,
   updateHandler: undefined as undefined | (() => void),
-  searchDeskFiles: vi.fn(async (_query: string): Promise<DeskSearchResult[]> => []),
+  searchDeskFiles: vi.fn(async (
+    _query: string,
+    _options?: DeskSearchOptions,
+  ): Promise<DeskSearchResult[]> => []),
   mentionMenuProps: undefined as undefined | {
     items: Array<{ source?: string; name: string }>;
     busy: boolean;
@@ -56,6 +61,10 @@ function deferred<T>() {
     resolve = next;
   });
   return { promise, resolve };
+}
+
+function expectSearchQuery(query: string): void {
+  expect(mocks.searchDeskFiles.mock.calls.some(([candidate]) => candidate === query)).toBe(true);
 }
 
 vi.mock('@tiptap/react', () => ({
@@ -140,7 +149,7 @@ vi.mock('../../stores/session-actions', () => ({
 
 vi.mock('../../stores/desk-actions', () => ({
   loadDeskFiles: vi.fn(),
-  searchDeskFiles: (query: string) => mocks.searchDeskFiles(query),
+  searchDeskFiles: (...args: [query: string, options?: DeskSearchOptions]) => mocks.searchDeskFiles(...args),
   toggleJianSidebar: vi.fn(),
 }));
 
@@ -295,7 +304,7 @@ describe('InputArea file mention workspace search', () => {
     expect(screen.getByTestId('mention-menu')).toBeTruthy();
 
     await waitFor(() => {
-      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('read');
+      expectSearchQuery('read');
     }, { timeout: 500 });
 
     await waitFor(() => {
@@ -382,7 +391,7 @@ describe('InputArea file mention workspace search', () => {
       mocks.updateHandler?.();
     });
     await waitFor(() => {
-      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('first');
+      expectSearchQuery('first');
     }, { timeout: 500 });
 
     const secondDoc = mentionSchema.node('doc', null, [
@@ -393,7 +402,7 @@ describe('InputArea file mention workspace search', () => {
       mocks.updateHandler?.();
     });
     await waitFor(() => {
-      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('second');
+      expectSearchQuery('second');
     }, { timeout: 500 });
 
     await act(async () => {
@@ -425,6 +434,7 @@ describe('InputArea file mention workspace search', () => {
   it('closes the menu and aborts a pending workspace search when the trigger is cleared', async () => {
     const pendingSearch = deferred<DeskSearchResult[]>();
     const abort = vi.spyOn(AbortController.prototype, 'abort');
+    let searchSignal: AbortSignal | undefined;
     mocks.searchDeskFiles.mockReturnValueOnce(pendingSearch.promise);
 
     const queryDoc = mentionSchema.node('doc', null, [
@@ -440,7 +450,10 @@ describe('InputArea file mention workspace search', () => {
       mocks.updateHandler?.();
     });
     await waitFor(() => {
-      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('read');
+      expectSearchQuery('read');
+      searchSignal = mocks.searchDeskFiles.mock.calls.find(([query]) => query === 'read')?.[1]?.signal;
+      expect(searchSignal).toBeInstanceOf(AbortSignal);
+      expect(searchSignal?.aborted).toBe(false);
     }, { timeout: 500 });
 
     const clearedDoc = mentionSchema.node('doc', null, [mentionSchema.node('paragraph')]);
@@ -452,6 +465,7 @@ describe('InputArea file mention workspace search', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('mention-menu')).toBeNull();
       expect(abort).toHaveBeenCalled();
+      expect(searchSignal?.aborted).toBe(true);
     });
 
     await act(async () => {
@@ -470,6 +484,7 @@ describe('InputArea file mention workspace search', () => {
   it('cleans up a pending workspace search on unmount', async () => {
     const pendingSearch = deferred<DeskSearchResult[]>();
     const abort = vi.spyOn(AbortController.prototype, 'abort');
+    let searchSignal: AbortSignal | undefined;
     mocks.searchDeskFiles.mockReturnValueOnce(pendingSearch.promise);
 
     const doc = mentionSchema.node('doc', null, [
@@ -485,11 +500,15 @@ describe('InputArea file mention workspace search', () => {
       mocks.updateHandler?.();
     });
     await waitFor(() => {
-      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('read');
+      expectSearchQuery('read');
+      searchSignal = mocks.searchDeskFiles.mock.calls.find(([query]) => query === 'read')?.[1]?.signal;
+      expect(searchSignal).toBeInstanceOf(AbortSignal);
+      expect(searchSignal?.aborted).toBe(false);
     }, { timeout: 500 });
 
     view.unmount();
     expect(abort).toHaveBeenCalled();
+    expect(searchSignal?.aborted).toBe(true);
 
     await act(async () => {
       pendingSearch.resolve([]);
@@ -515,7 +534,7 @@ describe('InputArea file mention workspace search', () => {
     });
 
     await waitFor(() => {
-      expect(mocks.searchDeskFiles).toHaveBeenCalledWith('unavailable');
+      expectSearchQuery('unavailable');
       expect(screen.getByTestId('mention-menu')).toHaveAttribute('data-busy', 'false');
       expect(screen.getByTestId('mention-menu')).toHaveAttribute('data-item-count', '0');
     }, { timeout: 500 });

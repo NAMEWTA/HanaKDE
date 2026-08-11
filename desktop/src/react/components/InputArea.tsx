@@ -919,7 +919,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
     setFileMentionSearchResults([]);
     setFileMentionBusy(true);
     const timer = window.setTimeout(() => {
-      searchDeskFiles(query)
+      searchDeskFiles(query, { signal: request.signal })
         .then((results) => {
           if (request.isCurrent()) setFileMentionSearchResults(results);
         })
