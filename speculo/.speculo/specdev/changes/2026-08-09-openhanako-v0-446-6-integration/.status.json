@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-11T13:00:00+0800",
+  "updated_at": "2026-08-11T13:45:00+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -66,6 +66,14 @@
       "approved_by": "Root Lead",
       "approved_at": "2026-08-10T17:15:01+0800",
       "scope": "T-15 only: derive ProviderRootIdentity public and private halves from one no-follow BigInt stat/handle snapshot; deterministic replacement injection; no second pathname compare, public API, helper/protocol, Spec, ADR, or path expansion."
+    },
+    {
+      "id": "D-T21-01",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T13:45:00+0800",
+      "scope": "T-21 packaging correctness only: allow lib/resource-io/native-secure-write.ts to prefer the trusted absolute HANA_ROOT runtime root for locating the packaged secure helper. No public API, fallback, product behavior, or ownership expansion; the helper must still be copied into and signed with the server seed."
     }
   ],
   "worktrees": [
@@ -258,6 +266,16 @@
       "workspace_ref": "specdev-worktree/T-17",
       "status": "integrated",
       "updated_at": "2026-08-11T13:41:38+0800"
+    },
+    {
+      "ticket_id": "T-21",
+      "owner": "Worker-T-21 / Lead",
+      "provider": "git",
+      "base_sha": "4aa188af",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-21",
+      "workspace_ref": "specdev-worktree/T-21",
+      "status": "active",
+      "updated_at": "2026-08-11T13:45:00+0800"
     }
   ]
 }

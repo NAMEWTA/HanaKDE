@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-21
 title: 收敛 production 与 native packaging
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "根依赖、lockfile、native converter assets、Electron/server build 与双平台生产包是共享发布核心和供应链边界。"
 ready: true
 risk: critical
 blocked_by: [T-12, T-16, T-17, T-18, T-20]
 contract_ids: [AC-002, AC-003, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-027]
-owner: unassigned
+owner: Worker-T-21 / Lead Gate
 expected_changes: ["<Path>package.json</Path>", "<Path>package-lock.json</Path>", "<Path>scripts/build-*.mjs</Path>", "<Path>scripts/compute-cli-closure.mjs</Path>", "<Path>.github/workflows/build.yml</Path>", "<Path>.github/workflows/ci.yml</Path>", "<Path>tests/electron-builder-native-rebuild.test.ts</Path>"]
 writable_paths: ["<Path>package.json</Path>", "<Path>package-lock.json</Path>", "<Path>scripts/build-*.mjs</Path>", "<Path>scripts/compute-cli-closure.mjs</Path>", "<Path>.github/workflows/build.yml</Path>", "<Path>.github/workflows/ci.yml</Path>", "<Path>tests/electron-builder-native-rebuild.test.ts</Path>"]
 read_only_paths: ["<Path>lib/document-extract/**</Path>", "<Path>lib/resource-io/**</Path>", "<Path>core/engine.ts</Path>", "<Path>plugins/office/**</Path>", "<Path>desktop/**</Path>"]
