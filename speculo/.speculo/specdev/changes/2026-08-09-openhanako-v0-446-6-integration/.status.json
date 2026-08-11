@@ -5,7 +5,7 @@
   "change_status": "active",
   "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-11T16:39:15+0800",
+  "updated_at": "2026-08-11T16:48:55+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
@@ -354,7 +354,7 @@
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-22",
       "workspace_ref": "specdev-worktree/T-22",
       "status": "blocked",
-      "updated_at": "2026-08-11T15:24:22+0800"
+      "updated_at": "2026-08-11T16:48:55+0800"
     },
     {
       "ticket_id": "T-25",
