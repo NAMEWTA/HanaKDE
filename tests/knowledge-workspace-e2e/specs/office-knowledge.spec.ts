@@ -121,7 +121,7 @@ test("T-20 reindexes and restores an Office resource without a derived Workspace
       }),
     },
   ));
-  expect(modified.ok).toBe(true);
+  expect(modified.changeType).toBe("modified");
   expect(JSON.stringify(await waitForOfficeSearch(
     knowledgeApp.apiFetch,
     "Revised Forecast",
@@ -154,7 +154,7 @@ test("T-20 reindexes and restores an Office resource without a derived Workspace
       }),
     },
   ));
-  expect(restored.ok).toBe(true);
+  expect(restored.changeType).toBe("modified");
   expect(JSON.stringify(await waitForOfficeSearch(
     knowledgeApp.apiFetch,
     "Quarterly Notes",
