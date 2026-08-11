@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-24
 title: 发布架构文档与 upstream sync ledger
-status: ready
+status: in_progress
 planning_depth: standard
 planning_depth_reason: "跨模块架构和后续 upstream sync 审计涉及多来源事实，但仅修改文档且不改变运行时公共契约。"
 ready: true
 risk: medium
 blocked_by: [T-21]
 contract_ids: [AC-001, AC-028]
-owner: unassigned
+owner: Worker-T-24 / Lead审查
 expected_changes: ["<Path>docs/architecture/openhanako-v0.446.6-integration.md</Path>", "<Path>docs/upstream-sync-ledger.md</Path>", "<Path>docs/troubleshooting/resource-consistency.md</Path>", "<Path>docs/index.md</Path>"]
 writable_paths: ["<Path>docs/**</Path>"]
 read_only_paths: ["<Path>core/**</Path>", "<Path>lib/**</Path>", "<Path>server/**</Path>", "<Path>desktop/**</Path>", "<Path>plugins/**</Path>", "<Path>tests/**</Path>", "<Path>package.json</Path>"]

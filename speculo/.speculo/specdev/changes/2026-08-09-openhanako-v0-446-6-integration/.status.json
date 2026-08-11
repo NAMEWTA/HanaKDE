@@ -326,6 +326,16 @@
       "workspace_ref": "specdev-worktree/T-23",
       "status": "integrated",
       "updated_at": "2026-08-11T15:02:00+0800"
+    },
+    {
+      "ticket_id": "T-24",
+      "owner": "Worker-T-24 / Lead审查",
+      "provider": "git",
+      "base_sha": "aa476d23",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-24",
+      "workspace_ref": "specdev-worktree/T-24",
+      "status": "active",
+      "updated_at": "2026-08-11T15:06:00+0800"
     }
   ]
 }
