@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-25
 title: 完成 umbrella 最终验收
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "28 项验收合同、15 项 DoD、Git ancestry、整仓质量、双平台 package 和去冗余 Evidence 在此形成最终阻断汇合。"
 ready: true
 risk: critical
 blocked_by: [T-22, T-23, T-24]
 contract_ids: [AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010, AC-011, AC-012, AC-013, AC-014, AC-015, AC-016, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-024, AC-025, AC-026, AC-027, AC-028]
-owner: unassigned
+owner: Worker-T-25 / Lead final owner
 expected_changes: []
 writable_paths: []
 read_only_paths: ["<Path>**</Path>"]
