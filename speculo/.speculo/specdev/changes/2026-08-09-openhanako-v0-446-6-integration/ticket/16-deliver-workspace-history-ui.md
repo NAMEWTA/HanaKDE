@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-16
 title: 交付 Workspace History 用户界面
-status: ready
+status: in_progress
 planning_depth: deep
 planning_depth_reason: "UI 串联 deleted files、timeline、diff、restore、health 与安全冲突，并跨 renderer/server contract 和真实用户流程。"
 ready: true
 risk: high
 blocked_by: [T-13, T-15]
 contract_ids: [AC-006, AC-007, AC-013, AC-015, AC-016, AC-017, AC-024]
-owner: unassigned
+owner: Worker-T-16
 expected_changes: ["<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>"]
 writable_paths: ["<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>desktop/src/react/components/knowledge-workspace/**</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>"]
