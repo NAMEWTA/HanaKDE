@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-15
 title: 交付安全 restore 与全读面收敛
-status: in_progress
+status: review
 planning_depth: deep
 planning_depth_reason: "restore 会覆盖用户文件，跨 ResourceIO、History、Knowledge、Preview、Search 与 Agent Read，涉及 TOCTOU 和数据完整性。"
 ready: true
