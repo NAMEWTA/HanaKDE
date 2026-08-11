@@ -36,6 +36,14 @@
   border-radius: 4px;
 }
 
+.entryButtonCompact {
+  flex: 0 0 28px;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
 .entryButton:hover,
 .retryBtn:hover,
 .closeBtn:hover,

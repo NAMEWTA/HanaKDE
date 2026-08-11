@@ -4,6 +4,7 @@ import type { RightWorkspaceTab } from '../../types';
 import { DeskSection } from '../DeskSection';
 import { DeskCwdSkillsButton, DeskCwdSkillsPanel } from '../desk/DeskCwdSkills';
 import { JianEditor } from '../desk/DeskEditor';
+import { FileHistoryEntryButton } from '../file-history/FileHistoryModal';
 import { PluginWidgetView } from '../plugin/PluginWidgetView';
 import { SessionRegistryFilesPanel } from './SessionRegistryFilesPanel';
 import { SessionTodoCard } from './SessionTodoCard';
@@ -91,6 +92,7 @@ function WorkspaceHeader() {
         <div className={styles.workspaceTitle} title={titlePath}>
           {title}
         </div>
+        <FileHistoryEntryButton compact />
         <DeskCwdSkillsButton />
       </div>
       <DeskCwdSkillsPanel />

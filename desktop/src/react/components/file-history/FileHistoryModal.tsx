@@ -85,14 +85,20 @@ function retryIcon() {
 }
 
 /** A host-facing main-only History command/menu item. */
-export function FileHistoryEntryButton({ preselectRelPath = null }: { preselectRelPath?: string | null }) {
+export function FileHistoryEntryButton({
+  preselectRelPath = null,
+  compact = false,
+}: {
+  preselectRelPath?: string | null;
+  compact?: boolean;
+}) {
   const { t } = useI18n();
   const open = useStore(s => s.openFileHistoryModal);
   const label = t('preview.fileHistory');
   return (
     <button
       type="button"
-      className={styles.entryButton}
+      className={`${styles.entryButton}${compact ? ` ${styles.entryButtonCompact}` : ''}`}
       aria-label={label}
       title={label}
       data-testid="file-history-entry"
@@ -100,7 +106,7 @@ export function FileHistoryEntryButton({ preselectRelPath = null }: { preselectR
       onClick={() => open(preselectRelPath)}
     >
       {historyIcon()}
-      <span>{label}</span>
+      {!compact && <span>{label}</span>}
     </button>
   );
 }
