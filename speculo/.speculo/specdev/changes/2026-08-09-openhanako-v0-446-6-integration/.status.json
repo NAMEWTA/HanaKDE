@@ -324,8 +324,8 @@
       "base_sha": "fa569c0c",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-23",
       "workspace_ref": "specdev-worktree/T-23",
-      "status": "review",
-      "updated_at": "2026-08-11T14:58:00+0800"
+      "status": "integrated",
+      "updated_at": "2026-08-11T15:02:00+0800"
     }
   ]
 }

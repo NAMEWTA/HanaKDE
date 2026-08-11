@@ -260,7 +260,8 @@ DISPATCH ticket=T-21 wave=G8 baseline=4aa188af branch=speculo/2026-08-09-openhan
 DELIVERY ticket=T-21 state=integrated workspace=specdev-worktree/T-21 checkpoint=e1b232b3 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-21.md</Path> residual=windows-native-platform-and-release-notarization
 G8_CLOSURE ticket=T-21 state=integrated checkpoint=e1b232b3 acceptance=Lead-standards-and-specification-pass residual=windows-native-platform-and-release-notarization next=T-22/T-23
 DISPATCH ticket=T-23 wave=W9-MAC baseline=fa569c0c branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-23 workspace=specdev-worktree/T-23 placement=system-core-macos-platform-gate
-DELIVERY ticket=T-23 state=review workspace=specdev-worktree/T-23 checkpoint=fa569c0c evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-23.md</Path> residual=macos-x64-and-hardware-sleep-resume-and-launch-event-bus-warning
+DELIVERY ticket=T-23 state=integrated workspace=specdev-worktree/T-23 checkpoint=477a1b6a evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-23.md</Path> residual=macos-x64-and-hardware-sleep-resume-and-launch-event-bus-warning
+G9_MAC_STATUS ticket=T-23 state=review checkpoint=477a1b6a result=arm64-macos-harness-dmg-seed-inventory-pass residual=macos-x64-hardware-sleep-resume-interactive-E2E-event-bus-warning next=T-22/T-24
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5
 W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-11,T-18,T-19
 W3_GATE_CLASSIFICATION product_gate=2018ce1dc671f0d9bb3c6f61f4078625c7863001 management_only=e1b11c6d72d2d069e3bc8f4646692f2e504d5a3e
