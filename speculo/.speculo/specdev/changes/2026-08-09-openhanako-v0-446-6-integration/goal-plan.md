@@ -268,6 +268,8 @@ W9_DOCS_CLOSURE ticket=T-24 state=integrated checkpoint=e7530fb2 acceptance=Lead
 DISPATCH ticket=T-25 wave=G10-FINAL baseline=10a79be8 branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-25 workspace=specdev-worktree/T-25 placement=system-core-final-umbrella-audit
 DELIVERY ticket=T-25 state=blocked workspace=specdev-worktree/T-25 checkpoint=291d6231 evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-25.md</Path> residual=T-22-missing-windows-runner-and-T-23-review
 G10_FINAL ticket=T-25 state=blocked checkpoint=291d6231 verdict=BLOCKED next=T-22/T-23 re-run-T-25
+DISPATCH ticket=T-22 wave=W9-WIN baseline=4231ec3f branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-22 workspace=specdev-worktree/T-22 placement=system-core-windows-platform-gate
+DELIVERY ticket=T-22 state=blocked workspace=specdev-worktree/T-22 checkpoint=35cb5e7a evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-22.md</Path> residual=windows-real-runner-unavailable
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5
 W3_DISPATCH_BASE checkpoint=2018ce1dc671f0d9bb3c6f61f4078625c7863001 tickets=T-11,T-18,T-19
 W3_GATE_CLASSIFICATION product_gate=2018ce1dc671f0d9bb3c6f61f4078625c7863001 management_only=e1b11c6d72d2d069e3bc8f4646692f2e504d5a3e
