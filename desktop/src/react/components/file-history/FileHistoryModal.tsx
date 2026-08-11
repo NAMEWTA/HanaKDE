@@ -26,22 +26,6 @@ import {
 import { diffLines, type DiffLine } from '../../utils/line-diff';
 import styles from './FileHistoryModal.module.css';
 
-interface FileHistoryStoreState {
-  fileHistoryModal: {
-    open: boolean;
-    preselectRelPath: string | null;
-    scopeGeneration?: number;
-  };
-  closeFileHistoryModal: () => void;
-  openFileHistoryModal: (preselectRelPath?: string | null) => void;
-}
-// T-16 is intentionally isolated from the pre-T-13 store registration. The
-// host can mount the exported entry/modal when its shared store is assembled;
-// no agent/root fields are read here.
-const useFileHistoryStore = useStore as unknown as <T>(
-  selector: (state: FileHistoryStoreState) => T,
-) => T;
-
 type ModalStatus = 'idle' | 'loading' | 'ready' | 'restoring' | 'restored' | 'conflict' | 'error';
 
 function isAbortError(error: unknown): boolean {
@@ -103,7 +87,7 @@ function retryIcon() {
 /** A host-facing main-only History command/menu item. */
 export function FileHistoryEntryButton({ preselectRelPath = null }: { preselectRelPath?: string | null }) {
   const { t } = useI18n();
-  const open = useFileHistoryStore(s => s.openFileHistoryModal);
+  const open = useStore(s => s.openFileHistoryModal);
   const label = t('preview.fileHistory');
   return (
     <button
@@ -123,8 +107,8 @@ export function FileHistoryEntryButton({ preselectRelPath = null }: { preselectR
 
 export function FileHistoryModal() {
   const { t } = useI18n();
-  const modal = useFileHistoryStore(s => s.fileHistoryModal);
-  const close = useFileHistoryStore(s => s.closeFileHistoryModal);
+  const modal = useStore(s => s.fileHistoryModal);
+  const close = useStore(s => s.closeFileHistoryModal);
   const [files, setFiles] = useState<FileHistoryFileEntry[]>([]);
   const [filter, setFilter] = useState('');
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
