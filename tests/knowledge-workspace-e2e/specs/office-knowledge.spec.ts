@@ -95,7 +95,33 @@ test("T-20 reindexes and restores an Office resource without a derived Workspace
   expect(JSON.stringify(await searchOffice(knowledgeApp.apiFetch, "Quarterly Notes")))
     .toContain("Quarterly.docx");
 
-  await fs.writeFile(officePath, revised);
+  const initial = await json(await knowledgeApp.apiFetch(
+    "/api/resource-io/stat",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: { sourceKey: "main", relativePath: "Quarterly.docx" },
+      }),
+    },
+  ));
+  expect(initial.version).toBeTruthy();
+  const modified = await json(await knowledgeApp.apiFetch(
+    "/api/resource-io/write-expected-version",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: { sourceKey: "main", relativePath: "Quarterly.docx" },
+        content: revised.toString("base64"),
+        encoding: "base64",
+        expectedVersion: initial.version,
+        reason: "office_e2e_edit",
+        operationId: randomUUID(),
+      }),
+    },
+  ));
+  expect(modified.ok).toBe(true);
   expect(JSON.stringify(await waitForOfficeSearch(
     knowledgeApp.apiFetch,
     "Revised Forecast",
