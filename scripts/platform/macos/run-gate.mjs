@@ -93,7 +93,17 @@ function runProductWorkspaceMatrix(rootPath) {
   return JSON.parse(resultLine.slice(marker.length));
 }
 
-export async function runMacosGate({ rootDir, packageDir = null, cleanup = true } = {}) {
+async function runPackagedDirectFlow(options) {
+  const module = await import("./run-packaged-direct-flow.mjs");
+  return module.runPackagedDirectFlow(options);
+}
+
+export async function runMacosGate({
+  rootDir,
+  packageDir = null,
+  directFlowOptions = null,
+  cleanup = true,
+} = {}) {
   if (process.platform !== "darwin") {
     throw new Error(`[macos-gate] blocking gate requires darwin, got ${process.platform}`);
   }
@@ -175,6 +185,9 @@ export async function runMacosGate({ rootDir, packageDir = null, cleanup = true 
       await new Promise((resolve) => child.once("exit", resolve));
     }
 
+    const directFlow = directFlowOptions
+      ? await runPackagedDirectFlow(directFlowOptions)
+      : null;
     return {
       platform: process.platform,
       arch: process.arch,
@@ -188,6 +201,7 @@ export async function runMacosGate({ rootDir, packageDir = null, cleanup = true 
       },
       productWorkspace,
       package: packageDir ? inspectAppBundle(packageDir) : null,
+      directFlow,
     };
   } finally {
     if (cleanup) fs.rmSync(fixtureRoot, { recursive: true, force: true });
@@ -195,9 +209,27 @@ export async function runMacosGate({ rootDir, packageDir = null, cleanup = true 
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  const optionValue = (name) => {
+    const index = process.argv.indexOf(name);
+    if (index < 0) return null;
+    const value = process.argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`[macos-gate] ${name} requires a value`);
+    return value;
+  };
   const packageIndex = process.argv.indexOf("--package");
   const packageDir = packageIndex >= 0 ? process.argv[packageIndex + 1] : null;
-  runMacosGate({ packageDir }).then((result) => {
+  const directFlow = process.argv.includes("--direct-flow");
+  const directFlowOptions = directFlow
+    ? {
+        dmgPath: optionValue("--dmg"),
+        version: optionValue("--version") ?? "0.446.6",
+        adhocResign: process.argv.includes("--adhoc-resign"),
+      }
+    : null;
+  if (directFlow && !directFlowOptions.dmgPath) {
+    throw new Error("[macos-gate] --direct-flow requires --dmg");
+  }
+  runMacosGate({ packageDir, directFlowOptions }).then((result) => {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }).catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
