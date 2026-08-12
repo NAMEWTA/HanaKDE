@@ -2,7 +2,7 @@
 schema_version: 3
 artifact: goal-plan
 change: 2026-08-09-openhanako-v0-446-6-integration
-status: in_progress
+status: completed
 modes: [coordination, high-assurance, reference-conformance, release-coordination]
 ready_for_execution: false
 ---
@@ -277,6 +277,8 @@ CORRECTION_CLOSURE gate=G10 ids=D-G10-01,D-G10-02 state=closed checkpoint=46a835
 CORRECTION gate=G10 id=D-G10-03 round=3/3 owner=Root-Lead checkpoint=96a229de failure=full-vitest-6-files-16-tests authorization=<Path>build/cli-runtime-closure.json</Path>,<Path>build/open-boundary-baseline.json</Path>,<Path>build/persistence-schema-fingerprint.json</Path>,<Path>tests/engine-resource-events.test.ts</Path>,<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path> contract=regenerate-existing-deterministic-receipts-for-T26-import-and-source-drift;align-stale-legacy-event-test-with-ResourceIO-only-owner;wait-for-async-diff-and-conflict-state;no-production,baseline-weakening,schema-or-DATA_EPOCH-change,migration,package,route,public-API-or-new-owner proof=receipt-idempotence,focused-failed-file-matrix,full-test,lint,typecheck,diff-check
 CORRECTION_CLOSURE gate=G10 id=D-G10-03 state=closed checkpoint=8aa9f7b1 result=6-files-134-tests,full-vitest-1201-files-12253-tests,full-eslint-quiet,typecheck,current-server-seed-build,cli-closure-idempotent,persistence-63-stores-760-sites-DATA_EPOCH-1 residual=T-22,T-23,exact-SHA-platform-packages
 G10_FINAL_REFRESH ticket=T-25 state=blocked product=feb906d6 quality=8aa9f7b1 audit=7198ffcb runner=99b6a993 verdict=BLOCKED covered=Agent-producer,Workspace-History,local-quality,exact-current-arm64-package-office-history-agent-at-direct-flow residual=T-22-windows-runtime,T-23-macos-x64-descriptor-physical-sleep next=run-owning-platform-gates-then-rerun-T25
+
+SPLIT_CLOSURE 2026-08-12 original_change=completed moved_tickets=T-22,T-23,T-25 continuation=<Path>{roots.state}/specdev/changes/2026-08-12-openhanako-v0-446-6-platform-gates/</Path> reason=unfinished-platform-gates-extracted
 DISPATCH ticket=T-22 wave=W9-WIN baseline=4231ec3f branch=speculo/2026-08-09-openhanako-v0-446-6-integration/T-22 workspace=specdev-worktree/T-22 placement=system-core-windows-platform-gate
 DELIVERY ticket=T-22 state=blocked workspace=specdev-worktree/T-22 checkpoint=9112df7e evidence=<Path>{roots.state}/specdev/changes/{change}/evidence/T-22.md</Path> residual=windows-real-runner-unavailable
 W4_GATE_STATUS state=closed checkpoint=ff0b638f51cd9fc27a99b3a6e57a7db1e17d59d5 result=14-files-220-tests,typecheck,authorized-path-eslint,SpecDev-validator,persistence-census-63-stores-762-sites,two-axis-review-pass next=G5

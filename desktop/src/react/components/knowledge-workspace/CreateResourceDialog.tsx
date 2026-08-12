@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { KnowledgeWorkspaceClient } from '../../services/knowledge-workspace-client';
 import type { KnowledgeResourceAddress } from '../../../../../shared/knowledge-workspace-contract';
 import styles from './KnowledgeWorkspace.module.css';
@@ -24,7 +24,13 @@ export function CreateResourceDialog({
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  useEffect(() => { setName(''); setError(null); }, [kind, sourceKey, directoryPath]);
+  const submitGateRef = useRef(false);
+  useEffect(() => {
+    submitGateRef.current = false;
+    setName('');
+    setError(null);
+    setSubmitting(false);
+  }, [kind, sourceKey, directoryPath]);
   if (!kind || !sourceKey) return null;
   const title = tr(kind === 'page' ? 'knowledge.create.pageTitle' : 'knowledge.create.folderTitle');
   return (
@@ -34,16 +40,18 @@ export function CreateResourceDialog({
         className={styles.resourceDialog}
         onSubmit={async (event) => {
           event.preventDefault();
+          if (submitGateRef.current || !name.trim()) return;
+          submitGateRef.current = true;
           setSubmitting(true);
           setError(null);
           try {
             const result = await client.createResource({ kind, sourceKey, directoryPath, name });
-            onCreated(result);
             onClose();
+            onCreated(result);
           } catch (cause) {
-            setError((cause as { code?: string })?.code ?? 'knowledge_operation_precondition_failed');
-          } finally {
+            submitGateRef.current = false;
             setSubmitting(false);
+            setError((cause as { code?: string })?.code ?? 'knowledge_operation_precondition_failed');
           }
         }}
         role="dialog"

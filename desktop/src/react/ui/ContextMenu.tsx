@@ -6,10 +6,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface ContextMenuItem {
   label?: string;
+  icon?: ReactNode;
+  ariaLabel?: string;
+  tooltip?: string;
   action?: () => void;
   danger?: boolean;
   disabled?: boolean;
@@ -79,8 +83,10 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
 
   return createPortal(
     <div
+      aria-label="Context menu"
       className="context-menu"
       ref={menuRef}
+      role="menu"
       style={{ left: position.x, top: position.y }}
     >
       {items.map((item, i) => {
@@ -92,6 +98,8 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
         return (
           <div
             key={`${item.label || 'item'}-${i}`}
+            aria-disabled={item.disabled || undefined}
+            aria-label={item.ariaLabel || item.label || undefined}
             className={`context-menu-item${item.danger ? ' danger' : ''}${item.disabled ? ' disabled' : ''}${hasSubmenu ? ' has-submenu' : ''}`}
             onMouseDown={(e) => e.preventDefault()}
             onMouseEnter={() => {
@@ -112,10 +120,13 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
               }
               handleItemClick(e, item.action);
             }}
+            role="menuitem"
+            title={item.tooltip || item.ariaLabel || item.label || undefined}
           >
             {item.checked !== undefined && (
               <span className="context-menu-check" aria-hidden="true">{item.checked ? '✓' : ''}</span>
             )}
+            {item.icon && <span className="context-menu-icon" aria-hidden="true">{item.icon}</span>}
             <span className={`context-menu-label${item.disabled ? ' disabled' : ''}`}>{item.label || ''}</span>
             {submenuOpen && (
               <div className={`context-menu-submenu ${submenuSide}`}>
@@ -126,6 +137,8 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
                   return (
                     <div
                       key={`${child.label || 'child'}-${childIndex}`}
+                      aria-disabled={child.disabled || undefined}
+                      aria-label={child.ariaLabel || child.label || undefined}
                       className={`context-menu-item${child.danger ? ' danger' : ''}${child.disabled ? ' disabled' : ''}`}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={(e) => {
@@ -136,10 +149,13 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
                         }
                         handleItemClick(e, child.action);
                       }}
+                      role="menuitem"
+                      title={child.tooltip || child.ariaLabel || child.label || undefined}
                     >
                       {child.checked !== undefined && (
                         <span className="context-menu-check" aria-hidden="true">{child.checked ? '✓' : ''}</span>
                       )}
+                      {child.icon && <span className="context-menu-icon" aria-hidden="true">{child.icon}</span>}
                       <span className={`context-menu-label${child.disabled ? ' disabled' : ''}`}>{child.label || ''}</span>
                     </div>
                   );

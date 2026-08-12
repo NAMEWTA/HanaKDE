@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import {
   activeKnowledgeClipboard,
   createKnowledgeClipboardSlice,
+  knowledgeClipboardPasteAllowed,
   type KnowledgeClipboardSlice,
 } from '../../stores/knowledge-clipboard-slice';
 
@@ -37,5 +38,19 @@ describe('knowledge clipboard slice', () => {
     expect(store.getState().knowledgeClipboard?.addresses).toEqual([address('main', 'b.md')]);
     store.getState().retainKnowledgeClipboardFailures([]);
     expect(store.getState().knowledgeClipboard).toBeNull();
+  });
+
+  it('allows same-source cuts and all-source copies, but rejects cross-source cuts', () => {
+    const cut = {
+      workspaceKey: 'workspace-1',
+      sourceKey: 'main',
+      intent: 'cut' as const,
+      addresses: [address('main', 'a.md')],
+    };
+    const copy = { ...cut, intent: 'copy' as const };
+    expect(knowledgeClipboardPasteAllowed(cut, 'main')).toBe(true);
+    expect(knowledgeClipboardPasteAllowed(cut, 'archive')).toBe(false);
+    expect(knowledgeClipboardPasteAllowed(copy, 'archive')).toBe(true);
+    expect(knowledgeClipboardPasteAllowed(null, 'main')).toBe(false);
   });
 });

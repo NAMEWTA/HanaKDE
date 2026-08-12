@@ -1,4 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { HanaEngine } from "../core/engine.ts";
+import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import type { KnowledgeSourceDto } from "../shared/knowledge-workspace-contract.ts";
 import {
   knowledgeWritableSources,
@@ -54,6 +59,142 @@ const sources: KnowledgeSourceDto[] = [
 ];
 
 describe("knowledge workspace lifecycle", () => {
+  it("uses the active session directory as main without promoting authorized folders", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-knowledge-main-"));
+    const workDirectory = path.join(root, "work-directory");
+    const authorizedDirectory = path.join(root, "authorized-only");
+    fs.mkdirSync(workDirectory, { recursive: true });
+    fs.mkdirSync(authorizedDirectory, { recursive: true });
+    const sessionPath = path.join(root, "session.jsonl");
+    try {
+      const engine = Object.create(HanaEngine.prototype) as HanaEngine & Record<string, any>;
+      Object.assign(engine, {
+        _sessionCoord: {
+          currentSessionPath: sessionPath,
+          getSessionWorkspaceMount: () => null,
+          getSessionFolderScope: () => ({
+            cwd: workDirectory,
+            authorizedFolders: [authorizedDirectory],
+          }),
+        },
+        _agentMgr: {
+          agent: {
+            config: { desk: { home_folder: authorizedDirectory } },
+          },
+        },
+      });
+      Object.defineProperties(engine, {
+        currentSessionPath: { configurable: true, value: sessionPath },
+        defaultDeskCwd: { configurable: true, value: authorizedDirectory },
+        homeCwd: { configurable: true, value: authorizedDirectory },
+        deskCwd: { configurable: true, value: authorizedDirectory },
+      });
+
+      expect(engine._resolveActiveMainWorkspaceRoot()).toBe(workDirectory);
+      expect(engine._resolveKnowledgeResourceOwner()).toEqual({
+        key: JSON.stringify({ kind: "local-file", path: workDirectory }),
+        localRoot: workDirectory,
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not fall back when an explicitly selected session directory is unavailable", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-knowledge-missing-main-"));
+    const fallbackHome = path.join(root, "fallback-home");
+    const missingWorkDirectory = path.join(root, "missing-work-directory");
+    fs.mkdirSync(fallbackHome, { recursive: true });
+    try {
+      const engine = Object.create(HanaEngine.prototype) as HanaEngine & Record<string, any>;
+      Object.assign(engine, {
+        _sessionCoord: {
+          currentSessionPath: path.join(root, "session.jsonl"),
+          getSessionWorkspaceMount: () => null,
+          getSessionFolderScope: () => ({ cwd: missingWorkDirectory }),
+        },
+        _agentMgr: { agent: { config: { desk: {} } } },
+        getHomeCwd: () => fallbackHome,
+      });
+
+      expect(engine._hasSelectedLocalMainWorkspaceRoot()).toBe(true);
+      expect(engine._resolveActiveMainWorkspaceRoot()).toBeNull();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("drains the old main owner and rejects stale calls before binding the next root", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-knowledge-owner-"));
+    const rootA = path.join(root, "workspace-a");
+    const rootB = path.join(root, "workspace-b");
+    const hanakoHome = path.join(root, "hana");
+    fs.mkdirSync(rootA, { recursive: true });
+    fs.mkdirSync(rootB, { recursive: true });
+    fs.mkdirSync(hanakoHome, { recursive: true });
+    let activeRoot = rootA;
+    try {
+      const engine = Object.create(HanaEngine.prototype) as HanaEngine & Record<string, any>;
+      Object.assign(engine, {
+        hanakoHome,
+        agentsDir: root,
+        _agentMgr: { agent: { dir: root } },
+        _resourceIO: null,
+        _resourceIOOwnerKey: null,
+        _resourceIOOwnerScope: null,
+        _resourceIOOwnerTransitioning: false,
+        _runtimeContext: { studioId: "studio-owner-scope" },
+        _sessionFiles: null,
+        _resourceEvents: () => new ResourceEventBus({ emit: () => {} }),
+        getResourceService: () => null,
+      });
+      Object.defineProperties(engine, {
+        currentSessionPath: { configurable: true, value: null },
+        defaultDeskCwd: { configurable: true, get: () => activeRoot },
+        homeCwd: { configurable: true, get: () => activeRoot },
+        deskCwd: { configurable: true, get: () => activeRoot },
+      });
+
+      const ownerA = engine.getKnowledgeResourceIO();
+      const provider = ownerA.providers.local_fs;
+      const providerWrite = provider.write.bind(provider);
+      let releaseWrite: () => void = () => {};
+      provider.write = async (...args: Parameters<typeof provider.write>) => {
+        await new Promise<void>((resolve) => { releaseWrite = resolve; });
+        return providerWrite(...args);
+      };
+      const pendingWrite = ownerA.write(
+        { kind: "local-file", path: path.join(rootA, "pending.md") },
+        "pending",
+      );
+      const drain = engine._drainKnowledgeResourceOwner();
+      await expect(ownerA.write(
+        { kind: "local-file", path: path.join(rootA, "stale.md") },
+        "stale",
+      )).rejects.toMatchObject({
+        code: "knowledge_resource_unavailable",
+        httpStatus: 503,
+        retryable: true,
+      });
+      releaseWrite();
+      await Promise.all([pendingWrite, drain]);
+
+      activeRoot = rootB;
+      const ownerB = engine.getKnowledgeResourceIO();
+      expect(ownerB).not.toBe(ownerA);
+      expect(ownerA.providers.local_fs.cwd).toBe(rootA);
+      expect(ownerB.providers.local_fs.cwd).toBe(rootB);
+      await ownerB.write(
+        { kind: "local-file", path: path.join(rootB, "current.md") },
+        "current",
+      );
+      expect(fs.existsSync(path.join(rootA, "stale.md"))).toBe(false);
+      expect(fs.readFileSync(path.join(rootB, "current.md"), "utf8")).toBe("current");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("KW-US-045 closes a non-last shared view without confirmation", () => {
     const shared = document({ viewIds: ["view-a", "view-b"] });
     expect(shouldConfirmKnowledgeViewClose(shared, "view-a")).toBe(false);

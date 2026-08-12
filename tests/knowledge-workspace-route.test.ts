@@ -7,7 +7,6 @@ import { upsertStudioMount } from "../core/studio-mounts.ts";
 import { HanaEngine } from "../core/engine.ts";
 import { normalizePrincipal } from "../core/security-principal.ts";
 import { createSandboxResourceIO } from "../lib/resource-io/sandbox-resource-io.ts";
-import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
 import { ResourceIO } from "../lib/resource-io/resource-io.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
@@ -45,11 +44,25 @@ describe("knowledge workspace source route", () => {
       presentation: "folder",
       capabilities: ["list", "read", "write", "watch", "materialize"],
     });
+    const resourceIO = createSandboxResourceIO({
+      cwd: main,
+      agentDir: main,
+      workspace: main,
+      workspaceFolders: [main],
+      authorizedFolders: [main, research],
+      hanakoHome,
+      getSandboxEnabled: () => false,
+      studioId: "studio_1",
+    });
     const engine = {
       hanakoHome,
       defaultDeskCwd: main,
       homeCwd: main,
       deskCwd: main,
+      resourceIO,
+      knowledgeResourceIO: resourceIO,
+      getKnowledgeResourceIO: () => resourceIO,
+      _resolveActiveMainWorkspaceRoot: () => main,
       getRuntimeContext: () => ({
         serverId: "server_1",
         serverNodeId: "node_1",
@@ -58,6 +71,15 @@ describe("knowledge workspace source route", () => {
         connectionKind: "local",
         credentialKind: "loopback_token",
       }),
+    };
+    engine.getKnowledgeResourceIO = () => {
+      const candidate = engine.resourceIO;
+      const localProvider = candidate?.providers?.local_fs as { trashRoot?: string | null } | undefined;
+      if (
+        localProvider
+        && !localProvider.trashRoot
+      ) return engine.knowledgeResourceIO;
+      return candidate || engine.knowledgeResourceIO;
     };
     const app = new Hono();
     app.route("/api", createKnowledgeWorkspaceRoute(engine));
@@ -194,51 +216,21 @@ describe("knowledge workspace source route", () => {
   });
 
   it("keeps a newly mounted source bound through a source-scoped rebuild", async () => {
-    const { main, research } = setup();
-    if (!tempRoot) throw new Error("test root unavailable");
-    fs.writeFileSync(path.join(main, "Main.md"), "# Main", "utf8");
-    fs.writeFileSync(path.join(research, "Research.md"), "# Research", "utf8");
-    const hanakoHome = path.join(tempRoot, "hana");
-    const eventBus = new ResourceEventBus({ emit: () => {} });
-    const resourceIO = createSandboxResourceIO({
-      cwd: main,
-      agentDir: main,
-      workspace: main,
-      workspaceFolders: [main],
-      authorizedFolders: [main, research],
-      hanakoHome,
-      getSandboxEnabled: () => false,
-      eventBus,
-      studioId: "studio_1",
+    const { app, engine } = setup();
+    const boundSources: string[][] = [];
+    const bindKnowledgeIndexWorkspace = vi.fn(async (registry: SourceRegistry) => {
+      boundSources.push(registry.list().map(source => source.sourceKey));
+      return {};
     });
-    const watchRegistry = new ResourceWatchRegistry({
-      eventBus,
-      resolveWatchTarget: (resource) => resourceIO.resolveWatchTarget(resource),
-    });
-    const engine = Object.create(HanaEngine.prototype) as HanaEngine;
+    const rebuildKnowledgeIndex = vi.fn(async () => ({
+      state: "ready" as const,
+      generationId: "research-generation",
+      sequence: 5,
+    }));
     Object.assign(engine, {
-      hanakoHome,
-      _knowledgeIndexRuntime: null,
-      _resourceEventBus: eventBus,
-      _resourceIO: resourceIO,
-      _resourceWatchRegistry: watchRegistry,
-      _runtimeContext: {
-        serverId: "server_1",
-        serverNodeId: "node_1",
-        userId: "user_1",
-        studioId: "studio_1",
-        connectionKind: "local",
-        credentialKind: "loopback_token",
-      },
+      bindKnowledgeIndexWorkspace,
+      rebuildKnowledgeIndex,
     });
-    Object.defineProperties(engine, {
-      currentSessionPath: { configurable: true, value: null },
-      defaultDeskCwd: { configurable: true, value: main },
-      homeCwd: { configurable: true, value: main },
-      deskCwd: { configurable: true, value: main },
-    });
-    const app = new Hono();
-    app.route("/api", createKnowledgeWorkspaceRoute(engine));
 
     const registered = await app.request("/api/knowledge-workspace/sources", {
       method: "POST",
@@ -264,8 +256,11 @@ describe("knowledge workspace source route", () => {
       sourceKey: "research",
       health: { state: "ready" },
     });
-
-    await engine.disposeKnowledgeIndexRuntime();
+    expect(boundSources.at(-1)).toEqual(["main", "research"]);
+    expect(rebuildKnowledgeIndex).toHaveBeenCalledWith(
+      "research",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it("projects a source recovering in either operation coordinator without exposing journal identity", async () => {

@@ -5206,6 +5206,7 @@ async function performKnowledgeNativeGrantAction(action, grantId, authorizationT
   let ok = true;
   if (action === "openDefault") ok = (await shell.openPath(consumed.filePath)) === "";
   else if (action === "reveal") shell.showItemInFolder(consumed.filePath);
+  else if (action === "copyPath") clipboard.writeText(consumed.filePath);
   else {
     try { fs.lstatSync(consumed.filePath); await shell.trashItem(consumed.filePath); } catch { ok = false; }
     try {
@@ -5285,6 +5286,7 @@ wrapIpcHandler("knowledge-native:capabilities", () => {
     fileClipboard: available,
     openDefault: available,
     reveal: available,
+    copyPath: available,
     systemTrash: available,
   };
 });
@@ -5333,7 +5335,7 @@ wrapIpcHandler("knowledge-native:invoke", async (event, request) => {
       }, rendererToken);
       return { ok: true, cancelled: false, result: result.results };
     }
-    if (!["openDefault", "reveal", "systemTrash"].includes(action) || typeof request.grantId !== "string") {
+    if (!["openDefault", "reveal", "copyPath", "systemTrash"].includes(action) || typeof request.grantId !== "string") {
       const error = new Error("Invalid Knowledge native grant request");
       error.code = "knowledge_operation_precondition_failed";
       throw error;

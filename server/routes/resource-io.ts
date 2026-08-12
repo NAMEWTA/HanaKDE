@@ -781,7 +781,9 @@ async function resourceJson(c, engine, handler, {
     }
     if (allowedFields) rejectUnexpectedFields(body, allowedFields);
     rejectUnsafeRemoteResourceRefs(c, body);
-    const resourceIO = engine.resourceIO || engine.getResourceIO?.();
+    const resourceIO = engine.resourceIO
+      || engine.getKnowledgeResourceIO?.()
+      || engine.getResourceIO?.();
     if (!resourceIO) return c.json({ error: "resource io unavailable" }, 500);
     const result = await handler(resourceIO, body);
     if (isConflictResult(result)) {

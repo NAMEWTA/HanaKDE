@@ -5,7 +5,7 @@ describe('knowledge native renderer client', () => {
   it('returns explicit unavailable capability on Open/Web without inventing a path fallback', async () => {
     await expect(getKnowledgeNativeCapabilities({} as never)).resolves.toEqual({
       directoryPicker: false, filePicker: false, fileClipboard: false,
-      openDefault: false, reveal: false, systemTrash: false,
+      openDefault: false, reveal: false, copyPath: false, systemTrash: false,
     });
     await expect(invokeKnowledgeNative({
       action: 'pickFiles', target: { sourceKey: 'main', directoryPath: '' }, conflictPolicy: 'skip',

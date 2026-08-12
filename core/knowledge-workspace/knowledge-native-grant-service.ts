@@ -4,7 +4,7 @@ import { createKnowledgeWorkspaceError } from '../../shared/knowledge-workspace-
 import { createKnowledgeOperationId } from '../../lib/knowledge-workspace/knowledge-operation-plan.ts';
 import type { ResourceVersion } from '../../lib/resource-io/types.ts';
 
-export type KnowledgeNativeGrantAction = 'openDefault' | 'reveal' | 'systemTrash';
+export type KnowledgeNativeGrantAction = 'openDefault' | 'reveal' | 'copyPath' | 'systemTrash';
 export type KnowledgeNativeResourceGrant = Readonly<{
   grantId: string;
   action: KnowledgeNativeGrantAction;

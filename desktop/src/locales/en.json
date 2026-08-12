@@ -41,10 +41,12 @@
       "loading": "Loading sources…",
       "error": "Sources are unavailable"
     },
-    "source": { "main": "Main" },
+    "source": { "main": "Working directory" },
     "retry": "Retry",
     "actions": { "label": "Resource actions" },
     "action": { "newPage": "New page", "newFolder": "New folder", "import": "Import", "copy": "Copy", "cut": "Cut", "paste": "Paste", "delete": "Delete", "cancel": "Cancel", "create": "Create", "close": "Close", "restore": "Restore", "systemTrash": "System trash" },
+    "clipboard": { "staleWorkspace": "The clipboard belongs to a closed workspace", "crossSourceCut": "Cut items can only be pasted within the same source" },
+    "context": { "rename": "Rename", "renamePrompt": "Rename", "copyRelativePath": "Copy relative path", "copyAbsolutePath": "Copy absolute path", "openFolder": "Open folder", "reveal": "Reveal in file manager" },
     "create": { "pageTitle": "Create page", "folderTitle": "Create folder", "name": "Name", "error": "The resource could not be created." },
     "trash": { "title": "Workspace trash", "loading": "Loading trash…", "empty": "Trash is empty.", "deleteConfirm": "Move the selected resources to workspace trash?", "cleanupConfirm": "Move this resource to the system trash?", "cleanupTitle": "Move to system trash", "cleanupDescription": "OpenHanako will no longer be able to restore these items after the operating system accepts them.", "cleanupExpired": "Clean up items older than 30 days", "cleanupSelected": "Move selected items to system trash", "cleanupBatch": "Move batch to system trash", "retryFailed": "Retry failed items", "select": "Select", "operationError": "The trash operation could not be completed." },
     "search": {

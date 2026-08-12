@@ -2463,6 +2463,22 @@ body.resizing .channel-inspector-rail {
     text-overflow: ellipsis;
 }
 
+.context-menu-icon {
+    display: inline-flex;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+}
+
+.context-menu-icon > span,
+.context-menu-icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
 .context-menu-check {
     width: 12px;
     min-width: 12px;

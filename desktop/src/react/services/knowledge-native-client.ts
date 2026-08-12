@@ -15,6 +15,7 @@ const unavailableCapabilities: KnowledgeNativeCapabilities = Object.freeze({
   fileClipboard: false,
   openDefault: false,
   reveal: false,
+  copyPath: false,
   systemTrash: false,
 });
 
@@ -39,7 +40,7 @@ export async function invokeKnowledgeNative(
 
 export async function invokeKnowledgeNativeGrant(
   client: Pick<KnowledgeWorkspaceClient, 'createNativeGrant'>,
-  action: 'openDefault' | 'reveal' | 'systemTrash',
+  action: 'openDefault' | 'reveal' | 'copyPath' | 'systemTrash',
   address: KnowledgeResourceAddress,
   platform = window.hana,
 ): Promise<KnowledgeNativeResult> {

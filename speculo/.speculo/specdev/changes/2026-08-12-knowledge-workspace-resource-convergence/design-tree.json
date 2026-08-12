@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "artifact": "design-tree",
+  "change": "2026-08-12-knowledge-workspace-resource-convergence",
+  "status": "consensus",
+  "round": 2,
+  "nodes": [
+    {
+      "id": "D-001",
+      "title": "单一活动工作根与 ResourceIO owner",
+      "question": "是否确认聊天/工作台选择的活动工作目录就是 Knowledge 的 `main`，并要求 Knowledge registry、Engine/Server ResourceIO、operation coordinator、watcher 使用同一活动根 owner；切换根时整体重建并清理旧 owner？",
+      "depends_on": [],
+      "recommendation": "确认。`main` 不再只是在 registry 层映射；ResourceIO facade 必须由活动工作根统一绑定，所有 Knowledge 读写和复合操作共享该 owner。",
+      "status": "answered",
+      "round": 1,
+      "answer": "确认：聊天/工作台打开选择的工作目录就是知识 `main` 主来源；知识不再单独维护另一套根或 ResourceIO owner。",
+      "log_ref": "LOG-001"
+    },
+    {
+      "id": "D-002",
+      "title": "跨来源剪切与复制",
+      "question": "同一 Knowledge workspace 内，跨来源 `cut` 是否必须拒绝并要求改用 `copy`，而同来源 `cut` 才执行原子 move；跨来源 `copy` 只创建普通副本且不改写链接？",
+      "depends_on": ["D-001"],
+      "recommendation": "沿用永久 ADR：跨来源 cut fail closed；copy 保持源不变、正文/字节原样，不做链接重构。",
+      "status": "answered",
+      "round": 2,
+      "answer": "确认：跨来源 cut 必须 fail closed 并要求改用 copy；同源 cut 才执行原子 move，跨来源 copy 保持源不变且不改写正文链接。",
+      "log_ref": "LOG-003"
+    },
+    {
+      "id": "D-003",
+      "title": "资源树右键菜单范围",
+      "question": "Knowledge 文件/文件夹右键是否复用 Desk 的 ContextMenu 与文件动作，提供 cut/copy/delete/rename/copy relative path/copy absolute path/open folder/open default app，并按资源类型、来源能力和运行环境隐藏不可用项？",
+      "depends_on": ["D-001", "D-002"],
+      "recommendation": "确认复用 Desk 动作和 `ContextMenu`；菜单只暴露当前资源/选择集可安全执行的动作，Web/远程 mount 不显示绝对路径和原生动作。",
+      "status": "answered",
+      "round": 2,
+      "answer": "确认：复用工作台 ContextMenu 与资源动作，提供剪切、复制、删除、重命名、复制相对路径、复制绝对路径、打开文件夹、默认应用打开等操作；按资源能力和运行环境隐藏不可用项，Web/远程挂载不显示绝对路径和原生动作。",
+      "log_ref": "LOG-004"
+    },
+    {
+      "id": "D-004",
+      "title": "文件类型 icon 与打开策略",
+      "question": "`.md/.pdf/.jpg/.html` 等资源的 icon 与打开行为是否统一复用 Desk `file-kind`、`remote-file-preview` 与 Native Grant/open policy：可安全预览的走 renderer preview，具备 native path 的“用默认应用打开”，不可用时隐藏而不伪造成功？",
+      "depends_on": ["D-001", "D-003"],
+      "recommendation": "确认。Knowledge 不另建资源类型和 preview 解析器，只做 KnowledgeAddress 到现有 Workbench/FileRef preview 接缝的适配。",
+      "status": "answered",
+      "round": 2,
+      "answer": "确认：复用 Desk file-kind、remote-file-preview、Native Grant 与既有 open policy；可安全预览的资源走 Renderer preview，具备授权本地路径时才提供默认应用打开，不伪造不可用能力。",
+      "log_ref": "LOG-005"
+    },
+    {
+      "id": "D-005",
+      "title": "创建弹窗提交生命周期",
+      "question": "新建页面/文件夹请求成功后是否必须在同一 promise continuation 中先关闭 modal、解除提交锁，再只触发一次 locate/open；重复点击不得发出第二个 create request？",
+      "depends_on": ["D-001"],
+      "recommendation": "确认。提交按钮立即 disabled；成功只允许一个 create mutation，modal 卸载后再刷新/打开，409 只显示一次可重试错误。",
+      "status": "answered",
+      "round": 2,
+      "answer": "确认：提交立即进入不可重入状态；成功先关闭 dialog 并解除生命周期，再只触发一次 locate/open；重复点击不得发出第二个 create request，409 只显示一次可重试错误。",
+      "log_ref": "LOG-006"
+    },
+    {
+      "id": "D-006",
+      "title": "右键菜单的图标与可访问名称",
+      "question": "菜单视觉是否以现有 icon 作为主视觉，同时保留隐藏/tooltip 可访问名称和文字 label，以满足用户希望减少纯文字但不牺牲可发现性与无障碍？",
+      "depends_on": ["D-003", "D-004"],
+      "recommendation": "推荐 icon+tooltip/aria-label；熟悉动作可 icon-first，陌生动作保留短文字，避免把所有命令做成无提示图标。",
+      "status": "answered",
+      "round": 2,
+      "answer": "确认：右键菜单采用 icon-first，保留 tooltip/ARIA 可访问名称；熟悉操作可只显示图标，陌生操作保留短文字，不能牺牲可发现性和无障碍。",
+      "log_ref": "LOG-007"
+    }
+  ]
+}

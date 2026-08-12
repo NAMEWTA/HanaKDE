@@ -6,11 +6,14 @@ describe('knowledge native grants', () => {
     let now = 1_000;
     const service = new KnowledgeNativeGrantService({ now: () => now, randomUUID: () => '00000000-0000-4000-8000-000000000051' });
     const issued = service.issue({
-      action: 'reveal', address: { sourceKey: 'main', relativePath: 'a.md' },
+      action: 'copyPath', address: { sourceKey: 'main', relativePath: 'a.md' },
       version: { etag: 'v1' }, ownerKey: 'owner', windowKey: '7',
     });
-    expect(service.consume({ grantId: issued.grantId, action: 'reveal', ownerKey: 'owner', windowKey: '7' })).toMatchObject({ address: { relativePath: 'a.md' } });
-    expect(() => service.consume({ grantId: issued.grantId, action: 'reveal', ownerKey: 'owner', windowKey: '7' })).toThrow();
+    expect(service.consume({ grantId: issued.grantId, action: 'copyPath', ownerKey: 'owner', windowKey: '7' })).toMatchObject({
+      action: 'copyPath',
+      address: { relativePath: 'a.md' },
+    });
+    expect(() => service.consume({ grantId: issued.grantId, action: 'copyPath', ownerKey: 'owner', windowKey: '7' })).toThrow();
 
     const expired = new KnowledgeNativeGrantService({ now: () => now, randomUUID: () => '00000000-0000-4000-8000-000000000052' });
     const second = expired.issue({ action: 'systemTrash', address: { sourceKey: 'main', relativePath: 'b.md' }, version: { etag: 'v2' }, ownerKey: 'owner', windowKey: '7' });

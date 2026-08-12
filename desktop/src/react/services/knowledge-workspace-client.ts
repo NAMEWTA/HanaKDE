@@ -458,7 +458,7 @@ export interface KnowledgeWorkspaceClient {
   planTrashRestore(sourceKey: string, batchId: string, entryIds?: readonly string[], options?: KnowledgeWorkspaceRequestOptions): Promise<RendererKnowledgeTrashOperationPlan>;
   planTrashCleanup(address: KnowledgeResourceAddress, options?: KnowledgeWorkspaceRequestOptions): Promise<RendererKnowledgeTrashOperationPlan>;
   restoreTrash(sourceKey: string, batchId: string, entryIds?: readonly string[], options?: KnowledgeWorkspaceRequestOptions): Promise<Array<Record<string, unknown>>>;
-  createNativeGrant(action: 'openDefault' | 'reveal' | 'systemTrash', address: KnowledgeResourceAddress, options?: KnowledgeWorkspaceRequestOptions): Promise<{ grantId: string; expiresAt: number }>;
+  createNativeGrant(action: 'openDefault' | 'reveal' | 'copyPath' | 'systemTrash', address: KnowledgeResourceAddress, options?: KnowledgeWorkspaceRequestOptions): Promise<{ grantId: string; expiresAt: number }>;
   listSources(options?: KnowledgeWorkspaceRequestOptions): Promise<KnowledgeSourceDto[]>;
   registerSource(
     input: RegisterKnowledgeSourceInput,

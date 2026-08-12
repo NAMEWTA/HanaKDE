@@ -41,10 +41,12 @@
       "loading": "ソースを読み込み中…",
       "error": "ソースを読み込めません"
     },
-    "source": { "main": "メイン" },
+    "source": { "main": "作業ディレクトリ" },
     "retry": "再試行",
     "actions": { "label": "リソース操作" },
     "action": { "newPage": "新規ページ", "newFolder": "新規フォルダー", "import": "インポート", "copy": "コピー", "cut": "切り取り", "paste": "貼り付け", "delete": "削除", "cancel": "キャンセル", "create": "作成", "close": "閉じる", "restore": "復元", "systemTrash": "システムのゴミ箱" },
+    "clipboard": { "staleWorkspace": "クリップボードは閉じたワークスペースに属しています", "crossSourceCut": "切り取った項目は同じソース内にのみ貼り付けられます" },
+    "context": { "rename": "名前を変更", "renamePrompt": "名前を変更", "copyRelativePath": "相対パスをコピー", "copyAbsolutePath": "絶対パスをコピー", "openFolder": "フォルダーを開く", "reveal": "ファイルマネージャーで表示" },
     "create": { "pageTitle": "ページを作成", "folderTitle": "フォルダーを作成", "name": "名前", "error": "リソースを作成できませんでした。" },
     "trash": { "title": "ワークスペースのゴミ箱", "loading": "ゴミ箱を読み込み中…", "empty": "ゴミ箱は空です。", "deleteConfirm": "選択したリソースをワークスペースのゴミ箱へ移動しますか？", "cleanupConfirm": "このリソースをシステムのゴミ箱へ移動しますか？", "cleanupTitle": "システムのゴミ箱に移動", "cleanupDescription": "OS が受け入れた後、OpenHanako からこれらの項目を復元できなくなります。", "cleanupExpired": "30 日を超えた項目を整理", "cleanupSelected": "選択項目をシステムのゴミ箱へ", "cleanupBatch": "バッチ全体をシステムのゴミ箱へ", "retryFailed": "失敗項目のみ再試行", "select": "選択", "operationError": "ゴミ箱の操作を完了できませんでした。" },
     "search": {

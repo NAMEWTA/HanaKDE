@@ -31,7 +31,6 @@ import {
   knowledgeNativeCredentialMatches,
   type KnowledgeNativeGrantAction,
 } from "../../core/knowledge-workspace/knowledge-native-grant-service.ts";
-import { createSandboxResourceIO } from "../../lib/resource-io/sandbox-resource-io.ts";
 import {
   parseKnowledgeResourceAddress,
 } from "../../shared/knowledge-workspace-contract.ts";
@@ -842,6 +841,7 @@ export function createKnowledgeWorkspaceRoute(engine) {
       fileClipboard: available,
       openDefault: available,
       reveal: available,
+      copyPath: available,
       systemTrash: available,
     });
   });
@@ -1543,34 +1543,26 @@ async function createRegistryEntry({
   if (mainRoot.kind === "local-file" && !mainRoot.path) {
     throw routeError("knowledge workspace main root unavailable", 503);
   }
-  const defaultRoot = mainRoot.kind === "local-file"
-    ? mainRoot.path
-    : engine.defaultDeskCwd || engine.homeCwd || engine.deskCwd;
-  const resourceIO = createSandboxResourceIO({
-    cwd: defaultRoot,
-    agentDir: defaultRoot,
-    workspace: defaultRoot,
-    workspaceFolders: defaultRoot ? [defaultRoot] : [],
-    authorizedFolders: defaultRoot ? [defaultRoot] : [],
-    hanakoHome: engine.hanakoHome,
-    getSandboxEnabled: () => false,
-    getSessionPath: () => requestContext?.sessionPath || null,
-    emitEvent: () => {},
+  const resourceIO = resourceIoFor(engine, {
+    mainRoot,
+    requestContext,
     studioId,
+    forRegistry: true,
+  });
+  const registry = await SourceRegistry.create({
+    mainRoot,
+    mainDisplayName,
+    resourceIO,
+    hanakoHome: engine.hanakoHome,
+    context: createApiResourceOperationContext({
+      requestContext,
+      requestId: requestIdFromHono(c),
+    }) as ResourceOperationContext,
   });
   return {
     workspaceKey,
     signature,
-    registry: await SourceRegistry.create({
-      mainRoot,
-      mainDisplayName,
-      resourceIO,
-      hanakoHome: engine.hanakoHome,
-      context: createApiResourceOperationContext({
-        requestContext,
-        requestId: requestIdFromHono(c),
-      }) as ResourceOperationContext,
-    }),
+    registry,
   };
 }
 
@@ -1730,7 +1722,7 @@ async function createAtomicOperationEntry(
   const coordinator = new KnowledgeAtomicOperationCoordinator({
     hanakoHome: engine.hanakoHome,
     sourceRegistry: registry,
-    resourceIO: resourceIoFor(engine),
+    resourceIO: resourceIoFor(engine, { mainRoot: registry.rootRef("main") }),
   });
   await coordinator.recover();
   return coordinator;
@@ -1775,9 +1767,7 @@ async function createOperationEntry({
   workspaceKey,
 }): Promise<OperationEntry> {
   if (!engine.hanakoHome) throw routeError("hanakoHome required", 500);
-  const resourceIO = typeof engine.getResourceIO === "function"
-    ? engine.getResourceIO()
-    : engine.resourceIO;
+  const resourceIO = resourceIoFor(engine, { mainRoot: registry.rootRef("main") });
   if (
     !resourceIO
     || typeof resourceIO.stat !== "function"
@@ -2015,14 +2005,49 @@ function routeError(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
 }
 
-function resourceIoFor(engine) {
-  const resourceIO = typeof engine?.getResourceIO === "function" ? engine.getResourceIO() : engine?.resourceIO;
-  if (!resourceIO || typeof resourceIO.stat !== "function") throw routeError("knowledge ResourceIO unavailable", 503);
+function resourceIoFor(engine, options: {
+  forRegistry?: boolean;
+  mainRoot?: unknown;
+  requestContext?: unknown;
+  studioId?: string | null;
+} = {}) {
+  const forRegistry = options.forRegistry === true;
+  const injectedResourceIO = engine?.resourceIO;
+  const knowledgeResourceIO = injectedResourceIO
+    || (typeof engine?.getKnowledgeResourceIO === "function"
+      ? engine.getKnowledgeResourceIO()
+      : null);
+  let resourceIO = isKnowledgeResourceOwner(knowledgeResourceIO, { forRegistry })
+    ? knowledgeResourceIO
+    : null;
+  if (!resourceIO && isKnowledgeResourceOwner(injectedResourceIO, { forRegistry })) {
+    resourceIO = injectedResourceIO;
+  }
+  if (!resourceIO && typeof engine?.getResourceIO === "function") {
+    resourceIO = engine.getResourceIO();
+  }
+  if (!resourceIO && isKnowledgeResourceOwner(engine?.knowledgeResourceIO, { forRegistry })) {
+    resourceIO = engine.knowledgeResourceIO;
+  }
+  if (!resourceIO || typeof resourceIO.stat !== "function") {
+    throw routeError("knowledge ResourceIO unavailable", 503);
+  }
   return resourceIO;
 }
 
+function isKnowledgeResourceOwner(resourceIO, { forRegistry = false } = {}) {
+  const localProvider = resourceIO?.providers?.local_fs;
+  return Boolean(
+    resourceIO
+    && typeof resourceIO.stat === "function"
+    && typeof resourceIO.getRootIdentity === "function"
+    && typeof resourceIO.capabilitiesFor === "function"
+    && (!forRegistry || !localProvider || localProvider.trashRoot),
+  );
+}
+
 function parseNativeAction(value: unknown): KnowledgeNativeGrantAction | null {
-  return value === "openDefault" || value === "reveal" || value === "systemTrash" ? value : null;
+  return value === "openDefault" || value === "reveal" || value === "copyPath" || value === "systemTrash" ? value : null;
 }
 
 function validNativeWindowKey(value: unknown): value is string {

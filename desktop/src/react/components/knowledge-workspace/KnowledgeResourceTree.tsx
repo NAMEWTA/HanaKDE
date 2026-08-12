@@ -32,6 +32,8 @@ import {
 import { KnowledgeDragController } from './knowledge-drag-controller';
 import { invokeKnowledgeNative } from '../../services/knowledge-native-client';
 import { KNOWLEDGE_ATTACHMENT_RESOURCE_MIME } from '../../editor/knowledge-attachment-policy';
+import { ICONS, getFileIcon } from '../desk/desk-types';
+import { isMarkdownFileName } from '../../utils/file-kind';
 import type { KnowledgeBreadcrumbTarget } from './KnowledgeTabBar';
 import {
   createKnowledgeTreeSelectionState,
@@ -82,6 +84,12 @@ export interface KnowledgeResourceTreeProps {
     sourceKey: string | null;
     addresses: readonly KnowledgeResourceAddress[];
     contextTarget: KnowledgeResourceAddress | null;
+  }>): void;
+  onContextMenu?(input: Readonly<{
+    position: { x: number; y: number };
+    address: KnowledgeResourceAddress;
+    isDirectory: boolean;
+    addresses: readonly KnowledgeResourceAddress[];
   }>): void;
 }
 
@@ -181,20 +189,15 @@ function DisclosureIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
-function ResourceIcon({ directory }: { directory: boolean }) {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="15"
-      viewBox="0 0 24 24"
-      width="15"
-    >
-      {directory
-        ? <path d="M3 6h7l2 2h9v10H3z" />
-        : <path d="M6 3h8l4 4v14H6zM14 3v5h4" />}
-    </svg>
-  );
+function ResourceIcon({ directory, expanded = false, name = '' }: {
+  directory: boolean;
+  expanded?: boolean;
+  name?: string;
+}) {
+  const markup = directory
+    ? (expanded ? ICONS.folderOpen : ICONS.folder)
+    : getFileIcon(name);
+  return <span dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 
 export const KnowledgeResourceTree = forwardRef<
@@ -209,6 +212,7 @@ export const KnowledgeResourceTree = forwardRef<
   refreshDelayMs = 120,
   onOpenResource,
   onSelectionChange,
+  onContextMenu,
 }, ref) {
   const expandedPathsBySource = useStore(
     (state) => state.knowledgeExpandedPathsBySource,
@@ -598,6 +602,10 @@ export const KnowledgeResourceTree = forwardRef<
         // platform watcher having delivered the invalidation already.
         void loadDirectory(source, ancestor, true);
       }
+      if (target.kind === 'folder' && !next.includes(relativePath)) {
+        next.push(relativePath);
+        void loadDirectory(source, relativePath, true);
+      }
       setExpandedPaths(target.sourceKey, next);
     },
   }), [expandedPathsBySource, loadDirectory, setExpandedPaths, sources]);
@@ -633,9 +641,25 @@ export const KnowledgeResourceTree = forwardRef<
       dispatchSelection({ type: 'select', key, ...options });
       focusRow(key);
     },
-    context: (key) => {
+    context: (key, position) => {
       dispatchSelection({ type: 'context', key });
       focusRow(key);
+      const node = visibleNodes.find(candidate => candidate.key === key);
+      if (!node) return;
+      const selectedNodes = selection.selectedKeys.includes(key)
+        ? selection.selectedKeys
+          .map(selectedKey => visibleNodes.find(candidate => candidate.key === selectedKey))
+          .filter((candidate): candidate is KnowledgeTreeVisibleNode => Boolean(candidate))
+        : [node];
+      onContextMenu?.({
+        position,
+        address: { sourceKey: node.sourceKey, relativePath: node.relativePath },
+        isDirectory: node.isDirectory,
+        addresses: selectedNodes.map(candidate => ({
+          sourceKey: candidate.sourceKey,
+          relativePath: candidate.relativePath,
+        })),
+      });
     },
     keyDown: (event, key) => {
       const node = selection.visibleNodes.find(candidate => candidate.key === key);
@@ -719,7 +743,7 @@ export const KnowledgeResourceTree = forwardRef<
             sourceKey: candidate.sourceKey,
             relativePath: candidate.relativePath,
           },
-          kind: candidate.relativePath.toLocaleLowerCase().endsWith('.md')
+          kind: isMarkdownFileName(candidate.relativePath)
             ? 'page'
             : 'attachment',
         }));
@@ -771,6 +795,15 @@ export const KnowledgeResourceTree = forwardRef<
           target: dropped.target.address,
           conflictPolicy: 'keep-both',
         });
+        return;
+      }
+      if (
+        dropped.effect === 'move'
+        && dropped.payload.addresses.some(address => address.sourceKey !== dropped.target.address.sourceKey)
+      ) {
+        window.dispatchEvent(new CustomEvent('hana-inline-notice', {
+          detail: { text: tr('knowledge.clipboard.crossSourceCut'), type: 'error' },
+        }));
         return;
       }
       await client.pasteResources({
@@ -840,7 +873,7 @@ type TreeInteraction = {
   selection: KnowledgeTreeSelectionState;
   registerRow(key: string, element: HTMLDivElement | null): void;
   select(key: string, options?: { additive?: boolean; range?: boolean }): void;
-  context(key: string): void;
+  context(key: string, position: { x: number; y: number }): void;
   keyDown(event: KeyboardEvent<HTMLDivElement>, key: string): void;
   open(key: string, mode: 'preview' | 'pinned', focusContent: boolean): void;
   toggle(source: KnowledgeSourceDto, relativePath: string): void;
@@ -895,7 +928,7 @@ function SourceNode({
         })}
         onContextMenu={(event) => {
           event.preventDefault();
-          interact.context(key);
+          interact.context(key, { x: event.clientX, y: event.clientY });
         }}
         onDoubleClick={() => listable && onToggle('')}
         onKeyDown={(event) => interact.keyDown(event, key)}
@@ -922,7 +955,7 @@ function SourceNode({
           <span className={styles.treeDisclosureSpacer} aria-hidden="true" />
         )}
         <span className={styles.treeSourceIcon} aria-hidden="true">
-          <ResourceIcon directory />
+          <ResourceIcon directory expanded={expanded} name={source.displayName} />
         </span>
         <span className={styles.knowledgeTreeName}>{source.displayName}</span>
         <select
@@ -1029,7 +1062,7 @@ function DirectoryGroup({
               }}
               onContextMenu={(event) => {
                 event.preventDefault();
-                interact.context(key);
+                interact.context(key, { x: event.clientX, y: event.clientY });
               }}
               onDoubleClick={() => {
                 if (item.isDirectory) interact.toggle(source, relativePath);
@@ -1061,7 +1094,11 @@ function DirectoryGroup({
                 <span className={styles.treeDisclosureSpacer} aria-hidden="true" />
               )}
               <span className={styles.treeResourceIcon} aria-hidden="true">
-                <ResourceIcon directory={item.isDirectory} />
+                <ResourceIcon
+                  directory={item.isDirectory}
+                  expanded={expanded}
+                  name={item.name}
+                />
               </span>
               <span className={styles.knowledgeTreeName}>{item.name}</span>
             </div>

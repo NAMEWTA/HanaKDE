@@ -64,3 +64,79 @@ these areas route back to the owning Ticket and require a new Evidence checkpoin
 5. Regenerate closure/export/seed receipts from source and compare them deterministically.
 6. Keep platform Gate residuals visible; do not waive Windows/macOS blockers because a
    macOS/Linux development build is green.
+
+## 2026-08-12 Knowledge workspace resource convergence
+
+This checkpoint records the source-relative, minimal overlay from
+`2026-08-12-knowledge-workspace-resource-convergence`. It does not merge, rebase,
+cherry-pick, commit, push, or publish an upstream change.
+
+### Frozen inputs and overlap
+
+- **Frozen upstream target:** `c45d1e544f8f2611f92a459947b6a49e9b91239d`
+  (`merge(T-09): accept frozen v0.446.6 target`).
+- **Frozen ledger baseline:** `de0eb983c5fe237e1349b82a927050c524129b8f`
+  (`dispatch(T-24): start architecture sync ledger`).
+- **Frozen local source checkpoint:**
+  `af658cbe3a998f5631851a7fba8dc7485a53032c`; the change remains an explicitly
+  uncommitted working-tree overlay because commit authorization was not granted.
+- **Ancestry:** both frozen upstream checkpoints are ancestors of the local source
+  checkpoint.
+- **Path census:** `c45d1e54..af658cbe` changes 150 paths under
+  `core/`, `lib/`, `server/`, `desktop/`, `shared/`, `tests/`, and `docs/`.
+  The current convergence overlay changes 30 tracked paths and adds four isolated
+  test paths. The exact overlap is five paths.
+
+| Overlap path | Classification | Decision and retained contract |
+|---|---|---|
+| `core/engine.ts` | semantic integration | Keep the accepted production coordinator, History, Knowledge index and ResourceIO kernel; bind their public Knowledge facade to the active session work directory, drain the previous facade before switch, and keep mounted `main` free of a second local observer. |
+| `desktop/main.cjs` | semantic integration | Keep the accepted Main-process native bridge and one-time grant consumption; add `copyPath` only as a grant-bound Main clipboard action, without returning an absolute path to Renderer. |
+| `server/routes/resource-io.ts` | semantic integration | Keep the accepted ResourceIO routes and address DTO; resolve the current public Knowledge owner through the Engine seam instead of a private or route-local owner. |
+| `tests/engine-resource-events.test.ts` | semantic integration | Keep the accepted single-observer, History and index contract tests; update mounted-main expectations and add focused owner transition coverage without weakening the coordinator assertions. |
+| `tests/knowledge-workspace-route.test.ts` | semantic integration | Keep the accepted route contract and mounted-source coverage; use the public ResourceIO injection seam and isolate native-index-dependent assertions from route composition. |
+
+### Five-way decision record
+
+| Classification | Paths or behavior | Decision |
+|---|---|---|
+| upstream accepted | Existing `ResourceIO`, `SourceRegistry`, atomic/Trash operation coordinators, Workbench compatibility resolver, Desk file-kind/open helpers, shared `ContextMenu`, and Native Grant lifecycle | Reuse as the owning modules; do not fork providers, parsers, previewers, journals, or action protocols. |
+| HanaKDE kept | Source-relative Knowledge addresses, durable operation journal, workspace Trash, session-scoped `main`, mounted-source boundaries, and fail-closed native credential checks | Preserve local security and recovery semantics even when upstream offers a superficially similar path-based action. |
+| semantic integration | The five overlap paths above plus the thin Knowledge tree/action adapter and workspace-scoped clipboard slice | Combine accepted upstream owners with the smallest local binding and UI projection needed by the product contract. |
+| generated | Renderer build output and native helper output such as `dist-renderer/` and `dist-secure-fs/` | Regenerate from source for verification; exclude them from the semantic source checkpoint. |
+| deleted duplicate | The route-local `createSandboxResourceIO` composition and Knowledge-specific file icon/open branching | Remove the duplicate owner and replace file-kind/icon/open behavior with existing Desk/preview/native seams. |
+
+### Owner, security, and affected-test receipt
+
+- The production creation scan leaves the workspace owner in `core/engine.ts` and
+  `core/workspace-runtime/production-workspace-runtime.ts`. The other Engine
+  `ResourceIO` instances are request-body adapters or per-tool sandbox instances,
+  not Knowledge production owners. `server/routes/knowledge-workspace.ts` no longer
+  creates a sandbox ResourceIO.
+- The active local session directory wins over agent home and authorized folders.
+  An explicit unavailable local session directory stays fail closed. An active
+  mounted `main` uses the mount provider and does not start an agent-home watcher.
+- `copyPath` is issued and consumed with action, owner, window, expiry, version and
+  one-time binding. Web Open omits the action. The protected Main-only consume
+  endpoint may materialize an absolute path, but Renderer receives only the action
+  result and never the path value.
+- Focused backend regression: 8 files / 133 tests passed. Focused UI/file-kind/
+  preview regression: 8 files / 77 tests passed. Locale parity and Knowledge i18n:
+  4 files / 8 tests passed. Native contract/security: 4 files / 12 tests passed.
+  The Web Open resource-convergence Playwright flow passed, and the Renderer
+  production build and TypeScript checks passed.
+- Two native Knowledge index assertions in `tests/engine-resource-events.test.ts`
+  remain environment-classified: the current Node 22 process requires ABI 127,
+  while the installed `better-sqlite3` binary was built for ABI 137. The binary was
+  not rebuilt because doing so would replace the repository's existing Electron/
+  Node runtime artifact. All non-native owner/event assertions in that suite pass.
+- Change-scoped diff checking is clean. A repository-wide staged diff check still
+  reports trailing whitespace in separate archive/handoff artifacts that predate
+  and are outside this change; this checkpoint does not rewrite them.
+- Final change-focused regression after both review axes: 20 files / 214 tests
+  passed; the Web Open Playwright flow, three TypeScript configurations, focused
+  ESLint, Renderer production build, and change-scoped whitespace check passed.
+
+**Compatibility conclusion:** the overlay is traversable from the frozen v0.446.6
+checkpoint without a second owner, watcher, parser, route kernel, or raw
+absolute-path Renderer API. Any future overlap that changes these ownership or
+security facts must stop at the affected checkpoint and return to Spec/Grill.

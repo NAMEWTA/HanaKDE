@@ -166,6 +166,9 @@ import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registr
 import {
   createResourceMainRootAuthority,
 } from "./workspace-runtime/index.ts";
+import {
+  resolveWorkbenchCompatibilityMain,
+} from "./knowledge-workspace/workbench-compatibility.ts";
 import type { MainWorkspaceRuntime } from "./workspace-runtime/main-workspace-runtime.ts";
 import {
   EMPTY_PRODUCTION_OWNER_COUNTS,
@@ -181,6 +184,90 @@ import type {
   SingleOwnerProductionCutover,
 } from "./workspace-runtime/production-workspace-runtime.ts";
 import { MAIN_WORKSPACE_CUTOVER_DESCRIPTOR } from "../shared/workspace-observation.ts";
+
+type KnowledgeResourceOwnerScope = {
+  ownerKey: string;
+  active: boolean;
+  inFlight: number;
+  waiters: Array<() => void>;
+  facade: ResourceIO | null;
+};
+
+const RESOURCE_IO_SCOPE_ASYNC_METHODS = new Set([
+  "stat",
+  "read",
+  "openRead",
+  "write",
+  "writeExpectedVersion",
+  "edit",
+  "mkdir",
+  "delete",
+  "list",
+  "search",
+  "materialize",
+  "withMaterialized",
+  "copy",
+  "transfer",
+  "recoverTransferPublication",
+  "rename",
+  "move",
+  "trash",
+  "getRootIdentity",
+]);
+
+function createKnowledgeResourceOwnerFacade(
+  resourceIO: ResourceIO,
+  scope: KnowledgeResourceOwnerScope,
+): ResourceIO {
+  return new Proxy(resourceIO, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      if (property === "resolveWatchTarget") {
+        return (...args: unknown[]) => {
+          assertKnowledgeResourceOwnerActive(scope);
+          return value.apply(target, args);
+        };
+      }
+      if (typeof property !== "string" || !RESOURCE_IO_SCOPE_ASYNC_METHODS.has(property)) {
+        return value.bind(target);
+      }
+      return (...args: unknown[]) => {
+        try {
+          assertKnowledgeResourceOwnerActive(scope);
+        } catch (error) {
+          return Promise.reject(error);
+        }
+        scope.inFlight += 1;
+        let result: unknown;
+        try {
+          result = value.apply(target, args);
+        } catch (error) {
+          releaseKnowledgeResourceOwnerCall(scope);
+          throw error;
+        }
+        return Promise.resolve(result).finally(() => {
+          releaseKnowledgeResourceOwnerCall(scope);
+        });
+      };
+    },
+  });
+}
+
+function assertKnowledgeResourceOwnerActive(scope: KnowledgeResourceOwnerScope): void {
+  if (scope.active) return;
+  throw createKnowledgeWorkspaceError(
+    "knowledge_resource_unavailable",
+    "knowledge workspace resource owner is no longer active",
+  );
+}
+
+function releaseKnowledgeResourceOwnerCall(scope: KnowledgeResourceOwnerScope): void {
+  scope.inFlight = Math.max(0, scope.inFlight - 1);
+  if (scope.active || scope.inFlight !== 0) return;
+  const waiters = scope.waiters.splice(0);
+  for (const resolve of waiters) resolve();
+}
 
 export {
   MainWorkspaceKnowledgeSharedBaselineAdapter,
@@ -393,6 +480,9 @@ export class HanaEngine {
   declare _mainWorkspaceUnavailable: boolean;
   declare _resourceLoader: any;
   declare _resourceIO: any;
+  declare _resourceIOOwnerKey: string | null;
+  declare _resourceIOOwnerScope: KnowledgeResourceOwnerScope | null;
+  declare _resourceIOOwnerTransitioning: boolean;
   declare _resourceWatchRegistry: any;
   declare _resourceWatchSubscriptions: Map<string, EngineResourceWatchSubscription>;
   declare _retainedResourceWatches: Map<string, EngineRetainedResourceWatch>;
@@ -445,6 +535,9 @@ export class HanaEngine {
     this._resources = null;
     this._resourceAccess = null;
     this._resourceIO = null;
+    this._resourceIOOwnerKey = null;
+    this._resourceIOOwnerScope = null;
+    this._resourceIOOwnerTransitioning = false;
     this._resourceEventBus = null;
     this._fileHistoryService = new FileHistoryService({ privateStoreRoot: this.hanakoHome });
     this._mainFileHistoryBinding = null;
@@ -1214,24 +1307,55 @@ export class HanaEngine {
       ? configuredHome.trim().length > 0
       : configuredHome !== null && configuredHome !== undefined;
   }
+  _hasActiveMainWorkspaceMount(): boolean {
+    const sessionPath = this._sessionCoord?.currentSessionPath || null;
+    if (!sessionPath || typeof this._sessionCoord?.getSessionWorkspaceMount !== "function") {
+      return false;
+    }
+    const mount = this._sessionCoord.getSessionWorkspaceMount(sessionPath);
+    return typeof mount?.mountId === "string" && mount.mountId.trim().length > 0;
+  }
+  _hasSelectedLocalMainWorkspaceRoot(): boolean {
+    const sessionPath = this._sessionCoord?.currentSessionPath || null;
+    if (sessionPath) {
+      if (this._hasActiveMainWorkspaceMount()) return false;
+      const sessionCwd = typeof this._sessionCoord?.getSessionFolderScope === "function"
+        ? this._sessionCoord.getSessionFolderScope(sessionPath)?.cwd
+        : null;
+      if (typeof sessionCwd === "string" && sessionCwd.trim()) return true;
+    }
+    return this._hasConfiguredMainWorkspaceHome();
+  }
   _resolveActiveMainWorkspaceRoot(): string | null {
+    const sessionPath = this._sessionCoord?.currentSessionPath || null;
+    if (sessionPath) {
+      const sessionMount = typeof this._sessionCoord?.getSessionWorkspaceMount === "function"
+        ? this._sessionCoord.getSessionWorkspaceMount(sessionPath)
+        : null;
+      if (sessionMount?.mountId) return null;
+      const sessionCwd = typeof this._sessionCoord?.getSessionFolderScope === "function"
+        ? this._sessionCoord.getSessionFolderScope(sessionPath)?.cwd
+        : null;
+      if (typeof sessionCwd === "string" && sessionCwd.trim()) {
+        return resolveExistingWorkspaceDirectory(sessionCwd);
+      }
+    }
     const configuredHome = this._agentMgr?.agent?.config?.desk?.home_folder;
     const hasConfiguredHome = this._hasConfiguredMainWorkspaceHome();
 
-    // `last_cwd` is session history and may name a mounted workspace. Main
-    // ownership is the agent's configured home only. Keep an unavailable
-    // explicit home fail-closed rather than silently observing the default.
+    // Without an active chat/workbench directory, the configured home remains
+    // the compatibility main. An unavailable explicit home stays fail closed.
     if (hasConfiguredHome) {
       return resolveExistingWorkspaceDirectory(configuredHome);
     }
     return resolveExistingWorkspaceDirectory(this.getHomeCwd(this._agentMgr?.activeAgentId));
   }
   async _startProductionWorkspaceRuntime(log: (message: string) => void = () => {}) {
-    const hasConfiguredHome = this._hasConfiguredMainWorkspaceHome();
     const rootPath = this._resolveActiveMainWorkspaceRoot();
     if (!rootPath) {
       await this._stopProductionWorkspaceRuntime();
-      this._mainWorkspaceUnavailable = hasConfiguredHome;
+      this._resourceIOOwnerTransitioning = false;
+      this._mainWorkspaceUnavailable = this._hasSelectedLocalMainWorkspaceRoot();
       return this.getProductionWorkspaceHealth();
     }
     this._mainWorkspaceUnavailable = false;
@@ -1247,6 +1371,7 @@ export class HanaEngine {
     }
 
     await this._stopProductionWorkspaceRuntime();
+    this._resourceIOOwnerTransitioning = false;
     const assembly = createProductionWorkspaceRuntime({
       rootPath,
       rootAuthority: createResourceMainRootAuthority({ resourceIO: this.getResourceIO() }),
@@ -1273,9 +1398,13 @@ export class HanaEngine {
     return this.getProductionWorkspaceHealth();
   }
   async _stopProductionWorkspaceRuntime() {
+    this._resourceIOOwnerTransitioning = true;
+    const resourceOwnerScope = this._resourceIOOwnerScope;
+    await this._drainKnowledgeResourceOwner();
     await this._closeFileHistoryService();
     const cutover = this._mainWorkspaceCutover;
     if (!cutover) {
+      await this.disposeKnowledgeIndexRuntime();
       this._mainFileHistoryBinding = null;
       this._mainWorkspaceSharedBaseline?.detach();
       this._mainWorkspaceCanonicalRoot = null;
@@ -1283,7 +1412,16 @@ export class HanaEngine {
       this._mainWorkspaceUnavailable = false;
       return this.getProductionWorkspaceHealth();
     }
-    await cutover.stop();
+    try {
+      await cutover.stop();
+    } catch (error) {
+      if (resourceOwnerScope && this._resourceIOOwnerScope === resourceOwnerScope) {
+        resourceOwnerScope.active = true;
+      }
+      this._resourceIOOwnerTransitioning = false;
+      throw error;
+    }
+    await this.disposeKnowledgeIndexRuntime();
     this._mainFileHistoryBinding = null;
     this._mainWorkspaceRuntime = null;
     this._mainWorkspaceCutover = null;
@@ -1457,14 +1595,41 @@ export class HanaEngine {
     return this._resourceAccess;
   }
   getResourceIO() {
-    if (!this._resourceIO) {
+    if (this._mainWorkspaceUnavailable) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_unavailable",
+        "knowledge workspace main root is unavailable",
+      );
+    }
+    const owner = this._resolveKnowledgeResourceOwner();
+    const currentOwnerKey = this._resourceIOOwnerKey
+      || this._inspectResourceIOOwnerKey(this._resourceIO, owner.key);
+    const currentScopeActive = !this._resourceIOOwnerScope
+      || (
+        this._resourceIOOwnerScope.facade === this._resourceIO
+        && this._resourceIOOwnerScope.active
+      );
+    if (this._resourceIO && currentOwnerKey !== owner.key && currentScopeActive) {
+      this._resourceIOOwnerTransitioning = true;
+      this._invalidateKnowledgeResourceOwner();
+    }
+    if (this._resourceIOOwnerTransitioning) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_unavailable",
+        "knowledge workspace resource owner is transitioning",
+      );
+    }
+    if (!this._resourceIO || currentOwnerKey !== owner.key || !currentScopeActive) {
       if (!this._runtimeContext?.studioId) throw new Error("runtime studioId unavailable");
-      this._resourceIO = createSandboxResourceIO({
-        cwd: this.userDir,
+      const resourceCwd = owner.localRoot || this.defaultDeskCwd || this.homeCwd || this.deskCwd;
+      if (!resourceCwd) throw new Error("knowledge workspace main root unavailable");
+      this._invalidateKnowledgeResourceOwner();
+      const resourceIO = createSandboxResourceIO({
+        cwd: resourceCwd,
         agentDir: this.agent?.dir || this.agentsDir,
-        workspace: null,
-        workspaceFolders: [],
-        authorizedFolders: [],
+        workspace: owner.localRoot,
+        workspaceFolders: owner.localRoot ? [owner.localRoot] : [],
+        authorizedFolders: owner.localRoot ? [owner.localRoot] : [],
         hanakoHome: this.hanakoHome,
         getSandboxEnabled: () => false,
         getSessionPath: () => this.currentSessionPath || null,
@@ -1474,8 +1639,83 @@ export class HanaEngine {
         resourceService: this.getResourceService(),
         studioId: this._runtimeContext.studioId,
       });
+      const scope: KnowledgeResourceOwnerScope = {
+        ownerKey: owner.key,
+        active: true,
+        inFlight: 0,
+        waiters: [],
+        facade: null,
+      };
+      this._resourceIO = createKnowledgeResourceOwnerFacade(resourceIO, scope);
+      scope.facade = this._resourceIO;
+      this._resourceIOOwnerScope = scope;
+      this._resourceIOOwnerKey = owner.key;
     }
     return this._resourceIO;
+  }
+
+  /** Return the public ResourceIO bound to the current Workbench main scope. */
+  getKnowledgeResourceIO() {
+    return this.getResourceIO();
+  }
+
+  _invalidateKnowledgeResourceOwner(): void {
+    const scope = this._resourceIOOwnerScope;
+    if (!scope || !scope.active) return;
+    scope.active = false;
+    if (scope.inFlight === 0) releaseKnowledgeResourceOwnerCall(scope);
+  }
+
+  async _drainKnowledgeResourceOwner(): Promise<void> {
+    const scope = this._resourceIOOwnerScope;
+    if (!scope) return;
+    this._invalidateKnowledgeResourceOwner();
+    if (scope.inFlight === 0) return;
+    await new Promise<void>((resolve) => scope.waiters.push(resolve));
+  }
+
+  _resolveKnowledgeResourceOwner() {
+    try {
+      const main = resolveWorkbenchCompatibilityMain(this);
+      if (main.root.kind === "mount") {
+        return { key: JSON.stringify(main.root), localRoot: null };
+      }
+      if (main.root.kind !== "local-file") {
+        return { key: JSON.stringify(main.root), localRoot: null };
+      }
+      const localRoot = typeof main.root.path === "string" && main.root.path.trim()
+        ? path.resolve(main.root.path)
+        : null;
+      return {
+        key: JSON.stringify({ kind: "local-file", path: localRoot || "" }),
+        localRoot,
+      };
+    } catch {
+      const localRoot = (() => {
+        try {
+          const root = this._resolveActiveMainWorkspaceRoot();
+          return root ? path.resolve(root) : null;
+        } catch {
+          return null;
+        }
+      })();
+      return {
+        key: JSON.stringify({ kind: "local-file", path: localRoot || "" }),
+        localRoot,
+      };
+    }
+  }
+
+  _inspectResourceIOOwnerKey(resourceIO, fallbackKey) {
+    const localCwd = resourceIO?.providers?.local_fs?.cwd;
+    if (typeof localCwd !== "string" || !localCwd.trim()) return fallbackKey;
+    try {
+      const owner = JSON.parse(fallbackKey);
+      if (owner?.kind !== "local-file" || !owner.path) return fallbackKey;
+      return JSON.stringify({ kind: "local-file", path: path.resolve(localCwd) });
+    } catch {
+      return fallbackKey;
+    }
   }
   async bindKnowledgeIndexWorkspace(
     sourceRegistry: SourceRegistry,
@@ -1955,7 +2195,12 @@ export class HanaEngine {
   get deskCwd() { return this._sessionCoord.session?.sessionManager?.getCwd?.() || this.homeCwd || null; }
 
   async createSession(mgr, cwd, mem, model, opts: any = {}) {
-    return this._sessionCoord.createSession(mgr, cwd, mem, model, opts);
+    const previousOwnerKey = this._resolveKnowledgeResourceOwner().key;
+    const result = await this._sessionCoord.createSession(mgr, cwd, mem, model, opts);
+    if (this._resolveKnowledgeResourceOwner().key !== previousOwnerKey) {
+      await this._startProductionWorkspaceRuntime();
+    }
+    return result;
   }
   resolveSessionRef(ref, opts = {}) {
     if (!this._sessionManifestResolver) {
@@ -2160,7 +2405,11 @@ export class HanaEngine {
     return this._sessionCoord.getSessionTransformContext(p);
   }
   async switchSession(p) {
+    const previousOwnerKey = this._resolveKnowledgeResourceOwner().key;
     const result = await this._sessionCoord.switchSession(p);
+    if (this._resolveKnowledgeResourceOwner().key !== previousOwnerKey) {
+      await this._startProductionWorkspaceRuntime();
+    }
     await this.syncWorkspaceSkillPaths(this.cwd, { reload: true, emitEvent: false });
     return result;
   }
@@ -2191,6 +2440,9 @@ export class HanaEngine {
   getMessages(p) { return this._sessionCoord.getSessionByPath(p)?.messages ?? []; }
   getSessionWorkspaceFolders(p = this.currentSessionPath) {
     return this._sessionCoord.getSessionWorkspaceFolders(p);
+  }
+  getSessionWorkspaceMount(p = this.currentSessionPath) {
+    return this._sessionCoord.getSessionWorkspaceMount(p);
   }
   getSessionAuthorizedFolders(p = this.currentSessionPath) {
     return this._sessionCoord.getSessionAuthorizedFolders(p);

@@ -551,7 +551,7 @@ describe("HanaEngine ResourceEvent emission", () => {
     await engine._stopProductionWorkspaceRuntime();
   });
 
-  it("does not retarget main when a focused mounted session records last_cwd", async () => {
+  it("does not observe agent home as local main for a focused mounted workspace", async () => {
     workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-main-workspace-mounted-"));
     const rootA = path.join(workspaceRoot, "workspace-a");
     const mountedRoot = path.join(workspaceRoot, "mounted-docs");
@@ -602,8 +602,9 @@ describe("HanaEngine ResourceEvent emission", () => {
     await engine._startProductionWorkspaceRuntime();
     await expect(engine.updateConfig({ last_cwd: mountedRoot })).resolves.toEqual({ ok: true });
 
-    expect(order).toEqual([`open:${rootA}`]);
-    expect(engine._mainWorkspaceRoot).toBe(rootA);
+    expect(order).toEqual([]);
+    expect(engine._mainWorkspaceRoot).toBeNull();
+    expect(engine._mainWorkspaceUnavailable).toBe(false);
     await engine._stopProductionWorkspaceRuntime();
   });
 

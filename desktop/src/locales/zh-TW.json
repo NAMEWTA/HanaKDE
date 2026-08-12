@@ -41,10 +41,12 @@
       "loading": "正在載入來源…",
       "error": "無法載入內容來源"
     },
-    "source": { "main": "主要來源" },
+    "source": { "main": "工作目錄" },
     "retry": "重試",
     "actions": { "label": "資源操作" },
     "action": { "newPage": "新增頁面", "newFolder": "新增資料夾", "import": "匯入", "copy": "複製", "cut": "剪下", "paste": "貼上", "delete": "刪除", "cancel": "取消", "create": "建立", "close": "關閉", "restore": "還原", "systemTrash": "系統垃圾桶" },
+    "clipboard": { "staleWorkspace": "剪貼簿來自已關閉的工作區", "crossSourceCut": "剪下項目只能貼到相同來源" },
+    "context": { "rename": "重新命名", "renamePrompt": "重新命名", "copyRelativePath": "複製相對路徑", "copyAbsolutePath": "複製絕對路徑", "openFolder": "開啟資料夾", "reveal": "在檔案管理器中顯示" },
     "create": { "pageTitle": "新增頁面", "folderTitle": "新增資料夾", "name": "名稱", "error": "無法建立資源。" },
     "trash": { "title": "工作區回收站", "loading": "正在載入回收站…", "empty": "回收站是空的。", "deleteConfirm": "將所選資源移入工作區回收站？", "cleanupConfirm": "將此資源移入系統垃圾桶？", "cleanupTitle": "移入系統垃圾桶", "cleanupDescription": "作業系統接收這些項目後，OpenHanako 將無法再還原它們。", "cleanupExpired": "清理超過 30 天的項目", "cleanupSelected": "將所選項目移入系統垃圾桶", "cleanupBatch": "將整個批次移入系統垃圾桶", "retryFailed": "僅重試失敗項目", "select": "選取", "operationError": "回收站操作未能完成。" },
     "search": {

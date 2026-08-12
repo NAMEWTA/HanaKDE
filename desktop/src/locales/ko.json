@@ -41,10 +41,12 @@
       "loading": "소스를 불러오는 중…",
       "error": "소스를 불러올 수 없습니다"
     },
-    "source": { "main": "메인" },
+    "source": { "main": "작업 디렉터리" },
     "retry": "다시 시도",
     "actions": { "label": "리소스 작업" },
     "action": { "newPage": "새 페이지", "newFolder": "새 폴더", "import": "가져오기", "copy": "복사", "cut": "잘라내기", "paste": "붙여넣기", "delete": "삭제", "cancel": "취소", "create": "만들기", "close": "닫기", "restore": "복원", "systemTrash": "시스템 휴지통" },
+    "clipboard": { "staleWorkspace": "클립보드는 닫힌 작업 공간에 속해 있습니다", "crossSourceCut": "잘라낸 항목은 같은 소스 안에만 붙여넣을 수 있습니다" },
+    "context": { "rename": "이름 바꾸기", "renamePrompt": "이름 바꾸기", "copyRelativePath": "상대 경로 복사", "copyAbsolutePath": "절대 경로 복사", "openFolder": "폴더 열기", "reveal": "파일 관리자에서 보기" },
     "create": { "pageTitle": "페이지 만들기", "folderTitle": "폴더 만들기", "name": "이름", "error": "리소스를 만들 수 없습니다." },
     "trash": { "title": "작업 공간 휴지통", "loading": "휴지통 불러오는 중…", "empty": "휴지통이 비어 있습니다.", "deleteConfirm": "선택한 리소스를 작업 공간 휴지통으로 이동할까요?", "cleanupConfirm": "이 리소스를 시스템 휴지통으로 이동할까요?", "cleanupTitle": "시스템 휴지통으로 이동", "cleanupDescription": "운영 체제가 항목을 받은 뒤에는 OpenHanako에서 복원할 수 없습니다.", "cleanupExpired": "30일 지난 항목 정리", "cleanupSelected": "선택 항목을 시스템 휴지통으로 이동", "cleanupBatch": "전체 배치를 시스템 휴지통으로 이동", "retryFailed": "실패 항목만 다시 시도", "select": "선택", "operationError": "휴지통 작업을 완료하지 못했습니다." },
     "search": {

@@ -13,6 +13,9 @@ describe('knowledge native contract', () => {
     expect(parseKnowledgeNativeRequest({
       action: 'reveal', grantId: '00000000-0000-4000-8000-000000000051',
     })).toEqual({ action: 'reveal', grantId: '00000000-0000-4000-8000-000000000051' });
+    expect(parseKnowledgeNativeRequest({
+      action: 'copyPath', grantId: '00000000-0000-4000-8000-000000000051',
+    })).toEqual({ action: 'copyPath', grantId: '00000000-0000-4000-8000-000000000051' });
     const fileHandle = Object.freeze({ opaque: true });
     expect(parseKnowledgeNativeRequest({
       action: 'importDroppedFiles',

@@ -69,3 +69,17 @@ export function activeKnowledgeClipboard(
     ? state.knowledgeClipboard
     : null;
 }
+
+/**
+ * A cut is a durable move within one mounted source. Cross-source copies are
+ * supported, but a cross-source cut must fail closed before reaching the API.
+ */
+export function knowledgeClipboardPasteAllowed(
+  clipboard: KnowledgeClipboardPayload | null,
+  targetSourceKey: string,
+): boolean {
+  return Boolean(
+    clipboard
+    && (clipboard.intent !== 'cut' || clipboard.sourceKey === targetSourceKey),
+  );
+}

@@ -18,7 +18,7 @@ const mainSource: KnowledgeSourceDto = {
   sourceKey: 'main',
   displayName: 'Main workspace',
   role: 'main',
-  capabilities: ['stat', 'read', 'list', 'watch'],
+  capabilities: ['stat', 'read', 'write', 'list', 'watch', 'trash'],
   availability: 'available',
 };
 
@@ -43,7 +43,7 @@ describe('KnowledgeWorkspace', () => {
       'knowledge.tab': 'Knowledge',
       'knowledge.workspaceLabel': 'Knowledge workspace',
       'knowledge.sources.heading': 'Sources',
-      'knowledge.source.main': 'Main',
+      'knowledge.source.main': 'Working directory',
       'knowledge.tree.heading': 'Resource tree',
       'knowledge.tree.empty': 'No resources opened',
       'knowledge.actions.label': 'Resource actions',
@@ -130,7 +130,7 @@ describe('KnowledgeWorkspace', () => {
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
 
     await waitFor(() => expect(listSources).toHaveBeenCalledTimes(1));
-    expect(screen.getAllByText('Main workspace')).toHaveLength(2);
+    expect(screen.getAllByText('Working directory')).toHaveLength(2);
     expect(screen.queryByText('Restored mount must disappear')).not.toBeInTheDocument();
     expect(useStore.getState()).toMatchObject({
       knowledgeWorkspaceKey: 'workspace-session-15',
@@ -150,6 +150,7 @@ describe('KnowledgeWorkspace', () => {
         fileClipboard: true,
         openDefault: true,
         reveal: true,
+        copyPath: true,
         systemTrash: true,
       })),
       knowledgeNativeInvoke,
@@ -195,7 +196,7 @@ describe('KnowledgeWorkspace', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sources unavailable');
-    expect(screen.getAllByText('Main')).toHaveLength(2);
+    expect(screen.getAllByText('Working directory')).toHaveLength(2);
     expect(screen.getByRole('group', { name: 'Editor group' })).toBeInTheDocument();
 
     await act(async () => {
@@ -204,7 +205,7 @@ describe('KnowledgeWorkspace', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(screen.getAllByText('Main workspace')).toHaveLength(2);
+      expect(screen.getAllByText('Working directory')).toHaveLength(2);
     });
     expect(listSources).toHaveBeenCalledTimes(2);
   });

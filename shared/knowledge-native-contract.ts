@@ -9,6 +9,7 @@ export type KnowledgeNativeCapabilities = Readonly<{
   fileClipboard: boolean;
   openDefault: boolean;
   reveal: boolean;
+  copyPath: boolean;
   systemTrash: boolean;
 }>;
 
@@ -29,7 +30,7 @@ export type KnowledgeNativeRequest =
     conflictPolicy: 'skip' | 'keep-both' | 'replace';
   }>
   | Readonly<{
-    action: 'openDefault' | 'reveal' | 'systemTrash';
+    action: 'openDefault' | 'reveal' | 'copyPath' | 'systemTrash';
     grantId: string;
   }>;
 
@@ -43,12 +44,12 @@ const GRANT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 export function parseKnowledgeNativeRequest(input: unknown): KnowledgeNativeRequest | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   const value = input as Record<string, unknown>;
-  if (['openDefault', 'reveal', 'systemTrash'].includes(String(value.action))) {
+  if (['openDefault', 'reveal', 'copyPath', 'systemTrash'].includes(String(value.action))) {
     return Object.keys(value).every(key => ['action', 'grantId'].includes(key))
       && typeof value.grantId === 'string'
       && GRANT_PATTERN.test(value.grantId)
       ? Object.freeze({
-          action: value.action as 'openDefault' | 'reveal' | 'systemTrash',
+          action: value.action as 'openDefault' | 'reveal' | 'copyPath' | 'systemTrash',
           grantId: value.grantId,
         })
       : null;

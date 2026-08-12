@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { createRef, type Ref } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -13,6 +14,8 @@ import {
 } from '../../services/knowledge-workspace-client';
 import {
   KnowledgeResourceTree,
+  type KnowledgeResourceTreeHandle,
+  type KnowledgeResourceTreeProps,
   type KnowledgeResourceTreeChangeSignal,
 } from '../../components/knowledge-workspace/KnowledgeResourceTree';
 import type { ResourceWatchRelease } from '../../services/resource-events';
@@ -82,6 +85,8 @@ function renderTree({
   workspaceKey = 'workspace-tree-16',
   subscribeToChanges,
   watchSource,
+  onContextMenu,
+  treeRef,
 }: {
   client: KnowledgeWorkspaceClient;
   sources?: KnowledgeSourceDto[];
@@ -90,15 +95,19 @@ function renderTree({
     listener: (signal: KnowledgeResourceTreeChangeSignal) => void,
   ) => () => void;
   watchSource?: (sourceKey: string) => ResourceWatchRelease;
+  onContextMenu?: KnowledgeResourceTreeProps['onContextMenu'];
+  treeRef?: Ref<KnowledgeResourceTreeHandle>;
 }) {
   return render(
     <KnowledgeResourceTree
+      ref={treeRef}
       client={client}
       sources={sources}
       workspaceKey={workspaceKey}
       watchSource={watchSource ?? (() => () => {})}
       subscribeToChanges={subscribeToChanges ?? (() => () => {})}
       refreshDelayMs={0}
+      onContextMenu={onContextMenu}
     />,
   );
 }
@@ -112,6 +121,47 @@ describe('KnowledgeResourceTree', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it('projects right-click selection into the shared context-menu seam', async () => {
+    const list = vi.fn(async () => listResult([
+      { name: 'paper.pdf', isDirectory: false },
+      { name: 'photo.jpg', isDirectory: false },
+    ]));
+    const onContextMenu = vi.fn();
+    renderTree({ client: treeClient(list), sources: [mainSource], onContextMenu });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+    const paper = await screen.findByRole('treeitem', { name: /paper\.pdf/u });
+
+    fireEvent.contextMenu(paper, { clientX: 120, clientY: 240 });
+
+    expect(onContextMenu).toHaveBeenCalledWith(expect.objectContaining({
+      position: { x: 120, y: 240 },
+      address: { sourceKey: 'main', relativePath: 'paper.pdf' },
+      isDirectory: false,
+      addresses: [{ sourceKey: 'main', relativePath: 'paper.pdf' }],
+    }));
+  });
+
+  it('opens and loads a folder when the shared action locates it', async () => {
+    const list = vi.fn(async ({ relativePath }) => listResult(
+      relativePath === ''
+        ? [{ name: 'Notes', isDirectory: true }]
+        : [{ name: 'Inside.md', isDirectory: false }],
+    ));
+    const treeRef = createRef<KnowledgeResourceTreeHandle>();
+    renderTree({ client: treeClient(list), sources: [mainSource], treeRef });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+    expect(await screen.findByRole('treeitem', { name: /Notes/u })).toBeVisible();
+
+    act(() => treeRef.current?.locateResource({
+      kind: 'folder',
+      sourceKey: 'main',
+      relativePath: 'Notes',
+    }));
+
+    expect(await screen.findByText('Inside.md')).toBeVisible();
+    expect(useStore.getState().knowledgeExpandedPathsBySource.main).toEqual(['', 'Notes']);
   });
 
   it('lazily projects every source through KnowledgeResourceAddress and keeps complete names', async () => {
