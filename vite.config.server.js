@@ -12,6 +12,12 @@ const nodeBuiltins = builtinModules.flatMap((m) => [m, `node:${m}`]);
 const bundleEntry = process.env.HANA_SERVER_BUNDLE_ENTRY || "server/main-full.ts";
 
 export default defineConfig({
+  ssr: {
+    // SSR mode normally externalizes every dependency. Production server
+    // packaging installs only the audited rollupOptions.external set, so all
+    // other bare imports must remain bundled exactly as in the prior lib build.
+    noExternal: true,
+  },
   build: {
     lib: {
       // main-full.ts is the thin closed composition entry: it statically
@@ -31,6 +37,13 @@ export default defineConfig({
         "@node-rs/jieba",
         "better-sqlite3",
         "node-pty",
+
+        // @firecrawl/anydoc: napi native addon. Its per-platform subpackage
+        // declares the .node binary itself as "main", so bundling makes
+        // Rollup parse Mach-O/ELF bytes as JavaScript. External also means
+        // build-server installs it into the packaged server's node_modules
+        // (this list is the source of truth for that install set).
+        "@firecrawl/anydoc",
 
         // ws: CJS package, Rollup's CJS→ESM interop loses WebSocketServer
         // named export. Keep external — available as PI SDK transitive dep.

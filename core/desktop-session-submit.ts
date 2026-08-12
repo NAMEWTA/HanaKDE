@@ -24,14 +24,17 @@
  * @param {boolean} [opts.preservePromptEnvelope] - prompt text already contains its persisted media/SessionFile/reminder envelope
  * @param {boolean} [opts.projectUserMessage] - persist/emit a visible user projection for this model input
  * @param {() => void} [opts.beforeInputSideEffects] - synchronous commit hook after cache/model preflight, before UI or prompt persistence
+ * @param {() => void} [opts.onInputAccepted] - synchronous receipt after full prompt preflight and input side effects
  * @returns {Promise<{ text: string | null, toolMedia: string[] }>}
  */
 import path from "path";
 import { extOfName, inferFileKind } from "../lib/file-metadata.ts";
 import { collectMediaItems } from "../lib/tools/media-details.ts";
 import { formatSettingsUpdateText } from "../lib/tools/settings-update-result.ts";
+import { createVisibleTextAccumulator } from "../lib/bridge/visible-text-accumulator.ts";
 import { materializeBridgeInboundFiles } from "../lib/session-files/bridge-inbound-files.ts";
 import { serializeSessionFile } from "../lib/session-files/session-file-response.ts";
+import { BrowserManager } from "../lib/browser/browser-manager.ts";
 
 /**
  * 非桌面来源（bridge /rc 等）用户消息的来源元信息持久化条目类型。
@@ -72,6 +75,22 @@ function renderPendingReminderBlock(engine: any, sessionPath: string) {
 function consumeRenderedReminderBlock(engine: any, sessionPath: string, rendered: any): void {
   if (!rendered || rendered.alreadyConsumed || rendered.receipt == null) return;
   engine.consumeRenderedSessionReminderBlock?.(sessionPath, rendered.receipt);
+}
+
+/**
+ * 用户急停浏览器后，该 session 的浏览器授权被标记为已撤销，agent 再调浏览器
+ * 会拿到"用户已停止授权"的结果。收到新的用户消息说明用户又开口了，撤销标记
+ * 到此为止，下一轮里 agent 可以重新使用浏览器。
+ *
+ * 解除失败不阻断投递：这只是放宽一个限制，失败最多让 agent 多被拒一轮，
+ * 不该因此丢掉用户消息。
+ */
+function liftBrowserAuthorizationRevocation(sessionPath: string): void {
+  try {
+    BrowserManager.instance().clearBrowserAuthorizationRevocation(sessionPath);
+  } catch (err) {
+    console.warn(`[desktop-session-submit] lifting browser authorization revocation failed for ${sessionPath}: ${(err as any)?.message || err}`);
+  }
 }
 
 /**
@@ -173,6 +192,7 @@ export async function submitDesktopSessionMessage(engine: any, opts: {
   preservePromptEnvelope?: boolean;
   projectUserMessage?: boolean;
   beforeInputSideEffects?: () => unknown;
+  onInputAccepted?: () => unknown;
 } = {}) {
   const {
     sessionId: requestedSessionId,
@@ -194,6 +214,7 @@ export async function submitDesktopSessionMessage(engine: any, opts: {
     preservePromptEnvelope = false,
     projectUserMessage = true,
     beforeInputSideEffects,
+    onInputAccepted,
   } = opts;
 
   if (!engine || typeof engine.ensureSessionLoaded !== "function" || typeof engine.promptSession !== "function") {
@@ -208,6 +229,8 @@ export async function submitDesktopSessionMessage(engine: any, opts: {
   if (typeof engine.isSessionStreaming === "function" && engine.isSessionStreaming(sessionPath)) {
     throw new Error("session_busy");
   }
+
+  liftBrowserAuthorizationRevocation(sessionPath);
 
   pendingDesktopSessionSubmissions.add(submissionKey);
   try {
@@ -339,26 +362,31 @@ export async function submitDesktopSessionMessage(engine: any, opts: {
       }
     };
 
-    let captured = "";
+    const visibleText = createVisibleTextAccumulator();
     const toolMedia = [];
     const unsub = session.subscribe?.((event) => {
       if (event.type === "message_update") {
         const sub = event.assistantMessageEvent;
         if (sub?.type === "text_delta") {
-          const delta = sub.delta || "";
-          captured += delta;
-          try { onDelta?.(delta, captured); } catch {}
+          const { emittedDelta, text } = visibleText.appendTextDelta(sub.delta || "");
+          try { onDelta?.(emittedDelta, text); } catch {}
         }
+      } else if (event.type === "tool_execution_start") {
+        visibleText.markHiddenToolBoundary();
       } else if (event.type === "tool_execution_end" && !event.isError) {
         toolMedia.push(...collectMediaItems(event.result?.details?.media));
+        let appendedDetail = false;
         const card = event.result?.details?.card;
         if (card?.description) {
-          captured += (captured ? "\n\n" : "") + card.description;
+          visibleText.appendVisibleDetail(card.description);
+          appendedDetail = true;
         }
         const settingsUpdateText = formatSettingsUpdateText(event.result?.details?.settingsUpdate);
         if (settingsUpdateText) {
-          captured += (captured ? "\n\n" : "") + settingsUpdateText;
+          visibleText.appendVisibleDetail(settingsUpdateText);
+          appendedDetail = true;
         }
+        if (!appendedDetail) visibleText.markHiddenToolBoundary();
       }
     });
 
@@ -372,13 +400,13 @@ export async function submitDesktopSessionMessage(engine: any, opts: {
         promptAudioAttachmentPaths,
         context,
       });
-      if (typeof engine.preflightSessionInput === "function") {
-        await engine.promptSession(sessionPath, promptText, promptOpts, { afterCachePreflight });
-      } else {
-        // Compatibility for older embedders. HanaEngine always takes the guarded path above.
-        afterCachePreflight();
-        await engine.promptSession(sessionPath, promptText, promptOpts);
+      if (typeof engine.preflightSessionInput !== "function") {
+        throw new Error("desktop session submit requires preflightSessionInput");
       }
+      await engine.promptSession(sessionPath, promptText, promptOpts, {
+        afterCachePreflight,
+        afterInputAccepted: onInputAccepted,
+      });
       consumeRenderedReminderBlock(engine, sessionPath, reminderBlock);
     } finally {
       try { unsub?.(); } catch {}
@@ -388,12 +416,56 @@ export async function submitDesktopSessionMessage(engine: any, opts: {
     }
 
     return {
-      text: captured.trim() || null,
+      text: visibleText.getText().trim() || null,
       toolMedia,
     };
   } finally {
     pendingDesktopSessionSubmissions.delete(submissionKey);
   }
+}
+
+/**
+ * Start a desktop turn and expose the point where the prompt has passed Pi's
+ * complete preflight, its visible input side effects are committed, and the
+ * agent run is starting. The full turn remains available separately.
+ */
+export function submitDesktopSessionMessageWithReceipt(
+  engine: any,
+  opts: Parameters<typeof submitDesktopSessionMessage>[1] = {},
+) {
+  let settled = false;
+  let resolveAccepted!: (value: { accepted: true; sessionId: string | null; sessionPath: string }) => void;
+  let rejectAccepted!: (reason: unknown) => void;
+  const accepted = new Promise<{ accepted: true; sessionId: string | null; sessionPath: string }>((resolve, reject) => {
+    resolveAccepted = resolve;
+    rejectAccepted = reject;
+  });
+  const previousAcceptedHook = opts.onInputAccepted;
+  const accept = () => {
+    const hookResult = previousAcceptedHook?.();
+    if (hookResult && typeof (hookResult as any).then === "function") {
+      throw new TypeError("desktop-session-submit: onInputAccepted must be synchronous");
+    }
+    if (settled) return;
+    settled = true;
+    const target = resolveDesktopSessionTarget(engine, opts.sessionId, opts.sessionPath);
+    resolveAccepted({ accepted: true, sessionId: target.sessionId, sessionPath: target.sessionPath });
+  };
+
+  const completion = submitDesktopSessionMessage(engine, { ...opts, onInputAccepted: accept });
+  completion.then(
+    () => {
+      // Older embedders cannot expose the guarded boundary. Completion is the
+      // earliest trustworthy receipt for those compatibility implementations.
+      accept();
+    },
+    (error) => {
+      if (settled) return;
+      settled = true;
+      rejectAccepted(error);
+    },
+  );
+  return { accepted, completion };
 }
 
 export async function submitDesktopSessionInterjection(engine: any, opts: {
@@ -440,6 +512,9 @@ export async function submitDesktopSessionInterjection(engine: any, opts: {
   if (typeof engine.isSessionStreaming === "function" && !engine.isSessionStreaming(sessionPath)) {
     return submitDesktopSessionMessage(engine, opts);
   }
+
+  // 转交分支之后再解除：走 submitDesktopSessionMessage 时由它自己解除，避免重复。
+  liftBrowserAuthorizationRevocation(sessionPath);
 
   const session = await engine.ensureSessionLoaded(sessionPath);
   if (!session) {

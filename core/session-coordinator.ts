@@ -12,21 +12,25 @@ import { createAgentSession, SessionManager, estimateTokens, refreshSessionModel
 import { isSessionJsonlFilename } from "../lib/session-jsonl.ts";
 import { createDefaultSettings } from "./session-defaults.ts";
 import { isDefaultWorkspacePath, restoreDefaultWorkspaceIfMissing } from "../shared/default-workspace.ts";
-import { computeHardTruncation } from "./compaction-utils.ts";
 import {
   appendCompactionResultToSession,
-  createCachePreservingCompactionResult,
-  runCachePreservingCompactionForSession,
+  createColdUtilitySummaryResult,
+  isDirectCompactionInProgress,
 } from "./session-compactor.ts";
+import {
+  installDynamicCompactionReserve,
+  installMidRunCompaction,
+} from "./session-compaction-runtime.ts";
 import { teardownSessionResources } from "./session-teardown.ts";
 import { evaluateSessionHealth, repairOrphanToolResultEntriesInFile } from "./session-health.ts";
 import {
   applyReminderConsumption,
   collectReminderBlock,
-  noteTimeObservedForSession,
   REMINDER_BLOCK_END,
   REMINDER_BLOCK_PREFIX,
+  resolveReferenceBudgetTokens,
 } from "./session-reminders.ts";
+import { diffCatalogNames, formatCatalogChangeLines } from "./tool-catalog.ts";
 import { createModuleLogger } from "../lib/debug-log.ts";
 import { BrowserManager } from "../lib/browser/browser-manager.ts";
 import { t, getLocale } from "../lib/i18n.ts";
@@ -53,7 +57,6 @@ import {
   DEEPSEEK_ROLEPLAY_REASONING_PATCH_EXPERIMENT_ID,
   getResolvedExperimentValue,
 } from "../lib/experiments/registry.ts";
-import { isDeepSeekModel } from "./provider-compat.ts";
 import {
   normalizePlainDescription,
   stripClosedInternalNarrationBlocks,
@@ -76,6 +79,7 @@ import {
   normalizeSessionTurnContext,
 } from "./session-turn-context.ts";
 import {
+  isOfficialDeepSeekEndpoint,
   modelSupportsDirectAudioInput,
   modelSupportsAudioInput,
   modelSupportsDirectVideoInput,
@@ -94,12 +98,13 @@ import {
 import { SessionListProjectionCache } from "./session-list-projection-cache.ts";
 import {
   buildLlmContextCachePrefixContract,
+  describeCachePrefixDrift,
+  hashCacheContractValue,
   diffCachePrefixContracts,
   summarizeCachePrefixContract,
 } from "../lib/llm/cache-prefix-contract.ts";
 import { buildSessionCacheSnapshot as buildSessionCacheSnapshotValue } from "./session-cache-snapshot.ts";
 import { repairRestoredToolSnapshotDetailed, sameToolNames } from "./tool-snapshot-repair.ts";
-import { buildSessionCapabilityDrift } from "./session-capability-drift.ts";
 import {
   SESSION_PROMPT_SNAPSHOT_VERSION,
   freezeAgentsFilesResult,
@@ -134,8 +139,37 @@ const SESSION_META_PAYLOAD_FIELDS = ["promptSnapshot", "memoryReflectionSnapshot
 // payload 字段一律外置为 sidecar 文件，索引文件只承载小标量，防止快照全文把共享索引撑大
 const SESSION_META_PAYLOAD_INLINE_LIMIT_BYTES = 0;
 const SESSION_META_INDEX_MAX_BYTES = 1024 * 1024;
-const REMINDER_HEADER_RE = /^\[hana_reminder at \d{4}-\d{2}-\d{2} \d{2}:\d{2}\]$/;
+// 当前块头是静态的；`at <时间戳>` 是历史 JSONL 里的旧块头，剥离端必须继续认
+const REMINDER_HEADER_RE = /^\[hana_reminder(?: at \d{4}-\d{2}-\d{2} \d{2}:\d{2})?\]$/;
 const SESSION_MODEL_UNAVAILABLE_API = "hana-unavailable-model";
+// Pinned sessions carry a sparse manual order so a single drag only rewrites
+// the sessions the user actually moved. A fresh pin takes `min - STEP` to land
+// on top; a submitted reorder renumbers everything from STEP upwards.
+const PIN_ORDER_STEP = 1024;
+const PIN_ORDER_BACKFILL_STATE_KEY = "pin-order-backfill-v1";
+const identitySessionTransformContext = async (messages: any[]) => messages;
+
+export class SessionTransformContextResolutionError extends Error {
+  code = "SESSION_TRANSFORM_CONTEXT_UNKNOWN";
+  sessionPath: any;
+
+  constructor(sessionPath: any) {
+    super(`Session transform context unavailable: unknown session ${sessionPath || "(empty)"}`);
+    this.name = "SessionTransformContextResolutionError";
+    this.sessionPath = sessionPath;
+  }
+}
+
+export class SessionAgentRunRuntimeResolutionError extends Error {
+  code = "SESSION_AGENT_RUN_RUNTIME_UNKNOWN";
+  sessionPath: any;
+
+  constructor(sessionPath: any, reason = "unknown session") {
+    super(`Session AgentRun runtime unavailable: ${reason} ${sessionPath || "(empty)"}`);
+    this.name = "SessionAgentRunRuntimeResolutionError";
+    this.sessionPath = sessionPath;
+  }
+}
 
 type SessionModelAvailability = {
   available: boolean;
@@ -150,6 +184,18 @@ function modelEntryId(entry: any) {
 
 function sessionModelRef(provider: any, modelId: any) {
   return provider && modelId ? `${provider}/${modelId}` : "unknown";
+}
+
+const MODEL_CONTEXT_TOO_LARGE_CODE = "MODEL_CONTEXT_TOO_LARGE";
+
+function createModelContextTooLargeError(currentTokens: number, effectiveWindow: number) {
+  const error: any = new Error(t("error.modelContextTooLarge"));
+  error.name = "ModelContextTooLargeError";
+  error.code = MODEL_CONTEXT_TOO_LARGE_CODE;
+  error.status = 409;
+  error.currentTokens = currentTokens;
+  error.effectiveWindow = effectiveWindow;
+  return error;
 }
 
 function classifySessionModelAvailability(models: any, provider: string, modelId: string): SessionModelAvailability {
@@ -215,7 +261,8 @@ function createUnavailableSessionModel(models: any, provider: string, modelId: s
 /** 巡检/定时任务默认工具白名单（"*" = 与 chat 一致，全部放行） */
 export const PATROL_TOOLS_DEFAULT = "*";
 function splitLeadingSessionReminder(text: any) {
-  if (typeof text !== "string" || !text.startsWith(`${REMINDER_BLOCK_PREFIX} at `)) return null;
+  // 粗筛只看前缀，精确匹配交给下面的整行 REMINDER_HEADER_RE
+  if (typeof text !== "string" || !text.startsWith(REMINDER_BLOCK_PREFIX)) return null;
   const firstNewline = text.indexOf("\n");
   if (firstNewline < 0 || !REMINDER_HEADER_RE.test(text.slice(0, firstNewline).replace(/\r$/, ""))) return null;
   const closingMarker = `\n${REMINDER_BLOCK_END}`;
@@ -332,18 +379,19 @@ function assertAudioInputSupported(model: any, audios: any) {
   }
 }
 
-function buildPromptMediaOptions(opts: any) {
+function buildPromptMediaOptions(opts: any, preflightResult?: (success: boolean) => void) {
   const media = [
     ...(opts?.images || []),
     ...(opts?.videos || []),
     ...(opts?.audios || []),
   ];
-  if (!media.length) return undefined;
+  if (!media.length && !preflightResult) return undefined;
   return {
-    images: media,
-    ...(opts.imageAttachmentPaths?.length ? { imageAttachmentPaths: opts.imageAttachmentPaths } : {}),
-    ...(opts.videoAttachmentPaths?.length ? { videoAttachmentPaths: opts.videoAttachmentPaths } : {}),
-    ...(opts.audioAttachmentPaths?.length ? { audioAttachmentPaths: opts.audioAttachmentPaths } : {}),
+    ...(media.length ? { images: media } : {}),
+    ...(opts?.imageAttachmentPaths?.length ? { imageAttachmentPaths: opts.imageAttachmentPaths } : {}),
+    ...(opts?.videoAttachmentPaths?.length ? { videoAttachmentPaths: opts.videoAttachmentPaths } : {}),
+    ...(opts?.audioAttachmentPaths?.length ? { audioAttachmentPaths: opts.audioAttachmentPaths } : {}),
+    ...(preflightResult ? { preflightResult } : {}),
   };
 }
 
@@ -544,7 +592,9 @@ function recordAssistantUsage({ ledger, event, sessionPath, sessionId, agentId, 
 }
 
 function logDeepSeekReasoningVisibility({ event, model, sessionPath, agentId }: any) {
-  if (!isDeepSeekModel(model)) return;
+  // 覆盖 DeepSeek 全部协议通道（ChatCompletions / Responses / Anthropic），
+  // 思考链可见性是跨通道的关注点，不跟着 ChatCompletions 兼容路径一起收窄。
+  if (!isOfficialDeepSeekEndpoint(model)) return;
   const provider = textOrNull(model?.provider) || "deepseek";
   const modelId = modelIdFromModel(model) || "unknown";
   const sessionName = sessionPath ? path.basename(sessionPath) : "unknown";
@@ -978,6 +1028,7 @@ export class SessionCoordinator {
   declare _prePromptAbortControllers: Map<string, AbortController>;
   declare _turnContextBySession: Map<string, any>;
   declare _sessionManifestStore: any;
+  declare _pinOrderBackfill: Promise<any> | null;
   declare _envChangeLedger: any;
   declare _ensureSessionLoadedInFlight: Map<string, Promise<any>>;
   declare _metaQuarantines: Map<string, { metaPath: string; backupPath: string; quarantinedAt: string }>;
@@ -1026,13 +1077,13 @@ export class SessionCoordinator {
     this._prePromptAbortControllers = new Map();
     this._turnContextBySession = new Map();
     this._sessionManifestStore = deps.sessionManifestStore || null;
+    this._pinOrderBackfill = null;
     this._envChangeLedger = deps.envChangeLedger || null;
     this._ensureSessionLoadedInFlight = new Map();
     // 运行期 session-meta 隔离记录：key 是 metaPath，value 是隔离详情。
     // 只记内存态（不落盘）——重启后 quarantine 文件仍在磁盘上，但这份
-    // "刚刚发生过隔离"的提示只需要覆盖当前进程生命周期；重启后的存量隔离
-    // 文件由 listSkippedMetaSources（账本）与 _sessionManifestStoreRecovery
-    // 两条独立信号覆盖，不需要这里补历史。
+    // "刚刚发生过隔离"的提示只需要覆盖当前进程生命周期；重启后的存量
+    // 损坏状态由 manifest store recovery 信号覆盖，不需要这里补历史。
     this._metaQuarantines = new Map();
   }
 
@@ -1569,6 +1620,45 @@ export class SessionCoordinator {
     return entry?.session?.agent?.streamFn || null;
   }
 
+  getSessionAgentRunRuntime(sessionPath: any) {
+    const entry = this._getSessionEntryByPath(sessionPath);
+    if (!sessionPath || !entry?.session) {
+      throw new SessionAgentRunRuntimeResolutionError(sessionPath);
+    }
+    const session = entry.session;
+    const agent = session.agent;
+    if (typeof agent?.streamFn !== "function") {
+      throw new SessionAgentRunRuntimeResolutionError(sessionPath, "missing streamFn for session");
+    }
+    const tools = Object.freeze(
+      (Array.isArray(agent.state?.tools) ? agent.state.tools : [])
+        .map((tool) => Object.freeze({ ...tool })),
+    );
+    const streamOptions = Object.freeze({
+      sessionId: agent.sessionId ?? session.sessionManager?.getSessionId?.(),
+      onPayload: agent.onPayload,
+      onResponse: agent.onResponse,
+      transport: agent.transport,
+      thinkingBudgets: agent.thinkingBudgets,
+      maxRetryDelayMs: agent.maxRetryDelayMs,
+    });
+    return Object.freeze({
+      streamFn: agent.streamFn,
+      tools,
+      streamOptions,
+    });
+  }
+
+  getSessionTransformContext(sessionPath: any) {
+    const entry = this._getSessionEntryByPath(sessionPath);
+    if (!sessionPath || !entry?.session) {
+      throw new SessionTransformContextResolutionError(sessionPath);
+    }
+    return typeof entry.session.agent?.transformContext === "function"
+      ? entry.session.agent.transformContext
+      : identitySessionTransformContext;
+  }
+
   getSessionProviderCacheAffinityKey(sessionPath: any) {
     const entry = this._getSessionEntryByPath(sessionPath);
     return normalizeProviderCacheAffinityKey(
@@ -2022,7 +2112,11 @@ export class SessionCoordinator {
     const agentToolsSnapshot = typeof agent.getToolsSnapshot === "function"
       ? agent.getToolsSnapshot(toolSnapshotOptions)
       : agent.tools;
-    const { tools: sessionTools, customTools: sessionCustomTools } = this._d.buildTools(
+    const {
+      tools: sessionTools,
+      customTools: sessionCustomTools,
+      toolCatalogManifest: sessionToolCatalogManifest = null,
+    } = this._d.buildTools(
       effectiveCwd,
       agentToolsSnapshot,
       {
@@ -2030,7 +2124,10 @@ export class SessionCoordinator {
         workspaceFolders: workspaceScope.workspaceFolders,
         authorizedFolders: folderScope.authorizedFolders,
         getAuthorizedFolders: () => this.getSessionAuthorizedFolders(sessionPathRef.current || sessionPathForMeta),
+        getSessionPath: () => sessionPathRef.current || sessionPathForMeta || null,
         agentDir: agent.agentDir,
+        // Sizes the deferred-tool listing against the model this session froze.
+        modelContextWindowTokens: effectiveModel?.contextWindow ?? null,
       },
     );
     const sessionOpts: any = {
@@ -2218,8 +2315,6 @@ export class SessionCoordinator {
     let runtimeToolNames = null;
     let unavailableToolNames: string[] = [];
     let shouldPersistRestoredToolNames = false;
-    // #1624：dismissed fingerprint 仍从 session-meta 读出，保留未来手动提示链路。
-    let restoredDriftDismissedFingerprint: string | null = null;
     const restoredCapabilityToolNames = Array.isArray(restoredCapabilitySnapshot?.toolNames)
       ? uniqueToolNames(restoredCapabilitySnapshot.toolNames)
       : null;
@@ -2236,22 +2331,14 @@ export class SessionCoordinator {
             log.warn(`session-meta read for tool-snapshot restore failed, recomputing from current agent config: ${err.message}`);
           }
         }
-        restoredDriftDismissedFingerprint =
-          typeof restoredCapabilitySnapshot?.capabilityDriftDismissedFingerprint === "string"
-            ? restoredCapabilitySnapshot.capabilityDriftDismissedFingerprint
-            : typeof metaEntry?.capabilityDriftDismissedFingerprint === "string"
-            ? metaEntry.capabilityDriftDismissedFingerprint
-            : null;
         if (refreshCapabilitySnapshots) {
-          // #1624 显式刷新：Case C 语义重算（含插件工具），强制持久化，
-          // 并清空 dismissed 状态（旧 fingerprint 对新快照没有意义）。
+          // 显式更新：Case C 语义重算（含插件工具）并强制持久化。
           const disabled = agent.config?.tools?.disabled ?? DEFAULT_DISABLED_TOOL_NAMES;
           snapshotToolNames = computeToolSnapshot(allToolNames, disabled, {
             extraDisabled: extraDisabledToolNames,
           });
           runtimeToolNames = snapshotToolNames;
           shouldPersistRestoredToolNames = true;
-          restoredDriftDismissedFingerprint = null;
         } else if (restoredCapabilityToolNames) {
           const runtimeAvailableToolNames = computeToolSnapshot(allToolNames, [], {
             extraDisabled: extraDisabledToolNames,
@@ -2301,20 +2388,6 @@ export class SessionCoordinator {
       runtimeToolNames = snapshotToolNames;
     }
 
-    // A missing runtime handler is availability state, not permission to
-    // rewrite the frozen contract. Surface the outage while keeping restore
-    // otherwise free of live prompt-diff work.
-    const unavailableDrift = unavailableToolNames.length > 0
-      ? buildSessionCapabilityDrift({
-          frozenToolNames: runtimeToolNames || [],
-          liveToolNames: runtimeToolNames || [],
-          invalidToolNames: unavailableToolNames,
-          frozenSystemPrompt: "",
-          liveSystemPrompt: "",
-        })
-      : null;
-    let capabilityDrift = unavailableDrift?.hasDrift ? unavailableDrift : null;
-
     const reminderBaselineSeq = this._envChangeLedger?.maxSeq?.() ?? 0;
     const hasPreviousReminderState = reminderState && typeof reminderState === "object";
     const preserveFrozenPromptReminderState = !!restoredPromptSnapshot && hasPreviousReminderState;
@@ -2325,9 +2398,6 @@ export class SessionCoordinator {
       reminderEnvStartSeq: preserveFrozenPromptReminderState
         ? (reminderState.reminderEnvStartSeq ?? reminderBaselineSeq)
         : reminderBaselineSeq,
-      // A reused frozen prompt contains an old session-start clock. Every
-      // restored runtime therefore observes time again on its first message.
-      lastTimeObservedAt: restoredPromptSnapshot ? null : Date.now(),
       reminderCompactionRevision: hasPreviousReminderState
         ? (reminderState.reminderCompactionRevision ?? 0)
         : 0,
@@ -2341,6 +2411,18 @@ export class SessionCoordinator {
       reminderUnavailableRevision: hasPreviousReminderState
         ? (reminderState.reminderUnavailableRevision ?? 0)
         : 0,
+      // A restored session keeps what it was already told; only a session that
+      // has never been handed a listing should receive one.
+      reminderReferenceDelivered: hasPreviousReminderState
+        ? reminderState.reminderReferenceDelivered === true
+        : false,
+      reminderAcceptedCatalogFingerprint: hasPreviousReminderState
+        ? (reminderState.reminderAcceptedCatalogFingerprint ?? null)
+        : null,
+      reminderAcceptedCatalogNames: hasPreviousReminderState
+        && Array.isArray(reminderState.reminderAcceptedCatalogNames)
+        ? [...reminderState.reminderAcceptedCatalogNames]
+        : [],
     };
 
     Object.assign(sessionEntry, {
@@ -2376,9 +2458,15 @@ export class SessionCoordinator {
       sessionKind: pluginSessionMeta?.kind || null,
       sessionVisibility: pluginSessionMeta?.visibility || "public",
       memoryReflectionSnapshot,
-      // #1624：session 级提示数据，归属 sessionEntry（this._sessions 由 _sessionRuntimeKeyForPath 以 sessionId 优先键控，sessionPath 仅为兼容退化键），不挂 agent/engine
-      capabilityDrift,
-      capabilityDriftDismissedFingerprint: restoredDriftDismissedFingerprint,
+      // Invocation capabilities the user granted for this session only. Runtime
+      // state by design: it reaches neither writeSessionMeta nor the manifest
+      // snapshot, so it dies with the runtime and the user is asked again after
+      // a restart. That is the fail-closed direction for a permission grant.
+      sessionAllowedInvocationCapabilities: new Set(),
+      // The deferred-tool listing for the tool set this session just froze.
+      // Owned by the entry because it describes that frozen set, not the
+      // engine's current view of the world.
+      toolCatalogManifest: sessionToolCatalogManifest,
       ...initialReminderState,
       lastTouchedAt: Date.now(),
       unsub,
@@ -2455,6 +2543,11 @@ export class SessionCoordinator {
       : promptSnapshotForPersist;
     this._renewCachePrefixContract(mapKey, sessionEntry, restore ? "session_restore" : "new_session");
     this._installCachePrefixGuard(mapKey, sessionEntry);
+    installDynamicCompactionReserve(session);
+    installMidRunCompaction(session, {
+      usageLedger: this._d.getUsageLedger?.() || null,
+      buildUsageContext: (s: any) => this._buildMidRunCompactionUsageContext(s),
+    });
 
     // Persist fresh snapshots and repair/establish restored snapshots. Restored
     // legacy sessions with missing toolNames get a baseline on first restore,
@@ -2501,10 +2594,6 @@ export class SessionCoordinator {
       }
       if (shouldPersistRestoredToolNames && snapshotToolNames !== null) {
         metaPatch.toolNames = snapshotToolNames;
-      }
-      if (refreshCapabilitySnapshots) {
-        // #1624 显式刷新：dismissed 状态随旧快照一并失效
-        metaPatch.capabilityDriftDismissedFingerprint = null;
       }
       if (Object.keys(metaPatch).length > 0) {
         await this.writeSessionMeta(sessionPath, metaPatch);
@@ -3358,13 +3447,19 @@ export class SessionCoordinator {
     const forkReminderState = sourceReminderEntry ? {
       reminderEnvCursor: sourceReminderEntry.reminderEnvCursor,
       reminderEnvStartSeq: sourceReminderEntry.reminderEnvStartSeq,
-      lastTimeObservedAt: sourceReminderEntry.lastTimeObservedAt,
       reminderCompactionRevision: sourceReminderEntry.reminderCompactionRevision,
       reminderConsumedCompactionRevision: sourceReminderEntry.reminderConsumedCompactionRevision,
       reminderAcceptedUnavailableToolNames: Array.isArray(sourceReminderEntry.reminderAcceptedUnavailableToolNames)
         ? [...sourceReminderEntry.reminderAcceptedUnavailableToolNames]
         : [],
       reminderUnavailableRevision: sourceReminderEntry.reminderUnavailableRevision,
+      // The fork carries the source's transcript, which already contains the
+      // listing, so re-injecting it would repeat text the branch can see.
+      reminderReferenceDelivered: sourceReminderEntry.reminderReferenceDelivered === true,
+      reminderAcceptedCatalogFingerprint: sourceReminderEntry.reminderAcceptedCatalogFingerprint ?? null,
+      reminderAcceptedCatalogNames: Array.isArray(sourceReminderEntry.reminderAcceptedCatalogNames)
+        ? [...sourceReminderEntry.reminderAcceptedCatalogNames]
+        : [],
     } : null;
     if (
       this.isSessionStreaming(sourceSessionPath)
@@ -4210,8 +4305,9 @@ export class SessionCoordinator {
     const targetSessionPath = session.sessionManager?.getSessionFile?.() || null;
     const targetSessionId = targetSessionPath ? this._sessionIdForPath(targetSessionPath) : null;
     try {
-      const result = await createCachePreservingCompactionResult({
+      const result = await createColdUtilitySummaryResult({
         preparation,
+        transcriptMessages,
         model,
         systemPrompt: session.agent?.state?.systemPrompt ?? session.systemPrompt,
         customInstructions: [
@@ -4913,7 +5009,27 @@ export class SessionCoordinator {
     abortController.signal.throwIfAborted();
     assertVideoInputSupported(entry.session.model, opts?.videos);
     assertAudioInputSupported(entry.session.model, opts?.audios);
-    const promptOpts = buildPromptMediaOptions(opts);
+    let promptPreflightReported = false;
+    const needsPromptReceipt = typeof submitOptions?.afterCachePreflight === "function"
+      || typeof submitOptions?.afterInputAccepted === "function";
+    const notifyPromptPreflight = needsPromptReceipt ? (success: boolean) => {
+      if (promptPreflightReported) return;
+      promptPreflightReported = true;
+      if (!success) return;
+      if (typeof submitOptions?.afterCachePreflight === "function") {
+        const hookResult = submitOptions.afterCachePreflight();
+        if (hookResult && typeof hookResult.then === "function") {
+          throw new TypeError("promptSession afterCachePreflight must be synchronous");
+        }
+      }
+      if (typeof submitOptions?.afterInputAccepted === "function") {
+        const hookResult = submitOptions.afterInputAccepted();
+        if (hookResult && typeof hookResult.then === "function") {
+          throw new TypeError("promptSession afterInputAccepted must be synchronous");
+        }
+      }
+    } : undefined;
+    const promptOpts = buildPromptMediaOptions(opts, notifyPromptPreflight);
     const nativeMediaTurn = engine?.beginCurrentTurnNativeMedia?.(sessionPath, opts);
     if (turnContext) this._setRuntimeValueForPath(this._turnContextBySession, sessionPath, turnContext);
     try {
@@ -4922,12 +5038,6 @@ export class SessionCoordinator {
       // be committed onto a now-streaming Session.
       if (entry.session.isStreaming) throw new Error("session_busy");
       this.preflightSessionInput(sessionPath);
-      if (typeof submitOptions?.afterCachePreflight === "function") {
-        const hookResult = submitOptions.afterCachePreflight();
-        if (hookResult && typeof hookResult.then === "function") {
-          throw new TypeError("promptSession afterCachePreflight must be synchronous");
-        }
-      }
       await entry.session.prompt(text, promptOpts);
     } finally {
       if (turnContext) this._deleteRuntimeValueForPath(this._turnContextBySession, sessionPath);
@@ -5087,6 +5197,9 @@ export class SessionCoordinator {
     const reason = this._normalizeAbortReason(options, "abort");
     const pending = this._getRuntimeValueForPath(this._prePromptAbortControllers, sessionPath);
     if (pending) {
+      // preflight 窗口的中止不补发 turn_end：promptSession 尚未运行，本轮
+      // turn input 还没落入 branch，合成 turn_end 会把上一轮的 entry id
+      // 错绑到本轮的乐观消息上。
       pending.abort();
       this._deleteRuntimeValueForPath(this._prePromptAbortControllers, sessionPath);
       this._cleanupAbortedSessionSidecars(sessionPath, reason);
@@ -5108,7 +5221,7 @@ export class SessionCoordinator {
 
   /**
    * 在已有 session 上切换模型（不创建新 session）。
-   * 如果新模型的上下文窗口容不下当前对话，先压缩/截断。
+   * 如果新模型的上下文窗口容不下当前对话，拒绝切换并提示用户先手动压缩。
    *
    * @param {string} sessionPath
    * @param {object} newModel - Pi SDK Model 对象
@@ -5132,21 +5245,22 @@ export class SessionCoordinator {
     if (entry._switching) {
       throw new Error("Model switch already in progress for this session");
     }
-    if (session.isCompacting) {
+    // Both kinds of compaction rewrite this session's history, so either one
+    // blocks a model switch: isCompacting covers the SDK's own pass, and the
+    // direct cache-preserving pass reports itself separately.
+    if (session.isCompacting || isDirectCompactionInProgress(session)) {
       throw new Error("Cannot switch model while compaction is in progress");
     }
 
     entry._switching = true;
     const adaptations = [];
-    const oldModel = session.model;
-    const compactionModel = entry.modelAvailability?.available === false ? newModel : oldModel;
 
     try {
       // 估算当前上下文 token 数
       const msgs = session.agent?.state?.messages || [];
       const usage = session.getContextUsage?.();
       let currentTokens = usage?.tokens;
-      if (currentTokens == null) {
+      if (!Number.isFinite(currentTokens) || currentTokens < 0) {
         // fallback: 逐消息估算
         currentTokens = msgs.reduce((sum, m) => sum + estimateTokens(m), 0);
       }
@@ -5154,39 +5268,7 @@ export class SessionCoordinator {
       const effectiveWindow = Math.floor(newModel.contextWindow * 0.9) - 4000;
 
       if (currentTokens > effectiveWindow) {
-        // 预检：最后一轮对话是否本身就超窗口（此时 compact/truncate 都救不了）
-        const lastUserIdx = msgs.findLastIndex(m => m.role === "user");
-        if (lastUserIdx >= 0) {
-          const lastTurnTokens = msgs.slice(lastUserIdx).reduce((s, m) => s + estimateTokens(m), 0);
-          if (lastTurnTokens > effectiveWindow) {
-            throw new Error("当前对话无法适配目标模型的上下文窗口");
-          }
-        }
-
-        // 尝试压缩
-        try {
-          const compactionResult = await this._compactWithModel(sessionPath, session, effectiveWindow, compactionModel);
-          const hardTruncated = compactionResult?.details?.reason === "cache-preserving-compaction-hard-truncate";
-          adaptations.push(hardTruncated ? "truncated" : "compacted");
-        } catch (compactErr) {
-          log.warn(`compactWithModel failed, falling back to hard truncate: ${compactErr.message}`);
-          // 压缩失败，尝试硬截断
-          try {
-            await this._hardTruncate(sessionPath, session, effectiveWindow);
-            adaptations.push("truncated");
-          } catch (truncErr) {
-            throw new Error(`Failed to fit context into new model window: ${truncErr.message}`);
-          }
-        }
-
-        // 终极检查：压缩/截断后仍然超窗口则拒绝
-        const postMsgs = session.agent.state.messages;
-        const postTokens = postMsgs.reduce((sum, m) => sum + estimateTokens(m), 0);
-        if (postTokens > effectiveWindow) {
-          throw new Error(
-            `Context still exceeds new model window after adaptation (${postTokens} > ${effectiveWindow})`
-          );
-        }
+        throw createModelContextTooLargeError(currentTokens, effectiveWindow);
       }
 
       // 执行模型切换
@@ -5216,38 +5298,31 @@ export class SessionCoordinator {
   }
 
   /**
-   * 用主模型同前缀摘要来压缩对话历史（为 model switch 准备窗口）。
+   * Usage attribution for a compaction that fires between turns of a running
+   * agentic loop. The session's own live locator is resolved to a sessionId at
+   * this boundary, so the attribution follows the session even after the run
+   * has moved the branch head.
    * @private
    */
-  async _compactWithModel(sessionPath: any, session: any, effectiveWindow: any, model: any) {
-    if (!sessionPath) throw new Error("model-switch compaction requires an explicit session path");
-    const sessionId = this._sessionIdForPath(sessionPath);
-    return await runCachePreservingCompactionForSession(session, {
-      model,
-      settings: {
-        enabled: true,
-        reserveTokens: 4000,
-        keepRecentTokens: effectiveWindow,
+  _buildMidRunCompactionUsageContext(session: any) {
+    const sessionPath = session?.sessionManager?.getSessionFile?.() || null;
+    const sessionId = sessionPath ? this._sessionIdForPath(sessionPath) : null;
+    return {
+      source: {
+        subsystem: "compaction",
+        operation: "compact",
+        surface: "desktop",
+        trigger: "threshold",
       },
-      emitLifecycle: true,
-      lifecycleReason: "model_switch",
-      usageLedger: this._d.getUsageLedger?.(),
-      usageContext: {
-        source: {
-          subsystem: "compaction",
-          operation: "compact",
-          surface: "desktop",
-          trigger: "overflow",
-        },
-        attribution: {
-          kind: "session",
-          agentId: this.resolveSessionOwnership(sessionPath).agentId || this._d.getActiveAgentId?.() || null,
-          ...(sessionId ? { sessionId } : {}),
-          sessionPath,
-        },
+      attribution: {
+        kind: "session",
+        agentId: (sessionPath ? this.resolveSessionOwnership(sessionPath).agentId : null)
+          || this._d.getActiveAgentId?.()
+          || null,
+        ...(sessionId ? { sessionId } : {}),
+        ...(sessionPath ? { sessionPath } : {}),
       },
-      onCompacted: () => this._markSessionCompacted(sessionPath),
-    });
+    };
   }
 
   _markSessionCompacted(sessionPath: any) {
@@ -5259,52 +5334,6 @@ export class SessionCoordinator {
       : 0;
     entry.reminderCompactionRevision = revision + 1;
     return true;
-  }
-
-  /**
-   * 硬截断对话历史（无 API 调用，用固定文本作为摘要）。
-   * @private
-   */
-  async _hardTruncate(sessionPath: any, session: any, effectiveWindow: any) {
-    if (!sessionPath) throw new Error("model-switch hard truncation requires an explicit session path");
-    const sm = session.sessionManager;
-    const pathEntries = sm.getBranch();
-    const reason = "model_switch";
-    session?._emit?.({ type: "compaction_start", reason });
-
-    try {
-      const result = computeHardTruncation(pathEntries, effectiveWindow, {
-        summary: "[由于模型切换，早期对话历史已被截断]",
-        reason: "model-switch-truncation",
-      });
-      if (!result) {
-        throw new Error("Cannot hard-truncate: not enough messages or cut at beginning");
-      }
-
-      const saved = await appendCompactionResultToSession(session, result, {
-        fromExtension: false,
-        onCompacted: () => this._markSessionCompacted(sessionPath),
-      });
-      session?._emit?.({
-        type: "compaction_end",
-        reason,
-        result: saved,
-        aborted: false,
-        willRetry: false,
-      });
-      return saved;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      session?._emit?.({
-        type: "compaction_end",
-        reason,
-        result: undefined,
-        aborted: false,
-        willRetry: false,
-        errorMessage: `Compaction failed: ${message}`,
-      });
-      throw error;
-    }
   }
 
   /** Get plan mode for the current (focused) session */
@@ -5413,6 +5442,46 @@ export class SessionCoordinator {
     this._pendingPermissionMode = nextMode;
     this._emitPermissionModeChanged(nextMode, null);
     return { ok: true, mode: nextMode, enabled: isReadOnlyPermissionMode(nextMode) };
+  }
+
+  /**
+   * Grant one invocation capability for the remaining life of this session's
+   * runtime.
+   *
+   * Contrast with permission mode, which is persisted twice (session meta and
+   * the manifest snapshot). A session grant is deliberately neither: it answers
+   * "allow this for now", not "remember this". An unloaded session is an error
+   * rather than a silent no-op, because a grant the caller believes was
+   * recorded but that vanished is worse than a visible failure.
+   */
+  allowInvocationCapability(ref: any, capability: any) {
+    const normalized = typeof capability === "string" ? capability.trim() : "";
+    if (!normalized) {
+      const error: any = new Error("allow invocation capability: capability is required");
+      error.code = "invalid_capability";
+      error.status = 400;
+      throw error;
+    }
+    const { sessionId, sessionPath } = this._resolveSessionWriteRef(ref, "allow invocation capability");
+    const entry = this._getSessionEntryByPath(sessionPath);
+    if (!entry) {
+      const error: any = new Error("allow invocation capability: session runtime is not loaded");
+      error.code = "session_not_loaded";
+      error.status = 409;
+      throw error;
+    }
+    if (!(entry.sessionAllowedInvocationCapabilities instanceof Set)) {
+      entry.sessionAllowedInvocationCapabilities = new Set();
+    }
+    entry.sessionAllowedInvocationCapabilities.add(normalized);
+    return { ok: true, sessionId, capability: normalized };
+  }
+
+  /** Capabilities granted for this session, as a plain array for the classifier. */
+  getAllowedInvocationCapabilities(sessionPath: any) {
+    const entry = this._getSessionEntryByPath(sessionPath);
+    const granted = entry?.sessionAllowedInvocationCapabilities;
+    return granted instanceof Set ? [...granted] : [];
   }
 
   _applyPermissionModeToEntry(sessionPath: any, entry: any, nextMode: any) {
@@ -5581,6 +5650,12 @@ export class SessionCoordinator {
     const spShort = sessionPath ? path.basename(sessionPath) : "(anon)";
     entry.lastTouchedAt = Date.now();
 
+    // 中止路径补发 turn_end：下面的 unsub 会抢在 SDK 自己的 turn_end 之前断流，
+    // 前端就永远等不到 entry id 回绑（重试/fork/重写按钮的唯一数据源）。
+    // 必须在 _sessions 删除之前发出——chat 路由的 turn_end handler 要通过
+    // getSessionByPath 读 in-memory branch 才能算出 entry id（事件总线同步分发）。
+    this._d.emitEvent?.({ type: "turn_end", aborted: true, reason }, sessionPath);
+
     this._clearRuntimePressureTimer(sessionPath);
     this._deleteRuntimeValueForPath(this._hibernatedSessionMeta, sessionPath);
     this._deleteRuntimeValueForPath(this._sessions, sessionPath);
@@ -5691,13 +5766,20 @@ export class SessionCoordinator {
       toolNames: Array.isArray(entry.toolNames) ? [...entry.toolNames] : entry.toolNames,
       reminderEnvCursor: entry.reminderEnvCursor,
       reminderEnvStartSeq: entry.reminderEnvStartSeq,
-      lastTimeObservedAt: entry.lastTimeObservedAt,
       reminderCompactionRevision: entry.reminderCompactionRevision,
       reminderConsumedCompactionRevision: entry.reminderConsumedCompactionRevision,
       reminderAcceptedUnavailableToolNames: Array.isArray(entry.reminderAcceptedUnavailableToolNames)
         ? [...entry.reminderAcceptedUnavailableToolNames]
         : [],
       reminderUnavailableRevision: entry.reminderUnavailableRevision,
+      // Without these, a woken session would be handed its tool listing a
+      // second time and re-told about catalog changes it already saw.
+      reminderReferenceDelivered: entry.reminderReferenceDelivered === true,
+      reminderAcceptedCatalogFingerprint: entry.reminderAcceptedCatalogFingerprint ?? null,
+      reminderAcceptedCatalogNames: Array.isArray(entry.reminderAcceptedCatalogNames)
+        ? [...entry.reminderAcceptedCatalogNames]
+        : [],
+      toolCatalogManifest: entry.toolCatalogManifest || null,
       contextUsage: entry.session?.getContextUsage?.() || null,
       hibernatedAt: Date.now(),
     });
@@ -5933,15 +6015,60 @@ export class SessionCoordinator {
     if (!recipientAgentId) {
       throw new Error("renderSessionReminderBlock: session Agent ownership is unavailable");
     }
+    const isZh = getLocale().startsWith("zh");
+    const manifest = entry.toolCatalogManifest;
     return collectReminderBlock({
       sessionEntry: entry,
       ledger: this._envChangeLedger,
       recipientAgentId,
-      now: Date.now(),
-      isZh: getLocale().startsWith("zh"),
-      timeZone: this._d.getPrefs?.()?.getTimezone?.(),
+      isZh,
       unavailableToolNames: this._computeReminderUnavailableToolNamesForEntry(entry, sessionPath),
+      // The listing belongs to this session's entry, not to the engine: it
+      // describes the tool set this session froze at creation.
+      referenceText: typeof manifest?.text === "string" ? manifest.text : "",
+      referenceBudgetTokens: this._referenceBudgetTokensForEntry(entry),
+      catalogBroadcast: this._computeCatalogBroadcastForEntry(entry, isZh),
     });
+  }
+
+  /**
+   * The budget the listing was sized against when this session was built. Using
+   * the recorded value keeps the render from truncating a tier that was chosen
+   * against a larger context.
+   */
+  _referenceBudgetTokensForEntry(entry: any) {
+    const recorded = entry?.toolCatalogManifest?.budgetTokens;
+    if (typeof recorded === "number" && Number.isFinite(recorded) && recorded > 0) return recorded;
+    return resolveReferenceBudgetTokens(entry?.session?.model?.contextWindow ?? null);
+  }
+
+  /**
+   * Whether this session should be told the catalog changed shape.
+   *
+   * The comparison is against what this session has already accepted, not
+   * against its original listing, so a session that has been told once about a
+   * change is not told again, and a further change still surfaces. Sessions
+   * that never received a listing have nothing to compare and stay silent.
+   */
+  _computeCatalogBroadcastForEntry(entry: any, isZh: boolean) {
+    const snapshot = entry?.toolCatalogManifest;
+    if (!snapshot) return null;
+    const liveNames = this._d.getLiveToolCatalogNames?.();
+    if (!Array.isArray(liveNames)) return null;
+
+    const liveFingerprint = hashCacheContractValue(liveNames);
+    const acceptedFingerprint = typeof entry.reminderAcceptedCatalogFingerprint === "string"
+      ? entry.reminderAcceptedCatalogFingerprint
+      : snapshot.fingerprint;
+    if (liveFingerprint === acceptedFingerprint) return null;
+
+    const baseNames = Array.isArray(entry.reminderAcceptedCatalogNames)
+      && entry.reminderAcceptedCatalogNames.length > 0
+      ? entry.reminderAcceptedCatalogNames
+      : (Array.isArray(snapshot.names) ? snapshot.names : []);
+    const lines = formatCatalogChangeLines(diffCatalogNames(baseNames, liveNames), isZh);
+    if (lines.length === 0) return null;
+    return { lines, fingerprint: liveFingerprint, names: [...liveNames] };
   }
 
   consumeRenderedSessionReminderBlock(sessionPath: any, receipt: any) {
@@ -5959,14 +6086,6 @@ export class SessionCoordinator {
     return rendered.block;
   }
 
-  noteSessionTimeObserved(sessionPath: any, observedAt: any) {
-    if (!sessionPath) return false;
-    const entry = this._getSessionEntryByPath(sessionPath);
-    if (!entry) return false;
-    noteTimeObservedForSession(entry, observedAt);
-    return true;
-  }
-
   preflightSessionInput(sessionPath: any) {
     if (!sessionPath) throw new Error("preflightSessionInput: sessionPath is required");
     const entry = this._getSessionEntryByPath(sessionPath);
@@ -5974,7 +6093,6 @@ export class SessionCoordinator {
       throw new Error(`preflightSessionInput: session not loaded for ${sessionPath}`);
     }
     return this._assertCachePrefixContract(sessionPath, entry, {
-      allowRenew: false,
       countRequest: false,
     });
   }
@@ -6044,24 +6162,6 @@ export class SessionCoordinator {
     }
   }
 
-  /**
-   * #1624：返回当前应展示的"工具能力有更新"提示数据；无漂移或已被 dismiss
-   * （dismissed fingerprint === 当前 live fingerprint）时返回 null。
-   * 数据在 restore 完成时算好挂在 sessionEntry 上，这里只做读取与 dismiss 过滤。
-   */
-  getSessionCapabilityDriftNotice(sessionPath: any) {
-    const entry = this._getSessionEntryByPath(sessionPath);
-    const drift = entry?.capabilityDrift;
-    if (!drift?.hasDrift) return null;
-    if (entry.capabilityDriftDismissedFingerprint === drift.fingerprint) return null;
-    return {
-      ...drift,
-      addedToolNames: [...drift.addedToolNames],
-      removedToolNames: [...drift.removedToolNames],
-      invalidToolNames: [...drift.invalidToolNames],
-    };
-  }
-
   _buildLiveToolAvailabilityInputForEntry(
     entry: any,
     sessionPath: any,
@@ -6127,26 +6227,6 @@ export class SessionCoordinator {
     };
   }
 
-  _computeLiveToolSnapshotForEntry(entry: any, sessionPath: any) {
-    const input = this._buildLiveToolAvailabilityInputForEntry(entry, sessionPath);
-    if (!input) return null;
-    const { agent, allToolObjects, context } = input;
-    const allToolNames = toolNamesFromObjects(allToolObjects);
-    const extraDisabledToolNames = [
-      ...getStableFeatureDisabledToolNames(context),
-      ...computeRuntimeDisabledToolNames(
-        allToolObjects,
-        agent.config,
-        context,
-        { warn: (msg) => log.warn(msg) },
-      ),
-    ];
-    const disabled = agent.config?.tools?.disabled ?? DEFAULT_DISABLED_TOOL_NAMES;
-    return computeToolSnapshot(allToolNames, disabled, {
-      extraDisabled: extraDisabledToolNames,
-    });
-  }
-
   _computeReminderUnavailableToolNamesForEntry(entry: any, sessionPath: any) {
     const frozenToolNames = uniqueToolNames(Array.isArray(entry?.toolNames) ? entry.toolNames : []);
     if (frozenToolNames.length === 0) return [];
@@ -6179,57 +6259,6 @@ export class SessionCoordinator {
     return frozenToolNames
       .filter((name) => !liveToolNames.has(name))
       .sort((left, right) => left.localeCompare(right));
-  }
-
-  markCapabilitySnapshotsStale({ agentId = null, reason = "capability_changed" }: any = {}) {
-    const targetAgentId = typeof agentId === "string" && agentId ? agentId : null;
-    let scanned = 0;
-    let marked = 0;
-    for (const entry of this._sessions.values()) {
-      if (!entry?.sessionPath || !entry?.session) continue;
-      if (targetAgentId && entry.agentId !== targetAgentId) continue;
-      scanned += 1;
-      const frozenToolNames = Array.isArray(entry.runtimeToolNames)
-        ? entry.runtimeToolNames
-        : (entry.activeToolDefinitions || []).map((tool) => tool?.name).filter(Boolean);
-      const liveToolNames = this._computeLiveToolSnapshotForEntry(entry, entry.sessionPath);
-      if (!liveToolNames) continue;
-      const liveToolNameSet = new Set(liveToolNames);
-      const drift = buildSessionCapabilityDrift({
-        frozenToolNames,
-        liveToolNames,
-        invalidToolNames: Array.isArray(entry.unavailableToolNames)
-          ? entry.unavailableToolNames.filter((name) => !liveToolNameSet.has(name))
-          : [],
-        frozenSystemPrompt: "",
-        liveSystemPrompt: "",
-      });
-      entry.capabilityDrift = drift.hasDrift ? { ...drift, reason } : null;
-      if (drift.hasDrift) {
-        marked += 1;
-        this._emitSessionMetadataUpdated(entry.sessionPath, {
-          capabilityDrift: this.getSessionCapabilityDriftNotice(entry.sessionPath),
-        });
-      } else {
-        this._emitSessionMetadataUpdated(entry.sessionPath, { capabilityDrift: null });
-      }
-    }
-    return { ok: true, scanned, marked };
-  }
-
-  /**
-   * #1624：记录"用户关闭了当前 fingerprint 的提示"。持久化在 session-meta
-   * （跟 session 走，跨重启生效）；指纹再次变化时才重新提示。
-   */
-  async dismissSessionCapabilityDrift(sessionPath: any, fingerprint: any) {
-    this._assertActiveDesktopSessionPath(sessionPath, "dismissSessionCapabilityDrift");
-    if (typeof fingerprint !== "string" || !fingerprint) {
-      throw new Error("dismissSessionCapabilityDrift: fingerprint required");
-    }
-    const entry = this._getSessionEntryByPath(sessionPath);
-    if (entry) entry.capabilityDriftDismissedFingerprint = fingerprint;
-    await this.writeSessionMeta(sessionPath, { capabilityDriftDismissedFingerprint: fingerprint });
-    return { ok: true };
   }
 
   async reloadSessionRuntime(sessionPath: any, { refreshCapabilitySnapshots = false }: any = {}) {
@@ -6451,6 +6480,9 @@ export class SessionCoordinator {
           s.pinnedAt = typeof manifest?.pinnedAt === "string"
             ? manifest.pinnedAt
             : (typeof metaEntry?.pinnedAt === "string" ? metaEntry.pinnedAt : null);
+          s.pinOrder = Number.isFinite(manifest?.pinOrder)
+            ? manifest.pinOrder
+            : (Number.isFinite(metaEntry?.pinOrder) ? metaEntry.pinOrder : null);
           s.projectId = typeof metaEntry?.projectId === "string" && metaEntry.projectId.trim()
             ? metaEntry.projectId.trim()
             : null;
@@ -6531,6 +6563,7 @@ export class SessionCoordinator {
         workspaceLabel: entry.workspaceLabel || null,
         sessionId: entry.sessionId || this._sessionIdForPath(sessionPath),
         pinnedAt: null,
+        pinOrder: null,
         projectId: null,
         ...(isDeleted ? {
           agentDeleted: true,
@@ -6545,7 +6578,52 @@ export class SessionCoordinator {
     }
 
     allSessions.sort((a, b) => b.modified - a.modified);
+    this._ensurePinOrderBackfill(allSessions);
     return allSessions;
+  }
+
+  /**
+   * Sessions pinned before pinning carried an explicit order have none, and
+   * would otherwise all sort as "unordered". This writes the order the user was
+   * already looking at (most recently touched first) exactly once, so their
+   * pinned strip does not visibly shuffle on the upgrade. Runs in the
+   * background: the list this was called with is already on its way out.
+   */
+  _ensurePinOrderBackfill(projectedSessions: any[]) {
+    const store = this._sessionManifestStore;
+    if (!store || typeof store.getState !== "function") return;
+    if (this._pinOrderBackfill) return;
+    if (store.getState(PIN_ORDER_BACKFILL_STATE_KEY)?.completedAt) return;
+
+    const pending = projectedSessions
+      .filter((session) => (
+        typeof session?.pinnedAt === "string"
+        && session.pinnedAt
+        && !Number.isFinite(session.pinOrder)
+        && !!session.sessionId
+      ))
+      .sort((a, b) => b.modified - a.modified);
+
+    this._pinOrderBackfill = (async () => {
+      for (const [index, session] of pending.entries()) {
+        const pinOrder = (index + 1) * PIN_ORDER_STEP;
+        await this.writeSessionMeta(session.path, { pinOrder });
+        store.setPinOrder(session.sessionId, pinOrder);
+        session.pinOrder = pinOrder;
+        this._emitSessionMetadataUpdated(session.path, { pinOrder });
+      }
+      store.setState(PIN_ORDER_BACKFILL_STATE_KEY, {
+        completedAt: new Date().toISOString(),
+        ordered: pending.length,
+      });
+    })()
+      .catch((err) => {
+        // Leaving the marker unset is the retry: the next list tries again.
+        log.warn(`pin order backfill failed: ${err?.message || err}`);
+      })
+      .finally(() => {
+        this._pinOrderBackfill = null;
+      });
   }
 
   async saveSessionTitle(sessionPath: any, title: any) {
@@ -6566,16 +6644,92 @@ export class SessionCoordinator {
     this._titlesCache.set(sessionDir, { titles: { ...titles }, ts: Date.now() });
   }
 
+  /**
+   * Pins or unpins a session. A new pin goes above every existing one, and
+   * unpinning drops the order together with the timestamp — the two fields
+   * share one lifetime, so a later re-pin is a brand new pin.
+   *
+   * @returns {Promise<{pinnedAt: string|null, pinOrder: number|null}>}
+   */
   async setSessionPinned(sessionRef: any, pinned: any) {
     const { sessionId, sessionPath, manifest } = this._resolveSessionWriteRef(sessionRef, "setSessionPinned");
     const pinnedAt = pinned ? new Date().toISOString() : null;
-    await this.writeSessionMeta(sessionPath, { pinnedAt });
+    const pinOrder = pinned ? this._topPinOrder() : null;
+    await this.writeSessionMeta(sessionPath, { pinnedAt, pinOrder });
     if (manifest || sessionId) {
-      this._sessionManifestStore.setPinnedAt((manifest?.sessionId || sessionId), pinnedAt);
+      const targetSessionId = manifest?.sessionId || sessionId;
+      this._sessionManifestStore.setPinnedAt(targetSessionId, pinnedAt);
+      this._sessionManifestStore.setPinOrder(targetSessionId, pinOrder);
     }
-    await this._verifySessionPinnedState(sessionPath, pinnedAt);
-    this._emitSessionMetadataUpdated(sessionPath, { pinnedAt });
-    return pinnedAt;
+    await this._verifySessionPinnedState(sessionPath, pinnedAt, pinOrder);
+    this._emitSessionMetadataUpdated(sessionPath, { pinnedAt, pinOrder });
+    return { pinnedAt, pinOrder };
+  }
+
+  /** Order that places a session above every currently pinned one. */
+  _topPinOrder() {
+    const min = this._sessionManifestStore?.minPinOrder?.();
+    return (Number.isFinite(min) ? min : 0) - PIN_ORDER_STEP;
+  }
+
+  /**
+   * Applies a manually submitted pin order. The caller sends the complete
+   * ordered list of pinned sessions; every entry is validated before anything
+   * is written, so a list naming an unpinned or unknown session changes
+   * nothing at all rather than landing halfway.
+   *
+   * @param {Array<{sessionId: string}|string>} orderedRefs
+   * @returns {Promise<Array<{sessionId: string, pinOrder: number}>>}
+   */
+  async setSessionPinOrder(orderedRefs: any) {
+    const refs = Array.isArray(orderedRefs) ? orderedRefs : null;
+    if (!refs || refs.length === 0) {
+      const error: any = new Error("setSessionPinOrder: at least one session is required");
+      error.code = "session_pin_order_empty";
+      error.status = 400;
+      throw error;
+    }
+
+    const resolved = [];
+    const seen = new Set();
+    for (const ref of refs) {
+      const sessionId = typeof ref === "string"
+        ? ref.trim()
+        : (typeof ref?.sessionId === "string" ? ref.sessionId.trim() : "");
+      if (!sessionId) {
+        const error: any = new Error("setSessionPinOrder: sessionId is required for every entry");
+        error.code = "session_pin_order_invalid";
+        error.status = 400;
+        throw error;
+      }
+      if (seen.has(sessionId)) {
+        const error: any = new Error(`setSessionPinOrder: duplicate session ${sessionId}`);
+        error.code = "session_pin_order_duplicate";
+        error.status = 400;
+        error.sessionId = sessionId;
+        throw error;
+      }
+      seen.add(sessionId);
+      const target = this._resolveSessionWriteRef({ sessionId }, "setSessionPinOrder");
+      if (!target.manifest?.pinnedAt) {
+        const error: any = new Error(`setSessionPinOrder: session ${sessionId} is not pinned`);
+        error.code = "session_not_pinned";
+        error.status = 400;
+        error.sessionId = sessionId;
+        throw error;
+      }
+      resolved.push(target);
+    }
+
+    const orders = [];
+    for (const [index, target] of resolved.entries()) {
+      const pinOrder = (index + 1) * PIN_ORDER_STEP;
+      await this.writeSessionMeta(target.sessionPath, { pinOrder });
+      this._sessionManifestStore.setPinOrder(target.manifest.sessionId, pinOrder);
+      this._emitSessionMetadataUpdated(target.sessionPath, { pinOrder });
+      orders.push({ sessionId: target.manifest.sessionId, pinOrder });
+    }
+    return orders;
   }
 
   async setSessionPluginMeta(sessionPath: any, patch: any = {}) {
@@ -6621,7 +6775,7 @@ export class SessionCoordinator {
     return plugin;
   }
 
-  async _verifySessionPinnedState(sessionPath: any, expectedPinnedAt: any) {
+  async _verifySessionPinnedState(sessionPath: any, expectedPinnedAt: any, expectedPinOrder: any = null) {
     const metaPath = this._sessionMetaPathFor(sessionPath);
     const sessKey = path.basename(sessionPath);
     let meta = {};
@@ -6634,6 +6788,10 @@ export class SessionCoordinator {
     const actual = meta[sessKey]?.pinnedAt ?? null;
     if (actual !== expectedPinnedAt) {
       throw new Error(`setSessionPinned: expected pinnedAt=${expectedPinnedAt ?? "null"} for ${sessKey}, got ${actual ?? "null"}`);
+    }
+    const actualOrder = meta[sessKey]?.pinOrder ?? null;
+    if (actualOrder !== expectedPinOrder) {
+      throw new Error(`setSessionPinned: expected pinOrder=${expectedPinOrder ?? "null"} for ${sessKey}, got ${actualOrder ?? "null"}`);
     }
   }
 
@@ -6859,21 +7017,21 @@ export class SessionCoordinator {
     {
       model = null,
       context = null,
-      allowRenew = true,
       countRequest = true,
     }: any = {},
   ) {
     if (!entry?.session) return null;
     let expected = entry.cachePrefixContract;
     if (!expected) {
-      if (!allowRenew) {
-        throw new Error("Cache prefix contract unavailable for input preflight");
-      }
       expected = this._renewCachePrefixContract(sessionPath, entry, "late_init", { model, context });
     }
     const actual = this._buildCachePrefixContract(entry, { model, context });
     const diffs = diffCachePrefixContracts(expected, actual);
     if (diffs.length > 0) {
+      // 漂移只说明有人在请求前重建了 prompt / 工具表却没走 renew：损失的是缓存命中，
+      // 不是正确性。所以记录足够定位到那个改写者的原文级 diff，然后按当前真实状态
+      // 续签契约放行，绝不把这份内部账目变成用户请求的失败。
+      const drift = describeCachePrefixDrift(expected, actual);
       const record = {
         session: sessionPath ? path.basename(sessionPath) : null,
         renewReason: entry.cachePrefixContractRenewReason || null,
@@ -6881,6 +7039,7 @@ export class SessionCoordinator {
         diffs,
         expected: summarizeCachePrefixContract(expected),
         actual: summarizeCachePrefixContract(actual),
+        drift,
       };
       log.error(`cache_contract_violation ${JSON.stringify(record)}`);
       try {
@@ -6890,11 +7049,17 @@ export class SessionCoordinator {
           diffs,
           expected: summarizeCachePrefixContract(expected),
           actual: summarizeCachePrefixContract(actual),
+          drift,
+          action: "renewed",
         }, sessionPath);
       } catch {
-        // The provider request must still fail even if UI event delivery fails.
+        // 事件投递失败不影响本次请求，诊断已经落在日志里。
       }
-      throw new Error(`Cache prefix contract violated: ${diffs.map((d) => d.field).join(", ")}`);
+      const renewed = this._renewCachePrefixContract(sessionPath, entry, "drift_auto_renew", { model, context });
+      if (countRequest) {
+        entry.cachePrefixContractRequestCount = (entry.cachePrefixContractRequestCount || 0) + 1;
+      }
+      return renewed ?? actual;
     }
 
     if (countRequest) {
@@ -6917,9 +7082,10 @@ export class SessionCoordinator {
     entry.cachePrefixGuardInstalled = true;
     entry.cachePrefixOriginalStreamFn = originalStreamFn;
     agent.streamFn = async (model, context, options) => {
-      // The main-session prefix contract applies only to normal turns. Pi native
-      // compaction and branch summaries use their own prompt; cache-preserving
-      // side tasks remain protected by their strict session snapshot contract.
+      // 这份前缀契约是诊断工具，不是闸门：发现漂移就记下原文级 diff 并按现状续签放行，
+      // 请求照常发出。漂移意味着有人在重建 prompt / 工具表时没走续签，凭那条记录去定位。
+      // 契约只覆盖普通轮次，原生压缩与分支摘要用的是各自的 prompt；保缓存的旁路任务
+      // 仍由它们自己的严格会话快照契约把关。
       if (entry.session?.isCompacting !== true) {
         this._assertCachePrefixContract(sessionPath, entry, { model, context });
       }
@@ -7758,6 +7924,10 @@ export class SessionCoordinator {
         customTools: [...actCustomTools, ...wrappedExtraCustomTools],
       });
 
+      // Throwaway session: the proportional reserve still applies, but there is
+      // no long-lived task to resume, so no mid-run compaction is installed.
+      installDynamicCompactionReserve(session);
+
       if (isolatedProviderCacheAffinityKey && typeof session?.agent?.streamFn === "function") {
         const originalStreamFn = session.agent.streamFn;
         session.agent.streamFn = function providerCacheAffinityStream(model, context, options) {
@@ -7840,7 +8010,27 @@ export class SessionCoordinator {
       let finalErrorMessage = null;
       const sessionFiles = [];
       const toolErrors = [];
+      // 中止请求是"粘性"的：SDK 在 agent run 还没起来时 abort 是空操作，而
+      // session.prompt() 进入 agent 循环前还有一段异步准备（扩展回调、压缩检查）。
+      // 落在这段窗口里的 abort 若不补发，子 session 会照常跑完全程——报了死却不死。
+      // 因此这里记账，并在 run 开跑后（第一个事件到达即证明）补发一次。
+      let abortRequested = false;
+      let abortRedelivered = false;
+      const deliverSessionAbort = () => {
+        // session.abort() 是异步的；丢掉它的 promise 会让失败变成未处理 rejection。
+        try {
+          Promise.resolve(session.abort()).catch((err) =>
+            log.warn(`executeIsolated abort failed: ${err?.message || err}`),
+          );
+        } catch (err) {
+          log.warn(`executeIsolated abort failed: ${err?.message || err}`);
+        }
+      };
       const unsub = session.subscribe((event) => {
+        if (abortRequested && !abortRedelivered) {
+          abortRedelivered = true;
+          deliverSessionAbort();
+        }
         const parentSessionPath = typeof opts.parentSessionPath === "string" && opts.parentSessionPath.trim()
           ? opts.parentSessionPath
           : null;
@@ -7932,7 +8122,10 @@ export class SessionCoordinator {
         });
       };
 
-      const abortHandler = () => session.abort();
+      const abortHandler = () => {
+        abortRequested = true;
+        deliverSessionAbort();
+      };
       opts.signal?.addEventListener("abort", abortHandler, { once: true });
 
       if (opts.signal?.aborted) {
@@ -7955,7 +8148,14 @@ export class SessionCoordinator {
       const sessionPath = session.sessionManager?.getSessionFile?.() || null;
       const leafEntryId = session.sessionManager?.getBranch?.()?.at?.(-1)?.id || null;
       const finalReplyText = stripClosedInternalNarrationBlocks(replyText || finalAssistantText);
-      const completionError = isolatedCompletionError(finalStopReason, finalErrorMessage);
+      // 中止的返回形态与入口早退保持一致（error: "aborted"），调用方只需认这一个词。
+      // 第二个条件覆盖"中止得太早、一轮都没跑完"——此时没有 stopReason 可读，但确实是被中止的。
+      // 反过来，已经正常跑完（stopReason=stop）的结果不会因为随后到达的 abort 被丢掉。
+      const runWasAborted = finalStopReason === "aborted"
+        || (opts.signal?.aborted === true && !finalStopReason);
+      const completionError = runWasAborted
+        ? "aborted"
+        : isolatedCompletionError(finalStopReason, finalErrorMessage);
 
       if (!opts.persist && !isResumedSession && sessionPath) {
         // 非 persist 的临时 session 文件清理 best-effort：删不掉不影响返回结果。

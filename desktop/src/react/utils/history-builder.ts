@@ -16,6 +16,7 @@ import { parseUserAttachments } from './message-parser';
 import { renderMarkdown } from './markdown';
 import { extOfName } from './file-kind';
 import { buildAssistantBlocksFromContent } from './assistant-block-builder';
+import { parseAgentFileChangeFact } from '../../../../shared/workspace-history.ts';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- API 历史消息 JSON 结构动态，难以静态收窄 */
 
@@ -331,11 +332,21 @@ function normalizeHistoryBlock(raw: unknown): Record<string, any> | null {
   if (!type || afterIndex === null) return null;
 
   if (type === 'file') {
+    const { agentFileChange: rawAgentFileChange, ...fileBlock } = raw;
     const filePath = nonEmptyString(raw.filePath);
     if (!filePath) return null;
     const label = nonEmptyString(raw.label) || basenamePortable(filePath);
     const ext = nonEmptyString(raw.ext) || extOfName(label) || extOfName(filePath) || '';
-    return { ...raw, type, afterIndex, filePath, label, ext };
+    const agentFileChange = parseAgentFileChangeFact(rawAgentFileChange);
+    return {
+      ...fileBlock,
+      type,
+      afterIndex,
+      filePath,
+      label,
+      ext,
+      ...(agentFileChange ? { agentFileChange } : {}),
+    };
   }
 
   if (type === 'plugin_card') {

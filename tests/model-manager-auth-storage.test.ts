@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import YAML from "js-yaml";
 import { ModelManager } from "../core/model-manager.ts";
 import { ProviderRegistry } from "../core/provider-registry.ts";
 import { callText } from "../core/llm-client.ts";
@@ -18,10 +17,18 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function writeAddedModels(providers) {
+function writeProviderCatalogProviders(providers) {
   fs.writeFileSync(
-    path.join(tmpDir, "added-models.yaml"),
-    YAML.dump({ providers }),
+    path.join(tmpDir, "provider-catalog.json"),
+    JSON.stringify({ catalogVersion: 2, providers, capabilities: {}, meta: {} }, null, 2) + "\n",
+    "utf-8",
+  );
+}
+
+function writeProviderCatalog(catalog) {
+  fs.writeFileSync(
+    path.join(tmpDir, "provider-catalog.json"),
+    JSON.stringify(catalog, null, 2) + "\n",
     "utf-8",
   );
 }
@@ -43,11 +50,7 @@ function writeModelsJson(data) {
 }
 
 function readPersistedProviders() {
-  const catalogPath = path.join(tmpDir, "provider-catalog.json");
-  if (fs.existsSync(catalogPath)) {
-    return JSON.parse(fs.readFileSync(catalogPath, "utf-8")).providers || {};
-  }
-  return YAML.load(fs.readFileSync(path.join(tmpDir, "added-models.yaml"), "utf-8")).providers;
+  return JSON.parse(fs.readFileSync(path.join(tmpDir, "provider-catalog.json"), "utf-8")).providers || {};
 }
 
 function deepseekProvider(apiKey) {
@@ -70,7 +73,7 @@ async function getDeepseekApiKey(manager) {
 
 describe("ModelManager AuthStorage ownership", () => {
   it("registers Grok OAuth with Pi and exposes subscription models only when logged in", async () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     writeAuth({
       "xai-oauth": {
         type: "oauth",
@@ -125,7 +128,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("replaces and removes SDK provider declarations exactly across reloads", async () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     writeAuth({});
     const oauth = (name) => ({
       name,
@@ -173,7 +176,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("builds the Hana-owned Codex default catalog before ModelRegistry and exposes it only when OAuth is logged in", async () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     writeAuth({
       "openai-codex": {
         type: "oauth",
@@ -206,7 +209,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("keeps Codex models unavailable while logged out", async () => {
-    writeAddedModels({});
+    writeProviderCatalogProviders({});
     writeAuth({});
 
     const manager = new ModelManager({ hanakoHome: tmpDir });
@@ -219,7 +222,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("preserves OAuth auth when a conflicting API-key provider claims its runtime auth key", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "openai-codex": {
         auth_type: "api-key",
         base_url: "https://conflicting-provider.example/v1",
@@ -252,7 +255,7 @@ describe("ModelManager AuthStorage ownership", () => {
     { label: "explicit empty list", models: [], expected: [] },
     { label: "explicit allowlist", models: ["gpt-5.6-terra"], expected: ["gpt-5.6-terra"] },
   ])("honors Codex $label instead of the plugin defaults", async ({ models, expected }) => {
-    writeAddedModels({ "openai-codex-oauth": { models } });
+    writeProviderCatalogProviders({ "openai-codex-oauth": { models } });
     writeAuth({
       "openai-codex": {
         type: "oauth",
@@ -279,7 +282,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("applies user model metadata ahead of provider-specific GPT-5.6 defaults", async () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       openai: {
         api_key: "sk-user",
         models: [{
@@ -325,7 +328,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("keeps an explicit user image:false ahead of known Kimi image capability", async () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "kimi-coding": {
         base_url: "https://api.kimi.com/coding/",
         api: "anthropic-messages",
@@ -348,7 +351,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("loads a fetched Kimi K3 id through the real ModelRegistry without projecting it to the default model", async () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "kimi-coding": {
         base_url: "https://api.kimi.com/coding/v1",
         api: "openai-completions",
@@ -366,12 +369,14 @@ describe("ModelManager AuthStorage ownership", () => {
     expect(projected.providers["kimi-coding"].models).toHaveLength(1);
     expect(projected.providers["kimi-coding"].models[0]).toMatchObject({
       id: "k3",
+      input: ["text", "image"],
       reasoning: true,
     });
     expect(manager.availableModels.find((item) => (
       item.provider === "kimi-coding" && item.id === "k3"
     ))).toMatchObject({
       id: "k3",
+      input: ["text", "image"],
       reasoning: true,
       compat: {
         thinkingFormat: "kimi",
@@ -382,13 +387,65 @@ describe("ModelManager AuthStorage ownership", () => {
         },
       },
     });
+    expect(projected.providers["kimi-coding"].models[0].compat).not.toHaveProperty("hanaVideoInput");
     expect(manager.availableModels.some((item) => (
       item.provider === "kimi-coding" && item.id === "kimi-for-coding"
     ))).toBe(false);
   });
 
+  it("uses the normalized Kimi model endpoint for fresh auxiliary execution credentials", async () => {
+    writeProviderCatalogProviders({
+      "kimi-coding": {
+        base_url: "https://api.kimi.com/coding/",
+        api: "anthropic-messages",
+        api_key: "sk-kimi",
+        models: ["k3"],
+      },
+    });
+    writeAuth({});
+
+    const manager = new ModelManager({ hanakoHome: tmpDir });
+    manager.init();
+    await manager.refreshAvailable();
+
+    const selected = manager.availableModels.find((item) => (
+      item.provider === "kimi-coding" && item.id === "k3"
+    ));
+    expect(selected).toMatchObject({
+      api: "openai-completions",
+      baseUrl: "https://api.kimi.com/coding/v1",
+    });
+
+    expect(manager.resolveModelWithCredentials({
+      id: "k3",
+      provider: "kimi-coding",
+    })).toMatchObject({
+      api: "openai-completions",
+      api_key: "sk-kimi",
+      base_url: "https://api.kimi.com/coding/v1",
+      credential_source: "provider-catalog",
+    });
+
+    const resolved = await manager.resolveModelWithCredentialsFresh({
+      id: "k3",
+      provider: "kimi-coding",
+    });
+    expect(resolved).toMatchObject({
+      api: "openai-completions",
+      api_key: "sk-kimi",
+      base_url: "https://api.kimi.com/coding/v1",
+      credential_source: "provider-catalog",
+      model: {
+        id: "k3",
+        provider: "kimi-coding",
+        api: "openai-completions",
+        baseUrl: "https://api.kimi.com/coding/v1",
+      },
+    });
+  });
+
   it("keeps provider-specific GPT-5.6 APIs ahead of an incompatible provider-wide default", async () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       openai: {
         api_key: "sk-openai",
         models: ["gpt-5.6-sol"],
@@ -411,7 +468,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("rejects invalid user thinking maps instead of silently falling back", () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       openai: {
         api_key: "sk-openai",
         models: [{
@@ -426,12 +483,12 @@ describe("ModelManager AuthStorage ownership", () => {
     expect(() => manager.init()).toThrow(/thinkingLevelMap\.ultra/);
   });
 
-  it("injects added-models API keys as runtime overrides before Pi SDK env resolution", async () => {
+  it("injects provider catalog API keys as runtime overrides before Pi SDK env resolution", async () => {
     const originalPublic = process.env.PUBLIC;
     process.env.PUBLIC = "C:\\Users\\Public";
     try {
       writeAuth({});
-      writeAddedModels({
+      writeProviderCatalogProviders({
         deepseek: deepseekProvider("public"),
       });
 
@@ -448,11 +505,11 @@ describe("ModelManager AuthStorage ownership", () => {
     }
   });
 
-  it("migrates legacy API-key auth into added-models before clearing auth.json", async () => {
+  it("does not import API-key auth into the provider catalog before clearing auth.json", async () => {
     writeAuth({
       deepseek: { type: "api_key", key: "sk-legacy-4d2a" },
     });
-    writeAddedModels({
+    writeProviderCatalogProviders({
       deepseek: deepseekProvider(undefined),
     });
 
@@ -460,92 +517,19 @@ describe("ModelManager AuthStorage ownership", () => {
     manager.init();
     await manager.syncAndRefresh();
 
-    await expect(getDeepseekApiKey(manager)).resolves.toBe("sk-legacy-4d2a");
     const persistedProviders = readPersistedProviders();
-    expect(persistedProviders.deepseek.api_key).toBe("sk-legacy-4d2a");
+    expect(persistedProviders.deepseek).not.toHaveProperty("api_key");
     const persistedAuth = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf-8"));
     expect(persistedAuth.deepseek).toBeUndefined();
+    expect(manager.availableModels.filter((model) => model.provider === "deepseek")).toEqual([]);
   });
 
-  it("recovers a legacy API key from models.json when auth.json was already cleaned", async () => {
-    writeAuth({});
-    writeAddedModels({
-      deepseek: deepseekProvider(undefined),
-    });
-    writeModelsJson({
-      providers: {
-        deepseek: {
-          baseUrl: "https://api.deepseek.com/v1",
-          api: "openai-completions",
-          apiKey: "sk-projected-6ad1",
-          models: [{ id: "deepseek-v4-pro" }],
-        },
-      },
-    });
 
-    const manager = new ModelManager({ hanakoHome: tmpDir });
-    manager.init();
-    await manager.syncAndRefresh();
-
-    await expect(getDeepseekApiKey(manager)).resolves.toBe("sk-projected-6ad1");
-    const persistedProviders = readPersistedProviders();
-    expect(persistedProviders.deepseek.api_key).toBe("sk-projected-6ad1");
-  });
-
-  it("does not seed bare model ids into catalog overlays for local provider plugins", async () => {
-    const registry = new ProviderRegistry(tmpDir);
-    registry.saveProvider("custom-vl", {
-      display_name: "Custom VL",
-      auth_type: "api-key",
-      base_url: "https://vl.example/v1",
-      api: "openai-completions",
-      models: [{
-        id: "vl-model",
-        name: "VL Model",
-        image: true,
-        audio: true,
-        context: 128000,
-        maxOutput: 16000,
-      }],
-    });
-    writeAuth({
-      "custom-vl": { type: "api_key", key: "sk-legacy-vl" },
-    });
-    writeModelsJson({
-      providers: {
-        "custom-vl": {
-          baseUrl: "https://vl.example/v1",
-          api: "openai-completions",
-          apiKey: "sk-projected-vl",
-          models: [{ id: "vl-model" }],
-        },
-      },
-    });
-
-    const manager = new ModelManager({ hanakoHome: tmpDir });
-    manager.init();
-    await manager.syncAndRefresh();
-
-    const persistedProviders = readPersistedProviders();
-    expect(persistedProviders["custom-vl"].api_key).toBe("sk-projected-vl");
-    expect(persistedProviders["custom-vl"].models).toBeUndefined();
-
-    const reloaded = new ProviderRegistry(tmpDir);
-    expect(reloaded.getAllProvidersRaw()["custom-vl"].models[0]).toMatchObject({
-      id: "vl-model",
-      name: "VL Model",
-      image: true,
-      audio: true,
-      context: 128000,
-      maxOutput: 16000,
-    });
-  });
-
-  it("API-key provider runtime lookup uses added-models credentials over stale auth.json", async () => {
+  it("API-key provider runtime lookup uses provider catalog credentials over stale auth.json", async () => {
     writeAuth({
       deepseek: { type: "api_key", key: "sk-old-3ffa" },
     });
-    writeAddedModels({
+    writeProviderCatalogProviders({
       deepseek: deepseekProvider("sk-new-999c"),
     });
 
@@ -558,11 +542,11 @@ describe("ModelManager AuthStorage ownership", () => {
     expect(persistedAuth.deepseek).toBeUndefined();
   });
 
-  it("does not resurrect an explicitly cleared added-models API key", async () => {
+  it("does not resurrect an explicitly cleared provider catalog API key", async () => {
     writeAuth({
       deepseek: { type: "api_key", key: "sk-old-3ffa" },
     });
-    writeAddedModels({
+    writeProviderCatalogProviders({
       deepseek: deepseekProvider(""),
     });
 
@@ -579,7 +563,7 @@ describe("ModelManager AuthStorage ownership", () => {
 
   it("re-applies Hana provider model metadata after Pi SDK availability filtering", async () => {
     writeAuth({});
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "local-max": {
         base_url: "https://api.example.com/v1",
         api: "openai-completions",
@@ -610,18 +594,16 @@ describe("ModelManager AuthStorage ownership", () => {
     expect(model?.thinkingLevels).toEqual(["off", "medium", "high", "max"]);
   });
 
-  it("does not resurrect a deleted custom provider from legacy auth or models projection", async () => {
+  it("does not resurrect a deleted custom provider from stale auth or models projection", async () => {
     writeAuth({
       "my-provider": { type: "api_key", key: "sk-legacy-custom" },
     });
-    fs.writeFileSync(
-      path.join(tmpDir, "added-models.yaml"),
-      YAML.dump({
-        _deleted_providers: ["my-provider"],
-        providers: {},
-      }),
-      "utf-8",
-    );
+    writeProviderCatalog({
+      catalogVersion: 2,
+      providers: {},
+      capabilities: {},
+      meta: { deletedProviders: ["my-provider"] },
+    });
     writeModelsJson({
       providers: {
         "my-provider": {
@@ -647,7 +629,7 @@ describe("ModelManager AuthStorage ownership", () => {
     writeAuth({
       deepseek: { type: "api_key", key: "sk-old-3ffa" },
     });
-    writeAddedModels({
+    writeProviderCatalogProviders({
       deepseek: deepseekProvider("sk-new-999c"),
     });
 
@@ -661,7 +643,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("refreshes OAuth credentials before resolving provider credentials for media adapters", async () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "openai-codex-oauth": {
         base_url: "https://stale-catalog.example/v1",
         models: ["gpt-5.5"],
@@ -719,7 +701,7 @@ describe("ModelManager AuthStorage ownership", () => {
   });
 
   it("does not return a stale OAuth token when refresh fails", async () => {
-    writeAddedModels({
+    writeProviderCatalogProviders({
       "openai-codex-oauth": {
         models: ["gpt-5.5"],
       },
@@ -744,8 +726,8 @@ describe("ModelManager AuthStorage ownership", () => {
       .rejects.toThrow(/openai-codex/);
   });
 
-  it("builds a fresh model credential result from AuthStorage and strips stale catalog/model credential headers", async () => {
-    writeAddedModels({
+  it("builds a fresh model credential result from AuthStorage, preserves its dynamic resource URL, and strips stale headers", async () => {
+    writeProviderCatalogProviders({
       "openai-codex-oauth": {
         api_key: "stale-catalog-token",
         headers: {
@@ -771,7 +753,7 @@ describe("ModelManager AuthStorage ownership", () => {
       id: "gpt-5.6-sol",
       provider: "openai-codex",
       api: "openai-codex-responses",
-      baseUrl: "https://chatgpt.com/backend-api",
+      baseUrl: "https://fixed-codex.example/v1",
       headers: {
         Authorization: "Bearer stale-model-header",
         Cookie: "model=stale",
@@ -800,6 +782,7 @@ describe("ModelManager AuthStorage ownership", () => {
     expect(resolved).toMatchObject({
       api: "openai-codex-responses",
       api_key: "fresh-auth-storage-token",
+      base_url: "https://chatgpt.com/backend-api",
       accountId: "acct_fresh",
       credential_source: "auth-storage",
       model: {

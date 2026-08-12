@@ -67,6 +67,10 @@ contextBridge.exposeInMainWorld("hana", {
   autoUpdateInstall: () => ipcRenderer.invoke("auto-update-install"),
   autoUpdateState: () => ipcRenderer.invoke("auto-update-state"),
   autoUpdateSetChannel: (ch) => ipcRenderer.invoke("auto-update-set-channel", ch),
+  // 邀请制测试通道：查状态 / 核销一枚邀请码 / 用户确认后写入通道状态。
+  inviteStatus: () => ipcRenderer.invoke("invite:status"),
+  inviteRedeem: (code) => ipcRenderer.invoke("invite:redeem", code),
+  inviteActivate: (payload) => ipcRenderer.invoke("invite:activate", payload),
   // 列车更新（OTA）：暂存状态查询 / 手动检查 / 立即应用（下载+激活+重启，仅由用户点击触发）
   trainUpdateStatus: () => ipcRenderer.invoke("train-update-status"),
   trainUpdateCheck: () => ipcRenderer.invoke("train-update-check"),
@@ -118,7 +122,7 @@ contextBridge.exposeInMainWorld("hana", {
   appReady: () => ipcRenderer.invoke("app-ready"),
   syncWindowTheme: (theme) => ipcRenderer.send("window-theme-changed", theme),
   selectFolder: () => ipcRenderer.invoke("select-folder"),
-  selectFiles: () => ipcRenderer.invoke("select-files"),
+  selectFiles: (options) => ipcRenderer.invoke("select-files", options),
   selectSkill: () => ipcRenderer.invoke("select-skill"),
   selectPlugin: () => ipcRenderer.invoke("select-plugin"),
   openFolder: (path) => ipcRenderer.invoke("open-folder", path),
@@ -136,9 +140,6 @@ contextBridge.exposeInMainWorld("hana", {
   watchFile: (filePath) => ipcRenderer.invoke("watch-file", filePath),
   unwatchFile: (filePath) => ipcRenderer.invoke("unwatch-file", filePath),
   onFileChanged: (cb) => ipcRenderer.on("file-changed", (_, filePath) => cb(filePath)),
-  watchWorkspace: (rootPath) => ipcRenderer.invoke("watch-workspace", rootPath),
-  unwatchWorkspace: (rootPath) => ipcRenderer.invoke("unwatch-workspace", rootPath),
-  onWorkspaceChanged: (cb) => ipcRenderer.on("workspace-changed", (_, payload) => cb(payload)),
   readFileBase64: (path) => ipcRenderer.invoke("read-file-base64", path),
   // 本地路径 → file:// URL（同步，纯字符串转换，无 IPC）。逻辑见 src/shared/path-to-file-url.cjs
   getFileUrl: (filePath) => pathToFileUrl(filePath),

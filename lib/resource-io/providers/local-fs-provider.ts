@@ -2,8 +2,19 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { ResourceIOError, resourceAccessDenied, resourceNotFound, targetAlreadyExists } from "../errors.ts";
-import { normalizeResourceRef, resourceKeyForRef } from "../resource-refs.ts";
-import { resolveLocalFsRootIdentity } from "../root-identity.ts";
+import {
+  secureConditionalWrite,
+  withLocalSecureWriteProof,
+  type LocalSecureWriteProof,
+  type NativeFileIdentity,
+  type NativeFileProof,
+} from "../native-secure-write.ts";
+import {
+  internalActivationRootIdentity,
+  normalizeResourceRef,
+  resourceKeyForRef,
+} from "../resource-refs.ts";
+import { localRootNativeIdentity, resolveLocalFsRootIdentity } from "../root-identity.ts";
 import { isOperationCorrelationId } from "../../../shared/knowledge-diagnostics.ts";
 import {
   RESOURCE_LIST_BLOCKED_ENTRIES,
@@ -78,6 +89,7 @@ const LOCAL_READ_PROOFS = new WeakSet<object>();
 type LocalPathIdentityEntry = Readonly<{
   filePath: string;
   identity: FileIdentity;
+  nativeIdentity: NativeFileIdentity;
   kind: "directory" | "file";
   changeToken: string;
 }>;
@@ -313,9 +325,40 @@ export class LocalFsProvider {
   }
 
   async writeExpectedVersion(ref: ResourceRef | unknown, content: string | Buffer, expectedVersion: ResourceVersion | null): Promise<ResourceWriteExpectedVersionResult> {
-    const filePath = this.resolvePath(ref);
+    const normalized = normalizeResourceRef(ref);
+    const target = resolveLocalSecureWriteTarget(normalized, this.cwd);
+    const filePath = target.filePath;
     this.assertAllowed(filePath, "write");
-    const currentVersion = statFileVersionOrNull(filePath);
+    const activationIdentity = internalActivationRootIdentity(normalized);
+    const activationRoot = activationIdentity === undefined
+      ? undefined
+      : localRootNativeIdentity(activationIdentity);
+    if (activationIdentity !== undefined && !activationRoot) throw secureWriteSafetyError();
+    const suppliedReadProof = localPathProofFromResourceReadProof(
+      normalized[RESOURCE_READ_PROOF],
+      filePath,
+    );
+    if (suppliedReadProof) {
+      let currentReadProof: LocalPathIdentityProof | null = null;
+      try {
+        currentReadProof = captureLocalPathIdentityProof(filePath, target.rootPath);
+      } catch {
+        // A completed read must still name the exact root/ancestor/final
+        // object before a new helper proof is captured or a helper is started.
+      }
+      if (!currentReadProof || !sameLocalPathIdentityProof(suppliedReadProof, currentReadProof)) {
+        return {
+          ok: false,
+          conflict: true,
+          resourceKey: localResourceKey(filePath),
+          resource: this.resourceForPath(filePath),
+          ...(currentReadProof ? { version: versionFromStat(currentReadProof.targetStat) } : {}),
+          filePath,
+        };
+      }
+    }
+    const preflight = captureLocalSecureWriteProof(target, activationRoot);
+    const currentVersion = preflight.currentVersion;
     if (expectedVersion === null) {
       if (currentVersion) {
         return {
@@ -327,24 +370,7 @@ export class LocalFsProvider {
           filePath,
         };
       }
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      try {
-        fs.writeFileSync(filePath, content, { flag: "wx" });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") throw error;
-        const racedVersion = statFileVersionOrNull(filePath);
-        return {
-          ok: false,
-          conflict: true,
-          resourceKey: localResourceKey(filePath),
-          resource: this.resourceForPath(filePath),
-          ...(racedVersion ? { version: racedVersion } : {}),
-          filePath,
-        };
-      }
-      return this.mutationResult(filePath, "created");
-    }
-    if (!currentVersion || !fileVersionsMatch(currentVersion, expectedVersion)) {
+    } else if (!currentVersion || !fileVersionsMatch(currentVersion, expectedVersion)) {
       return {
         ok: false,
         conflict: true,
@@ -354,7 +380,30 @@ export class LocalFsProvider {
         filePath,
       };
     }
-    return this.write(ref, content);
+    // The caller token is checked above. The helper receives this finer-grained
+    // native proof and rechecks it from held handles immediately before effect.
+    const committed = await withLocalSecureWriteProof(
+      normalized,
+      preflight.proof,
+      () => secureConditionalWrite(normalized, content, expectedVersion),
+    );
+    if (committed.kind === "conflict") {
+      return {
+        ok: false,
+        conflict: true,
+        resourceKey: localResourceKey(filePath),
+        resource: this.resourceForPath(filePath),
+        ...(committed.version ? { version: committed.version } : {}),
+        filePath,
+      };
+    }
+    return {
+      changeType: committed.changeType,
+      resourceKey: localResourceKey(filePath),
+      resource: this.resourceForPath(filePath),
+      version: committed.version,
+      filePath,
+    };
   }
 
   async edit(ref: ResourceRef | unknown, edits: ResourceEdit[]): Promise<ResourceMutationResult> {
@@ -1053,6 +1102,171 @@ function localResourceKey(filePath: string): string {
   return resourceKeyForRef({ kind: "local-file", path: filePath });
 }
 
+type LocalSecureWriteTarget = Readonly<{
+  rootPath: string;
+  segments: readonly string[];
+  filePath: string;
+}>;
+
+type LocalSecureWritePreflight = Readonly<{
+  proof: LocalSecureWriteProof;
+  currentVersion: ResourceVersion | null;
+}>;
+
+function resolveLocalSecureWriteTarget(ref: ResourceRef, providerCwd: string): LocalSecureWriteTarget {
+  if (ref.kind !== "local-file") throw secureWriteSafetyError();
+  const suppliedScope = ref[RESOURCE_SCOPE_ROOT];
+  const scopePath = typeof suppliedScope === "string" && suppliedScope.length > 0
+    ? suppliedScope
+    : providerCwd;
+  if (typeof scopePath !== "string" || !path.isAbsolute(scopePath)) throw secureWriteSafetyError();
+  const lexicalRoot = path.resolve(scopePath);
+  const rootPath = realOrResolved(lexicalRoot);
+  const requestedPath = path.isAbsolute(ref.path)
+    ? path.resolve(ref.path)
+    : path.resolve(lexicalRoot, ref.path);
+  const relative = relativeWithinRoot(lexicalRoot, requestedPath)
+    ?? relativeWithinRoot(rootPath, requestedPath);
+  if (relative === null || relative.length === 0) throw secureWriteSafetyError();
+  const segments = relative.split(path.sep).filter(Boolean);
+  if (segments.length === 0 || segments.some(segment => !isSecureWriteSegment(segment))) {
+    throw secureWriteSafetyError();
+  }
+  return Object.freeze({
+    rootPath,
+    segments: Object.freeze(segments),
+    filePath: path.join(rootPath, ...segments),
+  });
+}
+
+function relativeWithinRoot(rootPath: string, candidatePath: string): string | null {
+  const relative = path.relative(rootPath, candidatePath);
+  if (
+    relative === ".."
+    || relative.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relative)
+  ) {
+    return null;
+  }
+  return relative;
+}
+
+function isSecureWriteSegment(value: string): boolean {
+  return value.length > 0
+    && value !== "."
+    && value !== ".."
+    && !value.includes("/")
+    && !value.includes("\\")
+    && !value.includes(":")
+    && !containsSecureWriteControlCharacter(value)
+    && !/[. ]$/u.test(value)
+    && !/[<>"|?*]/u.test(value);
+}
+
+function containsSecureWriteControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
+function captureLocalSecureWriteProof(
+  target: LocalSecureWriteTarget,
+  activationRoot?: { device: string; inode: string; birthtimeNs: string },
+): LocalSecureWritePreflight {
+  let root: NativeFileIdentity;
+  try {
+    root = captureSecureWriteDirectory(target.rootPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") throw secureWriteSafetyError();
+    throw error;
+  }
+  if (activationRoot && !sameNativeFileIdentity(root, activationRoot)) {
+    throw secureWriteSafetyError();
+  }
+  const ancestors: NativeFileIdentity[] = [];
+  let parentPath = target.rootPath;
+  for (const segment of target.segments.slice(0, -1)) {
+    parentPath = path.join(parentPath, segment);
+    try {
+      ancestors.push(captureSecureWriteDirectory(parentPath));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        // Conditional writes never create pathname parents: doing so would
+        // add an unbound, path-following mutation before the native proof.
+        throw secureWriteSafetyError();
+      }
+      throw error;
+    }
+  }
+  let final: NativeFileProof | null = null;
+  let currentVersion: ResourceVersion | null = null;
+  try {
+    final = captureSecureWriteFile(target.filePath);
+    currentVersion = resourceVersionFromNativeProof(final);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+  }
+  return Object.freeze({
+    proof: Object.freeze({
+      rootPath: target.rootPath,
+      segments: target.segments,
+      root,
+      ancestors: Object.freeze(ancestors),
+      final,
+    }),
+    currentVersion,
+  });
+}
+
+function captureSecureWriteDirectory(filePath: string): NativeFileIdentity {
+  const stat = lstatForSecureWrite(filePath);
+  if (!stat.isDirectory()) throw secureWriteSafetyError();
+  return nativeIdentityFromStat(stat);
+}
+
+function captureSecureWriteFile(filePath: string): NativeFileProof {
+  const stat = lstatForSecureWrite(filePath);
+  if (!stat.isFile()) throw secureWriteSafetyError();
+  if (stat.size > BigInt(Number.MAX_SAFE_INTEGER)) throw secureWriteSafetyError();
+  return Object.freeze({
+    identity: nativeIdentityFromStat(stat),
+    mtimeNs: stat.mtimeNs.toString(),
+    size: stat.size.toString(),
+  });
+}
+
+function lstatForSecureWrite(filePath: string): fs.BigIntStats {
+  const stat = fs.lstatSync(filePath, { bigint: true });
+  if (stat.isSymbolicLink()) throw secureWriteSafetyError();
+  return stat;
+}
+
+function nativeIdentityFromStat(stat: fs.BigIntStats): NativeFileIdentity {
+  return Object.freeze({
+    device: stat.dev.toString(),
+    inode: stat.ino.toString(),
+    birthtimeNs: stat.birthtimeNs.toString(),
+  });
+}
+
+function resourceVersionFromNativeProof(proof: NativeFileProof): ResourceVersion {
+  const mtimeMs = Number((BigInt(proof.mtimeNs) + 500_000n) / 1_000_000n);
+  const size = Number(BigInt(proof.size));
+  if (!Number.isSafeInteger(mtimeMs) || !Number.isSafeInteger(size)) throw secureWriteSafetyError();
+  return Object.freeze({ mtimeMs, size });
+}
+
+function secureWriteSafetyError(): ResourceIOError {
+  return new ResourceIOError("Secure conditional write rejected", {
+    code: "resource_version_conflict",
+    status: 409,
+  });
+}
+
 function captureLocalPathIdentityProof(
   filePath: string,
   proofRoot: string,
@@ -1090,6 +1304,7 @@ function captureLocalPathIdentityProof(
         inode: Number(stat.ino),
         birthtimeMs: Number(stat.birthtimeNs) / 1_000_000,
       }),
+      nativeIdentity: nativeIdentityFromStat(stat),
       kind: stat.isDirectory() ? "directory" : "file",
       changeToken: [stat.ctimeNs, stat.mtimeNs, stat.size, stat.mode]
         .map(value => value.toString())
@@ -1150,9 +1365,16 @@ function sameLocalPathIdentityProof(
         && entry.filePath === candidate.filePath
         && entry.kind === candidate.kind
         && entry.changeToken === candidate.changeToken
-        && sameIdentity(entry.identity, candidate.identity),
+        && sameIdentity(entry.identity, candidate.identity)
+        && sameNativeFileIdentity(entry.nativeIdentity, candidate.nativeIdentity),
       );
     });
+}
+
+function sameNativeFileIdentity(left: NativeFileIdentity, right: NativeFileIdentity): boolean {
+  return left.device === right.device
+    && left.inode === right.inode
+    && left.birthtimeNs === right.birthtimeNs;
 }
 
 function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
@@ -1202,16 +1424,6 @@ function versionFromStat(stat: fs.Stats): ResourceVersion {
     mtimeMs: stat.mtime.getTime(),
     size: stat.isDirectory() ? null : stat.size,
   };
-}
-
-function statFileVersionOrNull(filePath: string): ResourceVersion | null {
-  try {
-    const stat = fs.statSync(filePath);
-    if (!stat.isFile()) return null;
-    return versionFromStat(stat);
-  } catch {
-    return null;
-  }
 }
 
 function fileVersionsMatch(current: ResourceVersion, expected: ResourceVersion): boolean {

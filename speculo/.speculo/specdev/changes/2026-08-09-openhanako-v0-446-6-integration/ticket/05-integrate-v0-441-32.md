@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-05
 title: 整合上游 v0.441.32 checkpoint
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "约 30 个提交、132 个文件和 20 个 overlap 的整仓 checkpoint 开始接近 History/Resource 高重叠区。"
 ready: true
 risk: high
 blocked_by: [T-04]
 contract_ids: [AC-001, AC-002, AC-003]
-owner: unassigned
+owner: Worker-T-05 / Lead
 expected_changes: ["<Path>**</Path>"]
 writable_paths: ["<Path>**</Path>"]
 read_only_paths: []
@@ -107,8 +107,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-001`：`v0.441.32` checkpoint 可审计。
-- [ ] `AC-002`：正常上游变化已吸收。
-- [ ] `AC-003`：HanaKDE 合同无回退且未引入临时双运行。
-- [ ] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>`。
-- [ ] 未发生未批准 Git 副作用。
+- [x] `AC-001`：`v0.441.32` checkpoint 可审计。
+- [x] `AC-002`：正常上游变化已吸收。
+- [x] `AC-003`：HanaKDE 合同无回退且未引入临时双运行。
+- [x] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>`。
+- [x] 未发生未批准 Git 副作用。

@@ -32,6 +32,7 @@ const browserManagerMock = {
     running: browserManagerMock.isRunning(sp),
     url: browserManagerMock.currentUrl(sp),
   })),
+  notifyViewerSession: vi.fn(async (_sp: string, _title?: string | null) => {}),
   closeBrowserForSession: vi.fn(),
   getBrowserSessions: vi.fn(() => ({})),
   getBrowserSessionStates: vi.fn(() => ({})),
@@ -76,6 +77,7 @@ describe("sessions route", () => {
     browserManagerMock._sessions.clear();
     browserManagerMock._sessions.set("/tmp/agents/a/sessions/old.jsonl", { running: true, url: "https://before.example.com" });
     browserManagerMock.suspendForSession.mockClear();
+    browserManagerMock.notifyViewerSession.mockClear();
     browserManagerMock.resumeForSession.mockClear();
     browserManagerMock.resumeForSessionIfAvailable.mockClear();
     browserManagerMock.closeBrowserForSession.mockClear();
@@ -110,6 +112,8 @@ describe("sessions route", () => {
         baseUrl: "https://api.xiaomimimo.com/v1",
         input: ["text"],
       },
+      // A real engine always resolves ownership for a switchable session path.
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "a", source: "path", agentDeleted: false })),
       isSessionStreaming: vi.fn(() => false),
       switchSession: vi.fn(async (sessionPath) => {
         engine.currentSessionPath = sessionPath;
@@ -148,7 +152,13 @@ describe("sessions route", () => {
 
     const data = await res.json();
     expect(res.status).toBe(200);
-    expect(browserManagerMock.suspendForSession).toHaveBeenCalledWith("/tmp/agents/a/sessions/old.jsonl");
+    // 切换时 viewer 保持可见，由随后的 notifyViewerSession 重绘目标 session
+    expect(browserManagerMock.suspendForSession).toHaveBeenCalledWith(
+      "/tmp/agents/a/sessions/old.jsonl",
+      { keepViewerVisible: true },
+    );
+    expect(browserManagerMock.notifyViewerSession.mock.calls.at(-1)?.[0])
+      .toBe("/tmp/agents/a/sessions/new.jsonl");
     expect(browserManagerMock.resumeForSessionIfAvailable).toHaveBeenCalledWith("/tmp/agents/a/sessions/new.jsonl");
     expect(browserManagerMock.resumeForSession).toHaveBeenCalledWith("/tmp/agents/a/sessions/new.jsonl");
     expect(data.browserRunning).toBe(true); // resumeForSession sets it running
@@ -183,6 +193,8 @@ describe("sessions route", () => {
       memoryModelUnavailableReason: null,
       cwd: "/tmp/workspace",
       currentAgentId: "a",
+      // A real engine always resolves ownership for a switchable session path.
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "a", source: "path", agentDeleted: false })),
       isSessionStreaming: vi.fn(() => false),
       switchSession: vi.fn(async () => historicalModel),
       getSessionByPath: vi.fn(() => ({
@@ -240,6 +252,8 @@ describe("sessions route", () => {
           ? { sessionId, currentLocator: { path: currentPath } }
           : null
       )),
+      // A real engine always resolves ownership for a switchable session path.
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "a", source: "path", agentDeleted: false })),
       isSessionStreaming: vi.fn(() => false),
       switchSession: vi.fn(async () => {}),
       getSessionByPath: vi.fn(() => ({ messages: [] })),
@@ -293,6 +307,8 @@ describe("sessions route", () => {
       cwd: "/tmp/workspace",
       currentAgentId: "a",
       currentModel: { id: "m", provider: "test", input: ["text"] },
+      // A real engine always resolves ownership for a switchable session path.
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "a", source: "path", agentDeleted: false })),
       isSessionStreaming: vi.fn(() => false),
       switchSession: vi.fn(async (sessionPath) => {
         engine.currentSessionPath = sessionPath;
@@ -350,6 +366,8 @@ describe("sessions route", () => {
       cwd: "/tmp/workspace",
       currentAgentId: "a",
       currentModel: { id: "m", provider: "test", input: ["text"] },
+      // A real engine always resolves ownership for a switchable session path.
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "a", source: "path", agentDeleted: false })),
       isSessionStreaming: vi.fn(() => false),
       switchSession: vi.fn(async (sessionPath) => {
         engine.currentSessionPath = sessionPath;
@@ -401,6 +419,8 @@ describe("sessions route", () => {
       cwd: "/tmp/workspace",
       currentAgentId: "a",
       currentModel: { id: "m", provider: "test", input: ["text"] },
+      // A real engine always resolves ownership for a switchable session path.
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "a", source: "path", agentDeleted: false })),
       isSessionStreaming: vi.fn(() => false),
       switchSession: vi.fn(async () => {}),
       getSessionByPath: vi.fn(() => ({ messages: [] })),
@@ -469,6 +489,8 @@ describe("sessions route", () => {
     );
     expect(data.workspaceFolders).toEqual([extra]);
     expect(data.sessionId).toBe("sess_route_new");
+    // session meta 必须显式落到刚建出来的会话上，而不是由被调方去猜焦点
+    expect(engine.persistSessionMeta).toHaveBeenCalledWith("/tmp/agents/hana/sessions/new.jsonl");
     expect(hub.eventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "session_created",
@@ -648,6 +670,10 @@ describe("sessions route", () => {
       sessionPath: "/tmp/agents/hana/sessions/quick.jsonl",
       projectId: "project-quick",
     });
+    // 回归钉子：detached 创建结束时焦点已经还给 focused.jsonl，
+    // 读焦点的旧实现会把新会话的记忆开关写到上一个会话头上。
+    expect(engine.persistSessionMeta).toHaveBeenCalledWith("/tmp/agents/hana/sessions/quick.jsonl");
+    expect(engine.persistSessionMeta).not.toHaveBeenCalledWith("/tmp/agents/hana/sessions/focused.jsonl");
     expect(data).toMatchObject({
       ok: true,
       path: "/tmp/agents/hana/sessions/quick.jsonl",
@@ -793,6 +819,35 @@ describe("sessions route", () => {
     expect(res.status).toBe(200);
     expect(data[0].sessionId).toBe("sess_route_list");
     expect(data[0].pinnedAt).toBe(pinnedAt);
+  });
+
+  it("includes the manual pin order in the session list and search responses", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const app = new Hono();
+    const session = {
+      path: "/tmp/agents/hana/sessions/a.jsonl",
+      title: "Pinned thread",
+      firstMessage: "hello",
+      modified: new Date("2026-04-29T07:00:00.000Z"),
+      messageCount: 2,
+      cwd: "/tmp/work",
+      agentId: "hana",
+      agentName: "Hana",
+      sessionId: "sess_route_order",
+      pinnedAt: "2026-04-29T08:00:00.000Z",
+      pinOrder: 2048,
+    };
+
+    app.route("/api", createSessionsRoute({
+      listSessions: vi.fn(async () => [session]),
+      rcState: null,
+    }));
+
+    const listData = await (await app.request("/api/sessions")).json();
+    const searchData = await (await app.request("/api/sessions/search?q=Pinned")).json();
+
+    expect(listData[0].pinOrder).toBe(2048);
+    expect(searchData.results[0].pinOrder).toBe(2048);
   });
 
   it("includes explicit projectId in the session list response", async () => {
@@ -1151,6 +1206,40 @@ describe("sessions route", () => {
     });
   });
 
+  it("returns an actionable typed 422 when fresh compaction cannot replay retained history", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const { CompactionHistoryReplayError } = await import("../core/session-compactor.ts");
+    const app = new Hono();
+    const sessionPath = path.join(tmpDir, "agents", "hana", "sessions", "unsafe.jsonl");
+    const replayError = new CompactionHistoryReplayError({
+      boundaryRegion: "retained",
+      safeBoundaryCount: 0,
+    });
+    const engine = {
+      agentsDir: path.join(tmpDir, "agents"),
+      isDeletedAgentSession: vi.fn(() => false),
+      freshCompactDesktopSession: vi.fn(async () => {
+        throw replayError;
+      }),
+    };
+
+    app.route("/api", createSessionsRoute(engine));
+
+    const res = await app.request("/api/sessions/fresh-compact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: sessionPath }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(engine.freshCompactDesktopSession).toHaveBeenCalledWith(sessionPath);
+    expect(data).toMatchObject({
+      code: "COMPACTION_HISTORY_REPLAY_UNPROCESSABLE",
+      error: expect.stringContaining("cannot be compacted safely"),
+    });
+  });
+
   it("rejects content/runtime writes but allows safe unpin for deleted-agent sessions", async () => {
     const { createSessionsRoute } = await import("../server/routes/sessions.ts");
     const app = new Hono();
@@ -1160,7 +1249,7 @@ describe("sessions route", () => {
       agentIdFromSessionPath: vi.fn(() => "deleted"),
       isAgentDeleted: vi.fn(() => true),
       isDeletedAgentSession: vi.fn(() => true),
-      setSessionPinned: vi.fn(),
+      setSessionPinned: vi.fn(async () => ({ pinnedAt: null, pinOrder: null })),
       switchSession: vi.fn(),
       saveSessionTitle: vi.fn(),
       rcState: null,
@@ -1514,6 +1603,101 @@ describe("sessions route", () => {
     );
   });
 
+  // retry 和 fork 是最容易接到外来异常的两条路由（重放会碰模型和文件，fork 会碰文件系统）。
+  // 它们各自的无码默认值不同——retry 回 400、fork 回 500——这是既有的用户可见行为，
+  // 收编到统一的状态码出口时必须原样保住，只把"越界状态码"这一种情形交给范围门。
+  describe("retry / fork error status contract", () => {
+    function activeSession(name) {
+      const sessionPath = path.join(tmpDir, "agents", "hana", "sessions", `${name}.jsonl`);
+      fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+      fs.writeFileSync(sessionPath, "x\n");
+      return {
+        sessionPath,
+        manifest: {
+          sessionId: `sess_${name}`,
+          lifecycle: "active",
+          currentLocator: { path: sessionPath },
+        },
+      };
+    }
+
+    async function retryWith(err) {
+      const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+      const app = new Hono();
+      const { sessionPath, manifest } = activeSession("retry-status");
+      retrySessionTurnMock.mockRejectedValueOnce(err);
+      app.route("/api", createSessionsRoute({
+        agentsDir: path.join(tmpDir, "agents"),
+        getSessionManifest: vi.fn(() => manifest),
+        isSessionStreaming: vi.fn(() => false),
+      }));
+      const res = await app.request("/api/sessions/turns/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: manifest.sessionId,
+          sessionPath,
+          target: { role: "assistant", entryId: "entry-a2" },
+        }),
+      });
+      return { res, raw: await res.text() };
+    }
+
+    async function forkWith(err) {
+      const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+      const app = new Hono();
+      const { sessionPath, manifest } = activeSession("fork-status");
+      app.route("/api", createSessionsRoute({
+        agentsDir: path.join(tmpDir, "agents"),
+        getSessionManifest: vi.fn(() => manifest),
+        isSessionStreaming: vi.fn(() => false),
+        forkSessionAtNode: vi.fn().mockRejectedValue(err),
+        getAgent: vi.fn(() => ({ agentName: "Hana" })),
+      }));
+      const res = await app.request("/api/sessions/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: manifest.sessionId,
+          sessionPath,
+          target: { role: "assistant", entryId: "entry-a2" },
+        }),
+      });
+      return { res, raw: await res.text() };
+    }
+
+    it("keeps retry's 400 default for an error that declares no status", async () => {
+      const { res } = await retryWith(new Error("retry blew up"));
+      expect(res.status).toBe(400);
+    });
+
+    it("keeps fork's 500 default for an error that declares no status", async () => {
+      const { res } = await forkWith(new Error("fork blew up"));
+      expect(res.status).toBe(500);
+    });
+
+    it.each([
+      ["retry", (e) => retryWith(e)],
+      ["fork", (e) => forkWith(e)],
+    ])("keeps the session_busy 409 special case on %s", async (_name, run) => {
+      const { res } = await run(new Error("session_busy"));
+      expect(res.status).toBe(409);
+    });
+
+    // 改动前这两条是红的：越界状态码原样交给 Response 构造会抛 RangeError，
+    // 异常穿透 catch，客户端收到的是框架兜底的纯文本而不是我们的错误体。
+    it.each([
+      ["retry", (e) => retryWith(e)],
+      ["fork", (e) => forkWith(e)],
+    ])("clamps an out-of-range status to 500 on %s", async (_name, run) => {
+      const err: any = new Error("upstream exit code leaked");
+      err.status = 999;
+      const { res, raw } = await run(err);
+      expect(res.status).toBe(500);
+      expect(JSON.parse(raw)).toMatchObject({ error: "upstream exit code leaked" });
+    });
+  });
+
   it("returns a session summary through an explicit route", async () => {
     const { createSessionsRoute } = await import("../server/routes/sessions.ts");
     const app = new Hono();
@@ -1585,7 +1769,9 @@ describe("sessions route", () => {
 
     const engine = {
       agentsDir: "/tmp/agents",
-      setSessionPinned: vi.fn(async (_sessionPath, pinned) => pinned ? pinnedAt : null),
+      setSessionPinned: vi.fn(async (_sessionPath, pinned) => (
+        pinned ? { pinnedAt, pinOrder: -1024 } : { pinnedAt: null, pinOrder: null }
+      )),
       getSessionIdForPath: vi.fn(() => "sess_route_pin"),
     };
 
@@ -1603,7 +1789,7 @@ describe("sessions route", () => {
       sessionId: "sess_route_pin",
       sessionPath: "/tmp/agents/hana/sessions/a.jsonl",
     }, true);
-    expect(pinData).toEqual({ ok: true, pinnedAt, sessionId: "sess_route_pin" });
+    expect(pinData).toEqual({ ok: true, pinnedAt, pinOrder: -1024, sessionId: "sess_route_pin" });
 
     const unpinRes = await app.request("/api/sessions/pin", {
       method: "POST",
@@ -1617,7 +1803,173 @@ describe("sessions route", () => {
       sessionId: "sess_route_pin",
       sessionPath: "/tmp/agents/hana/sessions/a.jsonl",
     }, false);
-    expect(unpinData).toEqual({ ok: true, pinnedAt: null, sessionId: "sess_route_pin" });
+    expect(unpinData).toEqual({ ok: true, pinnedAt: null, pinOrder: null, sessionId: "sess_route_pin" });
+  });
+
+  it("applies a submitted pin order for the whole pinned strip", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const app = new Hono();
+    const locators = {
+      sess_a: "/tmp/agents/hana/sessions/a.jsonl",
+      sess_b: "/tmp/agents/hana/sessions/b.jsonl",
+    };
+
+    const engine = {
+      agentsDir: "/tmp/agents",
+      getSessionManifest: vi.fn((sessionId) => (
+        locators[sessionId] ? { sessionId, currentLocator: { path: locators[sessionId] } } : null
+      )),
+      setSessionPinOrder: vi.fn(async (refs) => refs.map((ref, index) => ({
+        sessionId: ref.sessionId,
+        pinOrder: (index + 1) * 1024,
+      }))),
+    };
+
+    app.route("/api", createSessionsRoute(engine));
+
+    const res = await app.request("/api/sessions/pin-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionIds: ["sess_b", "sess_a"] }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(engine.setSessionPinOrder).toHaveBeenCalledWith([
+      { sessionId: "sess_b" },
+      { sessionId: "sess_a" },
+    ]);
+    expect(data).toEqual({
+      ok: true,
+      orders: [
+        { sessionId: "sess_b", pinOrder: 1024 },
+        { sessionId: "sess_a", pinOrder: 2048 },
+      ],
+    });
+  });
+
+  it("rejects a pin order request that is empty, repeats a session, or names an unknown one", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const app = new Hono();
+
+    const engine = {
+      agentsDir: "/tmp/agents",
+      getSessionManifest: vi.fn((sessionId) => (
+        sessionId === "sess_a"
+          ? { sessionId, currentLocator: { path: "/tmp/agents/hana/sessions/a.jsonl" } }
+          : null
+      )),
+      setSessionPinOrder: vi.fn(async () => []),
+    };
+
+    app.route("/api", createSessionsRoute(engine));
+
+    async function post(body) {
+      const res = await app.request("/api/sessions/pin-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return { status: res.status, data: await res.json() };
+    }
+
+    expect((await post({ sessionIds: [] })).status).toBe(400);
+    expect((await post({})).status).toBe(400);
+    expect((await post({ sessionIds: ["sess_a", "sess_a"] }))).toMatchObject({
+      status: 400,
+      data: { code: "session_pin_order_duplicate" },
+    });
+    expect((await post({ sessionIds: ["sess_a", "sess_missing"] }))).toMatchObject({
+      status: 404,
+      data: { code: "session_manifest_not_found" },
+    });
+    expect(engine.setSessionPinOrder).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an unpinned session in a pin order request as a client error", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const app = new Hono();
+
+    const engine = {
+      agentsDir: "/tmp/agents",
+      getSessionManifest: vi.fn((sessionId) => ({
+        sessionId,
+        currentLocator: { path: `/tmp/agents/hana/sessions/${sessionId}.jsonl` },
+      })),
+      setSessionPinOrder: vi.fn(async () => {
+        const err: any = new Error("setSessionPinOrder: session sess_b is not pinned");
+        err.code = "session_not_pinned";
+        err.status = 400;
+        err.sessionId = "sess_b";
+        throw err;
+      }),
+    };
+
+    app.route("/api", createSessionsRoute(engine));
+
+    const res = await app.request("/api/sessions/pin-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionIds: ["sess_a", "sess_b"] }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "session_not_pinned",
+      sessionId: "sess_b",
+    });
+  });
+
+  it("refuses a pin order request from a principal without session write scope", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const app = new Hono();
+
+    app.use("*", async (c, next) => {
+      (c as any).set("authPrincipal", Object.freeze({
+        kind: "device",
+        credentialKind: "device_credential",
+        connectionKind: "lan",
+        trustState: "lan",
+        serverNodeId: "node_projection",
+        userId: "user_projection",
+        studioId: "studio_projection",
+        studioIds: ["studio_projection"],
+        deviceId: "device_phone",
+        scopes: [],
+      }));
+      await next();
+    });
+
+    const engine = {
+      agentsDir: "/tmp/agents",
+      getRuntimeContext: () => ({
+        serverId: "server_projection",
+        serverNodeId: "node_projection",
+        userId: "user_projection",
+        studioId: "studio_projection",
+        connectionKind: "local",
+        credentialKind: "loopback_token",
+        platformAccountId: null,
+        officialServiceKind: null,
+      }),
+      getSessionManifest: vi.fn((sessionId) => ({
+        sessionId,
+        currentLocator: { path: `/tmp/agents/hana/sessions/${sessionId}.jsonl` },
+      })),
+      setSessionPinOrder: vi.fn(async () => []),
+    };
+
+    app.route("/api", createSessionsRoute(engine));
+
+    const res = await app.request("/api/sessions/pin-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionIds: ["sess_a"] }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: "insufficient_scope" });
+    expect(engine.setSessionPinOrder).not.toHaveBeenCalled();
   });
 
   it("pins sessions by sessionId and rejects stale locator paths", async () => {
@@ -1633,7 +1985,9 @@ describe("sessions route", () => {
           ? { sessionId, currentLocator: { path: currentPath } }
           : null
       )),
-      setSessionPinned: vi.fn(async (_sessionPath, pinned) => pinned ? pinnedAt : null),
+      setSessionPinned: vi.fn(async (_sessionPath, pinned) => (
+        pinned ? { pinnedAt, pinOrder: -1024 } : { pinnedAt: null, pinOrder: null }
+      )),
       getSessionIdForPath: vi.fn(() => "sess_route_pin"),
     };
 
@@ -1672,7 +2026,7 @@ describe("sessions route", () => {
       sessionId: "sess_route_pin",
       sessionPath: currentPath,
     }, true);
-    expect(data).toEqual({ ok: true, pinnedAt, sessionId: "sess_route_pin" });
+    expect(data).toEqual({ ok: true, pinnedAt, pinOrder: -1024, sessionId: "sess_route_pin" });
   });
 
   it("clears pinned state before archiving a session", async () => {
@@ -3001,6 +3355,62 @@ describe("sessions route", () => {
     expect(engine.listSessionFiles).toHaveBeenCalledWith(sessionPath, { references: activeMessages });
   });
 
+  it("rebuilds a correlated Agent write file block from persisted tool details", async () => {
+    const { createSessionsRoute } = await import("../server/routes/sessions.ts");
+    const msgUtils = await import("../core/message-utils.ts");
+    const app = new Hono();
+    const sessionPath = "/tmp/agents/hana/sessions/agent-write.jsonl";
+    const agentFileChange = {
+      sessionId: "sess_main",
+      operationId: "4f53a0f2-9b10-4f93-8f7b-9c8f73de6182",
+      resource: { sourceKey: "main", relativePath: "notes/a.md" },
+    };
+    vi.mocked(msgUtils.extractTextContent)
+      .mockReturnValueOnce({ text: "updated notes", images: [], thinking: "", toolUses: [] });
+    vi.mocked(msgUtils.loadSessionHistoryMessages).mockResolvedValueOnce([
+      { role: "assistant", content: "updated notes" },
+      {
+        role: "toolResult",
+        toolName: "write",
+        details: {
+          sessionFile: {
+            fileId: "sf_notes",
+            filePath: "/workspace/notes/a.md",
+            label: "a.md",
+            ext: "md",
+          },
+          agentFileChange,
+        },
+      },
+    ] as never);
+    const engine = {
+      agentsDir: "/tmp/agents",
+      currentSessionPath: sessionPath,
+      runtimeContext: { studioId: "studio_route" },
+      deferredResults: null,
+      getSessionFile: vi.fn(() => ({
+        id: "sf_notes",
+        filePath: "/workspace/notes/a.md",
+        label: "a.md",
+        ext: "md",
+        storageKind: "external",
+        status: "available",
+      })),
+    };
+    app.route("/api", createSessionsRoute(engine));
+
+    const res = await app.request(`/api/sessions/messages?path=${encodeURIComponent(sessionPath)}`);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.blocks).toEqual([expect.objectContaining({
+      type: "file",
+      afterIndex: 0,
+      fileId: "sf_notes",
+      agentFileChange,
+    })]);
+  });
+
   it("preserves repeated stage_files cards for the same SessionFile in history", async () => {
     const { createSessionsRoute } = await import("../server/routes/sessions.ts");
     const msgUtils = await import("../core/message-utils.ts");
@@ -3902,7 +4312,7 @@ describe("sessions route", () => {
       type: "subagent",
       streamKey: "",
       streamStatus: "failed",
-      summary: "历史子会话链接不可恢复",
+      summary: "历史 subagent 链接不可恢复",
     });
     expect(msgUtils.loadLatestAssistantSummaryFromSessionFile).not.toHaveBeenCalled();
   });
@@ -3960,7 +4370,7 @@ describe("sessions route", () => {
       type: "subagent",
       streamKey: "/tmp/agents/hanako/subagent-sessions/child.jsonl",
       streamStatus: "failed",
-      summary: "历史子会话运行状态不可恢复",
+      summary: "历史 subagent 运行状态不可恢复",
     });
     expect(msgUtils.loadLatestAssistantSummaryFromSessionFile).not.toHaveBeenCalled();
   });

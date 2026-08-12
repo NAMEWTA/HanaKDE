@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign as cryptoSign } from "crypto";
+import { generateKeyPairSync, sign as cryptoSign, type KeyObject } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -89,7 +89,7 @@ async function buildValidKit(root: string, opts: { platform?: string; arch?: str
 function tamperManifestField(
   artifactOutDir: string,
   platformArch: string,
-  privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"],
+  privateKey: KeyObject,
   mutate: (manifest: any) => void,
 ) {
   const manifestPath = path.join(artifactOutDir, seedManifestFileName(platformArch));

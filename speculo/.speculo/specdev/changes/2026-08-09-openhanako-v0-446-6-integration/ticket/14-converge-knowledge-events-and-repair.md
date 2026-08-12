@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-14
 title: 收敛 Knowledge 事件消费与 scoped repair
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "Knowledge 索引状态、event cursor、generation 与跨模块一致性依赖共享核心事件并涉及可重建持久化模型。"
 ready: true
 risk: critical
 blocked_by: [T-10, T-11]
 contract_ids: [AC-003, AC-011, AC-012, AC-013, AC-017]
-owner: unassigned
+owner: Worker-T-14
 expected_changes: ["<Path>core/knowledge-workspace/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>server/routes/knowledge-workspace.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
 writable_paths: ["<Path>core/knowledge-workspace/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>server/routes/knowledge-workspace.ts</Path>", "<Path>tests/knowledge-*.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>core/engine.ts</Path>", "<Path>lib/file-history/**</Path>", "<Path>desktop/src/react/**</Path>"]
@@ -89,6 +89,14 @@ shared_path_owners: []
 - **共享路径：** 无；本 Ticket 是 Knowledge event/repair 唯一 owner。
 - **保留或不动：** History store/policy、Office plugin、UI state 和 mount semantics。
 
+### W4 correction record: round 1/3
+
+- **Checkpoint / workspace：** immutable W4 base `e758c7a12d31e8385b4993c406ae5acc04b18635`; `<Path>specdev-worktree/T-14</Path>`; current candidate remains uncommitted and must not be merged.
+- **Failure standard：** `main` must consume only T-12's real canonical `{ subscribe, requestRepair }` shared-baseline port and must not retain a private watcher or call a local scan; mounted sources retain only their canonical registry lease and use bounded mounted repair; empty differences/rereads durably advance cursor; a failed shared baseline stays degraded/replay-required, and a subsequent explicit retry must request a fresh repair rather than hang or become incrementally HEALTHY.
+- **Cross-contract cursor decision (D-W4-01)：** `lastCompleteSequence`, repair `afterSequence`, and supplied shared-baseline `cursor` use process-local `ResourceEventBus.sequence` exclusively. `WorkspaceObservation.cursor` is not a Knowledge cursor and cannot be persisted or compared here. Since the bus resets after restart, each main bind/rebind must receive and publish a fresh `coverage: "source"` generation before it accepts new-process events; resource coverage is valid only within a binding lifecycle. T-12 captures the bus latest sequence only at a root-revalidated stable baseline/difference point; later ResourceEventBus events must replay after it. This Ticket must prove deliberately unequal cursor domains and persisted sequence 8/new bus 0/source baseline 0/event 1 converge without losing the later event.
+- **Preserve green behavior：** event debounce, multi-path reread, in-flight cursor handling, duplicate/stale suppression, burst repair, replay ordering, caller cancellation, generation atomicity, and batch/yield limits remain intact; History and Knowledge databases remain independent.
+- **Required proof before review：** focused event/runtime/shared-repair tests prove main/mount partition, lease release, empty-cursor restart durability, persisted sequence 8/new bus 0/source baseline 0/event 1 recovery, failed-apply retry liveness, no private full main scan, a later-event replay across a bus-cursor baseline despite an intentionally unequal workspace cursor, and a cross-contract production adapter receipt from T-12; Evidence must name commands and results.
+
 ## 8. 验证矩阵
 
 | 行为或风险 | 验证接缝 | 命令或步骤 | 预期结果 | Evidence |
@@ -108,8 +116,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-003`：Knowledge/Workbench 外部合同无回退。
-- [ ] `AC-011`/`AC-012`：事件和 stale/gap 通过 shared baseline + scoped repair 收敛。
-- [ ] `AC-013`：Knowledge 派生 failure/retry 与四态 health 一致且可见。
-- [ ] `AC-017`：资源版本变化后 Knowledge source/search 可收敛到磁盘版本。
-- [ ] watcher/full-walk/direct mutation 重复调用点为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-14.md</Path>`。
+- [x] `AC-003`：Knowledge/Workbench 外部合同无回退。
+- [x] `AC-011`/`AC-012`：事件和 stale/gap 通过 shared baseline + scoped repair 收敛。
+- [x] `AC-013`：Knowledge 派生 failure/retry 与四态 health 一致且可见。
+- [x] `AC-017`：资源版本变化后 Knowledge source/search 可收敛到磁盘版本。
+- [x] watcher/full-walk/direct mutation 重复调用点为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-14.md</Path>`。

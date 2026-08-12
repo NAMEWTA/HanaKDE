@@ -25,11 +25,6 @@ const NON_GPU_STARTUP_PHASES = new Set([
   "server-starting",
   "server-ready",
 ]);
-const LEGACY_AUTO_SAFE_MODE_REASONS = new Set([
-  "previous-startup-incomplete",
-]);
-const LEGACY_GPU_CHILD_SAFE_MODE_REASON = "gpu-child-process-gone";
-const LEGACY_SAFE_MODE_MIGRATION_VERSION = 1;
 const GPU_FAILURE_REASONS = new Set([
   "abnormal-exit",
   "crashed",
@@ -111,10 +106,6 @@ function readPreferences(hanakoHome) {
   return readJson(getPreferencesPath(hanakoHome), {});
 }
 
-function readPreferencesStrict(hanakoHome) {
-  return readJsonStrict(getPreferencesPath(hanakoHome), {}, "GPU startup preferences");
-}
-
 function boolFromSetting(value, defaultValue) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -191,237 +182,6 @@ function writeAutoGpuMode(hanakoHome, mode, {
   });
 }
 
-function legacyAutoSafeModeMigrationEvidence(state) {
-  if (state?.autoGpuMode) return null;
-  const safeMode = state?.safeMode;
-  if (!safeMode?.enabled) return null;
-  if (!LEGACY_AUTO_SAFE_MODE_REASONS.has(safeMode.reason || "")) return null;
-  const sourceUpdatedAt = safeMode.updatedAt;
-  if (typeof sourceUpdatedAt !== "string" || !sourceUpdatedAt) return null;
-
-  const migration = state?.legacySafeModeMigration;
-  const prepared =
-    migration?.version === LEGACY_SAFE_MODE_MIGRATION_VERSION &&
-    migration.status === "prepared" &&
-    migration.sourceReason === safeMode.reason &&
-    migration.sourceUpdatedAt === sourceUpdatedAt;
-
-  return { safeMode, sourceReason: safeMode.reason, sourceUpdatedAt, prepared };
-}
-
-function legacyAutoSafeModeMigrationCandidate(prefs, state) {
-  const evidence = legacyAutoSafeModeMigrationEvidence(state);
-  if (!evidence) return null;
-  if (!evidence.prepared && prefs?.hardware_acceleration !== false) return null;
-  return evidence;
-}
-
-function prepareLegacySafeModeMigration(hanakoHome, state, candidate, now) {
-  const timestamp = nowIso(now);
-  const statePath = getGpuStartupStatePath(hanakoHome);
-  let preparedState = state;
-  if (!candidate.prepared) {
-    preparedState = {
-      ...state,
-      legacySafeModeMigration: {
-        version: LEGACY_SAFE_MODE_MIGRATION_VERSION,
-        sourceReason: candidate.sourceReason,
-        sourceUpdatedAt: candidate.sourceUpdatedAt,
-        status: "prepared",
-        preparedAt: timestamp,
-      },
-    };
-    runLegacyGpuMigrationWrite("prepared GPU state", statePath, () => {
-      writeState(hanakoHome, preparedState);
-    });
-  }
-
-  const autoGpuMode = {
-    mode: GPU_MODE_GPU_SANDBOX_COMPAT,
-    reason: "legacy-auto-safe-mode-migration",
-    previousMode: GPU_MODE_SOFTWARE_SAFE,
-    previousStartup: candidate.safeMode.previousStartup || null,
-    updatedAt: timestamp,
-  };
-  return policyForMode(GPU_MODE_GPU_SANDBOX_COMPAT, "legacy-auto-safe-mode-migration", {
-    autoGpuMode,
-    legacyPreferenceCleanup: {
-      version: LEGACY_SAFE_MODE_MIGRATION_VERSION,
-      sourceReason: candidate.sourceReason,
-      sourceUpdatedAt: candidate.sourceUpdatedAt,
-    },
-  });
-}
-
-function migrateLegacyAutoSafeModePreference(hanakoHome, prefs, state, now) {
-  const candidate = legacyAutoSafeModeMigrationCandidate(prefs, state);
-  if (!candidate) return null;
-
-  return prepareLegacySafeModeMigration(hanakoHome, state, candidate, now);
-}
-
-function legacyGpuChildMigrationEvidence(state) {
-  if (state?.autoGpuMode) return null;
-  const safeMode = state?.safeMode;
-  const crash = state?.lastGpuCrash;
-  const sourceUpdatedAt = safeMode?.updatedAt;
-  if (!safeMode?.enabled || safeMode.reason !== LEGACY_GPU_CHILD_SAFE_MODE_REASON) return null;
-  if (typeof sourceUpdatedAt !== "string" || !sourceUpdatedAt) return null;
-  if (crash?.type !== "GPU" || !GPU_FAILURE_REASONS.has(crash.reason || "unknown")) return null;
-  if (crash.at !== sourceUpdatedAt) return null;
-
-  const migration = state?.legacySafeModeMigration;
-  const prepared =
-    migration?.version === LEGACY_SAFE_MODE_MIGRATION_VERSION &&
-    migration.status === "prepared" &&
-    migration.sourceReason === LEGACY_GPU_CHILD_SAFE_MODE_REASON &&
-    migration.sourceUpdatedAt === sourceUpdatedAt;
-
-  return {
-    safeMode,
-    sourceReason: LEGACY_GPU_CHILD_SAFE_MODE_REASON,
-    sourceUpdatedAt,
-    prepared,
-  };
-}
-
-function legacyGpuChildMigrationCandidate(prefs, state) {
-  const evidence = legacyGpuChildMigrationEvidence(state);
-  if (!evidence) return null;
-  const { prepared } = evidence;
-  if (!prepared && prefs?.hardware_acceleration !== false) return null;
-
-  return evidence;
-}
-
-function legacyEnabledGpuChildMigrationCandidate(prefs, state) {
-  if (prefs?.hardware_acceleration !== true) return null;
-  if (state?.legacySafeModeMigration) return null;
-  const evidence = legacyGpuChildMigrationEvidence(state);
-  if (!evidence) return null;
-  const crash = state.lastGpuCrash;
-  if (crash.platform !== "win32") return null;
-  const sourceDate = new Date(evidence.sourceUpdatedAt);
-  if (Number.isNaN(sourceDate.getTime()) || sourceDate.toISOString() !== evidence.sourceUpdatedAt) return null;
-
-  return { ...evidence, sourceCrashReason: crash.reason };
-}
-
-function runLegacyGpuMigrationWrite(stage, filePath, write) {
-  try {
-    write();
-  } catch (error) {
-    throw new Error(
-      `Legacy GPU safe-mode migration failed while writing ${stage} at ${filePath}: ${error.message}`,
-      { cause: error },
-    );
-  }
-}
-
-function migrateLegacyGpuChildSafeMode(hanakoHome, prefs, state, now) {
-  const enabledCandidate = legacyEnabledGpuChildMigrationCandidate(prefs, state);
-  if (enabledCandidate) {
-    const timestamp = nowIso(now);
-    const nextState = {
-      ...state,
-      autoGpuMode: {
-        mode: GPU_MODE_GPU_SANDBOX_COMPAT,
-        reason: "legacy-auto-safe-mode-migration",
-        previousMode: GPU_MODE_SOFTWARE_SAFE,
-        previousStartup: enabledCandidate.safeMode.previousStartup || null,
-        updatedAt: timestamp,
-      },
-      legacySafeModeMigration: {
-        version: LEGACY_SAFE_MODE_MIGRATION_VERSION,
-        sourceReason: enabledCandidate.sourceReason,
-        sourceUpdatedAt: enabledCandidate.sourceUpdatedAt,
-        sourceCrashReason: enabledCandidate.sourceCrashReason,
-        preferenceStatus: "preserved-enabled",
-        status: "completed",
-        completedAt: timestamp,
-      },
-    };
-    delete nextState.safeMode;
-    runLegacyGpuMigrationWrite("completed GPU state", getGpuStartupStatePath(hanakoHome), () => {
-      writeState(hanakoHome, nextState);
-    });
-    return policyForMode(GPU_MODE_GPU_SANDBOX_COMPAT, "legacy-auto-safe-mode-migration", {
-      autoGpuMode: nextState.autoGpuMode,
-    });
-  }
-
-  const candidate = legacyGpuChildMigrationCandidate(prefs, state);
-  if (!candidate) return null;
-
-  return prepareLegacySafeModeMigration(hanakoHome, state, candidate, now);
-}
-
-function settleLegacyGpuPreferenceMigration({
-  hanakoHome,
-  intent,
-  preferenceStatus,
-  now,
-} = {}) {
-  if (!hanakoHome) throw new Error("settleLegacyGpuPreferenceMigration requires hanakoHome");
-  if (
-    intent?.version !== LEGACY_SAFE_MODE_MIGRATION_VERSION ||
-    typeof intent.sourceReason !== "string" ||
-    typeof intent.sourceUpdatedAt !== "string"
-  ) {
-    throw new Error("Legacy GPU safe-mode migration has an invalid cleanup intent");
-  }
-  if (!["deleted", "already-absent", "value-changed"].includes(preferenceStatus)) {
-    throw new Error(`Legacy GPU safe-mode migration received unknown preference status: ${preferenceStatus}`);
-  }
-
-  const state = readStateStrict(hanakoHome);
-  const migration = state.legacySafeModeMigration;
-  if (
-    migration?.version !== intent.version ||
-    migration.status !== "prepared" ||
-    migration.sourceReason !== intent.sourceReason ||
-    migration.sourceUpdatedAt !== intent.sourceUpdatedAt
-  ) {
-    throw new Error("Legacy GPU safe-mode migration prepared state no longer matches its cleanup intent");
-  }
-
-  const timestamp = nowIso(now);
-  const nextState = {
-    ...state,
-    legacySafeModeMigration: {
-      ...migration,
-      preferenceStatus,
-    },
-  };
-
-  if (preferenceStatus === "value-changed") {
-    nextState.legacySafeModeMigration.status = "cancelled";
-    nextState.legacySafeModeMigration.cancelledAt = timestamp;
-    delete nextState.safeMode;
-    runLegacyGpuMigrationWrite("cancelled GPU state", getGpuStartupStatePath(hanakoHome), () => {
-      writeState(hanakoHome, nextState);
-    });
-    return { status: "cancelled" };
-  }
-
-  if (!nextState.autoGpuMode) {
-    nextState.autoGpuMode = {
-      mode: GPU_MODE_GPU_SANDBOX_COMPAT,
-      reason: "legacy-auto-safe-mode-migration",
-      previousMode: GPU_MODE_SOFTWARE_SAFE,
-      previousStartup: state.safeMode?.previousStartup || null,
-      updatedAt: timestamp,
-    };
-  }
-  nextState.legacySafeModeMigration.status = "completed";
-  nextState.legacySafeModeMigration.completedAt = timestamp;
-  delete nextState.safeMode;
-  runLegacyGpuMigrationWrite("completed GPU state", getGpuStartupStatePath(hanakoHome), () => {
-    writeState(hanakoHome, nextState);
-  });
-  return { status: "completed" };
-}
-
 function resolveStoredAutoGpuMode(state) {
   const mode = state?.autoGpuMode?.mode;
   if (
@@ -432,15 +192,6 @@ function resolveStoredAutoGpuMode(state) {
     mode === GPU_MODE_DIAGNOSTIC_FAILED
   ) {
     return state.autoGpuMode;
-  }
-  if (state?.safeMode?.enabled) {
-    return {
-      mode: GPU_MODE_SOFTWARE_SAFE,
-      reason: state.safeMode.reason || "legacy-safe-mode",
-      previousMode: null,
-      previousStartup: state.safeMode.previousStartup || null,
-      updatedAt: state.safeMode.updatedAt || null,
-    };
   }
   return null;
 }
@@ -583,23 +334,8 @@ function resolveGpuStartupPolicy({
   const state = platform === "win32"
     ? readStateStrict(hanakoHome)
     : readState(hanakoHome);
-  const legacyGpuMigrationEvidence = platform === "win32"
-    ? legacyGpuChildMigrationEvidence(state) || legacyAutoSafeModeMigrationEvidence(state)
-    : null;
-  const prefs = legacyGpuMigrationEvidence
-    ? readPreferencesStrict(hanakoHome)
-    : readPreferences(hanakoHome);
+  const prefs = readPreferences(hanakoHome);
   const preferenceEnabled = boolFromSetting(prefs.hardware_acceleration, true);
-  const migratedLegacyGpuChildPolicy = platform === "win32"
-    ? migrateLegacyGpuChildSafeMode(hanakoHome, prefs, state, now)
-    : null;
-  if (migratedLegacyGpuChildPolicy) return migratedLegacyGpuChildPolicy;
-
-  const migratedLegacyPolicy = platform === "win32"
-    ? migrateLegacyAutoSafeModePreference(hanakoHome, prefs, state, now)
-    : null;
-  if (migratedLegacyPolicy) return migratedLegacyPolicy;
-
   const autoMode = platform === "win32" ? resolveStoredAutoGpuMode(state) : null;
   if (platform === "win32" && isGpuRecoveryIncompleteStartup(state)) {
     const fallbackMode = preferenceEnabled ? GPU_MODE_HARDWARE : GPU_MODE_SOFTWARE_SAFE;
@@ -892,6 +628,83 @@ function recordGpuInfoUpdate({
   return true;
 }
 
+const GPU_MODE_DEPTH = {
+  [GPU_MODE_HARDWARE]: 0,
+  [GPU_MODE_GPU_SANDBOX_COMPAT]: 1,
+  [GPU_MODE_GPU_BACKEND_COMPAT]: 2,
+  [GPU_MODE_SOFTWARE_SAFE]: 3,
+  [GPU_MODE_DEEP_COMPAT]: 4,
+  [GPU_MODE_DIAGNOSTIC_FAILED]: 5,
+};
+
+function getGpuRecoveryEvidence(hanakoHome) {
+  if (!hanakoHome) throw new Error("getGpuRecoveryEvidence requires hanakoHome");
+  const state = readState(hanakoHome);
+  return {
+    autoGpuMode: state.autoGpuMode || null,
+    latestCrashAt: state.lastGpuCrash?.at || null,
+    startup: state.startup
+      ? {
+          status: state.startup.status || null,
+          startedAt: state.startup.startedAt || null,
+          readyAt: state.startup.readyAt || null,
+          policyMode: state.startup.policy?.mode || null,
+        }
+      : null,
+    incompleteClassification: classifyIncompleteStartup(state),
+  };
+}
+
+function clearAutoGpuModeForRecovery({ hanakoHome, reason, now } = {}) {
+  if (!hanakoHome) throw new Error("clearAutoGpuModeForRecovery requires hanakoHome");
+  const state = readState(hanakoHome);
+  const clearedMode = state.autoGpuMode?.mode || null;
+  const stalePendingIsGpuEvidence =
+    state.startup?.status === "pending" && classifyIncompleteStartup(state) === "gpu-recovery";
+  if (!clearedMode && !stalePendingIsGpuEvidence) {
+    return { cleared: false, clearedMode: null };
+  }
+  const next = { ...state };
+  delete next.autoGpuMode;
+  let clearedPendingPhase = null;
+  if (stalePendingIsGpuEvidence) {
+    clearedPendingPhase = state.startup.phase || null;
+    delete next.startup;
+  }
+  next.lastGpuRecovery = {
+    reason: reason || "unknown",
+    clearedMode,
+    clearedPendingPhase,
+    at: nowIso(now),
+  };
+  writeState(hanakoHome, next);
+  return { cleared: true, clearedMode };
+}
+
+function restoreDeeperAutoGpuMode({ hanakoHome, mode, reason, now } = {}) {
+  if (!hanakoHome) throw new Error("restoreDeeperAutoGpuMode requires hanakoHome");
+  if (!(mode in GPU_MODE_DEPTH)) throw new Error(`restoreDeeperAutoGpuMode received unknown GPU mode: ${mode}`);
+  const state = readState(hanakoHome);
+  const currentMode = state.autoGpuMode?.mode && state.autoGpuMode.mode in GPU_MODE_DEPTH
+    ? state.autoGpuMode.mode
+    : GPU_MODE_HARDWARE;
+  if (GPU_MODE_DEPTH[mode] <= GPU_MODE_DEPTH[currentMode]) {
+    return { restored: false, currentMode };
+  }
+  const next = { ...state };
+  if (next.startup?.status === "pending" && classifyIncompleteStartup(state) === "gpu-recovery") {
+    delete next.startup;
+  }
+  next.autoGpuMode = {
+    mode,
+    reason: reason || "acl-heal-ineffective",
+    previousMode: currentMode,
+    updatedAt: nowIso(now),
+  };
+  writeState(hanakoHome, next);
+  return { restored: true, currentMode: mode };
+}
+
 function buildGpuStartupDiagnostics({ hanakoHome, policy, app } = {}) {
   const items = [
     ``,
@@ -922,7 +735,6 @@ function buildGpuStartupDiagnostics({ hanakoHome, policy, app } = {}) {
   items.push(`Unsafe no-sandbox note: only enabled by --hana-gpu-unsafe-no-sandbox for one diagnostic launch`);
   if (state.startup) items.push(`GPU startup marker: ${JSON.stringify(state.startup)}`);
   if (state.autoGpuMode) items.push(`GPU auto mode: ${JSON.stringify(state.autoGpuMode)}`);
-  if (state.safeMode) items.push(`GPU safe mode: ${JSON.stringify(state.safeMode)}`);
   if (state.lastGpuCrash) items.push(`Last GPU crash: ${JSON.stringify(state.lastGpuCrash)}`);
   if (state.lastGpuFeatureStatus) {
     items.push(`Last GPU feature status: ${JSON.stringify(state.lastGpuFeatureStatus)}`);
@@ -933,6 +745,8 @@ function buildGpuStartupDiagnostics({ hanakoHome, policy, app } = {}) {
 module.exports = {
   applyGpuStartupPolicy,
   buildGpuStartupDiagnostics,
+  clearAutoGpuModeForRecovery,
+  getGpuRecoveryEvidence,
   getGpuStartupStatePath,
   getPreferencesPath,
   markGpuStartupFailed,
@@ -942,5 +756,5 @@ module.exports = {
   recordGpuChildProcessGone,
   recordGpuInfoUpdate,
   resolveGpuStartupPolicy,
-  settleLegacyGpuPreferenceMigration,
+  restoreDeeperAutoGpuMode,
 };

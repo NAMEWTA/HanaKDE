@@ -1,3 +1,4 @@
+import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
 const localPrincipal = Object.freeze({
@@ -126,15 +127,20 @@ describe("HTTP route security policy", () => {
     }
   });
 
-  it("keeps legacy GPU preference cleanup local-owner only", async () => {
+  it("does not retain a local-only exception or route mount for retired GPU cleanup", async () => {
     const { authorizeHttpRoute, classifyHttpRoute } = await import("../server/http/route-security.ts");
     const path = "/api/preferences/legacy-gpu-safe-mode/hardware-acceleration";
 
-    expect(classifyHttpRoute({ method: "POST", path })).toMatchObject({ kind: "local_only" });
+    expect(classifyHttpRoute({ method: "POST", path })).toMatchObject({ kind: "studio_owner" });
     expect(authorizeHttpRoute({ method: "POST", path, principal: desktopOwnerPrincipal() }))
-      .toMatchObject({ allowed: false, error: "local_only_route" });
-    expect(authorizeHttpRoute({ method: "POST", path, principal: localPrincipal }))
       .toMatchObject({ allowed: true });
+    expect(authorizeHttpRoute({ method: "POST", path, principal: devicePrincipal(["settings.write"]) }))
+      .toMatchObject({ allowed: false, error: "studio_owner_required" });
+
+    const { createPreferencesRoute } = await import("../server/routes/preferences.ts");
+    const app = new Hono();
+    app.route("/api", createPreferencesRoute({}));
+    expect((await app.request(path, { method: "POST" })).status).toBe(404);
   });
 
   it("separates remote settings writes, provider management, bridge management, and secret mutation scopes", async () => {
@@ -215,6 +221,7 @@ describe("HTTP route security policy", () => {
       ["GET", "/api/memories/compiled"],
       ["GET", "/api/memories/export"],
       ["GET", "/api/memories/compiled/week/days"],
+      ["GET", "/api/memories/dream/status"],
     ]) {
       expect(authorizeHttpRoute({ method, path, principal: reader }), `${method} ${path}`)
         .toMatchObject({ allowed: true });
@@ -230,6 +237,8 @@ describe("HTTP route security policy", () => {
       ["PUT", "/api/memories/compiled/today"],
       ["PUT", "/api/memories/compiled/longterm"],
       ["PUT", "/api/memories/compiled/week/days/2026-07-05"],
+      ["POST", "/api/memories/dream/runs"],
+      ["POST", "/api/memories/dream/revisions/rev-1/restore"],
     ]) {
       expect(authorizeHttpRoute({ method, path, principal: writer }), `${method} ${path}`)
         .toMatchObject({ allowed: true });
@@ -290,6 +299,33 @@ describe("HTTP route security policy", () => {
       .toMatchObject({ allowed: false, error: "insufficient_scope", requiredScope: "files.write" });
   });
 
+  it("opens only File History's three read endpoints to files.read principals", async () => {
+    const { authorizeHttpRoute, classifyHttpRoute } = await import("../server/http/route-security.ts");
+    const reader = devicePrincipal(["files.read"]);
+    const chatOnly = devicePrincipal(["chat"]);
+
+    for (const path of [
+      "/api/file-history/files",
+      "/api/file-history/versions?relPath=notes%2Fa.md",
+      "/api/file-history/diff?snapshotId=1",
+    ]) {
+      expect(classifyHttpRoute({ method: "GET", path })).toEqual({ kind: "scope", scope: "files.read" });
+      expect(authorizeHttpRoute({ method: "GET", path, principal: reader })).toMatchObject({ allowed: true });
+      expect(authorizeHttpRoute({ method: "GET", path, principal: chatOnly }))
+        .toMatchObject({ allowed: false, error: "insufficient_scope", requiredScope: "files.read" });
+    }
+
+    for (const [method, path] of [
+      ["HEAD", "/api/file-history/files"],
+      ["POST", "/api/file-history/restore"],
+      ["GET", "/api/file-history/snapshot"],
+    ]) {
+      expect(classifyHttpRoute({ method, path })).toEqual({ kind: "local_only" });
+      expect(authorizeHttpRoute({ method, path, principal: reader }))
+        .toMatchObject({ allowed: false, error: "local_only_route" });
+    }
+  });
+
   it("allows remote plugin UI metadata, settings tabs, and iframe ticket issuance while keeping plugin route apps owner-gated", async () => {
     const { authorizeHttpRoute } = await import("../server/http/route-security.ts");
     const principal = devicePrincipal(["chat", "settings.read"]);
@@ -346,40 +382,78 @@ describe("HTTP route security policy", () => {
     const writer = devicePrincipal(["settings.read", "settings.write"]);
     const chatOnly = devicePrincipal(["chat"]);
 
-    expect(classifyHttpRoute({ method: "GET", path: "/api/plugins/mcp/oauth/callback" }))
-      .toMatchObject({ kind: "public" });
-    expect(authorizeHttpRoute({
-      method: "GET",
-      path: "/api/plugins/mcp/oauth/callback",
-      principal: null,
-    })).toMatchObject({ allowed: true });
+    for (const prefix of ["/api/mcp"]) {
+      expect(classifyHttpRoute({ method: "GET", path: `${prefix}/oauth/callback` }))
+        .toMatchObject({ kind: "public" });
+      expect(authorizeHttpRoute({
+        method: "GET",
+        path: `${prefix}/oauth/callback`,
+        principal: null,
+      })).toMatchObject({ allowed: true });
 
-    for (const [method, path] of [
-      ["GET", "/api/plugins/mcp/state"],
-      ["GET", "/api/plugins/mcp/oauth/poll/session_1"],
-    ]) {
-      expect(authorizeHttpRoute({ method, path, principal: reader }))
-        .toMatchObject({ allowed: true });
-      expect(authorizeHttpRoute({ method, path, principal: chatOnly }))
-        .toMatchObject({ allowed: false, error: "insufficient_scope" });
-    }
+      // Granting a session-scoped tool invocation changes session permission
+      // state, not connector settings, so it travels with the session scope
+      // rather than settings.write, exactly like /api/sessions. The handler
+      // still runs the finer sessions.write capability check once it has
+      // resolved the session.
+      expect(classifyHttpRoute({ method: "POST", path: `${prefix}/session-permissions` }))
+        .toMatchObject({ kind: "scope", scope: "chat" });
+      expect(authorizeHttpRoute({
+        method: "POST",
+        path: `${prefix}/session-permissions`,
+        principal: chatOnly,
+      })).toMatchObject({ allowed: true });
+      // A settings writer with no session access must not be able to widen a
+      // session's permissions.
+      expect(authorizeHttpRoute({
+        method: "POST",
+        path: `${prefix}/session-permissions`,
+        principal: devicePrincipal(["settings.read", "settings.write"]),
+      })).toMatchObject({ allowed: false, error: "insufficient_scope" });
 
-    for (const [method, path] of [
-      ["PUT", "/api/plugins/mcp/settings/enabled"],
-      ["POST", "/api/plugins/mcp/connectors"],
-      ["PUT", "/api/plugins/mcp/connectors/github"],
-      ["DELETE", "/api/plugins/mcp/connectors/github"],
-      ["POST", "/api/plugins/mcp/connectors/github/start"],
-      ["POST", "/api/plugins/mcp/connectors/github/stop"],
-      ["POST", "/api/plugins/mcp/connectors/github/refresh-tools"],
-      ["PUT", "/api/plugins/mcp/agents/hana/connectors/github"],
-      ["POST", "/api/plugins/mcp/connectors/github/oauth/start"],
-      ["POST", "/api/plugins/mcp/connectors/github/oauth/logout"],
-    ]) {
-      expect(authorizeHttpRoute({ method, path, principal: writer }))
-        .toMatchObject({ allowed: true });
-      expect(authorizeHttpRoute({ method, path, principal: reader }))
-        .toMatchObject({ allowed: false, error: "insufficient_scope" });
+      // Invoking a connector tool for an app surface is a real third-party side
+      // effect, so it is owner-only rather than a settings scope.
+      expect(classifyHttpRoute({
+        method: "POST",
+        path: `${prefix}/connectors/acme/app-tools/board/call`,
+      })).toMatchObject({ kind: "studio_owner" });
+      expect(authorizeHttpRoute({
+        method: "POST",
+        path: `${prefix}/connectors/acme/app-tools/board/call`,
+        principal: writer,
+      })).toMatchObject({ allowed: false });
+
+      for (const [method, path] of [
+        ["GET", `${prefix}/state`],
+        ["GET", `${prefix}/apps`],
+        ["GET", `${prefix}/connectors/acme/resources`],
+        ["GET", `${prefix}/oauth/poll/session_1`],
+      ]) {
+        expect(authorizeHttpRoute({ method, path, principal: reader }))
+          .toMatchObject({ allowed: true });
+        expect(authorizeHttpRoute({ method, path, principal: chatOnly }))
+          .toMatchObject({ allowed: false, error: "insufficient_scope" });
+      }
+
+      for (const [method, path] of [
+        ["PUT", `${prefix}/settings/enabled`],
+        ["PUT", `${prefix}/enabled`],
+        ["POST", `${prefix}/connectors`],
+        ["PUT", `${prefix}/connectors/github`],
+        ["DELETE", `${prefix}/connectors/github`],
+        ["POST", `${prefix}/connectors/github/start`],
+        ["POST", `${prefix}/connectors/github/stop`],
+        ["POST", `${prefix}/connectors/github/refresh-tools`],
+        ["PUT", `${prefix}/agents/hana/connectors/github`],
+        ["POST", `${prefix}/connectors/github/oauth/start`],
+        ["POST", `${prefix}/connectors/github/oauth/logout`],
+        ["POST", `${prefix}/connectors/acme/apps/board/launch`],
+      ]) {
+        expect(authorizeHttpRoute({ method, path, principal: writer }))
+          .toMatchObject({ allowed: true });
+        expect(authorizeHttpRoute({ method, path, principal: reader }))
+          .toMatchObject({ allowed: false, error: "insufficient_scope" });
+      }
     }
   });
 
@@ -432,15 +506,15 @@ describe("HTTP route security policy", () => {
       ["PUT", "/api/plugins/media-board/enabled"],
       ["DELETE", "/api/plugins/media-board"],
       ["POST", "/api/plugins/marketplace/media-board/install"],
-      ["GET", "/api/plugins/mcp/state?agentId=hana"],
-      ["PUT", "/api/plugins/mcp/enabled"],
-      ["POST", "/api/plugins/mcp/servers"],
-      ["PUT", "/api/plugins/mcp/servers/github"],
-      ["DELETE", "/api/plugins/mcp/servers/github"],
-      ["POST", "/api/plugins/mcp/servers/github/start"],
-      ["POST", "/api/plugins/mcp/servers/github/stop"],
-      ["POST", "/api/plugins/mcp/servers/github/refresh-tools"],
-      ["PUT", "/api/plugins/mcp/agents/hana/servers/github"],
+      ["GET", "/api/mcp/state?agentId=hana"],
+      ["PUT", "/api/mcp/settings/enabled"],
+      ["POST", "/api/mcp/connectors"],
+      ["PUT", "/api/mcp/connectors/github"],
+      ["DELETE", "/api/mcp/connectors/github"],
+      ["POST", "/api/mcp/connectors/github/start"],
+      ["POST", "/api/mcp/connectors/github/stop"],
+      ["POST", "/api/mcp/connectors/github/refresh-tools"],
+      ["PUT", "/api/mcp/agents/hana/connectors/github"],
     ]) {
       expect(authorizeHttpRoute({ method, path, principal: owner }), `${method} ${path}`)
         .toMatchObject({ allowed: true });
@@ -461,8 +535,8 @@ describe("HTTP route security policy", () => {
       ["GET", "/api/media/image/providers"],
       ["PUT", "/api/media/image/config"],
       ["PUT", "/api/plugins/media-board/config"],
-      ["GET", "/api/plugins/mcp/state?agentId=hana"],
-      ["PUT", "/api/plugins/mcp/enabled"],
+      ["GET", "/api/mcp/state?agentId=hana"],
+      ["PUT", "/api/mcp/settings/enabled"],
     ]) {
       expect(authorizeHttpRoute({ method, path, principal }), `${method} ${path}`)
         .toMatchObject({ allowed: false, status: 403 });

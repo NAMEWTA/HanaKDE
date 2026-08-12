@@ -193,7 +193,7 @@ describe("knowledge workspace source route", () => {
     });
   });
 
-  it("keeps a newly mounted source bound across sequential main and source rebuilds", async () => {
+  it("keeps a newly mounted source bound through a source-scoped rebuild", async () => {
     const { main, research } = setup();
     if (!tempRoot) throw new Error("test root unavailable");
     fs.writeFileSync(path.join(main, "Main.md"), "# Main", "utf8");
@@ -255,11 +255,6 @@ describe("knowledge workspace source route", () => {
         expect.objectContaining({ sourceKey: "research" }),
       ]));
 
-    const mainRebuild = await app.request(
-      "/api/knowledge-workspace/index/main/rebuild",
-      { method: "POST" },
-    );
-    expect(mainRebuild.status).toBe(200);
     const researchRebuild = await app.request(
       "/api/knowledge-workspace/index/research/rebuild",
       { method: "POST" },

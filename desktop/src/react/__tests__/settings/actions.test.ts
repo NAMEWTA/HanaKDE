@@ -1,5 +1,12 @@
 /**
  * @vitest-environment jsdom
+ *
+ * 注意：这个文件把 settings/api 整个 mock 掉了，假的 hanaFetch 不带 status 语义
+ * ——它对任何响应都直接把 body 交给调用方，而真的 hanaFetch 会在非 2xx 时先抛出
+ * 带错误码的异常。所以这里适合测加载编排（竞态、abort、状态清理），**不适合**测
+ * 错误路径：在这儿写的错误用例锁的是假契约，产线上根本不会那样跑（已经发生过一次）。
+ * 错误呈现的用例一律写进 switch-agent-error-boundary.test.ts，那边只 stub 全局
+ * fetch，让请求走真实边界。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -59,7 +66,6 @@ function resetState() {
     pluginAllowFullAccess: undefined,
     pluginDevToolsEnabled: undefined,
     pluginUserDir: '',
-    pluginSettingsTabs: [],
     set: vi.fn((patch: Record<string, unknown>) => Object.assign(mockState, patch)),
     getSettingsAgentId: () => mockState.settingsAgentId || mockState.currentAgentId,
     showToast: vi.fn(),
@@ -286,7 +292,6 @@ describe('settings actions', () => {
     expect(mockState.pluginSettingsStatus).toBe('ready');
     expect(mockState.pluginAllowFullAccess).toBe(true);
     expect(mockState.pluginDevToolsEnabled).toBe(true);
-    expect(mockState.pluginSettingsTabs).toHaveLength(1);
   });
 
   it('clears same-owner stale snapshot data while a fresh settings snapshot is loading', async () => {
@@ -301,7 +306,6 @@ describe('settings actions', () => {
     mockState.pluginAllowFullAccess = false;
     mockState.pluginDevToolsEnabled = false;
     mockState.pluginUserDir = '/old/plugins';
-    mockState.pluginSettingsTabs = [{ pluginId: 'old', id: 'old-tab', title: 'Old', nativeComponent: 'OldSettings' }];
     mockState.settingsSnapshot = {
       key: 'local:snapshot:agent-a',
       status: 'ready',
@@ -358,7 +362,6 @@ describe('settings actions', () => {
     expect(mockState.currentPins).toEqual([]);
     expect(mockState.pluginAllowFullAccess).toBeUndefined();
     expect(mockState.pluginDevToolsEnabled).toBeUndefined();
-    expect(mockState.pluginSettingsTabs).toEqual([]);
 
     resolveSnapshot(jsonResponse({
       agentId: 'agent-a',

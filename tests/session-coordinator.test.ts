@@ -3,12 +3,23 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 
-const { createAgentSessionMock, sessionManagerCreateMock, sessionManagerListMock, emitSessionShutdownMock, refreshSessionModelFromRegistryMock, moduleLogMock } = vi.hoisted(() => ({
+const {
+  createAgentSessionMock,
+  sessionManagerCreateMock,
+  sessionManagerListMock,
+  emitSessionShutdownMock,
+  estimateTokensMock,
+  refreshSessionModelFromRegistryMock,
+  runAgentLoopMock,
+  moduleLogMock,
+} = vi.hoisted(() => ({
   createAgentSessionMock: vi.fn(),
   sessionManagerCreateMock: vi.fn(),
   sessionManagerListMock: vi.fn(),
   emitSessionShutdownMock: vi.fn(),
+  estimateTokensMock: vi.fn((message) => JSON.stringify(message).length),
   refreshSessionModelFromRegistryMock: vi.fn(),
+  runAgentLoopMock: vi.fn(),
   moduleLogMock: {
     log: vi.fn(),
     warn: vi.fn(),
@@ -19,6 +30,8 @@ const { createAgentSessionMock, sessionManagerCreateMock, sessionManagerListMock
 vi.mock("../lib/pi-sdk/index.js", () => ({
   createAgentSession: createAgentSessionMock,
   emitSessionShutdown: emitSessionShutdownMock,
+  estimateTokens: estimateTokensMock,
+  runAgentLoop: runAgentLoopMock,
   SessionManager: {
     create: sessionManagerCreateMock,
     list: sessionManagerListMock,
@@ -1367,7 +1380,7 @@ describe("SessionCoordinator", () => {
     expect(session.steer).toHaveBeenCalledWith("先别展开，直接给结论");
   });
 
-  it("fails legacy focus prompt and steer explicitly when their cache contract is missing", async () => {
+  it("late-initializes the cache contract for legacy focus prompt and steer instead of failing them", async () => {
     const sessionPath = path.join(tempDir, "focus-preflight.jsonl");
     const model = { id: "test-model", provider: "test", name: "test-model" };
     const session = {
@@ -1412,10 +1425,17 @@ describe("SessionCoordinator", () => {
     coordinator._session = session;
     coordinator._currentSessionPath = sessionPath;
 
-    await expect(coordinator.prompt("hello", undefined)).rejects.toThrow(/contract unavailable/i);
-    expect(session.prompt).not.toHaveBeenCalled();
-    expect(() => coordinator.steer("interrupt")).toThrow(/contract unavailable/i);
-    expect(session.steer).not.toHaveBeenCalled();
+    const entry = coordinator._sessions.get(sessionPath);
+    expect(entry.cachePrefixContract).toBeUndefined();
+
+    // 契约缺失只是还没签过，不是用户的错：preflight 就地补签并放行。
+    await coordinator.prompt("hello", undefined);
+    expect(session.prompt).toHaveBeenCalledTimes(1);
+    expect(entry.cachePrefixContract).toBeTruthy();
+    expect(entry.cachePrefixContractRenewReason).toBe("late_init");
+
+    expect(() => coordinator.steer("interrupt")).not.toThrow();
+    expect(session.steer).toHaveBeenCalledWith("interrupt");
   });
 
   it("lists sessions from a lightweight projection without delegating to the Pi SDK full scan", async () => {
@@ -1928,9 +1948,21 @@ describe("SessionCoordinator", () => {
       buildSystemPrompt: () => "BASE",
       tools: [{ name: "write" }],
     };
-    const buildTools = vi.fn((_cwd, customTools) => ({ tools: [], customTools }));
+    const buildTools = vi.fn((_cwd, customTools, _buildOpts: any = {}) => ({ tools: [], customTools }));
     const homeCwd = path.join(tempDir, "agent-home");
     const sessionCwd = path.join(tempDir, "session-cwd");
+    const sessionFile = path.join(agent.sessionDir, "tool-identity.jsonl");
+    sessionManagerCreateMock.mockReturnValueOnce({
+      getCwd: () => sessionCwd,
+      getSessionFile: () => sessionFile,
+    });
+    createAgentSessionMock.mockResolvedValueOnce({
+      session: {
+        sessionManager: { getSessionFile: () => sessionFile },
+        subscribe: vi.fn(() => vi.fn()),
+        setActiveToolsByName: vi.fn(),
+      },
+    });
 
     const coordinator = new SessionCoordinator({
       agentsDir: path.join(tempDir, "agents"),
@@ -1971,6 +2003,8 @@ describe("SessionCoordinator", () => {
         workspace: sessionCwd,
       }),
     );
+    const buildOptions = buildTools.mock.calls[0][2] as { getSessionPath?: () => string | null };
+    expect(buildOptions.getSessionPath?.()).toBe(sessionFile);
   });
 
   it("passes the frozen experience state into the agent tool snapshot", async () => {
@@ -2267,7 +2301,6 @@ describe("SessionCoordinator", () => {
     // context ring refresh keeps restore cheap: old sessions keep frozen prompt snapshots,
     // while explicit refresh/fresh compact is responsible for rebuilding capability snapshots.
     expect(agent.buildSystemPrompt).toHaveBeenCalledTimes(1);
-    expect(coordinator.getSessionCapabilityDriftNotice(sessionFile)).toBeNull();
   });
 
   it("restores a prompt-snapshotted session with xhigh before the SDK model is available", async () => {
@@ -3083,7 +3116,9 @@ describe("SessionCoordinator", () => {
     });
   });
 
-  it("guards normal-turn cache prefixes while allowing Pi compaction prompts", async () => {
+  it("records and auto-renews cache prefix drift instead of failing the turn", async () => {
+    const emittedEvents: any[] = [];
+    const violations = () => emittedEvents.filter((event) => event?.type === "cache_contract_violation");
     const sessionFile = path.join(tempDir, "hana", "sessions", "cache-contract.jsonl");
     const model = {
       id: "deepseek-v4-pro",
@@ -3105,7 +3140,10 @@ describe("SessionCoordinator", () => {
       steer: vi.fn(),
       model,
       getContextUsage: () => ({ tokens: 0 }),
-      prompt: vi.fn(async () => "ok"),
+      prompt: vi.fn(async (_text, opts) => {
+        opts?.preflightResult?.(true);
+        return "ok";
+      }),
       setActiveToolsByName: vi.fn((names) => {
         session.agent.state.tools = names.map((name) => activeTools.get(name)).filter(Boolean);
       }),
@@ -3150,7 +3188,7 @@ describe("SessionCoordinator", () => {
       }),
       getSkills: () => null,
       buildTools: () => ({ tools: [readTool, execCommandTool], customTools: [] }),
-      emitEvent: () => {},
+      emitEvent: (event: any) => { emittedEvents.push(event); },
       getHomeCwd: () => "/tmp/home",
       agentIdFromSessionPath: () => "hana",
       switchAgentOnly: async () => {},
@@ -3168,7 +3206,8 @@ describe("SessionCoordinator", () => {
     const renewSpy = vi.spyOn(coordinator as any, "_renewCachePrefixContract");
     const requestCountBeforePreflight = entry.cachePrefixContractRequestCount;
     const promptOrder: string[] = [];
-    session.prompt.mockImplementationOnce(async () => {
+    session.prompt.mockImplementationOnce(async (_text, opts) => {
+      opts?.preflightResult?.(true);
       promptOrder.push("pi-prompt");
       return "ok";
     });
@@ -3176,37 +3215,68 @@ describe("SessionCoordinator", () => {
       afterCachePreflight: () => {
         promptOrder.push("post-preflight-hook");
       },
+      afterInputAccepted: () => {
+        promptOrder.push("input-accepted");
+      },
     });
-    expect(promptOrder).toEqual(["post-preflight-hook", "pi-prompt"]);
+    expect(promptOrder).toEqual(["post-preflight-hook", "input-accepted", "pi-prompt"]);
     expect(entry.cachePrefixContractRequestCount).toBe(requestCountBeforePreflight);
     expect(renewSpy).not.toHaveBeenCalled();
 
+    expect(violations()).toHaveLength(0);
+
+    // 输入前有人重建了 system prompt 却没续签：漂移必须被记下来，但请求照常发出。
     session.agent.state.systemPrompt = "MUTATED BEFORE INPUT";
-    const rejectedHook = vi.fn();
-    await expect(coordinator.promptSession(sessionFile, "blocked", undefined, {
-      afterCachePreflight: rejectedHook,
-    })).rejects.toThrow(/Cache prefix contract violated/);
-    expect(rejectedHook).not.toHaveBeenCalled();
-    expect(session.prompt).toHaveBeenCalledTimes(1);
+    const driftHook = vi.fn();
+    await coordinator.promptSession(sessionFile, "drifted", undefined, {
+      afterCachePreflight: driftHook,
+    });
+    expect(driftHook).toHaveBeenCalled();
+    expect(session.prompt).toHaveBeenCalledTimes(2);
+    expect(violations()).toHaveLength(1);
+    const inputViolation = violations()[0];
+    expect(inputViolation.action).toBe("renewed");
+    expect(inputViolation.diffs.map((d: any) => d.field)).toContain("systemPromptHash");
+    expect(inputViolation.drift.systemPrompt.expectedExcerpt).toContain("FINAL CACHE PREFIX");
+    expect(inputViolation.drift.systemPrompt.actualExcerpt).toContain("MUTATED BEFORE INPUT");
+    // 事件只带摘要，整段 prompt 不外泄
+    expect(inputViolation.expected.systemPrompt).toBeUndefined();
+    expect(renewSpy).toHaveBeenCalledWith(sessionFile, entry, "drift_auto_renew", expect.anything());
+
+    // 契约已按现状续签：同一份 prompt 再来一次不再报漂移
+    renewSpy.mockClear();
+    await coordinator.promptSession(sessionFile, "settled", undefined, {
+      afterCachePreflight: vi.fn(),
+    });
+    expect(violations()).toHaveLength(1);
+    expect(renewSpy).not.toHaveBeenCalled();
+
+    // steer 路径同理：漂移不再打断用户的插话
     session.isStreaming = true;
     session.steer.mockClear();
-    expect(() => coordinator.steerSession(sessionFile, "blocked steer"))
-      .toThrow(/Cache prefix contract violated/);
-    expect(session.steer).not.toHaveBeenCalled();
+    session.agent.state.systemPrompt = "MUTATED BEFORE STEER";
+    expect(() => coordinator.steerSession(sessionFile, "steered")).not.toThrow();
+    expect(session.steer).toHaveBeenCalledTimes(1);
+    expect(violations()).toHaveLength(2);
+    expect(violations()[1].action).toBe("renewed");
     session.isStreaming = false;
     session.agent.state.systemPrompt = "FINAL CACHE PREFIX";
 
+    // 契约放行不改变 preflight 钩子本身的同步契约
     await expect(coordinator.promptSession(sessionFile, "async hook", undefined, {
       afterCachePreflight: () => Promise.resolve(),
     })).rejects.toThrow(/must be synchronous/);
-    expect(session.prompt).toHaveBeenCalledTimes(1);
+    expect(session.prompt).toHaveBeenCalledTimes(4);
 
     await expect((session.agent.streamFn as any)(model, {
       systemPrompt: "FINAL CACHE PREFIX",
       tools: [readTool, execCommandTool],
       messages: [{ role: "user", content: "hello" }],
     }, {})).resolves.toBe("ok");
+    expect(originalStreamFn).toHaveBeenCalledTimes(1);
+    expect(violations()).toHaveLength(3);
 
+    // 请求发出那一刻才漂移：记录 + 续签 + 照常发给 provider
     await expect((session.agent.streamFn as any)(model, {
       systemPrompt: "MUTATED CACHE PREFIX",
       tools: [readTool, execCommandTool],
@@ -3214,8 +3284,19 @@ describe("SessionCoordinator", () => {
         { role: "user", content: "hello" },
         { role: "toolResult", content: [{ type: "text", text: "dynamic" }] },
       ],
-    }, {})).rejects.toThrow(/Cache prefix contract violated/);
-    expect(originalStreamFn).toHaveBeenCalledTimes(1);
+    }, {})).resolves.toBe("ok");
+    expect(originalStreamFn).toHaveBeenCalledTimes(2);
+    expect(violations()).toHaveLength(4);
+    expect(violations()[3].drift.systemPrompt.actualExcerpt).toContain("MUTATED CACHE PREFIX");
+
+    // 续签之后同一个前缀不再重复告警
+    await expect((session.agent.streamFn as any)(model, {
+      systemPrompt: "MUTATED CACHE PREFIX",
+      tools: [readTool, execCommandTool],
+      messages: [{ role: "user", content: "hello again" }],
+    }, {})).resolves.toBe("ok");
+    expect(originalStreamFn).toHaveBeenCalledTimes(3);
+    expect(violations()).toHaveLength(4);
 
     session.isCompacting = true;
     await expect((session.agent.streamFn as any)(model, {
@@ -3223,21 +3304,68 @@ describe("SessionCoordinator", () => {
       tools: [],
       messages: [{ role: "user", content: "Summarize the conversation" }],
     }, {})).resolves.toBe("ok");
-    expect(originalStreamFn).toHaveBeenCalledTimes(2);
+    expect(originalStreamFn).toHaveBeenCalledTimes(4);
+    expect(violations()).toHaveLength(4);
 
+    // 工具表漂移同样只留证据，并按名字点出增删改
     session.isCompacting = false;
     await expect((session.agent.streamFn as any)(model, {
       systemPrompt: "MUTATED CACHE PREFIX",
-      tools: [readTool, execCommandTool],
-      messages: [{ role: "user", content: "hello again" }],
-    }, {})).rejects.toThrow(/Cache prefix contract violated/);
-    expect(originalStreamFn).toHaveBeenCalledTimes(2);
+      tools: [readTool],
+      messages: [{ role: "user", content: "fewer tools" }],
+    }, {})).resolves.toBe("ok");
+    expect(originalStreamFn).toHaveBeenCalledTimes(5);
+    expect(violations()).toHaveLength(5);
+    expect(violations()[4].drift.tools.removed).toEqual(["exec_command"]);
 
+    // 契约缺失（late init）不再是错误，续签后照常发出
     entry.cachePrefixContract = null;
-    await expect(coordinator.promptSession(sessionFile, "missing contract", undefined, {
+    renewSpy.mockClear();
+    await coordinator.promptSession(sessionFile, "late init", undefined, {
       afterCachePreflight: vi.fn(),
-    })).rejects.toThrow(/contract unavailable/i);
-    expect(renewSpy).not.toHaveBeenCalled();
+    });
+    expect(renewSpy).toHaveBeenCalledWith(sessionFile, entry, "late_init", expect.anything());
+    expect(session.prompt).toHaveBeenCalledTimes(5);
+
+    let finishAcceptedTurn!: () => void;
+    const acceptedTurnGate = new Promise<void>((resolve) => { finishAcceptedTurn = resolve; });
+    const acceptedHook = vi.fn();
+    session.prompt.mockImplementationOnce(async (_text, opts) => {
+      opts?.preflightResult?.(true);
+      await acceptedTurnGate;
+      return "ok";
+    });
+    const acceptedTurn = coordinator.promptSession(sessionFile, "accepted before completion", undefined, {
+      afterCachePreflight: vi.fn(),
+      afterInputAccepted: acceptedHook,
+    });
+    await vi.waitFor(() => expect(acceptedHook).toHaveBeenCalledTimes(1));
+    let turnCompleted = false;
+    void acceptedTurn.finally(() => { turnCompleted = true; });
+    expect(turnCompleted).toBe(false);
+    finishAcceptedTurn();
+    await acceptedTurn;
+
+    let finishRejectedPreflight!: () => void;
+    const rejectedPreflightGate = new Promise<void>((resolve) => { finishRejectedPreflight = resolve; });
+    const rejectedSideEffects = vi.fn();
+    const rejectedAcceptedHook = vi.fn();
+    session.prompt.mockImplementationOnce(async (_text, opts) => {
+      await rejectedPreflightGate;
+      opts?.preflightResult?.(false);
+      throw new Error("Pi preflight rejected");
+    });
+    const rejectedTurn = coordinator.promptSession(sessionFile, "reject after delay", undefined, {
+      afterCachePreflight: rejectedSideEffects,
+      afterInputAccepted: rejectedAcceptedHook,
+    });
+    await Promise.resolve();
+    expect(rejectedSideEffects).not.toHaveBeenCalled();
+    expect(rejectedAcceptedHook).not.toHaveBeenCalled();
+    finishRejectedPreflight();
+    await expect(rejectedTurn).rejects.toThrow("Pi preflight rejected");
+    expect(rejectedSideEffects).not.toHaveBeenCalled();
+    expect(rejectedAcceptedHook).not.toHaveBeenCalled();
   });
 
   it("renews the cache prefix contract for an explicit model switch", async () => {
@@ -3365,6 +3493,132 @@ describe("SessionCoordinator", () => {
       { name: "exec_command", description: "Run command", parameters: { type: "object" } },
     ]);
     expect(snapshot.messages[0].content[1]).toEqual({ type: "input_audio", audio_url: "file://voice.wav" });
+  });
+
+  it("returns the transform context owned by the keyed session runtime", () => {
+    const sessionPath = path.join(tempDir, "hana", "sessions", "transform.jsonl");
+    const transformContext = vi.fn(async (messages) => messages);
+    const coordinator = Object.create(SessionCoordinator.prototype);
+    coordinator._sessions = new Map([
+      [sessionPath, {
+        session: {
+          agent: { transformContext },
+        },
+      }],
+    ]);
+
+    expect(coordinator.getSessionTransformContext(sessionPath)).toBe(transformContext);
+  });
+
+  it("returns the complete AgentRun runtime owned by the keyed session", () => {
+    const sessionPath = path.join(tempDir, "hana", "sessions", "agent-run-runtime.jsonl");
+    const streamFn = vi.fn();
+    const onPayload = vi.fn();
+    const onResponse = vi.fn();
+    const prepareArguments = vi.fn((args) => args);
+    const execute = vi.fn();
+    const tools = [{
+      name: "read",
+      label: "Read",
+      description: "Read files",
+      parameters: { type: "object" },
+      prepareArguments,
+      execute,
+    }];
+    const coordinator = Object.create(SessionCoordinator.prototype);
+    coordinator._sessions = new Map([
+      [sessionPath, {
+        session: {
+          sessionManager: { getSessionId: () => "session-runtime-1" },
+          agent: {
+            streamFn,
+            onPayload,
+            onResponse,
+            transport: "sse",
+            thinkingBudgets: { high: 8192 },
+            maxRetryDelayMs: 1234,
+            state: { tools },
+          },
+        },
+      }],
+    ]);
+
+    const runtime = coordinator.getSessionAgentRunRuntime(sessionPath);
+    expect(runtime).toEqual({
+      streamFn,
+      tools,
+      streamOptions: {
+        sessionId: "session-runtime-1",
+        onPayload,
+        onResponse,
+        transport: "sse",
+        thinkingBudgets: { high: 8192 },
+        maxRetryDelayMs: 1234,
+      },
+    });
+    expect(Object.isFrozen(runtime)).toBe(true);
+    expect(Object.isFrozen(runtime.tools)).toBe(true);
+    expect(Object.isFrozen(runtime.streamOptions)).toBe(true);
+    expect(runtime.tools[0]).not.toBe(tools[0]);
+  });
+
+  it.each([
+    ["unknown session", false, undefined],
+    ["missing streamFn", true, undefined],
+  ])("throws a typed AgentRun runtime error for %s", (_name, includeSession, streamFn) => {
+    const sessionPath = path.join(tempDir, "hana", "sessions", "missing-agent-run-runtime.jsonl");
+    const coordinator = Object.create(SessionCoordinator.prototype);
+    coordinator._sessions = new Map(includeSession
+      ? [[sessionPath, { session: { agent: { streamFn, state: { tools: [] } } } }]]
+      : []);
+
+    let caught = null;
+    try {
+      coordinator.getSessionAgentRunRuntime(sessionPath);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      name: "SessionAgentRunRuntimeResolutionError",
+      code: "SESSION_AGENT_RUN_RUNTIME_UNKNOWN",
+      sessionPath,
+    });
+  });
+
+  it("returns an explicit identity transform for a resolved session without one", async () => {
+    const sessionPath = path.join(tempDir, "hana", "sessions", "identity.jsonl");
+    const coordinator = Object.create(SessionCoordinator.prototype);
+    coordinator._sessions = new Map([
+      [sessionPath, {
+        session: {
+          agent: {},
+        },
+      }],
+    ]);
+
+    const identityTransform = coordinator.getSessionTransformContext(sessionPath);
+    expect(typeof identityTransform).toBe("function");
+    const messages = [{ role: "user", content: "hello" }];
+    await expect(identityTransform(messages)).resolves.toBe(messages);
+  });
+
+  it("throws a typed ownership error for an unknown session path", () => {
+    const coordinator = Object.create(SessionCoordinator.prototype);
+    coordinator._sessions = new Map();
+    const missingPath = path.join(tempDir, "missing.jsonl");
+    let caught = null;
+    try {
+      coordinator.getSessionTransformContext(missingPath);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      name: "SessionTransformContextResolutionError",
+      code: "SESSION_TRANSFORM_CONTEXT_UNKNOWN",
+      sessionPath: missingPath,
+    });
   });
 
   it("cleans up the temporary session file when aborted after session creation", async () => {
@@ -3495,6 +3749,157 @@ describe("SessionCoordinator", () => {
     expect(coordinator.discardSessionRuntime).not.toHaveBeenCalled();
     expect(coordinator.setSessionPinned).toHaveBeenCalledWith(sourcePath, false);
     expect(fs.existsSync(createdPath)).toBe(true);
+  });
+
+  it("summarizes a deleted-agent continuation through the explicit cold utility lane", async () => {
+    const summary = `## Goal
+Continue the restored transcript.
+
+## Constraints & Preferences
+- Keep the continuation self-contained.
+
+## Progress
+### Done
+- [x] Summarized the deleted Agent transcript.
+
+### In Progress
+- [ ] Continue in the primary Agent.
+
+### Blocked
+- (none)
+
+## Key Decisions
+- Use a cold utility summary.
+
+## Next Steps
+1. Continue the work.
+
+## Critical Context
+- The source Agent runtime is unavailable.`;
+    const transcriptMessages = [
+      { role: "user", content: [{ type: "text", text: "old user transcript" }], timestamp: 1 },
+      { role: "assistant", content: [{ type: "text", text: "old assistant transcript" }], timestamp: 2 },
+    ];
+    const providerContexts: any[] = [];
+    runAgentLoopMock.mockImplementationOnce(async (
+      prompts,
+      context,
+      config,
+      emit,
+      signal,
+      streamFn,
+    ) => {
+      const providerContext = {
+        systemPrompt: context.systemPrompt,
+        messages: [...context.messages, ...prompts],
+        tools: context.tools,
+      };
+      providerContexts.push(providerContext);
+      const stream = await streamFn(config.model, providerContext, { signal });
+      const message = await stream.result();
+      await emit({ type: "message_end", message });
+      return [...prompts, message];
+    });
+    const streamFn = vi.fn(async () => ({
+      async result() {
+        return {
+          role: "assistant",
+          content: [{ type: "text", text: summary }],
+          stopReason: "stop",
+          usage: {
+            input: 20,
+            output: 10,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 30,
+          },
+        };
+      },
+    }));
+    const appendCompaction = vi.fn(() => "cold-compaction-entry");
+    const compactedMessages = [{ role: "compactionSummary", summary }];
+    const emit = vi.fn();
+    const replaceMessages = vi.fn();
+    const ledger = createUsageLedger({ requestIdFactory: () => "deleted-agent-cold-1" });
+    const session = {
+      model: {
+        id: "test-model",
+        provider: "test-provider",
+        api: "openai-completions",
+        reasoning: false,
+      },
+      thinkingLevel: "off",
+      _emit: emit,
+      settingsManager: {
+        getCompactionSettings: () => ({ reserveTokens: 1000, keepRecentTokens: 0 }),
+      },
+      sessionManager: {
+        getSessionFile: () => "/sessions/continued.jsonl",
+        appendCompaction,
+        buildSessionContext: () => ({ messages: compactedMessages }),
+      },
+      agent: {
+        id: "hana",
+        state: {
+          systemPrompt: "primary Agent system prompt",
+          tools: [{ name: "dangerous-live-tool", execute: vi.fn() }],
+        },
+        streamFn,
+        convertToLlm: async (messages) => messages,
+        replaceMessages,
+      },
+    };
+    const coordinator = Object.create(SessionCoordinator.prototype);
+    coordinator._d = { getUsageLedger: () => ledger };
+    coordinator._createSettings = vi.fn();
+    coordinator._sessionIdForPath = vi.fn(() => "sess-continued");
+    coordinator._markSessionCompacted = vi.fn();
+
+    const result = await coordinator._freshCompactDeletedAgentContinuation(
+      session,
+      transcriptMessages,
+      {
+        sourceSessionPath: "/deleted/session.jsonl",
+        sourceAgentId: "deleted-agent",
+      },
+    );
+
+    expect(result).toMatchObject({
+      summary,
+      firstKeptEntryId: null,
+    });
+    expect(providerContexts).toHaveLength(1);
+    expect(providerContexts[0].messages.slice(0, -1)).toEqual(transcriptMessages);
+    expect(providerContexts[0].tools).toEqual([]);
+    expect(appendCompaction).toHaveBeenCalledWith(
+      summary,
+      null,
+      expect.any(Number),
+      { readFiles: [], modifiedFiles: [] },
+      false,
+    );
+    expect(replaceMessages).toHaveBeenCalledWith(compactedMessages);
+    expect(emit.mock.calls).toEqual([
+      [{ type: "compaction_start", reason: "deleted_agent_continue" }],
+      [{
+        type: "compaction_end",
+        reason: "deleted_agent_continue",
+        result: expect.objectContaining({ summary }),
+        aborted: false,
+        willRetry: false,
+      }],
+    ]);
+    expect(coordinator._markSessionCompacted).toHaveBeenCalledWith("/sessions/continued.jsonl");
+    expect(ledger.list({ operation: "deleted_agent_continue" }).entries[0]).toMatchObject({
+      metadata: {
+        cacheStrategy: "utility_template",
+        cacheGroup: "compaction.deleted-agent-continuation",
+        strict: false,
+      },
+      usage: {
+        cache: { readTokens: 0, hit: false },
+      },
+    });
   });
 
   it("uses compaction summaries as transcript material when continuing a deleted-agent session", async () => {
@@ -4026,6 +4431,73 @@ describe("SessionCoordinator", () => {
       expect.objectContaining({ type: "session_status", isStreaming: false, aborted: true }),
       sessionFile,
     );
+  });
+
+  it("emits a synthetic turn_end before releasing an aborted streaming session", async () => {
+    const sessionFile = path.join(tempDir, "aborted-turn-end.jsonl");
+    let coordinator: any;
+    const events: any[] = [];
+    const emitEvent = vi.fn((event: any, sp: any) => {
+      events.push({
+        type: event.type,
+        aborted: event.aborted,
+        isStreaming: event.isStreaming,
+        sp,
+        sessionAlive: coordinator?.getSessionByPath(sessionFile) != null,
+      });
+    });
+    const unsubscribe = vi.fn();
+    const stuckSession = {
+      isStreaming: true,
+      sessionManager: { getSessionFile: () => sessionFile },
+      abort: vi.fn(),
+      dispose: vi.fn(),
+      extensionRunner: null,
+    };
+
+    coordinator = new SessionCoordinator({
+      agentsDir: tempDir,
+      getAgent: () => ({
+        id: "hana",
+        agentDir: tempDir,
+        sessionDir: tempDir,
+        _memoryTicker: { notifySessionEnd: vi.fn(() => Promise.resolve()) },
+      }),
+      getActiveAgentId: () => "hana",
+      getModels: () => ({ authStorage: {}, modelRegistry: {}, resolveThinkingLevel: () => "medium" }),
+      getResourceLoader: () => ({ getSystemPrompt: () => "prompt" }),
+      getSkills: () => null,
+      buildTools: () => ({ tools: [], customTools: [] }),
+      emitEvent,
+      getHomeCwd: () => tempDir,
+      agentIdFromSessionPath: () => "hana",
+      switchAgentOnly: async () => {},
+      getConfig: () => ({}),
+      getPrefs: () => ({ getThinkingLevel: () => "medium" }),
+      getAgents: () => new Map(),
+      getActivityStore: () => null,
+      getAgentById: () => null,
+      listAgents: () => [],
+    });
+    coordinator.sessions.set(sessionFile, {
+      session: stuckSession,
+      agentId: "hana",
+      lastTouchedAt: Date.now(),
+      unsub: unsubscribe,
+    });
+
+    await coordinator.abortSession(sessionFile);
+
+    const turnEndIndex = events.findIndex(
+      (e) => e.type === "turn_end" && e.aborted === true && e.sp === sessionFile,
+    );
+    const statusIndex = events.findIndex(
+      (e) => e.type === "session_status" && e.isStreaming === false,
+    );
+    expect(turnEndIndex).toBeGreaterThanOrEqual(0);
+    expect(statusIndex).toBeGreaterThanOrEqual(0);
+    expect(turnEndIndex).toBeLessThan(statusIndex);
+    expect(events[turnEndIndex].sessionAlive).toBe(true);
   });
 
   it("aborts session-owned sidecars when the user cancels a streaming session", async () => {
@@ -5534,7 +6006,6 @@ describe("SessionCoordinator session reminders", () => {
     const sessionPath = path.join(agent.sessionDir, "fresh.jsonl");
     mockSessionAt(sessionPath);
     const coordinator = makeCoordinator(agent, ledger);
-    const before = Date.now();
 
     await coordinator.createSession(null, "/tmp/workspace", false);
 
@@ -5547,8 +6018,6 @@ describe("SessionCoordinator session reminders", () => {
       reminderAcceptedUnavailableToolNames: [],
       reminderUnavailableRevision: 0,
     });
-    expect(entry.lastTimeObservedAt).toBeGreaterThanOrEqual(before);
-    expect(entry.lastTimeObservedAt).toBeLessThanOrEqual(Date.now());
     expect(coordinator.renderSessionReminderBlock(sessionPath)).toBeNull();
   });
 
@@ -5599,7 +6068,7 @@ describe("SessionCoordinator session reminders", () => {
     expect(coordinator.renderSessionReminderBlock(sessionPath)).toBeNull();
   });
 
-  it("keeps newer compaction and time observations when consuming an older receipt", async () => {
+  it("keeps a newer compaction revision when consuming an older receipt", async () => {
     const ledger = new EnvChangeLedger();
     const agent = makeAgent();
     const sessionPath = path.join(agent.sessionDir, "monotonic.jsonl");
@@ -5607,47 +6076,18 @@ describe("SessionCoordinator session reminders", () => {
     const coordinator = makeCoordinator(agent, ledger);
     await coordinator.createSession(null, "/tmp/workspace", false);
     const entry = coordinator._getSessionEntryByPath(sessionPath);
-    entry.lastTimeObservedAt = null;
     coordinator._markSessionCompacted(sessionPath);
     const rendered = coordinator.renderSessionReminderBlock(sessionPath)!;
 
     coordinator._markSessionCompacted(sessionPath);
-    const laterObservation = rendered.receipt.observedAt + 10_000;
-    expect(coordinator.noteSessionTimeObserved(sessionPath, laterObservation)).toBe(true);
     coordinator.consumeRenderedSessionReminderBlock(sessionPath, rendered.receipt);
 
-    expect(entry.lastTimeObservedAt).toBe(laterObservation);
     expect(entry.reminderCompactionRevision).toBe(2);
     expect(entry.reminderConsumedCompactionRevision).toBe(1);
     expect(coordinator.renderSessionReminderBlock(sessionPath)?.block).toContain("上下文已压缩");
   });
 
-  it("sets cold restored sessions to observe time on the first message only when a frozen prompt is reused", async () => {
-    const ledger = new EnvChangeLedger();
-    const agent = makeAgent();
-    const sessionPath = path.join(agent.sessionDir, "restored.jsonl");
-    const sessionManager = mockSessionAt(sessionPath);
-    const coordinator = makeCoordinator(agent, ledger);
-    vi.spyOn(coordinator as any, "_readSessionCapabilitySnapshot").mockReturnValue({
-      toolNames: [],
-      promptSnapshot: {
-        version: 1,
-        systemPrompt: "FROZEN",
-        appendSystemPrompt: [],
-        skillsResult: { skills: [], diagnostics: [] },
-        agentsFilesResult: { agentsFiles: [] },
-      },
-    });
-
-    await coordinator.createSession(sessionManager, "/tmp/workspace", false, null, { restore: true });
-
-    const entry = coordinator._getSessionEntryByPath(sessionPath);
-    expect(entry.lastTimeObservedAt).toBeNull();
-    expect(coordinator.renderSessionReminderBlock(sessionPath)?.block).toContain("当前时间");
-    expect(createAgentSessionMock.mock.calls[0][0].resourceLoader.getSystemPrompt()).toBe("FROZEN");
-  });
-
-  it("preserves same-process cursors and revisions but resets time for a frozen runtime", async () => {
+  it("preserves same-process cursors and revisions for a frozen runtime", async () => {
     const ledger = new EnvChangeLedger();
     const agent = makeAgent();
     const sessionPath = path.join(agent.sessionDir, "hibernated.jsonl");
@@ -5666,7 +6106,6 @@ describe("SessionCoordinator session reminders", () => {
     const reminderState = {
       reminderEnvCursor: 4,
       reminderEnvStartSeq: 2,
-      lastTimeObservedAt: 1234,
       reminderCompactionRevision: 5,
       reminderConsumedCompactionRevision: 3,
       reminderAcceptedUnavailableToolNames: ["mcp_calendar"],
@@ -5678,13 +6117,36 @@ describe("SessionCoordinator session reminders", () => {
       reminderState,
     });
 
-    expect(coordinator._getSessionEntryByPath(sessionPath)).toMatchObject({
-      ...reminderState,
-      lastTimeObservedAt: null,
-    });
+    expect(coordinator._getSessionEntryByPath(sessionPath)).toMatchObject(reminderState);
   });
 
   it("keeps a valid reminder ahead of provider-only beforeUser context", async () => {
+    const ledger = new EnvChangeLedger();
+    const agent = makeAgent();
+    const sessionPath = path.join(agent.sessionDir, "context.jsonl");
+    mockSessionAt(sessionPath);
+    const coordinator = makeCoordinator(agent, ledger);
+    await coordinator.createSession(null, "/tmp/workspace", false);
+    coordinator._setRuntimeValueForPath(coordinator._turnContextBySession, sessionPath, {
+      beforeUser: "world lore",
+      metadata: { pluginId: "tavern" },
+    });
+    const extension = createAgentSessionMock.mock.calls[0][0]
+      .resourceLoader.getExtensions().extensions[0];
+    const handler = extension.handlers.get("context")[0];
+    const reminder = "[hana_reminder]\n- Current time: 2026-07-05 14:05\n[/hana_reminder]";
+
+    const result = await handler({
+      messages: [{ role: "user", content: `${reminder}\n\nhello` }],
+    });
+    const content = result.messages[0].content;
+
+    expect(content.startsWith(reminder)).toBe(true);
+    expect(content.indexOf("[Hana turn context: before_user]")).toBeGreaterThan(reminder.length);
+    expect(content.indexOf("world lore")).toBeLessThan(content.indexOf("hello"));
+  });
+
+  it("keeps a legacy timestamped reminder ahead of provider-only beforeUser context", async () => {
     const ledger = new EnvChangeLedger();
     const agent = makeAgent();
     const sessionPath = path.join(agent.sessionDir, "context.jsonl");
@@ -5713,10 +6175,8 @@ describe("SessionCoordinator session reminders", () => {
   it("returns false for reminder state operations on an unknown session path", () => {
     const coordinator = makeCoordinator(makeAgent(), new EnvChangeLedger());
     expect(coordinator.consumeRenderedSessionReminderBlock("/missing.jsonl", {
-      observedAt: 1,
       throughSeq: 0,
       compactionRevision: 0,
     })).toBe(false);
-    expect(coordinator.noteSessionTimeObserved("/missing.jsonl", 1)).toBe(false);
   });
 });

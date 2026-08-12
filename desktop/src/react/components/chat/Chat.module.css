@@ -1690,6 +1690,35 @@
     outline: none;
 }
 
+/* Main-only Agent file changes reuse the T-16 History command below the
+   existing operation card. The command remains a native button for keyboard
+   and screen-reader access; this wrapper only constrains the chat layout. */
+.agentFileChangeHistoryAction {
+    display: flex;
+    width: min(var(--chat-task-block-width, 348px), 100%);
+    max-width: 100%;
+    margin: calc(var(--space-8) * -0.5) 0 var(--space-8);
+    min-width: 0;
+}
+
+.agentFileChangeHistoryAction > button {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.agentFileChangeHistoryAction > button > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+    .agentFileChangeHistoryAction {
+        width: 100%;
+    }
+}
+
 /* ── 媒体生成占位卡片 ── */
 
 .mediaGenerationCard {

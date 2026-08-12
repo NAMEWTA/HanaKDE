@@ -145,14 +145,18 @@ describe("SpeechRecognitionService", () => {
   it("resolves MiMo Token Plan STT with Token Plan credentials and base URL", async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-speech-token-plan-"));
     try {
-      fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), [
-        "providers:",
-        "  mimo-token-plan:",
-        "    api_key: tp-mimo-key",
-        "    base_url: https://token-plan-cn.xiaomimimo.com/v1",
-        "    api: openai-completions",
-        "",
-      ].join("\n"), "utf-8");
+      fs.writeFileSync(path.join(tmpDir, "provider-catalog.json"), JSON.stringify({
+        catalogVersion: 2,
+        providers: {
+          "mimo-token-plan": {
+            api_key: "tp-mimo-key",
+            base_url: "https://token-plan-cn.xiaomimimo.com/v1",
+            api: "openai-completions",
+          },
+        },
+        capabilities: {},
+        meta: {},
+      }, null, 2) + "\n", "utf-8");
       const providerRegistry = new ProviderRegistry(tmpDir);
       providerRegistry.reload();
 

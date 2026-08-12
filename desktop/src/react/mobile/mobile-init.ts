@@ -149,7 +149,7 @@ export async function initializeMobileRuntime(
       ...(bootstrap.thinkingLevel ? { thinkingLevel: bootstrap.thinkingLevel } : {}),
     });
   }
-  loadAvatars(bootstrap.avatars);
+  loadAvatars(bootstrap.avatars, currentAgent?.id || bootstrap.currentAgentId || null);
   if (isSessionPermissionMode(permissionDefault.permissionMode)) {
     useStore.getState().setPendingNewSessionPermissionMode(permissionDefault.permissionMode);
   }
@@ -219,11 +219,17 @@ export async function loadMobileSessions({
   return next;
 }
 
-export async function switchMobileSession(path: string, session?: Pick<Session, 'cwd' | 'permissionMode' | 'sessionId'> | null): Promise<void> {
+export async function switchMobileSession(
+  path: string,
+  session?: Pick<Session, 'cwd' | 'permissionMode' | 'sessionId' | 'agentId' | 'agentName'> | null,
+): Promise<void> {
   useStore.setState((state) => {
     const sessionId = typeof session?.sessionId === 'string' && session.sessionId.trim()
       ? session.sessionId.trim()
       : sessionIdForPathFromLocatorState(state, path);
+    const sessionAgent = session?.agentId
+      ? state.agents.find(agent => agent.id === session.agentId) || null
+      : null;
     return {
     currentSessionPath: path,
     currentSessionId: sessionId,
@@ -235,7 +241,14 @@ export async function switchMobileSession(path: string, session?: Pick<Session, 
     } : {}),
     pendingSessionSwitchPath: path,
     pendingNewSession: false,
+    selectedAgentId: null,
     welcomeVisible: false,
+    ...(session?.agentId ? {
+      currentAgentId: session.agentId,
+      agentName: session.agentName || sessionAgent?.name || session.agentId,
+      agentYuan: sessionAgent?.yuan || 'hanako',
+      homeFolder: sessionAgent?.homeFolder || null,
+    } : {}),
     };
   });
   syncMobilePermissionMode(session || null);

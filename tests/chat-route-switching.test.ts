@@ -16,6 +16,51 @@ describe("chat route model switch guard", () => {
     expect(resolveDisconnectAbortGraceMs("bad")).toBe(DEFAULT_DISCONNECT_ABORT_GRACE_MS);
   });
 
+  it("rebroadcasts in-memory Agent activity once after the first session subscription", async () => {
+    let createHandlers;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const sessionPath = "/tmp/agent-history-reload.jsonl";
+    const sessionId = "sess_agent_history_reload";
+    const rebroadcastSession = vi.fn();
+    const hub = {
+      subscribe: vi.fn(),
+      send: vi.fn(async () => {}),
+      eventBus: { emit: vi.fn() },
+    };
+    const engine = {
+      getRuntimeContext: vi.fn(() => ({ studioId: "studio_test" })),
+      activityHub: { rebroadcastSession },
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionIdForPath: vi.fn(() => sessionId),
+      getSessionManifest: vi.fn(() => ({ currentLocator: { path: sessionPath } })),
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "hana", agentDeleted: false })),
+      getSessionContextUsage: vi.fn(() => null),
+      getSessionByPath: vi.fn(() => null),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+    const message = {
+      data: JSON.stringify({ type: "context_usage", sessionId, sessionPath }),
+    };
+    handlers.onMessage(message, ws);
+    handlers.onMessage(message, ws);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rebroadcastSession).toHaveBeenCalledOnce();
+    expect(rebroadcastSession).toHaveBeenCalledWith(sessionPath);
+  });
+
   it("adds persisted user and assistant entry ids to turn_end", () => {
     let createHandlers;
     let subscriber;
@@ -64,6 +109,267 @@ describe("chat route model switch guard", () => {
       userEntryId: "entry-user",
       assistantEntryId: "entry-assistant",
     });
+  });
+
+  it("broadcasts entry ids on an aborted turn_end without a false empty-reply error", () => {
+    let createHandlers;
+    let subscriber;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const sessionPath = "/tmp/aborted-turn.jsonl";
+    const branch = [
+      { type: "message", id: "entry-user", parentId: null, message: { role: "user", content: "hello" } },
+    ];
+    const hub = {
+      subscribe: vi.fn((fn) => { subscriber = fn; }),
+      send: vi.fn(async () => {}),
+      eventBus: { emit: vi.fn() },
+    };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionByPath: vi.fn(() => ({
+        entries: [],
+        sessionManager: { getBranch: () => branch },
+      })),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+    subscriber?.({ type: "session_status", isStreaming: true }, sessionPath);
+    subscriber?.({ type: "turn_start" }, sessionPath);
+    subscriber?.({ type: "turn_end", aborted: true }, sessionPath);
+
+    const payloads = ws.send.mock.calls.map(([raw]) => JSON.parse(raw));
+    const turnEnd = payloads.find((payload) => payload.type === "turn_end");
+    expect(turnEnd).toMatchObject({
+      sessionPath,
+      turnInputEntryId: "entry-user",
+      userEntryId: "entry-user",
+      assistantEntryId: null,
+    });
+    expect(payloads.find((payload) => payload.type === "error")).toBeUndefined();
+  });
+
+  it("does not count a length-limited thinking-only reply as a normal success", async () => {
+    let createHandlers;
+    let subscriber;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const sessionPath = "/tmp/thinking-only-length.jsonl";
+    const hub = {
+      subscribe: vi.fn((fn) => { subscriber = fn; }),
+      send: vi.fn(async () => {}),
+      eventBus: { emit: vi.fn() },
+    };
+    const deliverNotification = vi.fn(async () => ({ ok: true }));
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getNotificationPreferences: vi.fn(() => ({ chatCompletion: "always" })),
+      getSessionIdForPath: vi.fn(() => "session-thinking-only"),
+      getSessionManifest: vi.fn(() => ({
+        sessionId: "session-thinking-only",
+        ownerAgentId: "agent-1",
+        domain: "desktop",
+        kind: "chat",
+      })),
+      deliverNotification,
+      getSessionByPath: vi.fn(() => ({ entries: [] })),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+
+    subscriber?.({ type: "session_status", isStreaming: true }, sessionPath);
+    subscriber?.({ type: "turn_start" }, sessionPath);
+    subscriber?.({
+      type: "message_update",
+      message: { role: "assistant" },
+      assistantMessageEvent: { type: "thinking_delta", delta: "still reasoning" },
+    }, sessionPath);
+    subscriber?.({
+      type: "message_end",
+      message: { role: "assistant", content: [{ type: "thinking", thinking: "still reasoning" }], stopReason: "length" },
+    }, sessionPath);
+    subscriber?.({ type: "turn_end" }, sessionPath);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const payloads = ws.send.mock.calls.map(([raw]) => JSON.parse(raw));
+    expect(payloads.some((payload) => payload.type === "error")).toBe(true);
+    expect(payloads.find((payload) => payload.type === "turn_end")).toMatchObject({
+      truncated: true,
+      stopReason: "length",
+    });
+    expect(deliverNotification).not.toHaveBeenCalled();
+    handlers.onClose({}, ws);
+  });
+
+  it("marks a visible partial reply as truncated without adding a generic error", () => {
+    let createHandlers;
+    let subscriber;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const sessionPath = "/tmp/partial-length.jsonl";
+    const hub = {
+      subscribe: vi.fn((fn) => { subscriber = fn; }),
+      send: vi.fn(async () => {}),
+      eventBus: { emit: vi.fn() },
+    };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionByPath: vi.fn(() => ({ entries: [] })),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+
+    subscriber?.({ type: "session_status", isStreaming: true }, sessionPath);
+    subscriber?.({ type: "turn_start" }, sessionPath);
+    subscriber?.({
+      type: "message_update",
+      message: { role: "assistant" },
+      assistantMessageEvent: { type: "text_delta", delta: "visible partial reply" },
+    }, sessionPath);
+    subscriber?.({
+      type: "message_end",
+      message: { role: "assistant", content: "visible partial reply", stopReason: "length" },
+    }, sessionPath);
+    subscriber?.({ type: "turn_end" }, sessionPath);
+
+    const payloads = ws.send.mock.calls.map(([raw]) => JSON.parse(raw));
+    expect(payloads.some((payload) => payload.type === "error")).toBe(false);
+    expect(payloads.find((payload) => payload.type === "turn_end")).toMatchObject({
+      truncated: true,
+      stopReason: "length",
+    });
+    handlers.onClose({}, ws);
+  });
+
+  it("does not re-log a previous turn's usage on an aborted turn_end", () => {
+    let createHandlers;
+    let subscriber;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const sessionPath = "/tmp/aborted-turn-usage.jsonl";
+    const usage = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 };
+    const previousAssistant = {
+      type: "message",
+      id: "entry-assistant-prev",
+      parentId: "entry-user-prev",
+      message: { role: "assistant", content: "hi", usage },
+    };
+    const branch = [
+      { type: "message", id: "entry-user-prev", parentId: null, message: { role: "user", content: "hello" } },
+      previousAssistant,
+      { type: "message", id: "entry-user-now", parentId: "entry-assistant-prev", message: { role: "user", content: "again" } },
+    ];
+    const hub = {
+      subscribe: vi.fn((fn) => { subscriber = fn; }),
+      send: vi.fn(async () => {}),
+      eventBus: { emit: vi.fn() },
+    };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionByPath: vi.fn(() => ({
+        entries: [previousAssistant],
+        sessionManager: { getBranch: () => branch },
+      })),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+    subscriber?.({ type: "session_status", isStreaming: true }, sessionPath);
+    subscriber?.({ type: "turn_end", aborted: true }, sessionPath);
+
+    const usageEmits = hub.eventBus.emit.mock.calls
+      .filter(([event]) => event?.type === "token_usage");
+    expect(usageEmits).toHaveLength(0);
+  });
+
+  it("still logs usage on a normally completed turn_end", () => {
+    let createHandlers;
+    let subscriber;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const sessionPath = "/tmp/completed-turn-usage.jsonl";
+    const usage = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 };
+    const assistant = {
+      type: "message",
+      id: "entry-assistant-now",
+      parentId: "entry-user-now",
+      message: { role: "assistant", content: "done", usage },
+    };
+    const branch = [
+      { type: "message", id: "entry-user-now", parentId: null, message: { role: "user", content: "again" } },
+      assistant,
+    ];
+    const hub = {
+      subscribe: vi.fn((fn) => { subscriber = fn; }),
+      send: vi.fn(async () => {}),
+      eventBus: { emit: vi.fn() },
+    };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionByPath: vi.fn(() => ({
+        entries: [assistant],
+        sessionManager: { getBranch: () => branch },
+      })),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onOpen({}, ws);
+    subscriber?.({ type: "session_status", isStreaming: true }, sessionPath);
+    subscriber?.({ type: "turn_start" }, sessionPath);
+    subscriber?.({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "done" } }, sessionPath);
+    subscriber?.({ type: "turn_end" }, sessionPath);
+
+    const usageEmits = hub.eventBus.emit.mock.calls
+      .filter(([event]) => event?.type === "token_usage");
+    expect(usageEmits).toHaveLength(1);
   });
 
   it("keeps hidden background turn input separate from the nearest visible user on turn_end", () => {
@@ -206,6 +512,88 @@ describe("chat route model switch guard", () => {
     }));
   });
 
+  // 身份解析排在媒体校验之前：一条没有身份的消息不该先把附件量一遍再拒，
+  // 而且媒体校验的错误回包也要报在解析出来的会话上，而不是客户端原样送来的字段。
+  it("rejects a prompt with no identity before it validates the attachments", async () => {
+    let createHandlers;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const hub = { subscribe: vi.fn(), send: vi.fn(async () => {}) };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionIdForPath: vi.fn(() => null),
+      getSessionManifest: vi.fn(() => null),
+      getSessionByPath: vi.fn(() => null),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onMessage({
+      data: JSON.stringify({
+        type: "prompt",
+        text: "hello",
+        images: Array.from({ length: 11 }, () => ({ mimeType: "image/png", data: "AAAA" })),
+      }),
+    }, ws);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(hub.send).not.toHaveBeenCalled();
+    const payloads = ws.send.mock.calls.map(([raw]) => JSON.parse(raw));
+    expect(payloads).toEqual([{
+      type: "error",
+      code: "internal_contract",
+      message: "session identity required",
+    }]);
+  });
+
+  it("reports attachment problems against the resolved session locator", async () => {
+    let createHandlers;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const hub = { subscribe: vi.fn(), send: vi.fn(async () => {}) };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      getSessionIdForPath: vi.fn(() => "sess_moved"),
+      getSessionManifest: vi.fn(() => ({ currentLocator: { path: "/tmp/canonical.jsonl" } })),
+      getSessionByPath: vi.fn(() => null),
+      resolveSessionOwnership: vi.fn(() => ({ agentId: "agent-a", source: "manifest", agentDeleted: false })),
+      isSessionStreaming: vi.fn(() => false),
+      isSessionSwitching: vi.fn(() => false),
+      steerSession: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onMessage({
+      data: JSON.stringify({
+        type: "prompt",
+        text: "hello",
+        sessionPath: "/tmp/stale.jsonl",
+        images: [{ mimeType: "image/tiff", data: "AAAA" }],
+      }),
+    }, ws);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(hub.send).not.toHaveBeenCalled();
+    expect(ws.send.mock.calls.map(([raw]) => JSON.parse(raw))).toContainEqual(expect.objectContaining({
+      type: "error",
+      sessionPath: "/tmp/canonical.jsonl",
+    }));
+  });
+
   it("rejects mismatched steer and resume targets before touching runtime state (#2078)", async () => {
     let createHandlers;
     const upgradeWebSocket = vi.fn((factory) => {
@@ -291,6 +679,112 @@ describe("chat route model switch guard", () => {
         sessionPath: "/tmp/current-b.jsonl",
         status: "noop",
         reason: "nothing_to_compact",
+      }),
+    ]);
+  });
+
+  it("runs instant simple compaction as an enabled one-shot method without changing ordinary compaction", async () => {
+    let createHandlers;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const session = {
+      isCompacting: false,
+      compact: vi.fn(),
+    };
+    const summarySource = { summary: "rolling" };
+    const runInstantSimpleCompaction = vi.fn(async (_session, options) => {
+      expect(await options.getSummarySource()).toEqual(summarySource);
+      return { summary: "local checkpoint" };
+    });
+    const hub = { subscribe: vi.fn(), send: vi.fn(async () => {}) };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      preferences: {
+        getExperimentValue: vi.fn((id) => (
+          id === "session.instant_simple_compaction" ? true : undefined
+        )),
+      },
+      getLossyLocalCompactionSummarySource: vi.fn(() => summarySource),
+      getSessionManifest: vi.fn(() => ({ currentLocator: { path: "/tmp/current-b.jsonl" } })),
+      getSessionByPath: vi.fn(() => session),
+      isDeletedAgentSession: vi.fn(() => false),
+      isSessionStreaming: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket, runInstantSimpleCompaction });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onMessage({
+      data: JSON.stringify({
+        type: "compact",
+        sessionId: "sess_a",
+        method: "instant_simple",
+      }),
+    }, ws);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runInstantSimpleCompaction).toHaveBeenCalledWith(session, expect.objectContaining({
+      getSummarySource: expect.any(Function),
+      lifecycleReason: "manual",
+    }));
+    expect(session.compact).not.toHaveBeenCalled();
+    expect(ws.send.mock.calls.map(([raw]) => JSON.parse(raw))).toEqual([
+      expect.objectContaining({
+        type: "compaction_accepted",
+        mode: "lossy_local",
+      }),
+      expect.objectContaining({
+        type: "compaction_result",
+        mode: "lossy_local",
+        status: "succeeded",
+      }),
+    ]);
+  });
+
+  it("rejects the one-shot instant method while its experiment is disabled", async () => {
+    let createHandlers;
+    const upgradeWebSocket = vi.fn((factory) => {
+      createHandlers = factory;
+      return () => new Response(null);
+    });
+    const session = { isCompacting: false, compact: vi.fn() };
+    const runInstantSimpleCompaction = vi.fn();
+    const hub = { subscribe: vi.fn(), send: vi.fn(async () => {}) };
+    const engine = {
+      agentName: "Hana",
+      abortAllStreaming: vi.fn(async () => {}),
+      preferences: { getExperimentValue: vi.fn(() => false) },
+      getSessionManifest: vi.fn(() => ({ currentLocator: { path: "/tmp/current-b.jsonl" } })),
+      getSessionByPath: vi.fn(() => session),
+      isDeletedAgentSession: vi.fn(() => false),
+      isSessionStreaming: vi.fn(() => false),
+      slashDispatcher: null,
+    };
+
+    createChatRoute(engine, hub, { upgradeWebSocket, runInstantSimpleCompaction });
+    const handlers = createHandlers({});
+    const ws = { readyState: 1, send: vi.fn() };
+    handlers.onMessage({
+      data: JSON.stringify({
+        type: "compact",
+        sessionId: "sess_a",
+        method: "instant_simple",
+      }),
+    }, ws);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(runInstantSimpleCompaction).not.toHaveBeenCalled();
+    expect(session.compact).not.toHaveBeenCalled();
+    expect(ws.send.mock.calls.map(([raw]) => JSON.parse(raw))).toEqual([
+      expect.objectContaining({
+        type: "compaction_result",
+        mode: "lossy_local",
+        status: "failed",
+        reason: "experiment_disabled",
       }),
     ]);
   });
@@ -621,6 +1115,7 @@ describe("chat route model switch guard", () => {
       abortAllStreaming: vi.fn(async () => {}),
       getSessionByPath: vi.fn(() => ({ entries: [] })),
       getSessionIdForPath: vi.fn(() => "sess_running"),
+      getSessionManifest: vi.fn(() => ({ currentLocator: { path: "/tmp/running-session.jsonl" } })),
       isSessionStreaming: vi.fn((sessionPath) => sessionPath === "/tmp/running-session.jsonl"),
       isSessionSwitching: vi.fn(() => false),
       steerSession: vi.fn(() => false),

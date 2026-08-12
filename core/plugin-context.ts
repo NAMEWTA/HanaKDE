@@ -189,19 +189,37 @@ function createPluginBusProxy(bus, { ownerContext, grantedPermissions, allowHand
   };
 
   const proxy: Record<string, any> = {
-    emit(event, sessionPath) {
+    emit(eventOrType, payloadOrSessionPath) {
+      const typeFirst = typeof eventOrType === "string";
+      const event = typeFirst
+        ? { type: eventOrType, payload: payloadOrSessionPath }
+        : eventOrType;
+      const sessionPath = typeFirst ? null : payloadOrSessionPath;
       if (!fullAccess && event?.type === "llm_usage") {
         throw forbiddenBusError("llm_usage", "emit", "usage.read");
       }
       return bus.emit(event, sessionPath);
     },
-    subscribe(callback, filter = {}) {
+    subscribe(callbackOrType, filterOrHandler = {}) {
+      const typeFirst = typeof callbackOrType === "string";
+      const callback = typeFirst ? filterOrHandler : callbackOrType;
+      if (typeFirst && typeof callback !== "function") {
+        throw new TypeError("plugin bus type subscription requires a handler");
+      }
+      const filter = typeFirst ? { types: [callbackOrType] } : filterOrHandler;
       const requestedTypes = typesFromFilter(filter);
       if (!fullAccess && !canReadUsage && requestedTypes?.has("llm_usage")) {
         throw forbiddenBusError("llm_usage", "subscribe", "usage.read");
       }
       const wrapped = (event, sessionPath) => {
         if (!fullAccess && !canReadUsage && event?.type === "llm_usage") return;
+        if (typeFirst) {
+          const payload = event && typeof event === "object"
+            && Object.prototype.hasOwnProperty.call(event, "payload")
+            ? event.payload
+            : event;
+          return callback(payload);
+        }
         return callback(event, sessionPath);
       };
       return bus.subscribe(wrapped, filter);

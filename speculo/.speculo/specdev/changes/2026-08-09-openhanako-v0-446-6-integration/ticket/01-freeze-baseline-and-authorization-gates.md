@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-01
 title: 冻结实施基线与授权门
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "整仓 Git 固定点、脏工作树保护和后续不可逆 Git 操作批准点具有高事故半径。"
 ready: true
 risk: high
 blocked_by: []
 contract_ids: [AC-001]
-owner: unassigned
+owner: Worker-T-01 / Lead
 expected_changes: []
 writable_paths: []
 read_only_paths: ["<Path>**</Path>"]

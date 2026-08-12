@@ -81,6 +81,7 @@ const tMap: Record<string, string> = {
   'desk.sort.nameAscShort': '名称↑',
   'desk.sort.label': '排序',
   'preview.toggle': '预览面板',
+  'preview.fileHistory': '文件历史',
   'common.noFiles': '没有文件',
   'settings.bridge.feishu': '飞书',
 };
@@ -180,6 +181,21 @@ describe('RightWorkspacePanel', () => {
     expect((tabList as HTMLElement).style.getPropertyValue('--right-workspace-active-tab-index')).toBe('1');
     expect(screen.getByText('hana-work')).toBeInTheDocument();
     expect(screen.queryByText(/工作台 ·/)).not.toBeInTheDocument();
+  });
+
+  it('opens the shared main History modal intent from the workspace header', () => {
+    render(<RightWorkspacePanel />);
+
+    const entry = screen.getByRole('button', { name: '文件历史' });
+    expect(entry).toHaveAttribute('data-history-source', 'main');
+    expect(entry.querySelector('span')).toBeNull();
+
+    fireEvent.click(entry);
+
+    expect(useStore.getState().fileHistoryModal).toMatchObject({
+      open: true,
+      preselectRelPath: null,
+    });
   });
 
   it('hides desktop-only open-folder controls in the PWA workspace', () => {

@@ -1,5 +1,5 @@
 /**
- * sandbox/index.js — 沙盒入口（无状态工厂）
+ * sandbox/index.ts — 沙盒入口（无状态工厂）
  *
  * 每次 buildTools 调用时创建 session 级的 PathGuard + OS 沙盒 exec。
  * 不持有 engine 级状态，天然支持多 agent 并发。
@@ -19,6 +19,7 @@ import { createManagedConfigWriteGuard } from "./managed-config-guard.ts";
 import { t } from "../i18n.ts";
 import fs from "fs";
 import path, { extname } from "path";
+import { randomUUID } from "node:crypto";
 import {
   createReadTool,
   createWriteTool,
@@ -31,8 +32,10 @@ import {
 import { normalizeWin32ShellPath } from "./win32-path.ts";
 import { serializeSessionFile } from "../session-files/session-file-response.ts";
 import { wrapResourceIoFileTools } from "../resource-io/agent-tools.ts";
+import { createMaterializeTool } from "../resource-io/materialize-tool.ts";
 import { createResourceIoToolOperations } from "../resource-io/pi-tool-operations.ts";
 import { createSandboxResourceIO } from "../resource-io/sandbox-resource-io.ts";
+import type { ResourceMutationResult } from "../resource-io/types.ts";
 import { createExecCommandTools } from "../exec-command/tool.ts";
 import { detectWin32PowerShellFlavor } from "./win32-runtime-cache.ts";
 import {
@@ -63,13 +66,13 @@ import {
  * @param {(sessionPath: string) => string|null} [opts.getSessionIdForPath]  sessionPath locator → sessionId
  * @param {(fileId: string, options?: {sessionPath?: string|null}) => object|null} [opts.resolveSessionFile]  SessionFile resolver
  * @param {(entry: object) => void} [opts.recordFileOperation]  记录 write/edit 触达的 session file
+ * @param {(entry: object) => Promise<object|null>|object|null} [opts.recordAgentFileChange]  投影 authoritative main mutation correlation
  * @param {() => object|null} [opts.getVisionBridge]  辅助视觉桥
  * @param {() => boolean} [opts.isVisionAuxiliaryEnabled]  辅助视觉开关
  * @param {() => object|null} [opts.getTerminalSessionManager]  当前 engine 的 terminal session manager
  * @param {() => string} [opts.getAgentId]  当前 agent id
  * @param {object} [opts.resourceIO]  session 级 ResourceIO 内核；未传入时按 cwd 创建 local_fs 内核
  * @param {(event: object, sessionPath?: string|null) => void} [opts.emitEvent]  ResourceIO 事件出口
- * @param {object|null} [opts.legacyCleanupQueue] Windows 旧 ACL 清理队列
  * @returns {{ tools: object[], customTools: object[], permissionBoundary: object }}
  */
 export function createSandboxedTools(cwd, customTools, {
@@ -86,13 +89,13 @@ export function createSandboxedTools(cwd, customTools, {
   getSessionIdForPath,
   resolveSessionFile,
   recordFileOperation,
+  recordAgentFileChange,
   getVisionBridge,
   isVisionAuxiliaryEnabled,
   getTerminalSessionManager,
   getAgentId,
   resourceIO: providedResourceIO,
   emitEvent,
-  legacyCleanupQueue = null,
 }) {
   // 始终按 standard 模式构建策略和 PathGuard，wrappers 在运行时动态 bypass
   const resolveAuthorizedFolders = () => {
@@ -199,15 +202,21 @@ export function createSandboxedTools(cwd, customTools, {
     origin: "agent_edit",
     operationForPath: () => "modified",
     getSessionPath,
+    getSessionIdForPath,
     recordFileOperation,
+    recordAgentFileChange,
+    withMutationCapture: resourceOps.withMutationCapture,
   });
   const writeToolWithResourceIO = wrapFileTouchTool(createWriteTool(cwd, { operations: resourceOps.write }), cwd, {
     origin: "agent_write",
     operationForPath: (filePath) => fs.existsSync(filePath) ? "modified" : "created",
     getSessionPath,
+    getSessionIdForPath,
     recordFileOperation,
+    recordAgentFileChange,
+    withMutationCapture: resourceOps.withMutationCapture,
   });
-  const readTool = wrapSessionFilePathTool(wrapReadImageWithVisionBridge(wrapReadOfficeMedia(createReadTool(cwd, { operations: readOps }), cwd, {
+  const readTool = wrapReadImageWithVisionBridge(wrapReadOfficeMedia(createReadTool(cwd, { operations: readOps }), cwd, {
     hanakoHome,
     getSessionPath,
     getSessionIdForPath,
@@ -220,7 +229,13 @@ export function createSandboxedTools(cwd, customTools, {
     recordFileOperation,
     getVisionBridge,
     isVisionAuxiliaryEnabled,
-  }), { getSessionPath, resolveSessionFile });
+  });
+  const materializeTool = createMaterializeTool({
+    resourceIO,
+    getSessionPath,
+    getSessionIdForPath,
+    cwd,
+  });
   const buildResourceIoFileTools = (tools) => wrapResourceIoFileTools(tools, {
     cwd,
     resourceIO,
@@ -256,7 +271,6 @@ export function createSandboxedTools(cwd, customTools, {
         hanakoHome,
         getExternalReadPaths,
         getSandboxNetworkEnabled: resolveSandboxNetworkEnabled,
-        legacyCleanupQueue,
       },
     })(command, execCwd, execOpts);
     const sandboxedBashTool = createBashTool(cwd, {
@@ -298,6 +312,7 @@ export function createSandboxedTools(cwd, customTools, {
         createGrepTool(cwd, { ...searchToolPaths, operations: resourceOps.grep }),
         createFindTool(cwd, { ...searchToolPaths, operations: resourceOps.find }),
         createLsTool(cwd, { operations: resourceOps.ls }),
+        materializeTool,
       ]),
       customTools,
       permissionBoundary,
@@ -347,6 +362,7 @@ export function createSandboxedTools(cwd, customTools, {
       createGrepTool(cwd, { ...searchToolPaths, operations: resourceOps.grep }),
       createFindTool(cwd, { ...searchToolPaths, operations: resourceOps.find }),
       createLsTool(cwd, { operations: resourceOps.ls }),
+      materializeTool,
     ]),
     customTools,
     permissionBoundary,
@@ -375,107 +391,107 @@ function normalizeFileTouchToolParams(params) {
   return { ...params, path: rawPath };
 }
 
+type FileTouchToolOptions = {
+  origin?: string;
+  operationForPath?: (filePath: string) => string | null;
+  getSessionPath?: () => string | null;
+  getSessionIdForPath?: (sessionPath: string) => string | null;
+  recordFileOperation?: (entry: {
+    sessionPath: string;
+    filePath: string;
+    label: string;
+    origin?: string;
+    operation: string | null;
+  }) => unknown;
+  recordAgentFileChange?: (entry: {
+    sessionId: string;
+    sessionPath: string;
+    operationId: string;
+    mutation: ResourceMutationResult;
+  }) => Promise<unknown> | unknown;
+  withMutationCapture?: <T>(context: {
+    operationId: string;
+    sessionId: string | null;
+    sessionPath: string | null;
+  }, fn: () => Promise<T>) => Promise<{
+    result: T;
+    mutations: readonly ResourceMutationResult[];
+  }>;
+};
+
 function wrapFileTouchTool(tool, cwd, {
   origin,
   operationForPath,
   getSessionPath,
+  getSessionIdForPath,
   recordFileOperation,
-}: { origin?: any; operationForPath?: any; getSessionPath?: any; recordFileOperation?: any } = {}) {
+  recordAgentFileChange,
+  withMutationCapture,
+}: FileTouchToolOptions = {}) {
   return {
     ...tool,
     execute: async (toolCallId, params, ...rest) => {
       const normalizedParams = normalizeFileTouchToolParams(params);
       const absolutePath = resolveToolPath(fileTouchToolPathParam(normalizedParams), cwd);
       const operation = absolutePath ? operationForPath?.(absolutePath) : null;
+      const sessionPath = getSessionPath?.() || null;
+      const sessionId = sessionPath && typeof getSessionIdForPath === "function"
+        ? getSessionIdForPath(sessionPath)
+        : null;
+      const operationId = randomUUID();
       let result;
+      let mutations: readonly ResourceMutationResult[] = [];
       try {
-        result = await tool.execute(toolCallId, normalizedParams, ...rest);
+        if (typeof withMutationCapture === "function") {
+          const captured = await withMutationCapture({
+            operationId,
+            sessionId,
+            sessionPath,
+          }, () => tool.execute(toolCallId, normalizedParams, ...rest));
+          result = captured.result;
+          mutations = captured.mutations;
+        } else {
+          result = await tool.execute(toolCallId, normalizedParams, ...rest);
+        }
       } catch (err) {
         return {
           content: [{ type: "text", text: err?.message || String(err) }],
         };
       }
-      const sessionPath = getSessionPath?.() || null;
       if (!absolutePath || !sessionPath || typeof recordFileOperation !== "function") {
         return result;
       }
       if (!fs.existsSync(absolutePath)) return result;
+      let sessionFile;
       try {
-        const sessionFile = serializeSessionFile(recordFileOperation({
+        sessionFile = serializeSessionFile(recordFileOperation({
           sessionPath,
           filePath: absolutePath,
           label: path.basename(absolutePath),
           origin,
           operation,
         }));
-        return appendSessionFileDetails(result, sessionFile, absolutePath);
       } catch (err) {
         return appendRegistrationWarning(result, err);
       }
-    },
-  };
-}
-
-function addSessionFileParameters(parameters) {
-  if (!parameters || typeof parameters !== "object" || !parameters.properties) return parameters;
-  const required = Array.isArray(parameters.required)
-    ? parameters.required.filter((name) => name !== "path")
-    : parameters.required;
-  return {
-    ...parameters,
-    ...(required ? { required } : {}),
-    properties: {
-      ...parameters.properties,
-      fileId: {
-        type: "string",
-        description: "SessionFile id from current_status/session_files or attached [SessionFile] context. Use this for read/stat/copy access. Do not use fileId for write/edit; use writableLocalRef.path or an ordinary local path for modifications.",
-      },
-      sessionPath: {
-        type: "string",
-        description: "Optional session JSONL path that owns fileId. Usually omit to use the current session.",
-      },
-    },
-  };
-}
-
-function sessionFilePath(file) {
-  if (!file || typeof file !== "object") return null;
-  if (file.status === "expired") {
-    throw new Error(`SessionFile expired: ${file.fileId || file.id || "unknown"}`);
-  }
-  const filePath = file.realPath || file.filePath || file.path || null;
-  if (!filePath || !path.isAbsolute(filePath)) {
-    throw new Error(`SessionFile has no readable absolute path: ${file.fileId || file.id || "unknown"}`);
-  }
-  return filePath;
-}
-
-function wrapSessionFilePathTool(tool, { getSessionPath, resolveSessionFile }: { getSessionPath?: any; resolveSessionFile?: any } = {}) {
-  return {
-    ...tool,
-    parameters: addSessionFileParameters(tool.parameters),
-    execute: async (toolCallId, params: Record<string, any> = {}, ...rest) => {
-      const fileId = typeof params.fileId === "string" && params.fileId.trim() ? params.fileId.trim() : null;
-      if (!fileId) return tool.execute(toolCallId, params, ...rest);
-      if (typeof resolveSessionFile !== "function") {
-        return {
-          content: [{ type: "text", text: `SessionFile resolver unavailable for fileId: ${fileId}` }],
-        };
+      const registeredResult = appendSessionFileDetails(result, sessionFile, absolutePath);
+      if (
+        !sessionId
+        || mutations.length !== 1
+        || typeof recordAgentFileChange !== "function"
+      ) {
+        return registeredResult;
       }
-      const lookupSessionPath = typeof params.sessionPath === "string" && params.sessionPath
-        ? params.sessionPath
-        : getSessionPath?.() || null;
       try {
-        const file = resolveSessionFile(fileId, { sessionPath: lookupSessionPath });
-        if (!file) {
-          return { content: [{ type: "text", text: `SessionFile not found: ${fileId}` }] };
-        }
-        const resolvedPath = sessionFilePath(file);
-        return tool.execute(toolCallId, { ...params, path: resolvedPath }, ...rest);
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: err?.message || String(err) }],
-        };
+        const agentFileChange = await recordAgentFileChange({
+          sessionId,
+          sessionPath,
+          operationId,
+          mutation: mutations[0],
+        });
+        return appendSessionFileDetails(result, sessionFile, absolutePath, agentFileChange);
+      } catch {
+        return appendCorrelationWarning(registeredResult);
       }
     },
   };
@@ -492,7 +508,7 @@ function writableLocalRef(filePath) {
     : null;
 }
 
-function appendSessionFileDetails(result, sessionFile, filePath = null) {
+function appendSessionFileDetails(result, sessionFile, filePath = null, agentFileChange = null) {
   if (!sessionFile) return result;
   const sessionRef = sessionFileRef(sessionFile);
   const writableRef = writableLocalRef(filePath);
@@ -503,12 +519,22 @@ function appendSessionFileDetails(result, sessionFile, filePath = null) {
       sessionFile,
       ...(sessionRef ? { sessionFileRef: sessionRef } : {}),
       ...(writableRef ? { writableLocalRef: writableRef } : {}),
+      ...(agentFileChange ? { agentFileChange } : {}),
     },
   };
 }
 
 function appendRegistrationWarning(result, err) {
   const message = `Session file registration failed: ${err?.message || String(err)}`;
+  const content = Array.isArray(result?.content) ? [...result.content] : [];
+  return {
+    ...(result || {}),
+    content: [...content, { type: "text", text: message }],
+  };
+}
+
+function appendCorrelationWarning(result) {
+  const message = "Agent file change correlation unavailable.";
   const content = Array.isArray(result?.content) ? [...result.content] : [];
   return {
     ...(result || {}),

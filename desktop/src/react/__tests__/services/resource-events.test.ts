@@ -581,41 +581,34 @@ describe('resource-events', () => {
     }));
   });
 
-  it('applies caught-up resource events through the same event handler', async () => {
-    const event = {
-      type: 'resource.changed',
-      sequence: 2,
-      resourceKey: 'mount:docs:notes/b.md',
-      resource: { kind: 'mount', mountId: 'docs', path: 'notes/b.md' },
-      changeType: 'modified',
-      source: 'provider_watch',
-      occurredAt: '2026-06-22T00:00:01.000Z',
-    };
+  it('recovers from a nonempty catch-up page projected as a resync', async () => {
     const applyEvent = vi.fn();
+    const requeryAfterGap = vi.fn(async () => {});
     const fetchImpl = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ stale: false, latestSequence: 2, events: [event] }),
+      json: async () => ({
+        stale: true,
+        latestSequence: 2,
+        events: [],
+        resync: 'resource-stat-required',
+      }),
     }));
     const { createResourceEventClient } = await import('../../services/resource-events');
-    const client = createResourceEventClient({ fetchImpl, applyEvent });
-    await client.handleEvent({
-      ...event,
-      sequence: 1,
-      resourceKey: 'mount:docs:notes/a.md',
-      resource: { kind: 'mount', mountId: 'docs', path: 'notes/a.md' },
-      occurredAt: '2026-06-22T00:00:00.000Z',
+    const client = createResourceEventClient({
+      fetchImpl,
+      applyEvent,
+      requeryAfterGap,
     });
 
-    await client.catchUpAfterReconnect();
-
-    expect(applyEvent).toHaveBeenCalledWith({
-      type: 'resource.changed',
-      changeType: 'modified',
-      sequence: 2,
-      resource: { kind: 'mount', mountId: 'docs', path: 'notes/b.md' },
-      source: 'provider_watch',
-      occurredAt: '2026-06-22T00:00:01.000Z',
+    await expect(client.catchUpAfterReconnect()).resolves.toEqual({
+      stale: true,
+      latestSequence: 2,
+      events: [],
+      resync: 'resource-stat-required',
     });
+
+    expect(requeryAfterGap).toHaveBeenCalledOnce();
+    expect(applyEvent).not.toHaveBeenCalled();
     expect(client.lastSeenSequence()).toBe(2);
   });
 

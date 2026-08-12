@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-13
 title: 交付仅覆盖 main 的 File History
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "新 SQLite 数据模型、retention/quota、rename/delete 版本语义和安全 scope 属于共享持久化与数据完整性能力。"
 ready: true
 risk: critical
 blocked_by: [T-10, T-11]
 contract_ids: [AC-005, AC-006, AC-007, AC-025, AC-026]
-owner: unassigned
+owner: Worker-T-13
 expected_changes: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>"]
 writable_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>tests/file-history-*.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>core/engine.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>desktop/src/react/**</Path>"]
@@ -109,9 +109,9 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-005`：挂载功能保持但不捕获、不建 History store。
-- [ ] `AC-006`：main create/modify/delete/rename/origin/timeline/diff/dedupe 全部正确。
-- [ ] `AC-007`：60 秒、5 MiB、30 天、500 MiB 和 noise policy 可判定通过。
-- [ ] `AC-025`：唯一新 store baseline、FAILED/retry 和无 migration 合同通过。
-- [ ] `AC-026`：route 绑定授权 main 且不泄漏 raw root。
-- [ ] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-13.md</Path>`。
+- [x] `AC-005`：挂载功能保持但不捕获、不建 History store。
+- [x] `AC-006`：main create/modify/delete/rename/origin/timeline/diff/dedupe 全部正确。
+- [x] `AC-007`：60 秒、5 MiB、30 天、500 MiB 和 noise policy 可判定通过。
+- [x] `AC-025`：唯一新 store baseline、FAILED/retry 和无 migration 合同通过。
+- [x] `AC-026`：route 绑定授权 main 且不泄漏 raw root。
+- [x] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-13.md</Path>`。

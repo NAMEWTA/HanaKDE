@@ -25,10 +25,8 @@ const {
 const { createKeepAwakeManager } = require("./keep-awake.cjs");
 const { createFileWatchRegistry } = require("./file-watch-registry.cjs");
 const { createStableFileWatcher } = require("./file-watch-adapter.cjs");
-const { createWorkspaceWatchRegistry } = require("./workspace-watch-registry.cjs");
 const { createKnowledgeTrashRetentionScheduler } = require("./knowledge-trash-retention.cjs");
 const { readTextFileSnapshot, writeTextFileIfUnchanged } = require("./file-text-io.cjs");
-const chokidar = require("chokidar");
 const { wrapIpcHandler, wrapIpcBestEffortHandler, wrapIpcOn } = require('./ipc-wrapper.cjs');
 const themeRegistry = require('./src/shared/theme-registry.cjs');
 const {
@@ -78,8 +76,11 @@ const {
   recordGpuChildProcessGone,
   recordGpuInfoUpdate,
   resolveGpuStartupPolicy,
-  settleLegacyGpuPreferenceMigration,
 } = require("./src/shared/gpu-startup-policy.cjs");
+const {
+  buildInstallAclHealDiagnostics,
+  maybeHealWin32InstallAcl,
+} = require("./src/shared/win32-install-acl-heal.cjs");
 const {
   buildWin32ServerEnv,
 } = require("./src/shared/server-process-env.cjs");
@@ -280,6 +281,37 @@ if (process.platform === "win32") {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
+// 必须先于 resolveGpuStartupPolicy：ACL 自愈成功时会清掉 autoGpuMode / 陈旧
+// pending 标记，本次启动就能直接回到 hardware，而不是等下一次启动。
+if (process.platform === "win32") {
+  try {
+    // appVersion 取壳版本：这里是"安装面身份"（哪个安装目录里的哪个壳），与
+    // 展示层禁止消费 app.getVersion() 的产品版本规则不冲突（同 desktopLaunchDiagnostics）。
+    const healResult = maybeHealWin32InstallAcl({
+      hanakoHome,
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      installDir: path.dirname(process.execPath),
+      appVersion: app.getVersion(),
+      env: process.env,
+    });
+    if (healResult.status === "healed") {
+      console.log(
+        `[desktop] install-dir sandbox ACE granted${healResult.probed ? `; GPU recovery probe cleared mode ${healResult.clearedMode ?? "(none)"}` : ""}`,
+      );
+    } else if (healResult.status === "ineffective") {
+      console.warn(
+        "[desktop] GPU crashes continued after the sandbox ACE grant; restored the previous compatibility mode. See startup diagnostics for the manual icacls command.",
+      );
+    } else if (healResult.status === "grant-failed") {
+      console.warn(`[desktop] install-dir sandbox ACE grant failed (attempt ${healResult.failureCount}); the installer-side grant remains the fallback`);
+    }
+  } catch (err) {
+    // 自愈是启动增强，绝不能反过来挡启动；失败原因完整落日志与诊断。
+    console.warn("[desktop] install ACL heal skipped due to an unexpected error:", err.message);
+  }
+}
+
 const gpuStartupPolicy = resolveGpuStartupPolicy({
   hanakoHome,
   platform: process.platform,
@@ -374,6 +406,7 @@ let _browserWebView = null;        // 当前活跃的 WebContentsView
 const _browserViews = new Map();   // sessionPath -> BrowserWorkspace; BrowserWorkspace.tabs: tabId -> WebContentsView
 let _currentBrowserSession = null; // 当前浏览器绑定的 sessionPath
 let _currentBrowserTabId = null;   // 当前浏览器绑定的 tabId
+const _browserSessionTitles = new Map(); // workspaceKey -> session title（viewer 工具栏显示"在看谁的浏览器"）
 let _browserAcceptCookies = true;
 const _browserCookiePolicyInstalledPartitions = new Set();
 
@@ -446,6 +479,10 @@ let _crashFallbackNotice = null;
  * 诊断专用文案（crash log、`dialog.trainUpdateApplyFailedBody` 这类"进程崩了
  * 请重启"对话框）刻意继续读 `app.getVersion()`，不经这个访问器——那些场景
  * 问的是"哪个壳进程崩了"，不是"用户在用哪个内容版本"。
+ * 该例外的适用范围收窄如下：crash.log 头部自本次起两行并写——壳行（`HanaAgent shell:`）
+ * 保留上述"哪个壳进程崩了"的例外语义，内容行（`Content:`）由本访问器提供。
+ * 原因是热更新后壳版本与内容版本会分叉，只报壳版本会把新内容里的崩溃标成
+ * 老版本，系统性误导排障；两行并写让"哪个壳崩的"和"崩的是哪份代码"都可读。
  */
 function getCurrentContentVersion() {
   return _currentContentVersion || app.getVersion();
@@ -814,25 +851,27 @@ function hasExistingConfig() {
   return false;
 }
 
-function hasLegacyProviderConfig() {
-  // 判断依据：added-models.yaml 存在且含有真实 api_key → 老用户配置过 provider。
+function hasProviderCatalogConfig() {
+  // A seeded agent config alone is not enough to skip onboarding. Only an
+  // explicit provider catalog credential establishes prior setup.
   // 不能只看 agents/*/config.yaml 是否存在，因为 ensureFirstRun 会为全新用户
   // 播种默认 agent（含 config.yaml），导致新用户被误判为老用户而跳过 onboarding。
   try {
-    const modelsPath = path.join(hanakoHome, "added-models.yaml");
-    if (!fs.existsSync(modelsPath)) return false;
-    const content = fs.readFileSync(modelsPath, "utf-8");
-    return /api_key:\s*["']?[^"'\s]+/.test(content);
+    const catalogPath = path.join(hanakoHome, "provider-catalog.json");
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf-8"));
+    return Object.values(catalog?.providers || {}).some((provider) => (
+      typeof provider?.api_key === "string" && provider.api_key.trim().length > 0
+    ));
   } catch {
     return false;
   }
 }
 
-async function migrateSetupCompleteViaServerIfNeeded() {
+async function completeOnboardingForExistingProviderConfigIfNeeded() {
   if (isSetupComplete()) return false;
-  if (!hasLegacyProviderConfig()) return false;
+  if (!hasProviderCatalogConfig()) return false;
   await submitOnboardingCompleteIntent({ serverPort, serverToken });
-  console.log("[desktop] 检测到老用户（已有 agent 配置），已通过 server 标记 setupComplete");
+  console.log("[desktop] 检测到已配置 provider catalog，已通过 server 标记 setupComplete");
   return true;
 }
 
@@ -1854,47 +1893,6 @@ async function _spawnServerOnce(serverInfoPath, artifactBootContext) {
   }
 }
 
-async function settleLegacyGpuPreferenceAfterServerStart() {
-  const intent = gpuStartupPolicy?.legacyPreferenceCleanup;
-  if (process.platform !== "win32" || !intent) return null;
-  if (!serverPort || !serverToken) {
-    throw new Error("Legacy GPU preference migration requires a ready local server");
-  }
-
-  const response = await fetch(
-    `http://127.0.0.1:${serverPort}/api/preferences/legacy-gpu-safe-mode/hardware-acceleration`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${serverToken}` },
-      signal: AbortSignal.timeout(5000),
-    },
-  );
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch {}
-  if (!response.ok) {
-    throw new Error(
-      `Legacy GPU preference migration failed with HTTP ${response.status}` +
-      (payload?.error ? `: ${payload.error}` : ""),
-    );
-  }
-  if (
-    payload?.ok !== true ||
-    !["deleted", "already-absent", "value-changed"].includes(payload.status)
-  ) {
-    throw new Error("Legacy GPU preference migration returned an invalid response");
-  }
-
-  const result = settleLegacyGpuPreferenceMigration({
-    hanakoHome,
-    intent,
-    preferenceStatus: payload.status,
-  });
-  console.log(`[desktop] Legacy GPU preference migration ${result.status}`);
-  return result;
-}
-
 /**
  * 持久监控 server 进程：崩溃后自动重启一次，再失败则写 crash log 并通知用户
  */
@@ -2068,6 +2066,7 @@ function buildServerCrashDiagnostics() {
   }
 
   items.push(buildGpuStartupDiagnostics({ hanakoHome, policy: gpuStartupPolicy, app }));
+  items.push(buildInstallAclHealDiagnostics({ hanakoHome }));
 
   return items.join("\n");
 }
@@ -2217,12 +2216,20 @@ function writeCrashLog(errorMessage) {
   const logs = _serverLogs.join("");
   const timestamp = new Date().toISOString();
   const diagnostics = buildServerCrashDiagnostics();
+  // 内容版本取不到就写 unknown，不猜、也不回落到壳版本——两行必须各自独立，
+  // 否则一行出问题会污染另一行，读日志的人无从分辨。
+  const contentVersion = (() => {
+    try { return getCurrentContentVersion(); } catch { return "unknown"; }
+  })();
 
   const content = redactMainLogText([
     `=== HanaAgent Crash Log ===`,
-    // 壳身份用途：crash log 记录的是"哪个壳进程崩了"，见
-    // getCurrentContentVersion() 声明处对这类诊断文案的例外说明。
-    `HanaAgent: v${app?.getVersion?.() || "unknown"}`,
+    // 壳身份 + 内容版本双行并写：壳行回答"哪个壳进程崩了"（见
+    // getCurrentContentVersion() 声明处对这类诊断文案的例外说明，该例外保留），
+    // 内容行回答"崩的是哪个版本的代码"——热更新后两者会分叉，只写壳版本会把
+    // 新内容里的崩溃标成老版本，误导用户与排障（已实际发生过一次）。
+    `HanaAgent shell: v${app?.getVersion?.() || "unknown"}`,
+    `Content: v${contentVersion}`,
     `Time: ${timestamp}`,
     `Error: ${errorMessage}`,
     `Platform: ${process.platform} ${process.arch}`,
@@ -2238,7 +2245,8 @@ function writeCrashLog(errorMessage) {
   // 写入文件（best effort）
   try {
     const crashLogPath = path.join(hanakoHome, "crash.log");
-    fs.mkdirSync(hanakoHome, { recursive: true });
+    // 数据目录存放凭证，只对当前用户开放（Windows 上 NTFS 忽略该位，由用户目录 ACL 兜底）
+    fs.mkdirSync(hanakoHome, { recursive: true, mode: 0o700 });
     fs.writeFileSync(crashLogPath, content, "utf-8");
   } catch (e) {
     console.error("[desktop] 写入 crash.log 失败:", e.message);
@@ -3076,6 +3084,8 @@ function createBrowserViewerWindow(opts = {}) {
 
   // 窗口获得焦点时，将输入焦点转发到 WebContentsView（否则无法滚动/打字）
   browserViewerWindow.on("focus", () => {
+    // 用户把 viewer 拉到前台 = 用户侧活动，刷新闲置回收计时
+    _sendBrowserUserActivity(_currentBrowserSession);
     if (_browserWebView) {
       _browserWebView.webContents.focus();
       console.log("[browser-viewer] window focus → view.focus(), isFocused:", _browserWebView.webContents.isFocused());
@@ -3383,17 +3393,6 @@ function _ensureBrowserForSession(sessionPath, tabId = null) {
   return view;
 }
 
-function _ensureBrowserTabForSession(sessionPath, tabId = null) {
-  const workspace = _ensureBrowserWorkspace(sessionPath);
-  let tab = tabId ? workspace.tabs.get(tabId) : _activeBrowserTabRecord(workspace);
-  if (!tab) {
-    tab = _createBrowserTabRecord(sessionPath, { tabId });
-    workspace.tabs.set(tab.tabId, tab);
-    workspace.activeTabId = tab.tabId;
-  }
-  return tab;
-}
-
 function _ensureBrowser() {
   return _ensureBrowserForSession(null);
 }
@@ -3461,14 +3460,14 @@ function _bindBrowserViewLifecycle(view, sessionPath) {
 
 function _removeBrowserTabRecord(view) {
   if (!view) return null;
-  for (const [key, workspace] of _browserViews) {
+  for (const workspace of _browserViews.values()) {
     for (const [tabId, tab] of workspace.tabs) {
       if (tab.view !== view) continue;
       workspace.tabs.delete(tabId);
       if (workspace.activeTabId === tabId) {
         workspace.activeTabId = workspace.tabs.keys().next().value || null;
       }
-      if (workspace.tabs.size === 0) _browserViews.delete(key);
+      // 空标签组保留：崩溃/销毁路径同样只摘掉 tab，session 的 workspace 继续存在。
       return { workspace, tabId };
     }
   }
@@ -3677,13 +3676,14 @@ function _notifyViewerUrl(url) {
       canGoBack: _browserWebView.webContents.canGoBack(),
       canGoForward: _browserWebView.webContents.canGoForward(),
       sessionPath: _currentBrowserSession,
+      sessionTitle: _browserSessionTitles.get(_browserWorkspaceKey(_currentBrowserSession)) || null,
       activeTabId: _currentBrowserTabId || serialized.activeTabId,
       tabs: serialized.tabs,
     });
   }
 }
 
-async function closeBrowserSessionViaServer(sessionPath) {
+async function closeBrowserSessionViaServer(sessionPath, { revoke = false } = {}) {
   if (!sessionPath) throw new Error("No active browser session");
   if (!serverPort || !serverToken) throw new Error("Server is not ready");
   const res = await fetch(`http://127.0.0.1:${serverPort}/api/browser/close-session`, {
@@ -3692,7 +3692,7 @@ async function closeBrowserSessionViaServer(sessionPath) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${serverToken}`,
     },
-    body: JSON.stringify({ sessionPath }),
+    body: JSON.stringify({ sessionPath, revoke }),
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) {
@@ -3855,11 +3855,49 @@ async function handleBrowserCommand(cmd, params) {
     }
 
     // ── suspend ──（从窗口摘下来，但不销毁，页面状态完全保留）
+    // keepViewerVisible：会话切换用。窗口保持可见，viewer 会短暂收到 running:false 清空 UI，
+    // 紧随其后的 viewerShowSession 立刻重绘目标 session 的标签页组或空态。
     case "suspend": {
       const sp = params.sessionPath;
       const view = sp ? _getViewForSession(sp) : _browserWebView;
       if (view && view === _browserWebView) {
-        _detachActiveBrowserView({ view, sessionPath: sp || _currentBrowserSession, hideIfVisible: true });
+        _detachActiveBrowserView({
+          view,
+          sessionPath: sp || _currentBrowserSession,
+          hideIfVisible: params.keepViewerVisible !== true,
+        });
+      }
+      return {};
+    }
+
+    // ── viewerVisibility ──（闲置回收巡检用：viewer 当前是否可见、正在展示哪个 session）
+    case "viewerVisibility": {
+      return {
+        visible: !!(browserViewerWindow && !browserViewerWindow.isDestroyed() && browserViewerWindow.isVisible()),
+        sessionPath: _currentBrowserSession,
+      };
+    }
+
+    // ── viewerShowSession ──（viewer 显示指定 session 的标签页组；无组则空态。不改变窗口可见性）
+    case "viewerShowSession": {
+      const sp = params.sessionPath || null;
+      if (typeof params.title === "string" && params.title.trim()) {
+        _browserSessionTitles.set(_browserWorkspaceKey(sp), params.title.trim());
+      }
+      if (!browserViewerWindow || browserViewerWindow.isDestroyed()) return {};
+      const workspace = _getBrowserWorkspace(sp);
+      const activeTab = _activeBrowserTabRecord(workspace);
+      if (activeTab) {
+        _switchActiveBrowserTab(sp, activeTab.tabId);
+      } else {
+        browserViewerWindow.webContents.send("browser-update", {
+          sessionPath: sp,
+          sessionTitle: _browserSessionTitles.get(_browserWorkspaceKey(sp)) || null,
+          activeTabId: null,
+          tabs: [],
+          canGoBack: false,
+          canGoForward: false,
+        });
       }
       return {};
     }
@@ -3938,16 +3976,19 @@ async function handleBrowserCommand(cmd, params) {
       workspace.tabs.delete(params.tabId);
       try { if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close(); } catch {}
       if (workspace.tabs.size === 0) {
-        _browserViews.delete(_browserWorkspaceKey(sp));
+        // 关掉最后一个标签页不销毁 workspace：session 的标签组保留为空组，viewer 显示空态。
+        // 「运行中」的语义以 workspace 是否存在为准，所以这里不广播 running:false。
+        workspace.activeTabId = null;
         if (browserViewerWindow && !browserViewerWindow.isDestroyed()) {
           browserViewerWindow.webContents.send("browser-update", {
-            running: false,
             sessionPath: sp,
             activeTabId: null,
             tabs: [],
+            canGoBack: false,
+            canGoForward: false,
           });
         }
-        return { activeTabId: null, tabs: [] };
+        return _serializeBrowserWorkspace(workspace);
       }
       workspace.activeTabId = nextTabId && workspace.tabs.has(nextTabId)
         ? nextTabId
@@ -4204,6 +4245,40 @@ async function handleBrowserCommand(cmd, params) {
   }
 }
 
+/** 浏览器命令通道的当前连接：viewer 直连主进程改动标签页后，用它把快照同步回 server */
+let _browserCmdWs = null;
+
+/**
+ * 把某个 session 的标签组快照推给 server 的 BrowserManager。
+ * viewer 的新建/关闭标签页走 IPC 直达主进程、绕过 server，不同步会让 server 状态漂移。
+ */
+function _syncWorkspaceToServer(sessionPath) {
+  if (!_browserCmdWs || _browserCmdWs.readyState !== 1) return;
+  const workspace = _getBrowserWorkspace(sessionPath);
+  try {
+    _browserCmdWs.send(JSON.stringify({
+      type: "browser-workspace-sync",
+      sessionPath,
+      workspace: workspace ? _serializeBrowserWorkspace(workspace) : null,
+    }));
+  } catch {}
+}
+
+/**
+ * 告诉 server 的 BrowserManager「用户刚碰过这个 session 的浏览器」。
+ * 闲置回收要求 agent 与用户双方都超时，用户侧的时间戳只有主进程知道。
+ */
+function _sendBrowserUserActivity(sessionPath) {
+  if (!sessionPath) return;
+  if (!_browserCmdWs || _browserCmdWs.readyState !== 1) return;
+  try {
+    _browserCmdWs.send(JSON.stringify({
+      type: "browser-user-activity",
+      sessionPath,
+    }));
+  } catch {}
+}
+
 /** 通过 WebSocket 监听 server 的浏览器命令 */
 function setupBrowserCommands() {
   if (!serverPort || !serverToken) return;
@@ -4214,6 +4289,7 @@ function setupBrowserCommands() {
 
   function connect() {
     ws = new WebSocket(url);
+    _browserCmdWs = ws;
     ws.on("open", () => {
       console.log("[desktop] Browser control WS connected");
     });
@@ -4242,6 +4318,7 @@ function setupBrowserCommands() {
       }
     });
     ws.on("close", () => {
+      if (_browserCmdWs === ws) _browserCmdWs = null;
       if (!isQuitting) {
         setTimeout(connect, 2000);
       }
@@ -5319,6 +5396,7 @@ wrapIpcBestEffortHandler("open-browser-viewer", async (_event, theme, payload) =
   if (theme) _browserViewerTheme = theme;
   const { url, sessionPath: sp } = _normalizeBrowserViewerOpenPayload(payload);
   createBrowserViewerWindow();
+  _sendBrowserUserActivity(sp);
 
   if (url && isAllowedBrowserUrl(url)) {
     await _openUrlInNewBrowserTab(sp, url);
@@ -5330,37 +5408,63 @@ wrapIpcBestEffortHandler("open-browser-viewer", async (_event, theme, payload) =
     return;
   }
 
-  const workspace = _ensureBrowserWorkspace(sp);
-  const tab = _ensureBrowserTabForSession(sp);
-  workspace.activeTabId = tab.tabId;
-  _switchActiveBrowserTab(sp, tab.tabId);
+  // 打开 viewer 不替用户建标签页：有标签就切过去，空标签组渲染空态等用户点 +。
+  const workspace = _getBrowserWorkspace(sp);
+  const activeTab = _activeBrowserTabRecord(workspace);
+  if (activeTab) {
+    _switchActiveBrowserTab(sp, activeTab.tabId);
+    return;
+  }
+  if (browserViewerWindow && !browserViewerWindow.isDestroyed()) {
+    browserViewerWindow.webContents.send("browser-update", {
+      sessionPath: sp,
+      activeTabId: null,
+      tabs: [],
+      canGoBack: false,
+      canGoForward: false,
+    });
+  }
 });
 wrapIpcBestEffortHandler("browser-go-back", (_event, sessionPath) => {
-  const view = _getViewForSession(_resolveBrowserIpcSessionPath(sessionPath));
+  const sp = _resolveBrowserIpcSessionPath(sessionPath);
+  _sendBrowserUserActivity(sp);
+  const view = _getViewForSession(sp);
   if (view) view.webContents.goBack();
 });
 wrapIpcBestEffortHandler("browser-go-forward", (_event, sessionPath) => {
-  const view = _getViewForSession(_resolveBrowserIpcSessionPath(sessionPath));
+  const sp = _resolveBrowserIpcSessionPath(sessionPath);
+  _sendBrowserUserActivity(sp);
+  const view = _getViewForSession(sp);
   if (view) view.webContents.goForward();
 });
 wrapIpcBestEffortHandler("browser-reload", (_event, sessionPath) => {
-  const view = _getViewForSession(_resolveBrowserIpcSessionPath(sessionPath));
+  const sp = _resolveBrowserIpcSessionPath(sessionPath);
+  _sendBrowserUserActivity(sp);
+  const view = _getViewForSession(sp);
   if (view) view.webContents.reload();
 });
 wrapIpcBestEffortHandler("browser-new-tab", async (_event, sessionPath) => {
-  await _openUrlInNewBrowserTab(_resolveBrowserIpcSessionPath(sessionPath), null);
+  const sp = _resolveBrowserIpcSessionPath(sessionPath);
+  _sendBrowserUserActivity(sp);
+  await _openUrlInNewBrowserTab(sp, null);
+  _syncWorkspaceToServer(sp);
 });
 wrapIpcBestEffortHandler("browser-switch-tab", (_event, tabId, sessionPath) => {
   if (typeof tabId !== "string" || !tabId) return;
-  _switchActiveBrowserTab(_resolveBrowserIpcSessionPath(sessionPath), tabId);
+  const sp = _resolveBrowserIpcSessionPath(sessionPath);
+  _sendBrowserUserActivity(sp);
+  _switchActiveBrowserTab(sp, tabId);
 });
-wrapIpcBestEffortHandler("browser-close-tab", (_event, tabId, sessionPath) => {
+wrapIpcBestEffortHandler("browser-close-tab", async (_event, tabId, sessionPath) => {
   if (typeof tabId !== "string" || !tabId) return;
   const sp = _resolveBrowserIpcSessionPath(sessionPath);
-  return handleBrowserCommand("closeTab", {
+  _sendBrowserUserActivity(sp);
+  const result = await handleBrowserCommand("closeTab", {
     sessionPath: sp,
     tabId,
   });
+  _syncWorkspaceToServer(sp);
+  return result;
 });
 wrapIpcBestEffortHandler("close-browser-viewer", () => {
   if (browserViewerWindow && !browserViewerWindow.isDestroyed()) browserViewerWindow.close();
@@ -5369,7 +5473,8 @@ wrapIpcBestEffortHandler("browser-emergency-stop", (_event, sessionPath) => {
   const sp = _resolveBrowserIpcSessionPath(sessionPath);
   // 有 session 归属时必须经过 server 的 BrowserManager，保持 UI 和运行时状态一致。
   if (sp) {
-    return closeBrowserSessionViaServer(sp);
+    // 急停语义 = 销毁浏览器 + 撤销 agent 的浏览器授权，直到用户下一条消息。
+    return closeBrowserSessionViaServer(sp, { revoke: true });
   }
   // 兼容无 sessionPath 的旧浏览器实例：没有 server 状态可同步，只能本地清理。
   const view = _getViewForSession(null);
@@ -5561,12 +5666,13 @@ wrapIpcBestEffortHandler("select-folder", async (event) => {
   return result.filePaths[0];
 });
 
-// 选择附件文件（多选文件；Windows/Linux 不支持同一 dialog 同时选文件和文件夹）
-wrapIpcBestEffortHandler("select-files", async (event) => {
+// 选择附件文件（默认多选；Windows/Linux 不支持同一 dialog 同时选文件和文件夹）
+wrapIpcBestEffortHandler("select-files", async (event, options) => {
   const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
   if (!win) return [];
+  const allowMultiple = options?.multiple !== false;
   const result = await dialog.showOpenDialog(win, {
-    properties: ["openFile", "multiSelections"],
+    properties: allowMultiple ? ["openFile", "multiSelections"] : ["openFile"],
     title: mt("dialog.selectFiles", null, "Select Files"),
   });
   if (result.canceled || !result.filePaths.length) return [];
@@ -5888,42 +5994,6 @@ wrapIpcBestEffortHandler("unwatch-file", (event, filePath) => {
   return _fileWatchRegistry.unwatchFile(filePath, event.sender.id);
 });
 
-// 工作区文件树监听：以 workspace root 为粒度递归监听，renderer 只消费目录失效事件。
-const _workspaceWatchedRendererIds = new Set();
-const _workspaceWatchRegistry = createWorkspaceWatchRegistry({
-  watch: (rootPath, options) => chokidar.watch(rootPath, options),
-  notifySubscriber: (subscriberId, payload) => {
-    const wc = webContents.fromId(subscriberId);
-    if (!wc || wc.isDestroyed()) {
-      _workspaceWatchedRendererIds.delete(subscriberId);
-      _workspaceWatchRegistry.unwatchAllForSubscriber(subscriberId);
-      return;
-    }
-    wc.send("workspace-changed", payload);
-  },
-  onError: (err, rootPath) => {
-    console.warn("[workspace-watch] failed:", rootPath, err?.message || err);
-  },
-});
-
-wrapIpcBestEffortHandler("watch-workspace", (event, rootPath) => {
-  if (!rootPath || !path.isAbsolute(rootPath)) return false;
-  const subscriberId = event.sender.id;
-  if (!_workspaceWatchedRendererIds.has(subscriberId)) {
-    _workspaceWatchedRendererIds.add(subscriberId);
-    event.sender.once("destroyed", () => {
-      _workspaceWatchedRendererIds.delete(subscriberId);
-      _workspaceWatchRegistry.unwatchAllForSubscriber(subscriberId);
-    });
-  }
-  return _workspaceWatchRegistry.watchWorkspace(rootPath, subscriberId);
-});
-
-wrapIpcBestEffortHandler("unwatch-workspace", (event, rootPath) => {
-  if (!rootPath || !path.isAbsolute(rootPath)) return true;
-  return _workspaceWatchRegistry.unwatchWorkspace(rootPath, event.sender.id);
-});
-
 // 读取二进制文件为 base64（图片、PDF 等）
 wrapIpcHandler("read-file-base64", (_event, filePath) => {
   if (!filePath || !path.isAbsolute(filePath)) return null;
@@ -6138,7 +6208,6 @@ app.whenReady().then(async () => {
     }
     console.log("[desktop] 启动 HanaAgent Server...");
     await startServer();
-    await settleLegacyGpuPreferenceAfterServerStart();
     if (process.platform === "win32") {
       markGpuStartupPhase({
         hanakoHome,
@@ -6164,8 +6233,8 @@ app.whenReady().then(async () => {
     }
 
     // 4. 检测是否需要 onboarding
-    const migratedSetupComplete = await migrateSetupCompleteViaServerIfNeeded();
-    if (isSetupComplete() || migratedSetupComplete) {
+    const completedExistingProviderSetup = await completeOnboardingForExistingProviderConfigIfNeeded();
+    if (isSetupComplete() || completedExistingProviderSetup) {
       // 已完成配置：直接创建主窗口
       if (process.platform === "win32") {
         markGpuStartupPhase({

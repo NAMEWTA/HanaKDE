@@ -6,10 +6,15 @@
  */
 
 import { sessionScopedKey, sessionScopedValue, type SessionLocatorState } from './session-slice';
+import { isOperationCorrelationId } from '../../../../shared/knowledge-diagnostics.ts';
+import {
+  isAgentFileChangeScopeGeneration,
+  type AgentActivityOperationCorrelation,
+} from '../../../../shared/workspace-history.ts';
 
 export interface AgentActivityEntry {
   id: string;
-  kind: 'subagent' | 'workflow' | 'workflow_agent' | 'workflow_step' | 'heartbeat' | 'cron';
+  kind: 'subagent' | 'workflow' | 'workflow_agent' | 'workflow_step' | 'heartbeat' | 'cron' | 'agent_tool';
   status: 'running' | 'done' | 'failed' | 'aborted';
   sessionId?: string | null;
   sessionPath: string | null;
@@ -29,6 +34,10 @@ export interface AgentActivityEntry {
   phaseLabel?: string | null;
   tokens?: number | null;
   stepKind?: 'parallel' | 'pipeline' | 'log' | null;
+  /** Opaque ResourceIO operation correlation emitted by a future activity source. */
+  operationId?: string | null;
+  /** Renderer-local workspace lifetime captured on first valid activity receipt. */
+  historyScopeGeneration?: number | null;
 }
 
 export interface AgentActivitySlice {
@@ -43,15 +52,46 @@ export const createAgentActivitySlice = (
 ): AgentActivitySlice => ({
   agentActivitiesBySession: {},
   upsertAgentActivity: (entry) => {
-    const sp = entry?.sessionPath;
-    if (!sp || !entry?.id) return; // 无归属/无 id 不入库（禁止从焦点 session 兜底）
+    // A websocket payload may not select its own History scope. Drop any
+    // supplied generation and stamp it only from the renderer state below.
+    const received = entry as AgentActivityEntry | null | undefined;
+    if (!received) return;
+    const incoming = { ...received };
+    delete incoming.historyScopeGeneration;
+    const sp = incoming.sessionPath;
+    if (!sp || !incoming.id) return; // 无归属/无 id 不入库（禁止从焦点 session 兜底）
     set((s) => {
-      const key = entry.sessionId?.trim() || sessionScopedKey(s as AgentActivitySlice & SessionLocatorState, sp) || sp;
-      const list = sessionScopedValue(s as AgentActivitySlice & SessionLocatorState, s.agentActivitiesBySession, sp) || [];
-      const idx = list.findIndex((e) => e.id === entry.id);
+      const state = s as AgentActivitySlice & SessionLocatorState & {
+        knowledgeSessionEpoch?: unknown;
+      };
+      const key = incoming.sessionId?.trim() || sessionScopedKey(state, sp) || sp;
+      // An explicit session id is authoritative even before the session
+      // locator hydrates. Prefer that bucket so an activity update retains its
+      // original local scope stamp instead of being treated as a new record.
+      const list = s.agentActivitiesBySession[key]
+        || sessionScopedValue(state, s.agentActivitiesBySession, sp)
+        || [];
+      const idx = list.findIndex((e) => e.id === incoming.id);
+      const existing = idx >= 0 ? list[idx] : null;
+      const { historyScopeGeneration: existingScopeGeneration, ...existingWithoutScope } = existing || {};
+      const nextEntry = {
+        ...existingWithoutScope,
+        ...incoming,
+      } as AgentActivityEntry;
+      const scopeGeneration = isOperationCorrelationId(nextEntry.operationId)
+        ? (isAgentFileChangeScopeGeneration(existingScopeGeneration)
+          ? existingScopeGeneration
+          : (isAgentFileChangeScopeGeneration(state.knowledgeSessionEpoch)
+            ? state.knowledgeSessionEpoch
+            : null))
+        : null;
+      const scopedEntry: AgentActivityEntry = {
+        ...nextEntry,
+        ...(scopeGeneration === null ? {} : { historyScopeGeneration: scopeGeneration }),
+      };
       const next = idx >= 0
-        ? list.map((e) => (e.id === entry.id ? { ...e, ...entry } : e))
-        : [...list, entry];
+        ? list.map((e) => (e.id === incoming.id ? scopedEntry : e))
+        : [...list, scopedEntry];
       const agentActivitiesBySession = { ...s.agentActivitiesBySession, [key]: next };
       if (key !== sp) delete agentActivitiesBySession[sp];
       return { agentActivitiesBySession };
@@ -76,3 +116,31 @@ export const selectAgentActivities =
   (sessionPath: string | null) =>
   (s: AgentActivitySlice & SessionLocatorState): AgentActivityEntry[] =>
     sessionPath ? (sessionScopedValue(s, s.agentActivitiesBySession, sessionPath) || EMPTY) : EMPTY;
+
+/**
+ * Return only operation identities backed by the existing activity records and
+ * their locally captured workspace lifetime. This is a projection helper, not
+ * an additional activity or History store.
+ */
+export function agentActivityOperationCorrelations(
+  entries: readonly AgentActivityEntry[],
+): AgentActivityOperationCorrelation[] {
+  const correlations: AgentActivityOperationCorrelation[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (
+      !isOperationCorrelationId(entry.operationId)
+      || !isAgentFileChangeScopeGeneration(entry.historyScopeGeneration)
+    ) {
+      continue;
+    }
+    const key = `${entry.operationId}:${entry.historyScopeGeneration}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    correlations.push(Object.freeze({
+      operationId: entry.operationId,
+      scopeGeneration: entry.historyScopeGeneration,
+    }));
+  }
+  return correlations;
+}

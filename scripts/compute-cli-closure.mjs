@@ -273,6 +273,16 @@ export const DYNAMIC_CALL_ALLOWLIST = Object.freeze([
       + "spawnHidden above -- same generic execution-machinery rationale.",
   },
   {
+    file: "core/mcp/clients/stdio-client.ts",
+    callee: "spawn",
+    argText: "spawnSpec.command",
+    reason:
+      "The stdio MCP transport launches the connector process the user configured "
+      + "(command plus args stored in the connector config). The target is external "
+      + "third-party server software chosen at runtime, not a reference to any module "
+      + "in this repo, so it contributes nothing to the source closure.",
+  },
+  {
     file: "lib/sandbox/exec-helper.ts",
     callee: "spawn",
     argText: "cmd",
@@ -288,16 +298,6 @@ export const DYNAMIC_CALL_ALLOWLIST = Object.freeze([
       "probeShell(shell, args, env) probes a candidate Windows shell binary to "
       + "confirm it starts correctly; shell is one of a small set of candidate "
       + "executables under test, not an import target.",
-  },
-  {
-    file: "lib/sandbox/win32-legacy-migration.ts",
-    callee: "spawn",
-    argText: "helperPath",
-    reason:
-      "Spawns a bundled Windows sandbox migration helper native binary at "
-      + "helperPath. A native-binary process launch, not a reference to repo JS/TS "
-      + "source -- the helper binary itself is a desktop packaging asset, out of this "
-      + "CLI closure's scope.",
   },
   {
     file: "lib/shell/shell-utils.ts",
@@ -317,6 +317,24 @@ export const DYNAMIC_CALL_ALLOWLIST = Object.freeze([
       + "small set of OS \"open with default app\" commands (open / cmd start / "
       + "xdg-open); cmd is a local variable holding one of those literals, not an "
       + "import target.",
+  },
+  {
+    file: "lib/document-extract/anydoc-process-runner.ts",
+    callee: "fork",
+    argText: "this.childScript",
+    reason:
+      "The isolated document conversion runner forks one of the two declared child runtime "
+      + "assets beside bundle/index.js. Tests may inject a fixture path through the existing "
+      + "internal runner seam; production defaults are anydoc-child.cjs and html-child.ts.",
+  },
+  {
+    file: "lib/resource-io/native-secure-write.ts",
+    callee: "spawn",
+    argText: "command.command",
+    reason:
+      "resolveHelperCommand returns the fixed packaged secure helper under HANA_ROOT. The only "
+      + "override is test-only and still passes through the same framed fail-closed protocol; "
+      + "this process boundary does not reference another repository module.",
   },
 ]);
 
@@ -340,6 +358,16 @@ const SPAWN_FAMILY_NAMES = new Set([
 
 export const RUNTIME_ASSETS = Object.freeze([
   {
+    path: "lib/document-extract/anydoc-child.cjs",
+    kind: "file",
+    reason: "lib/document-extract/anydoc-process-runner.ts forks this child by path at runtime; it is staged beside the server bundle.",
+  },
+  {
+    path: "lib/document-extract/html-child.ts",
+    kind: "file",
+    reason: "lib/document-extract/anydoc-process-runner.ts forks this HTML child by path at runtime; it is bundled and staged beside the server bundle.",
+  },
+  {
     path: "package.json",
     kind: "file",
     reason: "server/index.ts:266 reads fromRoot(\"package.json\") via fs.readFileSync for version display.",
@@ -358,8 +386,8 @@ export const RUNTIME_ASSETS = Object.freeze([
     path: "lib/default-models.json",
     kind: "file",
     reason:
-      "core/migrate-providers.ts:22 and core/provider-registry.ts:45 both read "
-      + "fromRoot(\"lib\", \"default-models.json\") via fs.readFileSync.",
+      "core/provider-registry.ts:45 reads fromRoot(\"lib\", \"default-models.json\") "
+      + "via fs.readFileSync.",
   },
   {
     path: "lib/config.example.yaml",
@@ -739,8 +767,37 @@ export function scanAndValidateDynamicCallSites({
 // Evidence source 3: nft trace of compiled bundles.
 // ---------------------------------------------------------------------------
 
+// Some native packages ship one npm package PER TARGET (napi-rs and esbuild
+// both do this): the variants are declared as optionalDependencies and npm
+// installs only the one matching the host, so the platform ends up in the
+// package NAME rather than inside a file the `.node` filter above can reach.
+// This is Node's own platform/arch vocabulary plus the libc/toolchain suffix
+// those packages append.
+const PLATFORM_VARIANT_SUFFIX_RE =
+  /-(?:aix|android|darwin|freebsd|linux|openbsd|sunos|win32)-(?:arm|arm64|ia32|loong64|mips64el|ppc|ppc64|riscv64|s390|s390x|x64)(?:-(?:eabi|eabihf|gnu|gnueabihf|msvc|musl))?$/;
+
+const PLATFORM_VARIANT_PLACEHOLDER = "<platform>";
+
+// Splits a traced path at its innermost `node_modules/<pkg>` boundary.
+// Returns null for paths that are not inside a package (repo sources) or that
+// stop at the package directory itself.
+export function splitNodeModulesPath(relPath) {
+  const marker = "node_modules/";
+  const idx = relPath.lastIndexOf(marker);
+  if (idx === -1) return null;
+  const base = relPath.slice(0, idx + marker.length);
+  const parts = relPath.slice(idx + marker.length).split("/");
+  const nameLen = parts[0].startsWith("@") ? 2 : 1;
+  if (parts.length <= nameLen) return null;
+  return {
+    base,
+    pkgName: parts.slice(0, nameLen).join("/"),
+    inner: parts.slice(nameLen).join("/"),
+  };
+}
+
 export function normalizeNftTraceFiles({ fileList, scratchRel }) {
-  return [...fileList]
+  const kept = [...fileList]
     .map(toPosix)
     .filter((relPath) => {
       if (relPath === scratchRel || relPath === "package.json") return false;
@@ -755,8 +812,40 @@ export function normalizeNftTraceFiles({ fileList, scratchRel }) {
       // change when npm ignore-scripts changes, while omitting the package's
       // JavaScript and metadata would still be incorrect.
       return path.posix.extname(relPath).toLowerCase() !== ".node";
-    })
-    .sort();
+    });
+
+  // A platform-variant package is only folded when BOTH hold: its name carries
+  // a platform suffix, AND (once its `.node` bytes are filtered above) it
+  // contributes nothing but its own package.json. The second condition is what
+  // keeps an ordinary package that merely looks platform-suffixed intact --
+  // folding one that ships real modules would erase real files from the census.
+  const contributions = new Map();
+  for (const relPath of kept) {
+    const split = splitNodeModulesPath(relPath);
+    if (!split) continue;
+    const key = split.base + split.pkgName;
+    if (!contributions.has(key)) contributions.set(key, []);
+    contributions.get(key).push(split.inner);
+  }
+  const foldable = new Set();
+  for (const [key, inners] of contributions) {
+    const pkgName = key.slice(key.lastIndexOf("node_modules/") + "node_modules/".length);
+    if (!PLATFORM_VARIANT_SUFFIX_RE.test(pkgName)) continue;
+    if (inners.length !== 1 || inners[0] !== "package.json") continue;
+    foldable.add(key);
+  }
+
+  const folded = kept.map((relPath) => {
+    const split = splitNodeModulesPath(relPath);
+    if (!split || !foldable.has(split.base + split.pkgName)) return relPath;
+    const stableName = split.pkgName.replace(
+      PLATFORM_VARIANT_SUFFIX_RE,
+      `-${PLATFORM_VARIANT_PLACEHOLDER}`,
+    );
+    return `${split.base}${stableName}/${split.inner}`;
+  });
+
+  return [...new Set(folded)].sort();
 }
 
 export async function traceNftRoot({ rootDir, root }) {

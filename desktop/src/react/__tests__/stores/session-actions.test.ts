@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { InlineErrorEntry } from '../../stores/streaming-slice';
 
 type MockState = Record<string, unknown>;
 
@@ -49,9 +50,8 @@ const initialStateFactory = (): MockState => ({
   clearDraft: vi.fn(),
   streamingSessions: [] as string[],
   unreadOutputSessionPaths: [] as string[],
-  capabilityDriftBySession: {} as Record<string, unknown>,
   capabilityRefreshingSessions: [] as string[],
-  inlineErrors: {} as Record<string, string | null>,
+  inlineErrors: {} as Record<string, InlineErrorEntry | null>,
   addToast: vi.fn(),
   activePanel: null,
   currentTab: 'chat',
@@ -245,9 +245,11 @@ function installStoreMethods() {
     const versions = mockState.todosLiveVersionBySession as Record<string, number>;
     versions[path] = (versions[path] ?? 0) + 1;
   });
-  s.setInlineError = vi.fn((path: string, text: string) => {
-    const inlineErrors = mockState.inlineErrors as Record<string, string | null>;
-    inlineErrors[path] = text;
+  s.setInlineError = vi.fn((path: string, error: string | InlineErrorEntry) => {
+    const inlineErrors = mockState.inlineErrors as Record<string, InlineErrorEntry | null>;
+    inlineErrors[path] = typeof error === 'string'
+      ? { text: error, detail: null, code: null }
+      : error;
   });
   s.appendItem = vi.fn((path: string, item: unknown) => {
     const chat = mockState.chatSessions as Record<string, { items: unknown[] }>;
@@ -266,11 +268,6 @@ function installStoreMethods() {
     }
   });
   s.setPendingNewSessionPermissionMode = vi.fn((mode: string | null) => { mockState.pendingNewSessionPermissionMode = mode; });
-  s.setSessionCapabilityDrift = vi.fn((path: string, drift: unknown) => {
-    const bySession = mockState.capabilityDriftBySession as Record<string, unknown>;
-    if (drift) bySession[path] = drift;
-    else delete bySession[path];
-  });
   s.setSessionCapabilityRefreshing = vi.fn((path: string, refreshing: boolean) => {
     const list = mockState.capabilityRefreshingSessions as string[];
     mockState.capabilityRefreshingSessions = refreshing
@@ -294,7 +291,6 @@ import {
   completeSessionTodos,
   continueDeletedAgentSession,
   createNewSession,
-  dismissSessionCapabilityDrift,
   ensureSession,
   loadMessages,
   loadSessions,
@@ -612,26 +608,61 @@ function mockPermissionDefault(mode = 'ask') {
   });
 
   describe('createNewSession cwd draft', () => {
-    it('uses the agent home folder and refreshes the visible desk root', async () => {
+    it('resets a global new-session draft to the primary agent and its effective workspace', async () => {
+      (mockState as Record<string, unknown>).agents = [
+        {
+          id: 'hana',
+          name: 'Hana',
+          isPrimary: true,
+          homeFolder: '/workspace/Primary',
+          effectiveHomeFolder: '/workspace/Primary',
+        },
+        {
+          id: 'mio',
+          name: 'Mio',
+          isPrimary: false,
+          homeFolder: '/workspace/Mio',
+          effectiveHomeFolder: '/workspace/Mio',
+        },
+      ];
+      (mockState as Record<string, unknown>).currentAgentId = 'mio';
       (mockState as Record<string, unknown>).deskBasePath = '/workspace/Desktop';
       (mockState as Record<string, unknown>).deskCurrentPath = 'old/subdir';
       (mockState as Record<string, unknown>).deskFiles = [{ name: 'stale.md' }];
       (mockState as Record<string, unknown>).deskJianContent = 'stale';
-      (mockState as Record<string, unknown>).homeFolder = '/workspace/AgentHome';
+      (mockState as Record<string, unknown>).homeFolder = '/workspace/Mio';
       mockPermissionDefault();
 
       await createNewSession();
 
-      expect(mockState.selectedFolder).toBe('/workspace/AgentHome');
+      expect(mockState.selectedAgentId).toBe('hana');
+      expect(mockState.selectedFolder).toBe('/workspace/Primary');
       expect(mockState.pendingNewSession).toBe(true);
-      expect(mockState.deskBasePath).toBe('/workspace/AgentHome');
+      expect(mockState.deskBasePath).toBe('/workspace/Primary');
       expect(mockState.deskCurrentPath).toBe('');
       expect(mockState.deskFiles).toEqual([]);
       expect(mockState.deskJianContent).toBeNull();
-      expect(mockLoadDeskFiles).toHaveBeenCalledWith('', '/workspace/AgentHome', null);
+      expect(mockLoadDeskFiles).toHaveBeenCalledWith('', '/workspace/Primary', null);
     });
 
-    it('uses the current session cwd for a new session when the agent has no explicit home folder', async () => {
+    it('uses the primary agent effective default workspace instead of the active session cwd', async () => {
+      (mockState as Record<string, unknown>).agents = [
+        {
+          id: 'hana',
+          name: 'Hana',
+          isPrimary: true,
+          homeFolder: null,
+          effectiveHomeFolder: '/home/test/Desktop/OH-WorkSpace',
+        },
+        {
+          id: 'mio',
+          name: 'Mio',
+          isPrimary: false,
+          homeFolder: null,
+          effectiveHomeFolder: '/home/test/Desktop/OH-WorkSpace',
+        },
+      ];
+      (mockState as Record<string, unknown>).currentAgentId = 'mio';
       (mockState as Record<string, unknown>).homeFolder = null;
       (mockState as Record<string, unknown>).deskBasePath = '/workspace/current-session';
       (mockState as Record<string, unknown>).deskCurrentPath = 'notes';
@@ -640,10 +671,11 @@ function mockPermissionDefault(mode = 'ask') {
 
       await createNewSession();
 
-      expect(mockState.selectedFolder).toBe('/workspace/current-session');
-      expect(mockState.deskBasePath).toBe('/workspace/current-session');
-      expect(mockState.deskCurrentPath).toBe('notes');
-      expect(mockLoadDeskFiles).toHaveBeenCalledWith('notes', '/workspace/current-session', null);
+      expect(mockState.selectedAgentId).toBe('hana');
+      expect(mockState.selectedFolder).toBe('/home/test/Desktop/OH-WorkSpace');
+      expect(mockState.deskBasePath).toBe('/home/test/Desktop/OH-WorkSpace');
+      expect(mockState.deskCurrentPath).toBe('');
+      expect(mockLoadDeskFiles).toHaveBeenCalledWith('', '/home/test/Desktop/OH-WorkSpace', null);
     });
 
     it('invalidates an in-flight session switch so the new-session desk stays on the agent home folder', async () => {
@@ -1069,6 +1101,27 @@ function mockPermissionDefault(mode = 'ask') {
     });
 
     it('carries an explicit project id from the new-session draft into session creation', async () => {
+      Object.assign(mockState, {
+        agents: [
+          {
+            id: 'hana',
+            name: 'Hana',
+            isPrimary: true,
+            homeFolder: '/workspace/primary',
+            effectiveHomeFolder: '/workspace/primary',
+          },
+          {
+            id: 'mio',
+            name: 'Mio',
+            isPrimary: false,
+            homeFolder: '/workspace/mio',
+            effectiveHomeFolder: '/workspace/mio',
+          },
+        ],
+        currentAgentId: 'mio',
+        homeFolder: '/workspace/mio',
+        deskBasePath: '/workspace/mio-session',
+      });
       mockPermissionDefault();
 
       await createNewSession({ projectId: 'project-hana', cwd: '/workspace/project-hana' });
@@ -1094,6 +1147,7 @@ function mockPermissionDefault(mode = 'ask') {
             cwd: '/workspace/project-hana',
             projectId: 'project-hana',
             permissionMode: 'ask',
+            agentId: 'hana',
             currentSessionPath: null,
           }),
         }),
@@ -1102,8 +1156,11 @@ function mockPermissionDefault(mode = 'ask') {
     });
 
     it('surfaces the server error when pending session creation fails', async () => {
-      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) =>
-        key === 'session.createFailed' ? 'Create session failed' : key;
+      const copy: Record<string, string> = {
+        'session.createFailed': 'Create session failed',
+        'error.code.unexpected': 'Something went wrong',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
       Object.assign(mockState, {
         pendingNewSession: true,
         pendingDraftId: 'draft-error',
@@ -1114,14 +1171,74 @@ function mockPermissionDefault(mode = 'ask') {
       await expect(ensureSession()).resolves.toBeNull();
 
       expect(mockState.inlineErrors).toMatchObject({
-        '': 'Create session failed: session skill snapshot failed',
+        '': {
+          text: 'Create session failed: Something went wrong',
+          detail: 'session skill snapshot failed',
+          code: null,
+        },
       });
       expect(mockState.addToast).toHaveBeenCalledWith(
-        'Create session failed: session skill snapshot failed',
+        'Create session failed: Something went wrong',
         'error',
         6000,
+        undefined,
       );
       expect(mockState.pendingNewSession).toBe(true);
+    });
+
+    it('新建失败带错误码时说人话，原始英文留在详情区', async () => {
+      const copy: Record<string, string> = {
+        'session.createFailed': 'Create session failed',
+        'error.code.unexpected': 'Something went wrong',
+        'error.code.noAvailableModel': '当前没有可用的对话模型',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
+      Object.assign(mockState, {
+        pendingNewSession: true,
+        pendingDraftId: 'draft-coded',
+        memoryEnabled: true,
+      });
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        error: 'no available model',
+        code: 'no_available_model',
+      }, false));
+
+      await expect(ensureSession()).resolves.toBeNull();
+
+      expect(mockState.inlineErrors).toMatchObject({
+        '': {
+          text: 'Create session failed: 当前没有可用的对话模型',
+          detail: 'no available model',
+          code: 'no_available_model',
+        },
+      });
+    });
+
+    it('新建失败走顶层 onError 的嵌套形状时，仍读得出 code 和 message', async () => {
+      const copy: Record<string, string> = {
+        'session.createFailed': 'Create session failed',
+        'error.code.unexpected': 'Something went wrong',
+        'error.code.sessionManifestUnavailable': '会话索引暂时不可用，请稍后重试',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
+      Object.assign(mockState, {
+        pendingNewSession: true,
+        pendingDraftId: 'draft-nested',
+        memoryEnabled: true,
+      });
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        error: { code: 'session_manifest_unavailable', message: 'session index is rebuilding', traceId: 't-1' },
+      }, false));
+
+      await expect(ensureSession()).resolves.toBeNull();
+
+      expect(mockState.inlineErrors).toMatchObject({
+        '': {
+          text: 'Create session failed: 会话索引暂时不可用，请稍后重试',
+          detail: 'session index is rebuilding',
+          code: 'session_manifest_unavailable',
+        },
+      });
     });
   });
 
@@ -1595,8 +1712,11 @@ function mockPermissionDefault(mode = 'ask') {
     });
 
     it('surfaces the server error when switching to an old session fails', async () => {
-      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) =>
-        key === 'session.switchFailed' ? 'Switch session failed' : key;
+      const copy: Record<string, string> = {
+        'session.switchFailed': 'Switch session failed',
+        'error.code.unexpected': 'Something went wrong',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
       Object.assign(mockState, {
         currentSessionPath: '/session/current.jsonl',
       });
@@ -1608,13 +1728,75 @@ function mockPermissionDefault(mode = 'ask') {
 
       expect(mockState.currentSessionPath).toBe('/session/current.jsonl');
       expect(mockState.inlineErrors).toMatchObject({
-        '/session/current.jsonl': 'Switch session failed: Invalid session path',
+        '/session/current.jsonl': {
+          text: 'Switch session failed: Something went wrong',
+          detail: 'Invalid session path',
+          code: null,
+        },
       });
       expect(mockState.addToast).toHaveBeenCalledWith(
-        'Switch session failed: Invalid session path',
+        'Switch session failed: Something went wrong',
         'error',
         6000,
+        undefined,
       );
+    });
+
+    it('切换失败带错误码时说人话，toast 带上错误码', async () => {
+      const copy: Record<string, string> = {
+        'session.switchFailed': 'Switch session failed',
+        'error.code.unexpected': 'Something went wrong',
+        'error.code.sessionLocatorNotActive': '这个会话已经不是当前版本，刷新一下列表',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
+      Object.assign(mockState, {
+        currentSessionPath: '/session/current.jsonl',
+      });
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        error: 'session locator is not active',
+        code: 'session_locator_not_active',
+      }, false));
+
+      await switchSession('/session/old.jsonl');
+
+      expect(mockState.inlineErrors).toMatchObject({
+        '/session/current.jsonl': {
+          text: 'Switch session failed: 这个会话已经不是当前版本，刷新一下列表',
+          detail: 'session locator is not active',
+          code: 'session_locator_not_active',
+        },
+      });
+      expect(mockState.addToast).toHaveBeenCalledWith(
+        'Switch session failed: 这个会话已经不是当前版本，刷新一下列表',
+        'error',
+        6000,
+        { errorCode: 'session_locator_not_active' },
+      );
+    });
+
+    it('切换失败走顶层 onError 的嵌套形状时，仍读得出 code 和 message', async () => {
+      const copy: Record<string, string> = {
+        'session.switchFailed': 'Switch session failed',
+        'error.code.unexpected': 'Something went wrong',
+        'error.code.sessionManifestUnavailable': '会话索引暂时不可用，请稍后重试',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
+      Object.assign(mockState, {
+        currentSessionPath: '/session/current.jsonl',
+      });
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        error: { code: 'session_manifest_unavailable', message: 'session index is rebuilding', traceId: 't-1' },
+      }, false));
+
+      await switchSession('/session/old.jsonl');
+
+      expect(mockState.inlineErrors).toMatchObject({
+        '/session/current.jsonl': {
+          text: 'Switch session failed: 会话索引暂时不可用，请稍后重试',
+          detail: 'session index is rebuilding',
+          code: 'session_manifest_unavailable',
+        },
+      });
     });
 
     it('后端返回 currentModelId，uncached session 仍然触发 loadMessages', async () => {
@@ -1833,6 +2015,49 @@ function mockPermissionDefault(mode = 'ask') {
       expect(mockLoadDeskFiles).toHaveBeenCalledWith('', '/workspace-a', null);
     });
 
+    it('switching across agents synchronizes the active agent home while showing the session cwd', async () => {
+      Object.assign(mockState, {
+        agents: [
+          {
+            id: 'hana',
+            name: 'Hana',
+            yuan: 'hanako',
+            isPrimary: true,
+            homeFolder: '/workspace/hana-home',
+            effectiveHomeFolder: '/workspace/hana-home',
+          },
+          {
+            id: 'mio',
+            name: 'Mio',
+            yuan: 'hanako',
+            isPrimary: false,
+            homeFolder: '/workspace/mio-home',
+            effectiveHomeFolder: '/workspace/mio-home',
+          },
+        ],
+        currentAgentId: 'hana',
+        homeFolder: '/workspace/hana-home',
+        deskBasePath: '/workspace/hana-session',
+      });
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        agentId: 'mio',
+        agentName: 'Mio',
+        cwd: '/workspace/mio-session',
+        currentModelId: null,
+        currentModelName: null,
+        currentModelProvider: null,
+      }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        messages: [{ text: 'mio history' }], blocks: [], todos: [], hasMore: false,
+      }));
+
+      await switchSession('/mio');
+
+      expect(mockState.currentAgentId).toBe('mio');
+      expect(mockState.homeFolder).toBe('/workspace/mio-home');
+      expect(mockState.deskBasePath).toBe('/workspace/mio-session');
+    });
+
     it('切到同一 workspace 的 session 时保留当前 desk 子目录', async () => {
       (mockState as Record<string, unknown>).deskCurrentPath = 'notes/daily';
       (mockState as Record<string, unknown>).deskBasePath = '/workspace-a';
@@ -1975,7 +2200,11 @@ function mockPermissionDefault(mode = 'ask') {
       (mockState.todosBySession as Record<string, unknown>)['/archived'] = [{ id: 'todo-1' }];
       (mockState.todosLiveVersionBySession as Record<string, number>)['/archived'] = 3;
       (mockState.streamingSessions as string[]) = ['/current', '/archived'];
-      (mockState.inlineErrors as Record<string, string | null>)['/archived'] = 'boom';
+      (mockState.inlineErrors as Record<string, InlineErrorEntry | null>)['/archived'] = {
+        text: 'boom',
+        detail: null,
+        code: null,
+      };
 
       mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }));
       mockFetch.mockResolvedValueOnce(jsonResponse([{ path: '/current' }]));
@@ -1998,7 +2227,7 @@ function mockPermissionDefault(mode = 'ask') {
       expect((mockState.draftDocs as Record<string, unknown>)['/archived']).toBeUndefined();
       expect((mockState.todosBySession as Record<string, unknown>)['/archived']).toBeUndefined();
       expect((mockState.streamingSessions as string[])).toEqual(['/current']);
-      expect((mockState.inlineErrors as Record<string, string | null>)['/archived']).toBeNull();
+      expect((mockState.inlineErrors as Record<string, InlineErrorEntry | null>)['/archived']).toBeNull();
       expect(mockClearChat).not.toHaveBeenCalled();
     });
 
@@ -2329,87 +2558,15 @@ function mockPermissionDefault(mode = 'ask') {
     });
   });
 
-  describe('capability drift actions (#1624)', () => {
+  describe('refreshSessionCapabilities', () => {
     const target = '/session/drift.jsonl';
-    const drift = {
-      version: 1,
-      fingerprint: 'fp-live',
-      frozenFingerprint: 'fp-frozen',
-      addedToolNames: ['office'],
-      removedToolNames: [],
-      invalidToolNames: [],
-      promptChanged: false,
-      hasDrift: true,
-    };
 
-    it('switchSession hydrates capabilityDrift from the response into the keyed store', async () => {
-      Object.assign(mockState, { sessions: [{ path: target, cwd: '/tmp/work' }] });
-      mockFetch.mockImplementation(async (url: string) => {
-        if (String(url) === '/api/sessions/switch') {
-          return jsonResponse({ ok: true, isStreaming: false, capabilityDrift: drift });
-        }
-        if (String(url).startsWith('/api/sessions/messages')) {
-          return jsonResponse({ messages: [], blocks: [], todos: [], hasMore: false });
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      });
-
-      await switchSession(target);
-
-      expect((mockState.capabilityDriftBySession as Record<string, unknown>)[target]).toEqual(drift);
-    });
-
-    it('switchSession clears stale drift when the response has none', async () => {
-      Object.assign(mockState, {
-        sessions: [{ path: target, cwd: '/tmp/work' }],
-        capabilityDriftBySession: { [target]: drift },
-      });
-      mockFetch.mockImplementation(async (url: string) => {
-        if (String(url) === '/api/sessions/switch') {
-          return jsonResponse({ ok: true, isStreaming: false });
-        }
-        if (String(url).startsWith('/api/sessions/messages')) {
-          return jsonResponse({ messages: [], blocks: [], todos: [], hasMore: false });
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      });
-
-      await switchSession(target);
-
-      expect((mockState.capabilityDriftBySession as Record<string, unknown>)[target]).toBeUndefined();
-    });
-
-    it('dismiss hides optimistically and posts the fingerprint', async () => {
-      Object.assign(mockState, { capabilityDriftBySession: { [target]: drift } });
-      mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }));
-
-      const ok = await dismissSessionCapabilityDrift(target, 'fp-live');
-
-      expect(ok).toBe(true);
-      expect((mockState.capabilityDriftBySession as Record<string, unknown>)[target]).toBeUndefined();
-      expect(mockFetch).toHaveBeenCalledWith('/api/sessions/capability-drift/dismiss', expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ path: target, fingerprint: 'fp-live' }),
-      }));
-    });
-
-    it('dismiss restores the notice when the server rejects', async () => {
-      Object.assign(mockState, { capabilityDriftBySession: { [target]: drift } });
-      mockFetch.mockResolvedValueOnce(jsonResponse({ error: 'nope' }, false));
-
-      const ok = await dismissSessionCapabilityDrift(target, 'fp-live');
-
-      expect(ok).toBe(false);
-      expect((mockState.capabilityDriftBySession as Record<string, unknown>)[target]).toEqual(drift);
-    });
-
-    it('refresh marks busy, clears drift on success, and reloads messages', async () => {
-      Object.assign(mockState, { capabilityDriftBySession: { [target]: drift } });
+    it('marks busy during refresh, reloads messages, and clears busy afterward', async () => {
       const busyDuringRequest: boolean[] = [];
       mockFetch.mockImplementation(async (url: string) => {
         if (String(url) === '/api/sessions/fresh-compact') {
           busyDuringRequest.push((mockState.capabilityRefreshingSessions as string[]).includes(target));
-          return jsonResponse({ ok: true, tokensBefore: 100, tokensAfter: 10, capabilityDrift: null });
+          return jsonResponse({ ok: true, tokensBefore: 100, tokensAfter: 10 });
         }
         if (String(url).startsWith('/api/sessions/messages')) {
           return jsonResponse({ messages: [], blocks: [], todos: [], hasMore: false });
@@ -2421,23 +2578,65 @@ function mockPermissionDefault(mode = 'ask') {
 
       expect(ok).toBe(true);
       expect(busyDuringRequest).toEqual([true]);
-      expect((mockState.capabilityDriftBySession as Record<string, unknown>)[target]).toBeUndefined();
       expect((mockState.capabilityRefreshingSessions as string[]).includes(target)).toBe(false);
       expect(mockFetch).toHaveBeenCalledWith(
         `/api/sessions/messages?path=${encodeURIComponent(target)}`,
       );
     });
 
-    it('refresh failure keeps the notice, surfaces an inline error, and clears busy', async () => {
-      Object.assign(mockState, { capabilityDriftBySession: { [target]: drift } });
+    it('surfaces a refresh failure as an inline error and clears busy', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({ error: 'already compacting' }, false));
 
       const ok = await refreshSessionCapabilities(target);
 
       expect(ok).toBe(false);
-      expect((mockState.capabilityDriftBySession as Record<string, unknown>)[target]).toEqual(drift);
       expect((mockState.capabilityRefreshingSessions as string[]).includes(target)).toBe(false);
-      expect((mockState.inlineErrors as Record<string, string | null>)[target]).toContain('already compacting');
+      const capabilityError = (mockState.inlineErrors as Record<string, InlineErrorEntry | null>)[target];
+      expect(capabilityError?.text).toContain('already compacting');
+    });
+
+    it('嵌套形状不渲染 [object Object]，错误码照样透传', async () => {
+      const copy: Record<string, string> = {
+        'input.refreshAndCompactFailed': 'Refresh failed',
+        'error.code.unexpected': 'Something went wrong',
+        'error.code.sessionBusy': '这个会话正忙，等当前操作结束',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        error: { code: 'session_busy', message: 'session is busy', traceId: 't-3' },
+      }, false));
+
+      const ok = await refreshSessionCapabilities(target);
+
+      expect(ok).toBe(false);
+      const capabilityError = (mockState.inlineErrors as Record<string, InlineErrorEntry | null>)[target];
+      expect(capabilityError?.text).not.toContain('[object Object]');
+      expect(capabilityError?.text).toBe('Refresh failed: 这个会话正忙，等当前操作结束');
+      expect(capabilityError?.code).toBe('session_busy');
+    });
+  });
+
+  describe('continueDeletedAgentSession 的错误呈现', () => {
+    it('嵌套形状不渲染 [object Object]，toast 带上错误码', async () => {
+      const copy: Record<string, string> = {
+        'session.deletedAgent.continueFailed': 'Continue failed',
+        'error.code.unexpected': 'Something went wrong',
+        'error.code.sessionBusy': '这个会话正忙，等当前操作结束',
+      };
+      (globalThis.window as unknown as { t: (key: string) => string }).t = (key: string) => copy[key] ?? key;
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        error: { code: 'session_busy', message: 'session is busy', traceId: 't-4' },
+      }, false));
+
+      const ok = await continueDeletedAgentSession('/session/deleted.jsonl');
+
+      expect(ok).toBe(false);
+      const toastCalls = (mockState.addToast as ReturnType<typeof vi.fn>).mock.calls;
+      const failureToast = toastCalls.find(call => String(call[0]).startsWith('Continue failed'));
+      expect(failureToast).toBeDefined();
+      expect(String(failureToast?.[0])).not.toContain('[object Object]');
+      expect(failureToast?.[0]).toBe('Continue failed: 这个会话正忙，等当前操作结束');
+      expect(failureToast?.[3]).toEqual({ errorCode: 'session_busy' });
     });
   });
 });

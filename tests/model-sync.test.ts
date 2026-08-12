@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import YAML from "js-yaml";
 
 // mock known-models 词典查询：provider + model 二级结构，未命中时再查通用 fallback
 const KNOWN_MODELS = {
@@ -72,6 +71,24 @@ const KNOWN_MODELS = {
     },
   },
   anthropic: {
+    "claude-opus-5": {
+      name: "Claude Opus 5",
+      context: 1000000,
+      maxOutput: 128000,
+      image: true,
+      reasoning: true,
+      xhigh: true,
+      compat: { thinkingFormat: "anthropic", reasoningProfile: "anthropic-adaptive-only" },
+    },
+    "claude-sonnet-5": {
+      name: "Claude Sonnet 5",
+      context: 1000000,
+      maxOutput: 128000,
+      image: true,
+      reasoning: true,
+      xhigh: true,
+      compat: { thinkingFormat: "anthropic", reasoningProfile: "anthropic-adaptive-only" },
+    },
     "claude-fable-5": {
       name: "Claude Fable 5",
       context: 1000000,
@@ -112,6 +129,7 @@ const KNOWN_MODELS = {
     k3: {
       name: "Kimi K3",
       context: 1048576,
+      image: true,
       reasoning: true,
       thinkingLevels: ["medium", "high", "max"],
       thinkingLevelMap: {
@@ -122,6 +140,21 @@ const KNOWN_MODELS = {
         xhigh: "max",
       },
       defaultThinkingLevel: "max",
+    },
+    "k3-256k": {
+      name: "Kimi K3 256K",
+      context: 262144,
+      image: true,
+      reasoning: true,
+      thinkingLevels: ["medium", "high", "max"],
+      thinkingLevelMap: {
+        off: null,
+        low: "low",
+        medium: "low",
+        high: "high",
+        xhigh: "max",
+      },
+      defaultThinkingLevel: "high",
     },
     "kimi-for-coding": {
       name: "Kimi for Coding",
@@ -175,6 +208,24 @@ const KNOWN_MODELS = {
     },
   },
   openrouter: {
+    "anthropic/claude-opus-5": {
+      name: "Anthropic/Claude Opus 5",
+      context: 1000000,
+      maxOutput: 128000,
+      image: true,
+      reasoning: true,
+      xhigh: true,
+      compat: { thinkingFormat: "openrouter", reasoningProfile: "openrouter-anthropic-adaptive" },
+    },
+    "anthropic/claude-sonnet-5": {
+      name: "Anthropic/Claude Sonnet 5",
+      context: 1000000,
+      maxOutput: 128000,
+      image: true,
+      reasoning: true,
+      xhigh: true,
+      compat: { thinkingFormat: "openrouter", reasoningProfile: "openrouter-anthropic-adaptive" },
+    },
     "anthropic/claude-fable-5": {
       name: "Anthropic/Claude Fable 5",
       context: 1000000,
@@ -281,6 +332,14 @@ async function loadSync() {
 
 function readProviderCatalogProviders() {
   return JSON.parse(fs.readFileSync(path.join(tmpDir, "provider-catalog.json"), "utf-8")).providers || {};
+}
+
+function writeProviderCatalogProviders(providers) {
+  fs.writeFileSync(
+    path.join(tmpDir, "provider-catalog.json"),
+    JSON.stringify({ catalogVersion: 2, providers, capabilities: {}, meta: {} }, null, 2) + "\n",
+    "utf-8",
+  );
 }
 
 describe("syncModels", () => {
@@ -803,7 +862,7 @@ describe("syncModels", () => {
     });
   });
 
-  it("projects official K3 metadata without inventing image or output limits", async () => {
+  it("projects official K3 image metadata without inventing video or output limits", async () => {
     const syncModels = await loadSync();
 
     const providers = {
@@ -811,19 +870,19 @@ describe("syncModels", () => {
         base_url: "https://api.kimi.com/coding/v1",
         api: "openai-completions",
         api_key: "sk-test",
-        models: ["k3"],
+        models: ["k3", "k3-256k"],
       },
     };
 
     syncModels(providers, { modelsJsonPath });
 
     const result = JSON.parse(fs.readFileSync(modelsJsonPath, "utf-8"));
-    const model = result.providers["kimi-coding"].models[0];
-    expect(model).toMatchObject({
+    const models = result.providers["kimi-coding"].models;
+    expect(models[0]).toMatchObject({
       id: "k3",
       name: "Kimi K3",
       contextWindow: 1048576,
-      input: ["text"],
+      input: ["text", "image"],
       reasoning: true,
       defaultThinkingLevel: "max",
       thinkingLevelMap: {
@@ -835,8 +894,27 @@ describe("syncModels", () => {
       },
       headers: { "User-Agent": "KimiCLI/1.5" },
     });
-    expect(model).not.toHaveProperty("maxTokens");
-    expect(model).not.toHaveProperty("visionCapabilities");
+    expect(models[1]).toMatchObject({
+      id: "k3-256k",
+      name: "Kimi K3 256K",
+      contextWindow: 262144,
+      input: ["text", "image"],
+      reasoning: true,
+      defaultThinkingLevel: "high",
+      thinkingLevelMap: {
+        off: null,
+        low: "low",
+        medium: "low",
+        high: "high",
+        xhigh: "max",
+      },
+      headers: { "User-Agent": "KimiCLI/1.5" },
+    });
+    for (const model of models) {
+      expect(model).not.toHaveProperty("maxTokens");
+      expect(model).not.toHaveProperty("visionCapabilities");
+      expect(model.compat).not.toHaveProperty("hanaVideoInput");
+    }
   });
 
   it("treats future official Kimi Coding ids as reasoning-capable without borrowing model metadata", async () => {
@@ -1270,7 +1348,7 @@ describe("syncModels", () => {
     });
   });
 
-  it("projects Claude Fable adaptive-only profile for Anthropic Messages providers", async () => {
+  it("projects Claude 5 adaptive-only profiles for Anthropic Messages providers", async () => {
     const syncModels = await loadSync();
 
     const providers = {
@@ -1278,26 +1356,31 @@ describe("syncModels", () => {
         base_url: "https://api.anthropic.com",
         api: "anthropic-messages",
         api_key: "sk-test",
-        models: ["claude-fable-5"],
+        models: ["claude-fable-5", "claude-opus-5", "claude-sonnet-5"],
       },
     };
 
     syncModels(providers, { modelsJsonPath });
 
     const result = JSON.parse(fs.readFileSync(modelsJsonPath, "utf-8"));
-    const model = result.providers.anthropic.models[0];
-    expect(model).toMatchObject({
-      id: "claude-fable-5",
-      contextWindow: 1000000,
-      maxTokens: 128000,
-      input: ["text", "image"],
-      reasoning: true,
-      compat: {
-        supportsDeveloperRole: false,
-        thinkingFormat: "anthropic",
-        reasoningProfile: "anthropic-adaptive-only",
-      },
-    });
+    expect(result.providers.anthropic.models.map((model) => model.id)).toEqual([
+      "claude-fable-5",
+      "claude-opus-5",
+      "claude-sonnet-5",
+    ]);
+    for (const model of result.providers.anthropic.models) {
+      expect(model).toMatchObject({
+        contextWindow: 1000000,
+        maxTokens: 128000,
+        input: ["text", "image"],
+        reasoning: true,
+        compat: {
+          supportsDeveloperRole: false,
+          thinkingFormat: "anthropic",
+          reasoningProfile: "anthropic-adaptive-only",
+        },
+      });
+    }
   });
 
   it("writes a custom entry when an Anthropic builtin has a model-level API override", async () => {
@@ -1330,7 +1413,7 @@ describe("syncModels", () => {
     expect(result.providers.anthropic.modelOverrides).toBeUndefined();
   });
 
-  it("projects Claude Fable OpenRouter profile without Anthropic Messages fields", async () => {
+  it("projects Claude 5 OpenRouter profiles without Anthropic Messages fields", async () => {
     const syncModels = await loadSync();
 
     const providers = {
@@ -1338,26 +1421,35 @@ describe("syncModels", () => {
         base_url: "https://openrouter.ai/api/v1",
         api: "openai-completions",
         api_key: "sk-test",
-        models: ["anthropic/claude-fable-5"],
+        models: [
+          "anthropic/claude-fable-5",
+          "anthropic/claude-opus-5",
+          "anthropic/claude-sonnet-5",
+        ],
       },
     };
 
     syncModels(providers, { modelsJsonPath });
 
     const result = JSON.parse(fs.readFileSync(modelsJsonPath, "utf-8"));
-    const model = result.providers.openrouter.models[0];
-    expect(model).toMatchObject({
-      id: "anthropic/claude-fable-5",
-      contextWindow: 1000000,
-      maxTokens: 128000,
-      input: ["text", "image"],
-      reasoning: true,
-      compat: {
-        supportsDeveloperRole: false,
-        thinkingFormat: "openrouter",
-        reasoningProfile: "openrouter-anthropic-adaptive",
-      },
-    });
+    expect(result.providers.openrouter.models.map((model) => model.id)).toEqual([
+      "anthropic/claude-fable-5",
+      "anthropic/claude-opus-5",
+      "anthropic/claude-sonnet-5",
+    ]);
+    for (const model of result.providers.openrouter.models) {
+      expect(model).toMatchObject({
+        contextWindow: 1000000,
+        maxTokens: 128000,
+        input: ["text", "image"],
+        reasoning: true,
+        compat: {
+          supportsDeveloperRole: false,
+          thinkingFormat: "openrouter",
+          reasoningProfile: "openrouter-anthropic-adaptive",
+        },
+      });
+    }
   });
 
   it("writes Pi-loadable models when Hana video capability is enabled", async () => {
@@ -1696,15 +1788,13 @@ describe("syncModels", () => {
 
   it("derives no-auth policy from ProviderRegistry for existing Ollama configs", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), [
-      "providers:",
-      "  ollama:",
-      "    base_url: http://192.168.1.20:11434/v1",
-      "    api: openai-completions",
-      "    models:",
-      "      - llama3",
-      "",
-    ].join("\n"), "utf-8");
+    writeProviderCatalogProviders({
+      ollama: {
+        base_url: "http://192.168.1.20:11434/v1",
+        api: "openai-completions",
+        models: ["llama3"],
+      },
+    });
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm._modelRegistry = {
@@ -1724,7 +1814,7 @@ describe("syncModels", () => {
 
   it("stores model thinking defaults without narrowing builtin provider model availability", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), "providers: {}\n", "utf-8");
+    writeProviderCatalogProviders({});
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm._modelRegistry = {
@@ -1750,18 +1840,16 @@ describe("syncModels", () => {
 
   it("ignores malformed provider records without breaking valid model projection", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), [
-      "providers:",
-      "  deepseek:",
-      "    base_url: https://api.deepseek.com/v1",
-      "    api: openai-completions",
-      "    api_key: sk-deep",
-      "    models:",
-      "      - deepseek-chat",
-      "  dashscope-coding:",
-      "  string-provider: broken",
-      "",
-    ].join("\n"), "utf-8");
+    writeProviderCatalogProviders({
+      deepseek: {
+        base_url: "https://api.deepseek.com/v1",
+        api: "openai-completions",
+        api_key: "sk-deep",
+        models: ["deepseek-chat"],
+      },
+      "dashscope-coding": null,
+      "string-provider": "broken",
+    });
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm._modelRegistry = {
@@ -1783,7 +1871,7 @@ describe("syncModels", () => {
 
   it("keeps SDK-auth alias providers available without a provider model allow list", async () => {
     const { ModelManager } = await import("../core/model-manager.ts");
-    fs.writeFileSync(path.join(tmpDir, "added-models.yaml"), "providers: {}\n", "utf-8");
+    writeProviderCatalogProviders({});
 
     const mm = new ModelManager({ hanakoHome: tmpDir });
     mm.providerRegistry.register({

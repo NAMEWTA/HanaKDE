@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-11
 title: 建立 main Workspace 基础设施
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "唯一 main 生命周期、physical watcher、baseline observation、健康状态与 root authority 是跨消费者共享核心状态机。"
 ready: true
 risk: critical
 blocked_by: [T-10]
 contract_ids: [AC-004, AC-005, AC-009, AC-012, AC-013, AC-014, AC-025, AC-026]
-owner: unassigned
+owner: Worker-T-18 / Lead
 expected_changes: ["<Path>core/workspace-runtime/**</Path>", "<Path>shared/workspace-*.ts</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>desktop/main.cjs</Path>", "<Path>tests/workspace-*.test.ts</Path>"]
 writable_paths: ["<Path>core/workspace-runtime/**</Path>", "<Path>shared/workspace-*.ts</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>desktop/main.cjs</Path>", "<Path>tests/workspace-*.test.ts</Path>"]
 read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/engine.ts</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
@@ -85,6 +85,7 @@ shared_path_owners: []
 ## 7. 路径访问契约
 
 - **预计修改点：** frontmatter 中 workspace runtime、desktop registry、shared contract 和测试。
+- **D-T11-01：** Lead 批准 `t02_merge` / Worker-T-18 在既有 `<Path>core/workspace-runtime/**</Path>` 与 `<Path>tests/workspace-*.test.ts</Path>` 范围内进行 round 1/3 successor correction：恢复订阅前重验、把 baseline 与 watcher callback 串行化、并在每个普通事件及 baseline 完成时 fail closed 重验 root/scope；不扩大路径合同或接入 production owner。
 - **可写范围：** 仅 `writable_paths`；`<Path>core/engine.ts</Path>` 为 T-12 唯一生产 wiring owner。
 - **只读上下文：** Resource Kernel、Knowledge、History 与 engine。
 - **共享路径：** 无；本 Ticket 拥有 workspace infrastructure contract。
@@ -109,9 +110,9 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-004`/`AC-005`：main switch 为新 lifecycle，挂载不继承/不升级且不进入 Workspace History scope。
-- [ ] `AC-009`/`AC-012`：N consumers 仍为一个 watcher、一次 baseline，gap 执行 scoped repair。
-- [ ] `AC-013`：四态 health 和 scoped retry contract 通过。
-- [ ] `AC-014`/`AC-026`：root authority fail closed，外部接口不泄漏 raw root。
-- [ ] `AC-025`：新 main 初始化失败可 retry 且普通 Workspace 能力不破坏。
-- [ ] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>`。
+- [x] `AC-004`/`AC-005`：main switch 为新 lifecycle，挂载不继承/不升级且不进入 Workspace History scope。
+- [x] `AC-009`/`AC-012`：N consumers 仍为一个 watcher、一次 baseline，gap 执行 scoped repair。
+- [x] `AC-013`：四态 health 和 scoped retry contract 通过。
+- [x] `AC-014`/`AC-026`：root authority fail closed，外部接口不泄漏 raw root。
+- [x] `AC-025`：新 main 初始化失败可 retry 且普通 Workspace 能力不破坏。
+- [x] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>`。

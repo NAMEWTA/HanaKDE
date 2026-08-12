@@ -1,7 +1,15 @@
 export const RESOURCE_SCOPE_ROOT = Symbol("hana.resource-io.scope-root");
 
+/**
+ * Provider-owned proof that binds a stat result to a later read. The symbol
+ * keeps the proof out of JSON, logs, and remote DTO projection while allowing
+ * in-process callers to carry it across the ResourceIO seam.
+ */
+export const RESOURCE_READ_PROOF = Symbol("hana.resource-io.read-proof");
+
 type ResourceInternalScope = {
   [RESOURCE_SCOPE_ROOT]?: string;
+  [RESOURCE_READ_PROOF]?: ResourceReadProof;
 };
 
 export type ResourceRef = (
@@ -136,13 +144,6 @@ export type ResourceProviderId =
   | "session_file"
   | "resource"
   | "url";
-
-/**
- * Provider-owned proof that binds a stat result to a later read. The symbol
- * keeps the proof out of JSON, logs, and remote DTO projection while allowing
- * in-process callers to carry it across the ResourceIO seam.
- */
-export const RESOURCE_READ_PROOF = Symbol("hana.resource-io.read-proof");
 
 /**
  * Provider-only signal for directory entries intentionally omitted from a
@@ -287,6 +288,8 @@ export type MaterializeResult = {
   resource: ResourceDescriptor;
   filePath: string;
   version?: ResourceVersion;
+  isDirectory?: boolean;
+  cleanup?: () => void | Promise<void>;
 };
 
 export type ResourceExportDirectoryEntry = {

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../../stores';
 
-const mockHanaFetch = vi.fn();
+// vi.hoisted: the mock factory below is hoisted above this file's imports, and
+// importing the store now reaches use-hana-fetch during that hoisted phase.
+const mockHanaFetch = vi.hoisted(() => vi.fn());
 
 vi.mock('../../hooks/use-hana-fetch', () => ({
   hanaFetch: mockHanaFetch,
@@ -74,7 +76,7 @@ describe('desk-actions workspace roots', () => {
       workspaceFolders: [],
       pendingNewSession: true,
       currentSessionPath: null,
-      currentAgentId: null,
+      currentAgentId: 'hana',
       selectedAgentId: null,
     } as never);
   });
@@ -135,7 +137,7 @@ describe('desk-actions workspace roots', () => {
     expect(useStore.getState().cwdHistory).toEqual(['/workspace/Keep']);
     expect(mockHanaFetch).toHaveBeenNthCalledWith(
       2,
-      '/api/config/workspaces/recent',
+      '/api/config/workspaces/recent?agentId=hana',
       expect.objectContaining({
         method: 'DELETE',
         body: JSON.stringify({ path: '/workspace/Missing' }),
@@ -385,12 +387,31 @@ describe('desk-actions workspace roots', () => {
 
     expect(useStore.getState().cwdHistory).toEqual(['/workspace/Novel']);
     expect(mockHanaFetch).toHaveBeenCalledWith(
-      '/api/config/workspaces/recent',
+      '/api/config/workspaces/recent?agentId=hana',
       expect.objectContaining({
         method: 'DELETE',
         body: JSON.stringify({ path: '/workspace/Desktop' }),
       }),
     );
+  });
+
+  it('does not record recent-workspace changes against a guessed agent when none is current', async () => {
+    // Recent workspaces live in one agent's own config. With no current agent
+    // there is nobody to attribute the change to, and asking the server to pick
+    // is how the wrong agent's history gets edited — so no request goes out.
+    useStore.setState({
+      currentAgentId: null,
+      cwdHistory: ['/workspace/Desktop', '/workspace/Novel'],
+    } as never);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { removeRecentWorkspace, clearRecentWorkspaces } = await import('../../stores/desk-actions');
+    await removeRecentWorkspace('/workspace/Desktop');
+    await clearRecentWorkspaces();
+
+    expect(mockHanaFetch.mock.calls.some(([url]) => String(url).includes('/api/config/workspaces/recent'))).toBe(false);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('removes a Studio workspace mount and clears the selected mount when it was active', async () => {
@@ -442,7 +463,7 @@ describe('desk-actions workspace roots', () => {
 
     expect(useStore.getState().cwdHistory).toEqual([]);
     expect(mockHanaFetch).toHaveBeenCalledWith(
-      '/api/config/workspaces/recent/all',
+      '/api/config/workspaces/recent/all?agentId=hana',
       expect.objectContaining({ method: 'DELETE' }),
     );
   });
@@ -470,7 +491,7 @@ describe('desk-actions workspace roots', () => {
     );
     expect(mockHanaFetch).toHaveBeenNthCalledWith(
       2,
-      '/api/config/workspaces/recent',
+      '/api/config/workspaces/recent?agentId=hana',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ path: '/workspace/Desktop' }),
@@ -1321,6 +1342,22 @@ describe('desk-actions workspace roots', () => {
     expect(results).toEqual([
       { name: 'DeskTree.tsx', relativePath: 'src/DeskTree.tsx', parentSubdir: 'src', isDir: false },
     ]);
+  });
+
+  it('passes the caller AbortSignal to workspace search transport', async () => {
+    useStore.setState({
+      deskBasePath: '/workspace',
+    } as never);
+    mockHanaFetch.mockResolvedValueOnce(jsonResponse({ results: [] }));
+    const controller = new AbortController();
+
+    const { searchDeskFiles } = await import('../../stores/desk-actions');
+    await searchDeskFiles('Desk', { signal: controller.signal });
+
+    expect(mockHanaFetch).toHaveBeenCalledWith(
+      '/api/desk/search-files?dir=%2Fworkspace&q=Desk',
+      { signal: controller.signal },
+    );
   });
 
   it('jumps to a search result by expanding ancestors and selecting the real tree path', async () => {

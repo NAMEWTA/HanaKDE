@@ -12,7 +12,7 @@
 
 import fs from "fs";
 import YAML from "js-yaml";
-import { atomicWriteSync } from "../../shared/safe-fs.ts";
+import { writeSecretFileSync } from "../../shared/secret-fs.ts";
 
 // 按路径缓存，防止跨 agent 污染
 const _cache = new Map(); // configPath → { cached, cachedRaw }
@@ -75,14 +75,10 @@ export function clearConfigCache(configPath?) {
 
 /** 返回原始配置（未经 resolveApi 处理）。需要传 configPath 来定位缓存 */
 export function getRawConfig(configPath) {
-  if (configPath) {
-    return _cache.get(configPath)?.cachedRaw ?? null;
+  if (typeof configPath !== "string" || !configPath) {
+    throw new Error("getRawConfig requires an explicit configPath");
   }
-  // 兼容：不传参时返回最近一个有 cachedRaw 的 entry
-  for (const entry of _cache.values()) {
-    if (entry.cachedRaw) return entry.cachedRaw;
-  }
-  return null;
+  return _cache.get(configPath)?.cachedRaw ?? null;
 }
 
 /**
@@ -133,6 +129,7 @@ export function saveConfig(configPath, partial) {
   });
 
   // atomic write：先写临时文件再 rename，防止写到一半崩溃损坏配置
-  atomicWriteSync(configPath, yamlStr);
+  // agent 配置里带 provider 与 channel 凭证，落盘只对当前用户开放
+  writeSecretFileSync(configPath, yamlStr);
   clearConfigCache();
 }

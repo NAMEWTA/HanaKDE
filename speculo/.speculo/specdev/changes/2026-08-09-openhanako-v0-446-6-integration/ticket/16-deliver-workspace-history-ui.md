@@ -4,16 +4,17 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-16
 title: 交付 Workspace History 用户界面
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "UI 串联 deleted files、timeline、diff、restore、health 与安全冲突，并跨 renderer/server contract 和真实用户流程。"
 ready: true
 risk: high
 blocked_by: [T-13, T-15]
 contract_ids: [AC-006, AC-007, AC-013, AC-015, AC-016, AC-017, AC-024]
-owner: unassigned
-expected_changes: ["<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>"]
-writable_paths: ["<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
+owner: Worker-T-16 / Lead
+deviations: [D-T16-01, D-T16-02, D-T16-03]
+expected_changes: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>"]
+writable_paths: ["<Path>desktop/src/react/App.tsx</Path>", "<Path>desktop/src/react/components/file-history/**</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>", "<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>", "<Path>desktop/src/react/stores/index.ts</Path>", "<Path>desktop/src/react/stores/file-history-slice.ts</Path>", "<Path>desktop/src/react/utils/file-history-api.ts</Path>", "<Path>desktop/src/react/utils/line-diff.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileHistoryModal.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>desktop/src/react/components/knowledge-workspace/**</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -114,3 +115,29 @@ shared_path_owners: []
 - [ ] `AC-015`—`AC-017`：restore 携带 expected version，冲突安全，成功后读面一致。
 - [ ] `AC-024`：Workspace 入口语义独立、异步 lifecycle 正确、无 UI shadow truth。
 - [ ] Component/E2E/a11y Evidence 记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-16.md</Path>`。
+
+## 11. 偏差 D-T16-01：全局 store 与 modal host 接入
+
+- **等级：** ticket；`status=approved`。
+- **触发事实：** 已交付的 `FileHistoryEntryButton` 调用全局 `useStore` 的 `openFileHistoryModal`，但 `<Path>desktop/src/react/stores/index.ts</Path>` 未组合 T-16 slice；同时生产 React 树没有挂载 `FileHistoryModal`。点击现有 Agent History 入口会调用缺失 action，且即使打开状态存在也没有 modal host。
+- **受影响路径：** 新增授权 `<Path>desktop/src/react/App.tsx</Path>`、`<Path>desktop/src/react/stores/index.ts</Path>`、`<Path>desktop/src/react/__tests__/stores/file-history-slice.test.ts</Path>` 与 `<Path>tests/file-history-production-boundary.test.ts</Path>`；保留原 T-16 组件/API/E2E 路径。
+- **选项：** 保持 fixed skip 会让 AC-006/AC-017/AC-024 无生产入口；插件化无法表达全局 store/顶层 modal 生命周期；推荐在 renderer 系统本体完成最小宿主接入。
+- **批准：** Root Lead，2026-08-11T19:04:48+0800；仅组合既有 T-16 slice、挂载单一 main-only modal host、更新边界/store 回归并启用现有 E2E。禁止新增 server 语义、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
+- **处理结果：** `1c7474a4` 已组合共享 store 并挂载单一全局 modal，integration checkpoint `3175d2f1`；store/production-boundary 回归通过。
+
+## 12. 偏差 D-T16-02：Workbench 可见入口接入
+
+- **等级：** ticket；`status=approved`。
+- **触发事实：** D-T16-01 已组合 store 并挂载全局 modal，但生产入口仍只存在于要求严格 Agent correlation envelope 的消息投影；普通 Workbench 没有可见入口，T-16 owner E2E 仍无法从用户界面打开 History。
+- **受影响路径：** 新增授权 `<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.tsx</Path>`、`<Path>desktop/src/react/components/right-workspace/RightWorkspacePanel.module.css</Path>` 与 `<Path>desktop/src/react/__tests__/components/RightWorkspacePanel.test.tsx</Path>`；继续使用已授权的 File History 组件和 E2E 路径。
+- **选项：** 依赖 Agent 投影会错误耦合 Workspace 与 conversation correlation；浮动全局按钮不符合现有 Workbench 信息架构；推荐在已有 workspace header 工具区挂载同一个 main-only entry。
+- **批准：** Root Lead，2026-08-11T19:11:30+0800；仅增加 main-only、可访问、固定尺寸的 Workbench History 命令及交互回归。禁止新增 route、mount History、raw path、第二 store/cache 或修改 History/ResourceIO 内核。
+- **处理结果：** `2421bfed` 已在 workspace header 挂载紧凑 main-only History 命令；desktop-full owner E2E 通过真实 60 秒 merge-window timeline、diff、expected-version restore 与 ResourceIO 回读。
+
+## 13. 偏差 D-T16-03：final-SHA native helper 前置诊断
+
+- **等级：** ticket；`status=approved`；correction round 3/3。
+- **触发事实：** 在 T-26 集成后的 fresh final-SHA 复核中，owner spec 在候选和 clean integration `e28c0c42` 均于第一次 `write-expected-version` 返回 503。最初怀疑 desktop fixture 的无 startup-session 模式没有建立 main context；authenticated `/api/sessions/new` 已证明 session `cwd` 正确，但 503 不变。
+- **根因：** T-15 将条件写入切换到 fail-closed native helper；单独调用 Playwright 时跳过了 `build:server`/CI 的 `build-secure-fs-helper` 前置。错误由 ResourceIO 边界规范化为 `knowledge_resource_unavailable`。按生产脚本构建 `dist-secure-fs/mac-arm64/hana-secure-fs-helper` 后，未经 session/model 绕行的原 owner flow 在 `6687c150` 完整通过。
+- **受影响路径：** 仅既有 writable `<Path>tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts</Path>`，增强非成功响应的 JSON envelope 诊断；不修改 fixture、生产代码或 route，生成 helper 不进入 Git。
+- **批准与结果：** Root Lead，2026-08-11T22:52:23+0800；2026-08-11T23:04:33+0800 复核关闭。原 session/model 假设被否定且未交付。真实 60 秒 merge-window、diff、expected-version restore 与 ResourceIO 回读保持不变；禁止 raw root 注入、production test route、私有 History 写入、跳过 merge window 或弱化断言。

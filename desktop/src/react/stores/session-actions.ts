@@ -20,6 +20,8 @@ import { loadModels } from '../utils/ui-helpers';
 import { browserStateForPath, setBrowserStateForPath } from './browser-slice';
 import { computerOverlayForSession } from './computer-overlay-slice';
 import { snapshotStreamBuffer, type StreamBufferSnapshot } from './stream-invalidator';
+import { errorWithCode, presentError, presentErrorWithLabel } from '../errors/error-presenter';
+import { normalizeSessionRouteError } from '../../../../shared/error-user-messages.ts';
 import { renderMarkdown } from '../utils/markdown';
 import type { ChatMessage, ContentBlock } from './chat-types';
 import { readMessageLiveVersion } from './message-live-version';
@@ -29,6 +31,7 @@ import {
   requestKnowledgeWorkspaceClose,
 } from '../services/knowledge-workspace-lifecycle';
 import { normalizeWorkspacePath } from '../../../../shared/workspace-history.ts';
+import { findPrimaryAgent, resolveAgentWorkspace } from '../utils/agent-workspace';
 
 // ── 防竞争计数器 ──
 
@@ -304,7 +307,6 @@ function clearSessionRuntimeCaches(path: string): void {
     const todosBySession = deleteSessionScopedStateValue(s, s.todosBySession || {}, path);
     const todosLiveVersionBySession = deleteSessionScopedStateValue(s, s.todosLiveVersionBySession || {}, path);
     const sessionAuthorizedFoldersByPath = deleteSessionScopedStateValue(s, s.sessionAuthorizedFoldersByPath || {}, path);
-    const capabilityDriftBySession = deleteSessionScopedStateValue(s, s.capabilityDriftBySession || {}, path);
     let inlineErrors = s.inlineErrors;
     if (inlineErrors) {
       inlineErrors = deleteSessionScopedStateValue(s, inlineErrors || {}, path);
@@ -326,7 +328,6 @@ function clearSessionRuntimeCaches(path: string): void {
       todosBySession,
       todosLiveVersionBySession,
       sessionAuthorizedFoldersByPath,
-      capabilityDriftBySession,
       capabilityRefreshingSessions: filterSessionScopedStateList(s, s.capabilityRefreshingSessions || [], path),
       inlineErrors,
     };
@@ -446,8 +447,13 @@ export async function completeSessionTodos(sessionPath: string): Promise<boolean
     useStore.getState().bumpTodosLiveVersion(sessionPath);
     return true;
   } catch (err) {
-    const message = errorMessage(err);
-    useStore.getState().addToast(message, 'error', 6000);
+    const presented = presentError(err);
+    useStore.getState().addToast(
+      presented.text,
+      'error',
+      6000,
+      presented.code ? { errorCode: presented.code } : undefined,
+    );
     return false;
   }
 }
@@ -803,9 +809,11 @@ export async function switchSession(path: string): Promise<void> {
     const data = await res.json();
     if (!isCurrentSwitch(myVersion, path)) return;
     if (data.error) {
-      console.error('[session] switch failed:', data.error);
+      // 带上错误码，呈现层才能把它翻成人话；没有码的原生崩溃走兜底文案 + 详情。
+      const routeError = normalizeSessionRouteError(data);
+      console.error('[session] switch failed:', routeError.message, routeError.code || '');
       useStore.setState({ pendingSessionSwitchPath: null });
-      showSessionSwitchError(path, data.error);
+      showSessionSwitchError(path, errorWithCode(routeError.message, routeError.code));
       return;
     }
 
@@ -836,6 +844,9 @@ export async function switchSession(path: string): Promise<void> {
       agentPatch.agentName = data.agentName || ag?.name || data.agentId;
       agentPatch.agentYuan = ag?.yuan || 'hanako';
       agentPatch.agentAvatarUrl = ag?.hasAvatar ? hanaUrl(`/api/agents/${data.agentId}/avatar?t=${Date.now()}`) : null;
+      agentPatch.homeFolder = typeof ag?.homeFolder === 'string' && ag.homeFolder.trim()
+        ? ag.homeFolder.trim()
+        : null;
     }
 
     // 保存当前 session 的附件到 keyed store
@@ -955,9 +966,6 @@ export async function switchSession(path: string): Promise<void> {
       });
     }
 
-    // #1624：服务端在 restore 时算好的工具能力漂移提示（无漂移 / 已 dismiss → null）
-    useStore.getState().setSessionCapabilityDrift(path, data.capabilityDrift || null);
-
     await requestActiveSessionStreamResume(path, isStreaming);
     if (myVersion !== _switchVersion) return;
 
@@ -985,7 +993,7 @@ export async function switchSession(path: string): Promise<void> {
       state.pendingSessionSwitchPath === path ? { pendingSessionSwitchPath: null } : {}
     ));
     console.error('[session] switch failed:', err);
-    showSessionSwitchError(path, errorMessage(err));
+    showSessionSwitchError(path, err);
   } finally {
     if (_switchAbortController === abortController) {
       _switchAbortController = null;
@@ -1175,10 +1183,15 @@ export async function createNewSession(options: CreateNewSessionOptions = {}): P
   }
 
   const s = useStore.getState();
+  const primaryAgent = findPrimaryAgent(s.agents);
+  const primaryWorkspace = resolveAgentWorkspace(primaryAgent);
   const requestedFolder = typeof options.cwd === 'string' && options.cwd.trim() ? options.cwd.trim() : null;
-  const defaultWorkspaceMountId = requestedFolder ? null : (s.deskWorkspaceMountId || null);
-  const defaultWorkspaceLabel = defaultWorkspaceMountId ? (s.deskWorkspaceLabel || null) : null;
-  const defaultFolder = requestedFolder || s.homeFolder || (defaultWorkspaceMountId ? null : s.deskBasePath) || null;
+  const defaultWorkspaceMountId = null;
+  const defaultWorkspaceLabel = null;
+  const defaultFolder = requestedFolder || primaryWorkspace || (!primaryAgent ? s.homeFolder : null) || null;
+  const selectedPrimaryAgentId = primaryAgent && primaryAgent.id !== s.currentAgentId
+    ? primaryAgent.id
+    : null;
   const pendingProjectId = typeof options.projectId === 'string' && options.projectId.trim()
     ? options.projectId.trim()
     : null;
@@ -1188,13 +1201,13 @@ export async function createNewSession(options: CreateNewSessionOptions = {}): P
     currentSessionPath: null,
     currentSessionId: null,
     pendingSessionSwitchPath: null,
-    // 有显式 Agent home 时以 home 为准；没有绑定 workspace 的 agent
-    // 以当前 session cwd 延续工作流，不从其他 agent 的 home_folder 推导。
+    // 全局新建始终回到 Primary Agent。显式项目 cwd 只覆盖本次工作目录；
+    // 普通新建使用 Primary Agent 的有效工作区（显式 home 或服务端默认工作区）。
     selectedFolder: defaultFolder,
     selectedWorkspaceMountId: defaultWorkspaceMountId,
     selectedWorkspaceLabel: defaultWorkspaceLabel,
     workspaceFolders: [],
-    selectedAgentId: null,
+    selectedAgentId: selectedPrimaryAgentId,
     ...pendingNewSessionIdentityPatch(),
     pendingProjectId,
     pendingNewSessionThinkingLevel: null,
@@ -1244,7 +1257,11 @@ export async function ensureSession(expectedPendingDraftId?: string | null): Pro
     if (expectedPendingDraftId && draftId !== expectedPendingDraftId) return null;
 
     const data = await postPendingSessionCreate(draft.body);
-    if (data?.error) throw new Error(data.error);
+    // 带上错误码，呈现层才能把它翻成人话；没有码的原生崩溃走兜底文案 + 详情。
+    if (data?.error) {
+      const routeError = normalizeSessionRouteError(data);
+      throw errorWithCode(routeError.message, routeError.code);
+    }
     const ref = frozenSessionRefFromCreateResponse(data);
     if (!ref) throw new Error('session creation returned an incomplete session identity');
 
@@ -1266,7 +1283,7 @@ export async function ensureSession(expectedPendingDraftId?: string | null): Pro
     return ref;
   } catch (err) {
     console.error('[session] create failed:', err);
-    showSessionCreationError(errorMessage(err));
+    showSessionCreationError(err);
     return null;
   }
 }
@@ -1280,9 +1297,15 @@ export async function continueDeletedAgentSession(path: string): Promise<boolean
     });
     const data = await res.json();
     if (!res.ok || data.error || !data.path) {
-      const message = data.error || res.statusText || 'continue failed';
-      console.error('[session] continue deleted-agent session failed:', message);
-      useStore.getState().addToast(`${tr('session.deletedAgent.continueFailed')}: ${message}`, 'error', 6000);
+      const routeError = normalizeSessionRouteError(data);
+      const message = routeError.message || res.statusText || 'continue failed';
+      console.error('[session] continue deleted-agent session failed:', message, routeError.code || '');
+      // 跟下面 catch 分支同一套呈现：错误码翻成人话，原始英文留在详情，toast 带码。
+      const entry = presentErrorWithLabel(
+        tr('session.deletedAgent.continueFailed'),
+        errorWithCode(message, routeError.code),
+      );
+      useStore.getState().addToast(entry.text, 'error', 6000, entry.code ? { errorCode: entry.code } : undefined);
       return false;
     }
 
@@ -1298,7 +1321,11 @@ export async function continueDeletedAgentSession(path: string): Promise<boolean
     return true;
   } catch (err) {
     console.error('[session] continue deleted-agent session failed:', err);
-    useStore.getState().addToast(`${tr('session.deletedAgent.continueFailed')}: ${errorMessage(err)}`, 'error', 6000);
+    useStore.getState().addToast(
+      presentErrorWithLabel(tr('session.deletedAgent.continueFailed'), err).text,
+      'error',
+      6000,
+    );
     return false;
   }
 }
@@ -1517,34 +1544,49 @@ export async function pinSession(path: string, pinned: boolean): Promise<boolean
   }
 }
 
-// ══════════════════════════════════════════════════════
-// #1624 工具能力漂移：dismiss / 显式刷新（fresh compact）
-// ══════════════════════════════════════════════════════
+/**
+ * 提交置顶区的完整新顺序。先按新顺序乐观改写本地 pinOrder（步长与服务端一致），
+ * 拖完立刻定位；服务端拒绝或请求失败就整体回滚到提交前的快照并提示，
+ * 不留下半套顺序。
+ */
+export async function reorderPinnedSessions(orderedSessionIds: string[]): Promise<boolean> {
+  const sessionIds = Array.isArray(orderedSessionIds)
+    ? orderedSessionIds.filter((id): id is string => typeof id === 'string' && !!id.trim())
+    : [];
+  if (sessionIds.length === 0) return false;
 
-/** 关闭当前 fingerprint 的提示；服务端持久化在 session-meta，指纹再变才重新提示 */
-export async function dismissSessionCapabilityDrift(path: string, fingerprint: string): Promise<boolean> {
-  // 乐观隐藏：dismiss 是低风险操作，失败时恢复提示
-  const prevDrift = sessionScopedValue(
-    useStore.getState() as Record<string, any>,
-    useStore.getState().capabilityDriftBySession,
-    path,
-  ) || null;
-  useStore.getState().setSessionCapabilityDrift(path, null);
+  const snapshot = useStore.getState().sessions;
+  const orderById = new Map(sessionIds.map((sessionId, index) => [sessionId, (index + 1) * 1024]));
+  useStore.setState({
+    sessions: snapshot.map(s => {
+      const sessionId = normalizeSessionId(s.sessionId);
+      const pinOrder = sessionId ? orderById.get(sessionId) : undefined;
+      return pinOrder === undefined ? s : { ...s, pinOrder };
+    }),
+  });
+
   try {
-    const res = await hanaFetch('/api/sessions/capability-drift/dismiss', {
+    const res = await hanaFetch('/api/sessions/pin-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, fingerprint }),
+      body: JSON.stringify({ sessionIds }),
     });
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+    if (!res.ok || data.error) {
+      throw new Error(data.error || res.statusText);
+    }
     return true;
   } catch (err) {
-    console.warn('[session] capability drift dismiss failed:', err);
-    useStore.getState().setSessionCapabilityDrift(path, prevDrift);
+    console.error('[session] pin reorder failed:', err);
+    useStore.setState({ sessions: snapshot });
+    showSidebarToast(window.t('session.reorderFailed'));
     return false;
   }
 }
+
+// ══════════════════════════════════════════════════════
+// 显式更新会话能力（fresh compact）
+// ══════════════════════════════════════════════════════
 
 /**
  * 显式刷新 Agent 工具：fresh compact——旧对话压缩成摘要 checkpoint，
@@ -1565,14 +1607,16 @@ export async function refreshSessionCapabilities(path: string): Promise<boolean>
       timeout: 180_000,
     });
     const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || res.statusText);
-    useStore.getState().setSessionCapabilityDrift(path, data.capabilityDrift || null);
+    if (!res.ok || data.error) {
+      const routeError = normalizeSessionRouteError(data);
+      throw errorWithCode(routeError.message || res.statusText, routeError.code);
+    }
     await loadMessages(path);
     return true;
   } catch (err) {
     console.error('[session] capability refresh failed:', err);
     const state = useStore.getState();
-    state.setInlineError?.(path, `${tr('session.capabilityDrift.refreshFailed')}: ${errorMessage(err)}`, 6000);
+    state.setInlineError?.(path, presentErrorWithLabel(tr('input.refreshAndCompactFailed'), err), 6000);
     return false;
   } finally {
     useStore.getState().setSessionCapabilityRefreshing(path, false);
@@ -1597,18 +1641,19 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err || 'Unknown error');
 }
 
-function showSessionCreationError(detail: unknown): void {
-  const label = tr('session.createFailed');
-  const message = `${label}: ${errorMessage(detail)}`;
+/** 内联错误说人话、原始报错留在展开区；toast 一闪而过，只带正文和错误码。 */
+function showSessionActionError(labelKey: string, path: string, detail: unknown): void {
+  const entry = presentErrorWithLabel(tr(labelKey), detail);
   const state = useStore.getState();
-  state.setInlineError?.(state.currentSessionPath || '', message, 6000);
-  state.addToast(message, 'error', 6000);
+  state.setInlineError?.(path, entry, 6000);
+  state.addToast(entry.text, 'error', 6000, entry.code ? { errorCode: entry.code } : undefined);
+}
+
+function showSessionCreationError(detail: unknown): void {
+  showSessionActionError('session.createFailed', useStore.getState().currentSessionPath || '', detail);
 }
 
 function showSessionSwitchError(targetPath: string, detail: unknown): void {
-  const label = tr('session.switchFailed');
-  const message = `${label}: ${errorMessage(detail)}`;
   const state = useStore.getState();
-  state.setInlineError?.(state.currentSessionPath || targetPath || '', message, 6000);
-  state.addToast(message, 'error', 6000);
+  showSessionActionError('session.switchFailed', state.currentSessionPath || targetPath || '', detail);
 }

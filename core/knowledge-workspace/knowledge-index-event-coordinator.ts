@@ -16,6 +16,11 @@ import {
   extractSafeTextIndexFacts,
 } from "../../lib/knowledge-workspace/safe-text-index-extractor.ts";
 import {
+  extractDocumentIndexFacts,
+  isCanonicalDocumentPath,
+  type DocumentIndexExtractionPort,
+} from "../../lib/knowledge-workspace/document-index-extractor.ts";
+import {
   canonicalKnowledgeRelativePath,
 } from "../../lib/knowledge-workspace/knowledge-address.ts";
 import type { ResourceIO } from "../../lib/resource-io/resource-io.ts";
@@ -36,19 +41,39 @@ export const KNOWLEDGE_INDEX_EVENT_DEBOUNCE_MS = 100;
 export const KNOWLEDGE_INDEX_EVENT_MAX_DEBOUNCE_MS = 500;
 export const KNOWLEDGE_INDEX_EVENT_BURST_LIMIT = 5_000;
 export const KNOWLEDGE_INDEX_EVENT_BURST_WINDOW_MS = 10_000;
-/**
- * A rebuild writes one SQLite transaction per batch.  Keeping this bounded
- * preserves cancellation and renderer responsiveness without turning a large
- * source scan into one transaction per resource.  Eight documents keeps the
- * synchronous SQLite write below the 50 ms interaction budget on the
- * reference 100k-resource corpus; larger batches can monopolize the main
- * process while FTS rows are updated.
- */
+export const KNOWLEDGE_INDEX_SHARED_REPAIR_MAX_CHANGES = 5_000;
 export const KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE = 8;
+
+/**
+ * The shared observation owner supplies canonical logical differences. This
+ * module can reread those resources, but never discovers a source by walking
+ * a root of its own.
+ */
+export type KnowledgeIndexSharedBaselineDifference = Readonly<{
+  type: "shared-baseline-difference";
+  sourceKey: string;
+  cursor: number;
+  coverage: "source" | "resources";
+  changes: readonly KnowledgeIndexSharedBaselineChange[];
+}>;
+
+export type KnowledgeIndexSharedBaselineChange = Readonly<{
+  relativePath: string;
+  changeType: "upsert" | "deleted";
+}>;
+
+export type KnowledgeIndexScopedRepairRequest = Readonly<{
+  sourceKey: string;
+  afterSequence: number;
+  reason: string;
+}>;
 
 export type KnowledgeIndexEventSource = Readonly<{
   eventPaths(event: ResourceEvent): readonly string[];
-  scan(signal?: AbortSignal): AsyncIterable<KnowledgeIndexResourceDocument>;
+  /** Available only to an explicitly mounted source. */
+  scanMountedSource?(
+    signal?: AbortSignal,
+  ): AsyncIterable<KnowledgeIndexResourceDocument>;
   reread(
     relativePath: string,
     signal?: AbortSignal,
@@ -68,6 +93,8 @@ type EventCoordinatorOptions = Readonly<{
   burstLimit?: number;
   burstWindowMs?: number;
   onDiagnostic?: (diagnostic: KnowledgeIndexEventDiagnostic) => void;
+  onScopedRepairRequested?: (request: KnowledgeIndexScopedRepairRequest) => unknown;
+  repairModeFor?: (sourceKey: string) => "shared" | "mounted";
 }>;
 
 export type KnowledgeIndexEventDiagnostic = Readonly<{
@@ -75,7 +102,8 @@ export type KnowledgeIndexEventDiagnostic = Readonly<{
   state:
     | "queued"
     | "incremental"
-    | "rebuild"
+    | "shared_repair"
+    | "mounted_rebuild"
     | "degraded"
     | "ignored";
   reason: string;
@@ -89,21 +117,31 @@ export type KnowledgeIndexEventCoordinatorInspection = Readonly<{
   replayCount: number;
   lastSequence: number;
   rebuilding: boolean;
+  repairRequested: boolean;
   lastReason: string | null;
   lastOperationId: string | null;
 }>;
 
-type PendingHint = {
+type PendingHint = Readonly<{
   sequence: number;
   operationId: string | null;
+}>;
+
+type SharedRepairCycle = {
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+  waiters: Set<symbol>;
 };
 
 type SourceState = {
   pending: Map<string, PendingHint>;
   replay: Map<string, PendingHint>;
+  inFlight: Map<string, PendingHint> | null;
   pendingSince: number | null;
   timer: ReturnType<typeof setTimeout> | null;
   lastSequence: number;
+  acceptedSharedCursor: number;
   burstTimes: number[];
   tail: Promise<void>;
   rebuilding: boolean;
@@ -114,6 +152,13 @@ type SourceState = {
   rebuildWaiters: Set<symbol>;
   rebuildAfterCurrentReason: string | null;
   rebuildRequiredReason: string | null;
+  repairRequested: boolean;
+  repairReason: string | null;
+  sharedRepairRequestPending: boolean;
+  sharedRepairMinimumCursor: number | null;
+  sharedRepairAfterCurrentReason: string | null;
+  sharedRepair: SharedRepairCycle | null;
+  sharedBaselineQueued: number;
   lastReason: string | null;
   lastOperationId: string | null;
   disposed: boolean;
@@ -131,6 +176,10 @@ export class KnowledgeIndexEventCoordinator {
   readonly #burstLimit: number;
   readonly #burstWindowMs: number;
   readonly #onDiagnostic?: (diagnostic: KnowledgeIndexEventDiagnostic) => void;
+  readonly #onScopedRepairRequested?: (
+    request: KnowledgeIndexScopedRepairRequest,
+  ) => unknown;
+  readonly #repairModeFor: (sourceKey: string) => "shared" | "mounted";
   readonly #states = new Map<string, SourceState>();
 
   constructor(options: EventCoordinatorOptions) {
@@ -138,6 +187,14 @@ export class KnowledgeIndexEventCoordinator {
       !options
       || !(options.indexCoordinator instanceof KnowledgeIndexCoordinator)
       || typeof options.sourceFor !== "function"
+      || (
+        options.onScopedRepairRequested !== undefined
+        && typeof options.onScopedRepairRequested !== "function"
+      )
+      || (
+        options.repairModeFor !== undefined
+        && typeof options.repairModeFor !== "function"
+      )
     ) {
       throw new TypeError("knowledge index event coordinator options are invalid");
     }
@@ -168,6 +225,8 @@ export class KnowledgeIndexEventCoordinator {
       "burstWindowMs",
     );
     this.#onDiagnostic = options.onDiagnostic;
+    this.#onScopedRepairRequested = options.onScopedRepairRequested;
+    this.#repairModeFor = options.repairModeFor ?? (() => "shared");
   }
 
   health(sourceKey: string): KnowledgeIndexHealth {
@@ -192,40 +251,26 @@ export class KnowledgeIndexEventCoordinator {
     const burstFloor = now - this.#burstWindowMs;
     state.burstTimes = state.burstTimes.filter((time) => time >= burstFloor);
 
-    const rebuildReason = event.sequence > previousSequence + 1
+    const repairReason = event.sequence > previousSequence + 1
       ? "sequence_gap"
       : state.burstTimes.length >= this.#burstLimit
         ? "event_burst"
-        : resourceEventRequiresSourceRebuild(event)
+        : resourceEventRequiresSourceRepair(event)
           ? "directory_event"
           : null;
-    if (rebuildReason) {
-      this.#diagnose(key, state, "queued", rebuildReason, event);
-      this.#requireRebuild(key, state, rebuildReason);
+    if (state.repairRequested || state.rebuilding) {
+      if (repairReason) this.#requestRepair(key, state, repairReason);
+      this.#queueEventPaths(key, state, event, state.replay);
+      return;
+    }
+    if (repairReason) {
+      this.#requestRepair(key, state, repairReason);
       return;
     }
 
-    let paths: readonly string[];
-    try {
-      paths = normalizeEventPaths(this.#sourceFor(key).eventPaths(event));
-    } catch {
-      this.#requestRebuild(key, state, "event_hint_invalid");
-      return;
-    }
-    if (paths.length === 0) {
-      this.#requestRebuild(key, state, "event_hint_unresolvable");
-      return;
-    }
-    const target = state.rebuilding ? state.replay : state.pending;
-    for (const relativePath of paths) {
-      coalesceHint(target, relativePath, {
-        sequence: event.sequence,
-        operationId: state.lastOperationId,
-      });
-    }
+    if (!this.#queueEventPaths(key, state, event, state.pending)) return;
     this.#diagnose(key, state, "queued", "event_hint", event);
-
-    if (!state.rebuilding) this.#scheduleFlush(key, state);
+    this.#scheduleFlush(key, state);
   }
 
   observe(sourceKey: string, event: ResourceEvent): void {
@@ -241,7 +286,7 @@ export class KnowledgeIndexEventCoordinator {
     state.lastSequence = event.sequence;
     state.lastOperationId = validOperationId(event.operationId);
     if (event.sequence > previousSequence + 1) {
-      this.#requireRebuild(key, state, "sequence_gap");
+      this.#requestRepair(key, state, "sequence_gap");
       return;
     }
     this.#diagnose(key, state, "ignored", "outside_source", event);
@@ -261,7 +306,7 @@ export class KnowledgeIndexEventCoordinator {
         state.lastSequence,
         validSequence(result.latestSequence),
       );
-      this.#requestRebuild(key, state, "catch_up_stale");
+      this.#requestRepair(key, state, "catch_up_stale");
       return;
     }
     for (const event of [...result.events].sort(
@@ -271,27 +316,98 @@ export class KnowledgeIndexEventCoordinator {
     }
   }
 
+  /**
+   * Applies a difference already produced by the single shared observation
+   * owner. A source-covered difference builds a fresh generation atomically;
+   * a resource-covered difference updates only its listed resources.
+   */
+  acceptSharedBaseline(
+    input: KnowledgeIndexSharedBaselineDifference,
+  ): Promise<void> {
+    const baseline = normalizeSharedBaselineDifference(input);
+    const state = this.#state(baseline.sourceKey);
+    if (state.disposed) return Promise.resolve();
+    if (
+      state.sharedRepairRequestPending
+      && state.sharedRepairMinimumCursor !== null
+      && baseline.cursor < state.sharedRepairMinimumCursor
+    ) {
+      const error = sharedBaselineCursorStale();
+      state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
+      state.repairRequested = true;
+      state.repairReason = errorReason(error);
+      this.#markDegraded(baseline.sourceKey, state, state.repairReason);
+      this.#failSharedRepair(state, error);
+      return Promise.reject(error);
+    }
+    if (baseline.cursor < state.acceptedSharedCursor) {
+      this.#diagnose(
+        baseline.sourceKey,
+        state,
+        "ignored",
+        "stale_shared_baseline",
+      );
+      return Promise.resolve();
+    }
+    state.acceptedSharedCursor = Math.max(
+      state.acceptedSharedCursor,
+      baseline.cursor,
+    );
+    state.sharedRepairRequestPending = false;
+    state.sharedRepairMinimumCursor = null;
+    if (state.inFlight) mergeHints(state.replay, state.inFlight);
+    state.lastSequence = Math.max(state.lastSequence, baseline.cursor);
+    state.sharedBaselineQueued += 1;
+    state.rebuilding = true;
+    return this.#enqueue(state, () =>
+      this.#applySharedBaseline(baseline.sourceKey, state, baseline)
+    );
+  }
+
+  /**
+   * This is intentionally a logical request, not a local rescan. The caller
+   * must arrange for a shared baseline difference to be supplied later.
+   */
+  rebuild(
+    sourceKey: string,
+    options: { signal?: AbortSignal; reason?: string } = {},
+  ): Promise<void> {
+    if (options.signal?.aborted) return Promise.reject(abortError());
+    const key = validSourceKey(sourceKey);
+    const state = this.#state(key);
+    if (state.disposed) return Promise.resolve();
+    const reason = options.reason ?? "requested";
+    if (this.#repairMode(key) === "mounted") {
+      const promise = state.rebuildPromise ?? this.#startMountedRebuild(
+        key,
+        state,
+        reason,
+        false,
+      );
+      return this.#waitForMountedRebuild(promise, state, options.signal);
+    }
+    const requestIsNew = !state.sharedRepairRequestPending;
+    const repair = this.#ensureSharedRepair(state);
+    this.#requestSharedRepair(key, state, reason, requestIsNew);
+    return this.#waitForSharedRepair(repair, options.signal);
+  }
+
+  requestRepair(sourceKey: string, reason = "requested"): void {
+    const key = validSourceKey(sourceKey);
+    const state = this.#state(key);
+    if (!state.disposed) this.#requestRepair(key, state, reason);
+  }
+
+  requestSharedRepair(sourceKey: string, reason = "requested"): void {
+    this.requestRepair(sourceKey, reason);
+  }
+
   async flush(sourceKey: string): Promise<void> {
     const key = validSourceKey(sourceKey);
     const state = this.#state(key);
     this.#clearTimer(state);
     return this.#enqueue(state, () => this.#flushPending(key, state));
-  }
-
-  rebuild(
-    sourceKey: string,
-    options: { signal?: AbortSignal; reason?: string } = {},
-  ): Promise<void> {
-    const key = validSourceKey(sourceKey);
-    const state = this.#state(key);
-    if (options.signal?.aborted) return Promise.reject(abortError());
-    const promise = state.rebuildPromise ?? this.#startRebuild(
-      key,
-      state,
-      options.reason ?? "requested",
-      false,
-    );
-    return this.#waitForRebuild(promise, state, options.signal);
   }
 
   inspect(sourceKey: string): KnowledgeIndexEventCoordinatorInspection {
@@ -303,6 +419,7 @@ export class KnowledgeIndexEventCoordinator {
       replayCount: state.replay.size,
       lastSequence: state.lastSequence,
       rebuilding: state.rebuilding,
+      repairRequested: state.repairRequested,
       lastReason: state.lastReason,
       lastOperationId: state.lastOperationId,
     });
@@ -319,8 +436,10 @@ export class KnowledgeIndexEventCoordinator {
       state.disposed = true;
       this.#clearTimer(state);
       state.rebuildAbort?.abort();
+      this.#failSharedRepair(state, abortError());
       state.pending.clear();
       state.replay.clear();
+      state.inFlight?.clear();
       pending.push(state.tail);
       this.#states.delete(key);
     }
@@ -333,20 +452,26 @@ export class KnowledgeIndexEventCoordinator {
     let lastSequence = this.#initialSequenceFor
       ? validSequence(this.#initialSequenceFor(sourceKey))
       : 0;
+    let acceptedSharedCursor = 0;
     if (!this.#initialSequenceFor) {
       try {
         const health = this.#indexCoordinator.health(sourceKey);
-        if (health.state === "ready") lastSequence = health.sequence;
+        if (health.state === "ready") {
+          lastSequence = Math.max(lastSequence, health.sequence);
+          acceptedSharedCursor = health.sequence;
+        }
       } catch {
-        // A source with no store starts at sequence zero.
+        // A source without a persisted generation begins at sequence zero.
       }
     }
     const state: SourceState = {
       pending: new Map(),
       replay: new Map(),
+      inFlight: null,
       pendingSince: null,
       timer: null,
       lastSequence,
+      acceptedSharedCursor,
       burstTimes: [],
       tail: Promise.resolve(),
       rebuilding: false,
@@ -357,12 +482,211 @@ export class KnowledgeIndexEventCoordinator {
       rebuildWaiters: new Set(),
       rebuildAfterCurrentReason: null,
       rebuildRequiredReason: null,
+      repairRequested: false,
+      repairReason: null,
+      sharedRepairRequestPending: false,
+      sharedRepairMinimumCursor: null,
+      sharedRepairAfterCurrentReason: null,
+      sharedRepair: null,
+      sharedBaselineQueued: 0,
       lastReason: null,
       lastOperationId: null,
       disposed: false,
     };
     this.#states.set(sourceKey, state);
     return state;
+  }
+
+  #queueEventPaths(
+    sourceKey: string,
+    state: SourceState,
+    event: ResourceEvent,
+    target: Map<string, PendingHint>,
+  ): boolean {
+    let paths: readonly string[];
+    try {
+      paths = normalizeEventPaths(this.#sourceFor(sourceKey).eventPaths(event));
+    } catch {
+      this.#requestRepair(sourceKey, state, "event_hint_invalid");
+      return false;
+    }
+    if (paths.length === 0) {
+      this.#requestRepair(sourceKey, state, "event_hint_unresolvable");
+      return false;
+    }
+    for (const relativePath of paths) {
+      coalesceHint(target, relativePath, {
+        sequence: event.sequence,
+        operationId: state.lastOperationId,
+      });
+    }
+    return true;
+  }
+
+  #repairMode(sourceKey: string): "shared" | "mounted" {
+    return this.#repairModeFor(sourceKey) === "mounted" ? "mounted" : "shared";
+  }
+
+  #requestRepair(
+    sourceKey: string,
+    state: SourceState,
+    reason: string,
+  ): void {
+    if (this.#repairMode(sourceKey) === "mounted") {
+      this.#requestMountedRebuild(sourceKey, state, reason);
+      return;
+    }
+    if (state.rebuilding) {
+      state.sharedRepairAfterCurrentReason ??= sanitizeReason(reason);
+      return;
+    }
+    if (state.repairRequested) {
+      state.sharedRepairMinimumCursor = Math.max(
+        state.sharedRepairMinimumCursor ?? 0,
+        state.lastSequence,
+      );
+      return;
+    }
+    this.#requestSharedRepair(sourceKey, state, reason);
+  }
+
+  #requestMountedRebuild(
+    sourceKey: string,
+    state: SourceState,
+    reason: string,
+  ): void {
+    this.#clearTimer(state);
+    state.rebuildKeepAlive = true;
+    if (state.rebuilding) {
+      state.rebuildAfterCurrentReason ??= sanitizeReason(reason);
+      return;
+    }
+    if (state.rebuildPromise || state.disposed) return;
+    void this.#startMountedRebuild(sourceKey, state, reason, true).catch(() => {
+      // Health and sanitized diagnostics retain the failed mount projection.
+    });
+  }
+
+  #requestSharedRepair(
+    sourceKey: string,
+    state: SourceState,
+    reason: string,
+    force = false,
+  ): void {
+    if (state.disposed || state.rebuilding || (state.repairRequested && !force)) {
+      return;
+    }
+    if (!state.repairRequested) {
+      this.#clearTimer(state);
+      mergeHints(state.replay, state.pending);
+      if (state.inFlight) mergeHints(state.replay, state.inFlight);
+      state.pending.clear();
+      state.pendingSince = null;
+    }
+    state.repairRequested = true;
+    state.repairReason = sanitizeReason(reason);
+    this.#markDegraded(sourceKey, state, state.repairReason);
+    this.#diagnose(sourceKey, state, "shared_repair", state.repairReason);
+    if (!this.#onScopedRepairRequested) {
+      const error = sharedBaselineUnavailable();
+      state.repairRequested = false;
+      state.repairReason = null;
+      state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
+      this.#markDegraded(sourceKey, state, errorReason(error));
+      this.#failSharedRepair(state, error);
+      return;
+    }
+    const request = Object.freeze({
+      sourceKey,
+      afterSequence: state.lastSequence,
+      reason: state.repairReason,
+    });
+    try {
+      // A port may synchronously publish the requested baseline, so mark this
+      // before invoking it. acceptSharedBaseline clears the marker on receipt.
+      state.sharedRepairRequestPending = true;
+      state.sharedRepairMinimumCursor = request.afterSequence;
+      const result = this.#onScopedRepairRequested(request);
+      consumeThenable(result, () => {
+        const error = sharedRepairRequestFailed();
+        state.repairRequested = false;
+        state.repairReason = null;
+        state.sharedRepairRequestPending = false;
+        state.sharedRepairMinimumCursor = null;
+        this.#markDegraded(sourceKey, state, errorReason(error));
+        this.#failSharedRepair(state, error);
+      });
+    } catch (error) {
+      state.repairRequested = false;
+      state.repairReason = null;
+      state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
+      this.#markDegraded(sourceKey, state, errorReason(error));
+      this.#failSharedRepair(state, error);
+    }
+  }
+
+  #ensureSharedRepair(state: SourceState): SharedRepairCycle {
+    if (state.sharedRepair) return state.sharedRepair;
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    const repair: SharedRepairCycle = {
+      promise,
+      resolve,
+      reject,
+      waiters: new Set(),
+    };
+    state.sharedRepair = repair;
+    return repair;
+  }
+
+  #completeSharedRepair(state: SourceState): void {
+    const repair = state.sharedRepair;
+    if (!repair) return;
+    state.sharedRepair = null;
+    repair.resolve();
+  }
+
+  #failSharedRepair(state: SourceState, error: unknown): void {
+    const repair = state.sharedRepair;
+    if (!repair) return;
+    state.sharedRepair = null;
+    repair.reject(error);
+  }
+
+  #waitForSharedRepair(
+    repair: SharedRepairCycle,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const token = Symbol("knowledge-index-shared-repair-waiter");
+    repair.waiters.add(token);
+    const releaseWaiter = () => repair.waiters.delete(token);
+    if (!signal) return repair.promise.finally(releaseWaiter);
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener("abort", onAbort);
+        releaseWaiter();
+        callback();
+      };
+      const onAbort = () => finish(() => reject(abortError()));
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      void repair.promise.then(
+        () => finish(resolve),
+        (error) => finish(() => reject(error)),
+      );
+    });
   }
 
   #scheduleFlush(sourceKey: string, state: SourceState): void {
@@ -377,33 +701,9 @@ export class KnowledgeIndexEventCoordinator {
     state.timer = setTimeout(() => {
       state.timer = null;
       void this.flush(sourceKey).catch(() => {
-        // Health and a sanitized diagnostic carry the failure.
+        // Health and sanitized diagnostics retain the failure state.
       });
     }, delay);
-  }
-
-  #requestRebuild(
-    sourceKey: string,
-    state: SourceState,
-    reason: string,
-  ): void {
-    this.#clearTimer(state);
-    state.rebuildKeepAlive = true;
-    if (state.rebuildPromise) return;
-    this.#startRebuild(sourceKey, state, reason, true);
-  }
-
-  #requireRebuild(
-    sourceKey: string,
-    state: SourceState,
-    reason: string,
-  ): void {
-    if (state.rebuilding) {
-      state.rebuildKeepAlive = true;
-      state.rebuildAfterCurrentReason ??= reason;
-      return;
-    }
-    this.#requestRebuild(sourceKey, state, reason);
   }
 
   async #flushPending(
@@ -411,65 +711,143 @@ export class KnowledgeIndexEventCoordinator {
     state: SourceState,
   ): Promise<void> {
     if (state.disposed) return;
-    if (state.rebuilding) {
+    if (state.repairRequested || state.rebuilding) {
       mergeHints(state.replay, state.pending);
       state.pending.clear();
       return;
     }
-    if (state.rebuildRequiredReason) {
-      await this.#runRebuild(
-        sourceKey,
-        state,
-        state.rebuildRequiredReason,
-      );
+    if (state.rebuildRequiredReason && this.#repairMode(sourceKey) === "mounted") {
+      const reason = state.rebuildRequiredReason;
+      await this.#runMountedRebuild(sourceKey, state, reason);
       return;
     }
     if (state.pending.size === 0) return;
     const health = this.#indexCoordinator.health(sourceKey);
     if (health.state !== "ready" && health.state !== "degraded") {
-      await this.#runRebuild(
-        sourceKey,
-        state,
-        `health_${health.state}`,
-      );
+      this.#requestRepair(sourceKey, state, "generation_unavailable");
       return;
     }
     const pending = state.pending;
     state.pending = new Map();
     state.pendingSince = null;
+    state.inFlight = pending;
     try {
       const source = this.#sourceFor(sourceKey);
       await source.revalidate?.();
-      const changes = await rereadHints(
-        source,
-        pending,
-      );
+      const changes = await rereadHints(source, pending);
       await source.revalidate?.();
-      if (changes.length > 0) {
-        await this.#indexCoordinator.applyIncremental(sourceKey, {
-          lastCompleteSequence: maxHintSequence(
-            pending,
-            health.state === "ready" ? health.sequence : 0,
-          ),
-          changes,
-        });
+      if (state.repairRequested || state.rebuilding) {
+        mergeHints(state.replay, pending);
+        return;
       }
-      this.#indexCoordinator.clearDegraded(sourceKey);
-      this.#diagnose(
+      await this.#applyChangesOrAdvance(
         sourceKey,
-        state,
-        "incremental",
-        "disk_reread_complete",
+        maxHintSequence(
+          pending,
+          health.state === "ready" ? health.sequence : 0,
+        ),
+        changes,
       );
+      this.#indexCoordinator.clearDegraded(sourceKey);
+      this.#diagnose(sourceKey, state, "incremental", "disk_reread_complete");
     } catch (error) {
-      mergeHints(state.pending, pending);
-      state.pendingSince ??= this.#now();
+      if (state.repairRequested || state.rebuilding) {
+        mergeHints(state.replay, pending);
+      } else {
+        mergeHints(state.pending, pending);
+        state.pendingSince ??= this.#now();
+      }
       this.#markDegraded(sourceKey, state, errorReason(error));
       throw error;
+    } finally {
+      if (state.inFlight === pending) state.inFlight = null;
     }
   }
 
-  async #runRebuild(
+  async #applySharedBaseline(
+    sourceKey: string,
+    state: SourceState,
+    baseline: KnowledgeIndexSharedBaselineDifference,
+  ): Promise<void> {
+    if (state.disposed) return;
+    if (this.#repairMode(sourceKey) !== "shared") {
+      throw new TypeError("mounted knowledge source cannot consume shared baseline");
+    }
+    let completedCursor = baseline.cursor;
+    try {
+      const source = this.#sourceFor(sourceKey);
+      await source.revalidate?.();
+      if (baseline.coverage === "source") {
+        completedCursor = await this.#publishSharedSourceDifference(
+          sourceKey,
+          state,
+          source,
+          baseline,
+        );
+      } else {
+        const changes = await rereadSharedChanges(source, baseline.changes);
+        await this.#applyChangesOrAdvance(sourceKey, baseline.cursor, changes);
+        await source.revalidate?.();
+      }
+      state.repairRequested = false;
+      state.repairReason = null;
+      state.sharedRepairMinimumCursor = null;
+      state.acceptedSharedCursor = Math.max(
+        state.acceptedSharedCursor,
+        completedCursor,
+      );
+      this.#indexCoordinator.clearDegraded(sourceKey);
+      this.#diagnose(sourceKey, state, "shared_repair", "shared_baseline_difference");
+      this.#completeSharedRepair(state);
+    } catch (error) {
+      state.repairRequested = true;
+      state.repairReason ??= "shared_baseline_failed";
+      state.sharedRepairRequestPending = false;
+      state.sharedRepairMinimumCursor = null;
+      this.#markDegraded(sourceKey, state, errorReason(error));
+      this.#failSharedRepair(state, error);
+      throw error;
+    } finally {
+      state.sharedBaselineQueued = Math.max(0, state.sharedBaselineQueued - 1);
+      state.rebuilding = state.sharedBaselineQueued > 0;
+      this.#releaseReplayAfterBaseline(sourceKey, state, completedCursor);
+      if (
+        state.sharedRepairAfterCurrentReason
+        && !state.rebuilding
+        && (
+          baseline.coverage !== "source"
+          || baseline.cursor < state.lastSequence
+        )
+      ) {
+        const reason = state.sharedRepairAfterCurrentReason;
+        state.sharedRepairAfterCurrentReason = null;
+        this.#requestSharedRepair(sourceKey, state, reason);
+      } else if (
+        !state.rebuilding
+        && baseline.coverage === "source"
+        && baseline.cursor >= state.lastSequence
+      ) {
+        state.sharedRepairAfterCurrentReason = null;
+      }
+    }
+  }
+
+  async #applyChangesOrAdvance(
+    sourceKey: string,
+    lastCompleteSequence: number,
+    changes: readonly KnowledgeIndexIncrementalChange[],
+  ): Promise<void> {
+    if (changes.length > 0) {
+      await this.#indexCoordinator.applyIncremental(sourceKey, {
+        lastCompleteSequence,
+        changes,
+      });
+      return;
+    }
+    await this.#indexCoordinator.advanceSequence(sourceKey, lastCompleteSequence);
+  }
+
+  async #runMountedRebuild(
     sourceKey: string,
     state: SourceState,
     reason: string,
@@ -481,7 +859,7 @@ export class KnowledgeIndexEventCoordinator {
     state.pendingSince = null;
     state.rebuilding = true;
     state.rebuildRequiredReason = reason;
-    state.lastReason = reason;
+    state.lastReason = sanitizeReason(reason);
     const controller = new AbortController();
     state.rebuildAbort = controller;
     if (state.rebuildAbortRequested) controller.abort();
@@ -493,6 +871,9 @@ export class KnowledgeIndexEventCoordinator {
     let appliedSequence = startedSequence;
     try {
       const source = this.#sourceFor(sourceKey);
+      if (typeof source.scanMountedSource !== "function") {
+        throw new Error("knowledge_index_mounted_scan_unavailable");
+      }
       await source.revalidate?.();
       rebuild = await this.#indexCoordinator.beginRebuild(sourceKey, {
         rebuildId,
@@ -503,7 +884,7 @@ export class KnowledgeIndexEventCoordinator {
       let processed = 0;
       let lastYieldAt = this.#now();
       const batch: KnowledgeIndexResourceDocument[] = [];
-      for await (const document of source.scan(controller.signal)) {
+      for await (const document of source.scanMountedSource(controller.signal)) {
         throwIfAborted(controller.signal);
         batch.push(document);
         processed += 1;
@@ -524,30 +905,21 @@ export class KnowledgeIndexEventCoordinator {
       while (state.replay.size > 0) {
         const replay = state.replay;
         state.replay = new Map();
-        const changes = await rereadHints(
-          source,
-          replay,
-          controller.signal,
-        );
+        const changes = await rereadHints(source, replay, controller.signal);
         for (const change of changes) {
-          if (change.kind === "replace") {
-            rebuild.replaceResource(change.document);
-          } else {
-            rebuild.deleteResource(change.relativePath);
-          }
+          if (change.kind === "replace") rebuild.replaceResource(change.document);
+          else rebuild.deleteResource(change.relativePath);
         }
         appliedSequence = maxHintSequence(replay, appliedSequence);
       }
       await source.revalidate?.();
       throwIfAborted(controller.signal);
       rebuild.setProgress(0.99);
-      await rebuild.publish({
-        lastCompleteSequence: appliedSequence,
-      });
+      await rebuild.publish({ lastCompleteSequence: appliedSequence });
       rebuild = null;
       state.rebuildRequiredReason = null;
       this.#indexCoordinator.clearDegraded(sourceKey);
-      this.#diagnose(sourceKey, state, "rebuild", reason);
+      this.#diagnose(sourceKey, state, "mounted_rebuild", reason);
     } catch (error) {
       rebuild?.cancel();
       if (isAbortError(error)) {
@@ -576,7 +948,7 @@ export class KnowledgeIndexEventCoordinator {
     }
   }
 
-  #startRebuild(
+  #startMountedRebuild(
     sourceKey: string,
     state: SourceState,
     reason: string,
@@ -585,7 +957,7 @@ export class KnowledgeIndexEventCoordinator {
     state.rebuildKeepAlive = keepAlive;
     state.rebuildAbortRequested = false;
     const run = this.#enqueue(state, () =>
-      this.#runRebuild(sourceKey, state, reason)
+      this.#runMountedRebuild(sourceKey, state, reason)
     );
     const tracked = run.finally(() => {
       if (state.rebuildPromise === tracked) {
@@ -596,23 +968,20 @@ export class KnowledgeIndexEventCoordinator {
     });
     state.rebuildPromise = tracked;
     void tracked.catch(() => {
-      // Health and a sanitized diagnostic carry the failure.
+      // Health and a sanitized diagnostic retain the failed mount projection.
     });
     return tracked;
   }
 
-  #waitForRebuild(
+  #waitForMountedRebuild(
     promise: Promise<void>,
     state: SourceState,
     signal?: AbortSignal,
   ): Promise<void> {
-    const token = Symbol("knowledge-index-rebuild-waiter");
+    const token = Symbol("knowledge-index-mounted-rebuild-waiter");
     state.rebuildWaiters.add(token);
-    const releaseWaiter = () => {
-      state.rebuildWaiters.delete(token);
-    };
+    const releaseWaiter = () => state.rebuildWaiters.delete(token);
     if (!signal) return promise.finally(releaseWaiter);
-
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       const finish = (callback: () => void) => {
@@ -643,6 +1012,86 @@ export class KnowledgeIndexEventCoordinator {
         (error) => finish(() => reject(error)),
       );
     });
+  }
+
+  async #publishSharedSourceDifference(
+    sourceKey: string,
+    state: SourceState,
+    source: KnowledgeIndexEventSource,
+    baseline: KnowledgeIndexSharedBaselineDifference,
+  ): Promise<number> {
+    const rebuildId = validArtifactId(this.#createId(), "rebuild");
+    const generationId = validArtifactId(this.#createId(), "generation");
+    let rebuild: Awaited<ReturnType<KnowledgeIndexCoordinator["beginRebuild"]>>
+      | null = null;
+    let completedCursor = baseline.cursor;
+    try {
+      rebuild = await this.#indexCoordinator.beginRebuild(sourceKey, {
+        rebuildId,
+        generationId,
+        startedSequence: baseline.cursor,
+      });
+      const batch: KnowledgeIndexResourceDocument[] = [];
+      let processed = 0;
+      let lastYieldAt = this.#now();
+      for (const change of baseline.changes) {
+        if (change.changeType === "upsert") {
+          const document = await source.reread(change.relativePath);
+          if (document) batch.push(document);
+        }
+        processed += 1;
+        if (
+          batch.length >= KNOWLEDGE_INDEX_REBUILD_WRITE_BATCH_SIZE
+          || this.#now() - lastYieldAt >= 50
+        ) {
+          if (batch.length > 0) rebuild.replaceResources(batch.splice(0));
+        }
+        if (processed % 200 === 0 || this.#now() - lastYieldAt >= 50) {
+          rebuild.setProgress(Math.min(0.9, processed / (processed + 200)));
+          await this.#yieldNow();
+          lastYieldAt = this.#now();
+        }
+      }
+      if (batch.length > 0) rebuild.replaceResources(batch.splice(0));
+
+      while (state.replay.size > 0) {
+        const replay = state.replay;
+        state.replay = new Map();
+        const replayAfterBaseline = filterHintsAfter(replay, baseline.cursor);
+        if (replayAfterBaseline.size === 0) continue;
+        for (const relativePath of [...replayAfterBaseline.keys()].sort()) {
+          const document = await source.reread(relativePath);
+          if (document) rebuild.replaceResource(document);
+          else rebuild.deleteResource(relativePath);
+        }
+        completedCursor = maxHintSequence(replayAfterBaseline, completedCursor);
+      }
+
+      await source.revalidate?.();
+      rebuild.setProgress(0.99);
+      await rebuild.publish({ lastCompleteSequence: completedCursor });
+      rebuild = null;
+      return completedCursor;
+    } catch (error) {
+      rebuild?.cancel();
+      throw error;
+    }
+  }
+
+  #releaseReplayAfterBaseline(
+    sourceKey: string,
+    state: SourceState,
+    completedCursor: number,
+  ): void {
+    const later = filterHintsAfter(state.replay, completedCursor);
+    state.replay.clear();
+    if (later.size > 0) {
+      mergeHints(state.pending, later);
+      state.pendingSince ??= this.#now();
+    }
+    if (!state.repairRequested && state.pending.size > 0) {
+      this.#scheduleFlush(sourceKey, state);
+    }
   }
 
   #markDegraded(
@@ -692,7 +1141,9 @@ export class KnowledgeIndexEventCoordinator {
 
 type ResourceIOReaderOptions = Readonly<{
   resourceIO: Pick<ResourceIO, "stat" | "list" | "openRead">;
+  documentExtraction?: DocumentIndexExtractionPort;
   root: ResourceRef;
+  eventRoots?: readonly ResourceRef[];
   resolveAddress(relativePath: string): ResourceRef | Promise<ResourceRef>;
   revalidate(): void | Promise<void>;
   now?: () => number;
@@ -701,7 +1152,9 @@ type ResourceIOReaderOptions = Readonly<{
 export class ResourceIOKnowledgeIndexSourceReader
 implements KnowledgeIndexEventSource {
   readonly #resourceIO: Pick<ResourceIO, "stat" | "list" | "openRead">;
+  readonly #documentExtraction?: DocumentIndexExtractionPort;
   readonly #root: ResourceRef;
+  readonly #eventRoots: readonly ResourceRef[];
   readonly #resolveAddress: (
     relativePath: string,
   ) => ResourceRef | Promise<ResourceRef>;
@@ -721,10 +1174,15 @@ implements KnowledgeIndexEventSource {
       throw new TypeError("ResourceIO knowledge index reader is invalid");
     }
     this.#resourceIO = options.resourceIO;
+    this.#documentExtraction = options.documentExtraction;
     this.#root = normalizeResourceRef(options.root);
     if (!["local-file", "mount"].includes(this.#root.kind)) {
       throw new TypeError("knowledge index source root is not hierarchical");
     }
+    this.#eventRoots = Object.freeze([
+      this.#root,
+      ...(options.eventRoots ?? []).map(normalizeResourceRef),
+    ]);
     this.#resolveAddress = options.resolveAddress;
     this.#revalidate = options.revalidate;
     this.#now = options.now ?? Date.now;
@@ -744,7 +1202,11 @@ implements KnowledgeIndexEventSource {
     }));
   }
 
-  async *scan(
+  /**
+   * Mounted sources have no main-workspace shared baseline owner. This scan is
+   * deliberately reachable only through the coordinator's mounted repair mode.
+   */
+  async *scanMountedSource(
     signal?: AbortSignal,
   ): AsyncIterable<KnowledgeIndexResourceDocument> {
     const queue: Array<{ ref: ResourceRef; relativePath: string }> = [{
@@ -756,15 +1218,13 @@ implements KnowledgeIndexEventSource {
       const current = queue.shift()!;
       const listing = await this.#resourceIO.list(current.ref, {
         auditRead: true,
-        reason: "knowledge-index-scan",
+        reason: "knowledge-index-mounted-scan",
       });
       if ((listing[RESOURCE_LIST_BLOCKED_ENTRIES]?.length ?? 0) > 0) {
-        // A UI can safely omit a link and keep showing its authorized
-        // siblings. An index rebuild is an integrity operation, so it must
-        // reject the whole source rather than silently publish a partial scan.
-        throw Object.assign(new Error("knowledge index source contains a blocked entry"), {
-          code: "knowledge_resource_out_of_scope",
-        });
+        throw Object.assign(
+          new Error("knowledge index source contains a blocked entry"),
+          { code: "knowledge_resource_out_of_scope" },
+        );
       }
       for (const item of [...listing.items].sort((left, right) =>
         left.name.localeCompare(right.name)
@@ -808,6 +1268,18 @@ implements KnowledgeIndexEventSource {
     });
     throwIfAborted(signal);
     if (!stat.exists || stat.isDirectory) return null;
+    if (this.#documentExtraction && isCanonicalDocumentPath(canonical)) {
+      const document = await extractDocumentIndexFacts({
+        resourceIO: this.#resourceIO,
+        extraction: this.#documentExtraction,
+        resource: ref,
+        relativePath: canonical,
+        indexedAtMs: this.#now(),
+        signal,
+      });
+      await this.#assertAddressStable(canonical, ref);
+      return document;
+    }
     if (/\.md$/iu.test(canonical)) {
       const sizeBytes = stat.version?.size;
       const mtimeMs = stat.version?.mtimeMs;
@@ -883,39 +1355,50 @@ implements KnowledgeIndexEventSource {
     } catch {
       return null;
     }
-    if (this.#root.kind === "mount" && ref.kind === "mount") {
-      if (this.#root.mountId !== ref.mountId) return null;
-      const rootPath = slashPath(this.#root.path);
-      const candidate = slashPath(ref.path);
-      if (
-        rootPath
-        && candidate !== rootPath
-        && !candidate.startsWith(`${rootPath}/`)
-      ) {
-        return null;
-      }
-      const relative = rootPath
-        ? candidate.slice(rootPath.length).replace(/^\/+/, "")
-        : candidate;
-      return relative ? maybeCanonicalRelativePath(relative) : null;
-    }
-    if (this.#root.kind === "local-file" && ref.kind === "local-file") {
-      const relative = path.relative(
-        path.resolve(this.#root.path),
-        path.resolve(ref.path),
-      ).replace(/\\/g, "/");
-      if (
-        !relative
-        || relative === ".."
-        || relative.startsWith("../")
-        || path.isAbsolute(relative)
-      ) {
-        return null;
-      }
-      return maybeCanonicalRelativePath(relative);
+    for (const root of this.#eventRoots) {
+      const relative = relativePathWithinRoot(root, ref);
+      if (relative) return relative;
     }
     return null;
   }
+}
+
+function relativePathWithinRoot(
+  root: ResourceRef,
+  ref: ResourceRef,
+): string | null {
+  if (root.kind === "mount" && ref.kind === "mount") {
+    if (root.mountId !== ref.mountId) return null;
+    const rootPath = slashPath(root.path);
+    const candidate = slashPath(ref.path);
+    if (
+      rootPath
+      && candidate !== rootPath
+      && !candidate.startsWith(`${rootPath}/`)
+    ) {
+      return null;
+    }
+    const relative = rootPath
+      ? candidate.slice(rootPath.length).replace(/^\/+/, "")
+      : candidate;
+    return relative ? maybeCanonicalRelativePath(relative) : null;
+  }
+  if (root.kind === "local-file" && ref.kind === "local-file") {
+    const relative = path.relative(
+      path.resolve(root.path),
+      path.resolve(ref.path),
+    ).replace(/\\/g, "/");
+    if (
+      !relative
+      || relative === ".."
+      || relative.startsWith("../")
+      || path.isAbsolute(relative)
+    ) {
+      return null;
+    }
+    return maybeCanonicalRelativePath(relative);
+  }
+  return null;
 }
 
 async function rereadHints(
@@ -932,6 +1415,24 @@ async function rereadHints(
       : { kind: "delete", relativePath });
   }
   return changes;
+}
+
+async function rereadSharedChanges(
+  source: KnowledgeIndexEventSource,
+  changes: readonly KnowledgeIndexSharedBaselineChange[],
+): Promise<KnowledgeIndexIncrementalChange[]> {
+  const output: KnowledgeIndexIncrementalChange[] = [];
+  for (const change of changes) {
+    if (change.changeType === "deleted") {
+      output.push({ kind: "delete", relativePath: change.relativePath });
+      continue;
+    }
+    const document = await source.reread(change.relativePath);
+    output.push(document
+      ? { kind: "replace", document }
+      : { kind: "delete", relativePath: change.relativePath });
+  }
+  return output;
 }
 
 async function readExactBody(
@@ -960,6 +1461,59 @@ async function readExactBody(
     offset += chunk.byteLength;
   }
   return output;
+}
+
+function normalizeSharedBaselineDifference(
+  input: KnowledgeIndexSharedBaselineDifference,
+): KnowledgeIndexSharedBaselineDifference {
+  if (!input || typeof input !== "object") {
+    throw new TypeError("shared baseline difference is invalid");
+  }
+  const candidate = input as Record<string, unknown>;
+  for (const field of ["root", "rootIdentity", "absolutePath", "path"]) {
+    if (Object.prototype.hasOwnProperty.call(candidate, field)) {
+      throw new TypeError("shared baseline difference must not carry a root");
+    }
+  }
+  if (
+    candidate.type !== "shared-baseline-difference"
+    || (candidate.coverage !== "source" && candidate.coverage !== "resources")
+    || !Array.isArray(candidate.changes)
+  ) {
+    throw new TypeError("shared baseline difference is invalid");
+  }
+  const sourceKey = validSourceKey(String(candidate.sourceKey));
+  const cursor = validSequence(Number(candidate.cursor));
+  const latest = new Map<string, KnowledgeIndexSharedBaselineChange>();
+  for (const item of candidate.changes) {
+    if (!item || typeof item !== "object") {
+      throw new TypeError("shared baseline change is invalid");
+    }
+    const change = item as Record<string, unknown>;
+    if (change.changeType !== "upsert" && change.changeType !== "deleted") {
+      throw new TypeError("shared baseline change is invalid");
+    }
+    const relativePath = canonicalRelativePath(String(change.relativePath));
+    latest.set(relativePath, Object.freeze({
+      relativePath,
+      changeType: change.changeType,
+    }));
+  }
+  if (
+    candidate.coverage === "resources"
+    && latest.size > KNOWLEDGE_INDEX_SHARED_REPAIR_MAX_CHANGES
+  ) {
+    throw new TypeError("shared baseline scoped repair is too large");
+  }
+  return Object.freeze({
+    type: "shared-baseline-difference",
+    sourceKey,
+    cursor,
+    coverage: candidate.coverage,
+    changes: Object.freeze([...latest.values()].sort((left, right) =>
+      left.relativePath.localeCompare(right.relativePath)
+    )),
+  });
 }
 
 function versionToken(version: ResourceVersion): string {
@@ -999,7 +1553,7 @@ function slashPath(value: string): string {
   return value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 }
 
-function resourceEventRequiresSourceRebuild(event: ResourceEvent): boolean {
+function resourceEventRequiresSourceRepair(event: ResourceEvent): boolean {
   if (event.type === "resource.changed") {
     return event.resource.isDirectory === true || event.version?.size === null;
   }
@@ -1011,7 +1565,7 @@ function resourceEventRequiresSourceRebuild(event: ResourceEvent): boolean {
 }
 
 function abortError(): Error {
-  return Object.assign(new Error("knowledge index rebuild aborted"), {
+  return Object.assign(new Error("knowledge index coordination aborted"), {
     name: "AbortError",
     code: "ABORT_ERR",
   });
@@ -1035,6 +1589,17 @@ function mergeHints(
   for (const [relativePath, hint] of source) {
     coalesceHint(target, relativePath, hint);
   }
+}
+
+function filterHintsAfter(
+  hints: Map<string, PendingHint>,
+  sequence: number,
+): Map<string, PendingHint> {
+  const later = new Map<string, PendingHint>();
+  for (const [relativePath, hint] of hints) {
+    if (hint.sequence > sequence) later.set(relativePath, hint);
+  }
+  return later;
 }
 
 function maxHintSequence(
@@ -1131,12 +1696,37 @@ function errorReason(error: unknown): string {
   return "index_update_failed";
 }
 
+function sharedBaselineUnavailable(): Error {
+  return Object.assign(new Error("knowledge shared baseline is unavailable"), {
+    code: "knowledge_shared_baseline_unavailable",
+  });
+}
+
+function sharedRepairRequestFailed(): Error {
+  return Object.assign(new Error("knowledge shared repair request failed"), {
+    code: "shared_repair_request_failed",
+  });
+}
+
+function sharedBaselineCursorStale(): Error {
+  return Object.assign(new Error("knowledge shared baseline cursor is stale"), {
+    code: "knowledge_shared_baseline_cursor_stale",
+  });
+}
+
+function consumeThenable(value: unknown, onReject: () => void): void {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) return;
+  try {
+    if (typeof (value as PromiseLike<unknown>).then !== "function") return;
+    void Promise.resolve(value).catch(onReject);
+  } catch {
+    onReject();
+  }
+}
+
 function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return;
-  throw Object.assign(new Error("knowledge index coordination aborted"), {
-    name: "AbortError",
-    code: "ABORT_ERR",
-  });
+  throw abortError();
 }
 
 function isAbortError(error: unknown): boolean {

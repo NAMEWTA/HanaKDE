@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PreferencesManager } from "../core/preferences-manager.ts";
-import { runBestEffortStartupMigrationStep } from "../core/engine.ts";
+import { runBestEffortStartupStep } from "../core/engine.ts";
 
 const tempDirs: string[] = [];
 
@@ -53,18 +53,18 @@ describe("PreferencesManager migration resilience", () => {
   });
 });
 
-describe("legacy startup migration isolation", () => {
+describe("startup step isolation", () => {
   it("records a failed step without throwing out of application startup", () => {
     const logs: string[] = [];
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      const result = runBestEffortStartupMigrationStep("provider-source", () => {
+      const result = runBestEffortStartupStep("credential-custody", () => {
         throw new Error("source is unreadable");
       }, (line) => logs.push(line));
 
       expect(result).toMatchObject({ ok: false });
-      expect(logs.join("\n")).toContain("provider-source");
+      expect(logs.join("\n")).toContain("credential-custody");
       expect(logs.join("\n")).toContain("应用继续启动");
     } finally {
       errorSpy.mockRestore();

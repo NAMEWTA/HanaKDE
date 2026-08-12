@@ -1,4 +1,4 @@
-// shared/tool-categories.js
+// shared/tool-categories.ts
 //
 // Single source of truth for built-in tool categorization.
 //
@@ -33,6 +33,7 @@ export const STANDARD_TOOL_NAMES = [
   "notify",
   "stage_files",
   "file",
+  "materialize",
   "subagent",
   "subagent_reply",
   "subagent_close",
@@ -45,6 +46,7 @@ export const STANDARD_TOOL_NAMES = [
   "stop_task",
   "hana_card_guide",
   "show_card",
+  "loop_control",
 ];
 
 export const GLOBAL_TOOL_NAMES = [
@@ -98,7 +100,7 @@ const OPTIONAL_TOOL_NAMES_SET = new Set(OPTIONAL_TOOL_NAMES);
  * fresh agents and agents upgrading from a pre-feature version hit this path.
  *
  * Must be a subset of OPTIONAL_TOOL_NAMES. The frontend AgentTab keeps a local
- * copy for display defaults; tests/optional-tool-names-drift.test.js guards the
+ * copy for display defaults; tests/optional-tool-names-drift.test.ts guards the
  * two from drifting.
  *
  * Rationale:

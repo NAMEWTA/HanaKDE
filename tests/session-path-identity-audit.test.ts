@@ -219,30 +219,19 @@ describe("session path identity audit", () => {
     expect(approved.some((file: string) => file.endsWith("stream-resume.ts"))).toBe(true);
   });
 
-  it("flags path-keyed session-meta business reads but allows legacy migration boundaries", () => {
+  it("flags path-keyed session-meta business reads", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-session-audit-meta-"));
     const appDir = path.join(dir, "core");
-    const legacyDir = path.join(dir, "core", "session-manifest");
     fs.mkdirSync(appDir, { recursive: true });
-    fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(appDir, "new-business.ts"), `
       const metaEntry = meta[path.basename(sessionPath)];
       const rawEntry = raw[path.basename(sessionPath)];
       const restoredToolNames = meta[path.basename(sessionPathForMeta)]?.toolNames;
     `);
-    fs.writeFileSync(path.join(legacyDir, "legacy-migration.ts"), `
-      const metaEntry = meta[path.basename(sessionPath)];
-    `);
-
     const report = runAudit(dir);
     const risks = report.identityRisk.map((item: { file: string }) => item.file);
-    const legacy = report.matches
-      .filter((item: { category: string }) => item.category === "legacy-session-meta-boundary")
-      .map((item: { file: string }) => item.file);
 
     expect(risks.some((file: string) => file.endsWith("new-business.ts"))).toBe(true);
-    expect(risks.some((file: string) => file.endsWith("legacy-migration.ts"))).toBe(false);
-    expect(legacy.some((file: string) => file.endsWith("legacy-migration.ts"))).toBe(true);
   });
 
   it("allows verified sessionId-first runtime adapters while still flagging new path-keyed maps", () => {
@@ -296,13 +285,6 @@ describe("session path identity audit", () => {
         if (key !== sessionPath) map.delete(sessionPath);
         return map.get(key) || (key !== sessionPath ? map.get(sessionPath) : null) || null;
         return map.has(key) || (key !== sessionPath && map.has(sessionPath));
-      `,
-      "core/migrations.ts": `
-        function rememberChildSessionIdentity(sessionPath, identity, priority) {
-          if (!sessionPath || !identity) return;
-          childSessionCandidates.set(sessionPath, { identity, priority });
-        }
-        const sessionId = sessionIdFromFilename(path.basename(sessionPath));
       `,
       "server/routes/chat.ts": `
         const key = sessionStateKey(sessionPath);
@@ -447,7 +429,6 @@ describe("session path identity audit", () => {
     expect(risks.some((file: string) => file.endsWith("upload.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("engine.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("session-coordinator.ts"))).toBe(false);
-    expect(risks.some((file: string) => file.endsWith("migrations.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("chat.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("browser-tool.ts"))).toBe(false);
     expect(risks.some((file: string) => file.endsWith("session-folders-tool.ts"))).toBe(false);
@@ -488,7 +469,6 @@ describe("session path identity audit", () => {
       expect.stringMatching(/upload\.ts$/),
       expect.stringMatching(/engine\.ts$/),
       expect.stringMatching(/session-coordinator\.ts$/),
-      expect.stringMatching(/migrations\.ts$/),
       expect.stringMatching(/chat\.ts$/),
       expect.stringMatching(/browser-tool\.ts$/),
       expect.stringMatching(/session-folders-tool\.ts$/),

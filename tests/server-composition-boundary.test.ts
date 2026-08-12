@@ -30,8 +30,8 @@ const root = process.cwd();
 // Part 1 — sorted mount-call inventory snapshot.
 //
 // Golden list captured from server/index.ts *before* the composition
-// split plus the Knowledge Workspace route added by this change (44
-// `app.route(prefix, headExpression)` call sites, sorted). Every
+// split plus the HanaKDE Knowledge Workspace and upstream MCP routes added
+// since (46 `app.route(prefix, headExpression)` call sites, sorted). Every
 // entry is `${prefix} :: ${firstIdentifierOfSecondArg}` — enough to prove
 // "same factory mounted at the same prefix", independent of exactly how
 // many lines its (unchanged) argument object spans or which file now
@@ -60,14 +60,20 @@ const PRE_REFACTOR_MOUNT_CALLS = Object.freeze([
   '"/api" :: createDiaryRoute',
   '"/api" :: createDmRoute',
   '"/api" :: createExperimentsRoute',
+  '"/api" :: createFileHistoryRoute',
   '"/api" :: createFsRoute',
   '"/api" :: createInputDraftsRoute',
   '"/api" :: createKnowledgeWorkspaceRoute',
+  // Added after the split: the MCP surface used to reach the app through the
+  // generic plugin route proxy, so it had no factory of its own here.
+  '"/api" :: createMcpRoute',
   '"/api" :: createMediaRoute',
+  '"/api" :: createMemoryDreamRoute',
   '"/api" :: createMobileWorkbenchRoute',
   '"/api" :: createModelsRoute',
   '"/api" :: createPluginsRoute',
   '"/api" :: createPreferencesRoute',
+  '"/api" :: createProductionWorkspaceHealthRoute',
   '"/api" :: createProvidersRoute',
   '"/api" :: createResourceIoRoute',
   '"/api" :: createResourcesRoute',
@@ -96,7 +102,7 @@ function extractMountCalls(filePath: string): string[] {
 }
 
 describe("composition boundary behavior lock: sorted mount-call inventory", () => {
-  it("server/index.ts + composition/open-root.ts + composition/full-root.ts mount the frozen 44 route factories at the expected prefixes", () => {
+  it("server/index.ts + composition/open-root.ts + composition/full-root.ts mount the frozen 46 route factories at the expected prefixes", () => {
     const combined = [
       ...extractMountCalls(path.join(root, "server", "index.ts")),
       ...extractMountCalls(path.join(root, "server", "composition", "open-root.ts")),

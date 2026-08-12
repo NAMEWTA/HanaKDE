@@ -3,13 +3,468 @@
   "artifact": "change-status",
   "change": "2026-08-09-openhanako-v0-446-6-integration",
   "change_status": "active",
-  "current_work": null,
+  "current_work": "specdev/implement",
   "created_at": "2026-08-09T10:08:37+08:00",
-  "updated_at": "2026-08-09T16:02:03+08:00",
+  "updated_at": "2026-08-11T23:32:42+0800",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
   "blockers": [],
-  "deviations": [],
-  "worktrees": []
+  "deviations": [
+    {
+      "id": "D-T16-01",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-16 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T19:04:48+0800",
+      "scope": "T-16 only: compose the existing main-only History slice into the global store, mount one modal host, and cover the store/production boundary. No server, mount History, raw path, second store/cache or kernel change."
+    },
+    {
+      "id": "D-T16-02",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-16 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T19:11:30+0800",
+      "scope": "T-16 only: mount the existing main-only History command in the Workbench header with focused interaction coverage. No server, mount History, raw path, second store/cache or kernel change."
+    },
+    {
+      "id": "D-T16-03",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-16 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T22:52:23+0800",
+      "scope": "T-16 correction round 3/3: diagnose the final-SHA 503, reject the session/main-context hypothesis, require the existing production native-helper build prerequisite, and modify only tests/knowledge-workspace-e2e/specs/file-history-workspace.spec.ts to expose the sanitized failure envelope. No fixture, product, route, raw-root, private History write or assertion weakening."
+    },
+    {
+      "id": "D-T12-06",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T14:12:37+0800",
+      "scope": "Register the activated File History SQLite production store; remove the dormant scanner exclusion; regenerate persistence receipts; test physical private-store symlink isolation."
+    },
+    {
+      "id": "D-T15-01",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T15:13:18+0800",
+      "scope": "Authorize only the main-bound File History restore adapter in core/workspace-runtime/production-workspace-runtime.ts and its focused production-runtime test. It must revalidate root identity/scope and delegate the sole write to existing ResourceIO.writeExpectedVersion; ResourceIO, Engine, route root authority, watcher/baseline/EventBus, UI, migration, and compatibility ownership remain unchanged."
+    },
+    {
+      "id": "D-T15-02",
+      "level": "architecture/security",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T15:21:16+0800",
+      "scope": "Authorize only local-fs-provider.ts and its focused provider test to harden the existing generic writeExpectedVersion with provider-held ancestry/identity/no-follow proof at effect time. ResourceIO public APIs, Engine, route authority, watcher/baseline/EventBus, UI, migration, and compatibility remain unchanged; a further deviation is required before altering resource-io.ts, types.ts, or adding a native helper."
+    },
+    {
+      "id": "D-T15-03",
+      "level": "architecture/security",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T15:38:11+0800",
+      "scope": "Authorize a single fail-closed system-core secure conditional-write primitive: ResourceIO internal runner/types/ref/root-identity seam, local provider, desktop/native/HanaSecureFsHelper, dev/test helper build script and a narrow package.json dev build entry with focused fixtures/tests. Existing writeExpectedVersion remains the sole upper mutation interface; private proofs stay non-serializable. T-21 retains production artifact/package, lockfile and CI ownership. No Node fallback, new plugin/route authority, migration, compatibility mode, or public raw root/native identity."
+    },
+    {
+      "id": "D-T15-04",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T16:29:40+0800",
+      "scope": "T-15 only: bind restore current tokens to bounded content, make History dedupe content-hash-only, fresh-read before restore, and preserve the attested read proof through provider preflight; no public API, Spec, ADR, or path expansion."
+    },
+    {
+      "id": "D-T15-05",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T17:01:55+0800",
+      "scope": "T-15 only: preserve the activation ProviderRootIdentity as private object-identity authority through ref normalization and compare it before native-proof capture; no second pathname revalidation, public API, helper/protocol, Spec, ADR, or path expansion."
+    },
+    {
+      "id": "D-T15-06",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-10T17:15:01+0800",
+      "scope": "T-15 only: derive ProviderRootIdentity public and private halves from one no-follow BigInt stat/handle snapshot; deterministic replacement injection; no second pathname compare, public API, helper/protocol, Spec, ADR, or path expansion."
+    },
+    {
+      "id": "D-T21-01",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T13:45:00+0800",
+      "scope": "T-21 packaging correctness only: allow lib/resource-io/native-secure-write.ts to prefer the trusted absolute HANA_ROOT runtime root for locating the packaged secure helper. No public API, fallback, product behavior, or ownership expansion; the helper must still be copied into and signed with the server seed."
+    },
+    {
+      "id": "D-T21-02",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T13:52:00+0800",
+      "scope": "T-21 open-package closure only: add the exact T-19/T-20 document extraction runner, child runtimes, and document index extractor paths to export-manifest.json so the existing open composition can be materialized and built. No product classification, API, or source behavior change."
+    },
+    {
+      "id": "D-T21-03",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T13:58:00+0800",
+      "scope": "T-21 closure receipt sync only: regenerate build/cli-runtime-closure.json and build/open-boundary-baseline.json from the authorized compute-cli-closure change so dynamic document child assets and the zero-edge open-boundary ratchet remain deterministic."
+    },
+    {
+      "id": "D-T21-04",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T14:02:00+0800",
+      "scope": "T-21 manifest hygiene only: remove the sole stale export-manifest.json entry lib/file-history/workspace-watcher.ts after clean open export proved that the upstream-integrated source no longer exists. No replacement watcher or source edit is authorized."
+    },
+    {
+      "id": "D-T21-05",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T14:04:00+0800",
+      "scope": "T-21 open-package closure only: add the seven deterministic source-graph paths for Workspace runtime, ResourceIO native runner, production workspace health, and shared workspace observation that are required by server/main-open.ts and classified with zero open-boundary coupling. No closed route/content or product behavior change."
+    },
+    {
+      "id": "D-T21-06",
+      "level": "ticket",
+      "status": "approved",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T14:07:00+0800",
+      "scope": "T-21 server bundle configuration only: set vite.config.server.js ssr.noExternal=true so SSR packaging bundles ordinary dependencies while preserving the existing explicit rollup external allowlist and target-node install contract. No runtime API or dependency version change."
+    },
+    {
+      "id": "D-T23-02",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-23 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T16:20:52+0800",
+      "scope": "T-23 only: allow the plugin boundary adapter in <Path>core/plugin-context.ts</Path> and its regression test <Path>tests/plugin-context.test.ts</Path> to implement the already-declared type-first HanaEventBus emit/subscribe overloads. Preserve callback-first behavior, EventBus ownership, permissions and route contracts; no edit to hub/event-bus.ts, external plugins, public SDK types, package manifests or release paths."
+    },
+    {
+      "id": "D-T18-03",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-18 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T20:37:00+0800",
+      "scope": "T-18 only: allow desktop/src/react/stores/desk-actions.ts and desktop/src/react/__tests__/stores/desk-actions.test.ts to accept the lifecycle's existing optional AbortSignal and pass it to hanaFetch. Preserve Desk routes, providers, backend, ResourceRef selection and all unrelated Desk actions."
+    },
+    {
+      "id": "D-G10-01",
+      "level": "quality-gate",
+      "status": "approved",
+      "owner": "G10 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T20:44:19+0800",
+      "scope": "G10 quality closure only: allow eslint.config.js to classify speculo/**/*.{js,mjs,ts} as Node-side sources. No lint rule weakening, ignore expansion, source behavior, dependency, package, workflow contract or product API change."
+    },
+    {
+      "id": "D-G10-02",
+      "level": "quality-gate",
+      "status": "approved",
+      "owner": "G10 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T20:54:22+0800",
+      "scope": "G10 deterministic quality sync only: replace the two T-16 style ratchet additions with existing shadow/spacing tokens, and regenerate build/persistence-store-inventory.json, build/persistence-startup-receipt.json and build/persistence-schema-fingerprint.json for already-authorized T-15 external-resource write sites. No style baseline increase, schema or DATA_EPOCH change, migration, persistence owner, product behavior or package change."
+    },
+    {
+      "id": "D-G10-03",
+      "level": "quality-gate",
+      "status": "approved",
+      "owner": "G10 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T23:17:09+0800",
+      "scope": "G10 correction round 3/3 after T-26: regenerate build/cli-runtime-closure.json, build/open-boundary-baseline.json and build/persistence-schema-fingerprint.json from their existing deterministic generators; update only tests/engine-resource-events.test.ts for ResourceIO-only Agent mutation ownership and desktop/src/react/__tests__/components/FileHistoryModal.test.tsx for explicit async state waits. No production behavior, baseline weakening, schema or DATA_EPOCH change, migration, package, route, public API or new owner."
+    },
+    {
+      "id": "D-T17-01",
+      "level": "architecture/security",
+      "status": "approved",
+      "owner": "T-26 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T21:30:18+0800",
+      "scope": "T-26 only: authorize the exact Pi-tool/sandbox/Engine/production-runtime/ActivityHub/block-extractor/renderer-activity and focused test paths in Ticket T-26 to turn one successful ResourceIO write/edit receipt into the existing strict T-17 main correlation. Preserve T-15/T-16 History and restore ownership, ResourceIO public contracts, mount behavior and live-only ActivityHub plus renderer-epoch proof; no durable workspace binding, raw-path fallback, second event/store/watcher/route, package or public API."
+    },
+    {
+      "id": "D-T26-01",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-26 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T22:21:42+0800",
+      "scope": "T-26 only: allow core/session-coordinator.ts and tests/session-coordinator.test.ts to inject the already-created desktop SessionManager path into Engine.buildTools through its existing getSessionPath callback. Preserve background and bridge session identity, the public SessionRef contract, History routes/UI, persistence model and all other session lifecycle behavior."
+    },
+    {
+      "id": "D-T26-02",
+      "level": "ticket",
+      "status": "approved",
+      "owner": "T-26 / Root Lead",
+      "approved_by": "Root Lead",
+      "approved_at": "2026-08-11T22:28:16+0800",
+      "scope": "T-26 only: allow server/routes/chat.ts and tests/chat-route-switching.test.ts to invoke the existing in-memory ActivityHub rebroadcast exactly when an authorized websocket client first adds a session subscription. Repeated messages must not rebroadcast; no new route, wire message, store, durable correlation, History permission or public API."
+    }
+  ],
+  "worktrees": [
+    {
+      "ticket_id": "T-02",
+      "owner": "Worker-T-02",
+      "provider": "git",
+      "base_sha": "fabe31dd8f36313f05ec635a4ce30d890bb91bd3",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-02",
+      "workspace_ref": "specdev-worktree/T-02",
+      "status": "removed",
+      "updated_at": "2026-08-09T18:59:00+08:00"
+    },
+    {
+      "ticket_id": "T-03",
+      "owner": "Worker-T-03",
+      "provider": "git",
+      "base_sha": "f76c7ed6922b86f101192dea6936ca7bb2c9859f",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-03",
+      "workspace_ref": "specdev-worktree/T-03",
+      "status": "removed",
+      "updated_at": "2026-08-09T18:59:00+08:00"
+    },
+    {
+      "ticket_id": "T-04",
+      "owner": "Worker-T-04",
+      "provider": "git",
+      "base_sha": "12ccbc02a919b08cac86a03b2b0ba5cfb4eeba26",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-04",
+      "workspace_ref": "specdev-worktree/T-04",
+      "status": "removed",
+      "updated_at": "2026-08-09T21:13:38+08:00"
+    },
+    {
+      "ticket_id": "T-05",
+      "owner": "Worker-T-05",
+      "provider": "git",
+      "base_sha": "c20605b377b8c0cc72beb2c57cedf643d8d5908b",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-05",
+      "workspace_ref": "specdev-worktree/T-05",
+      "status": "removed",
+      "updated_at": "2026-08-09T21:45:42+08:00"
+    },
+    {
+      "ticket_id": "T-06",
+      "owner": "Worker-T-06",
+      "provider": "git",
+      "base_sha": "01bc663c758ad899338e14008ebfff047ebe012d",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-06",
+      "workspace_ref": "specdev-worktree/T-06",
+      "status": "removed",
+      "updated_at": "2026-08-09T23:00:12+08:00"
+    },
+    {
+      "ticket_id": "T-07",
+      "owner": "Worker-T-07 / Lead",
+      "provider": "git",
+      "base_sha": "acc44806c0fea126e2b664d50fd03c372aa4af39",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-07",
+      "workspace_ref": "specdev-worktree/T-07",
+      "status": "removed",
+      "updated_at": "2026-08-10T00:40:07+08:00"
+    },
+    {
+      "ticket_id": "T-08",
+      "owner": "Worker-T-08",
+      "provider": "git",
+      "base_sha": "f6f3658985ab1beec116b7cf20c73b38a4ce2e3d",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-08",
+      "workspace_ref": "specdev-worktree/T-08",
+      "status": "removed",
+      "updated_at": "2026-08-10T01:45:16+08:00"
+    },
+    {
+      "ticket_id": "T-09",
+      "owner": "Worker-T-09",
+      "provider": "git",
+      "base_sha": "adda1f5806f125a9de7943ab782103c593311144",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-09",
+      "workspace_ref": "specdev-worktree/T-09",
+      "status": "removed",
+      "updated_at": "2026-08-10T03:16:22+08:00"
+    },
+    {
+      "ticket_id": "T-10",
+      "owner": "Worker-T-10 / Lead",
+      "provider": "git",
+      "base_sha": "589a3c0810a472ed4ab12e93e6c1d7195da5017c",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-10",
+      "workspace_ref": "specdev-worktree/T-10",
+      "status": "removed",
+      "updated_at": "2026-08-10T04:54:17+0800"
+    },
+    {
+      "ticket_id": "T-11",
+      "owner": "Worker-T-18 / Lead",
+      "provider": "git",
+      "base_sha": "2018ce1dc671f0d9bb3c6f61f4078625c7863001",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-11",
+      "workspace_ref": "specdev-worktree/T-11",
+      "status": "removed",
+      "updated_at": "2026-08-10T06:31:57+0800"
+    },
+    {
+      "ticket_id": "T-18",
+      "owner": "Worker-T-18",
+      "provider": "git",
+      "base_sha": "2018ce1dc671f0d9bb3c6f61f4078625c7863001",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-18",
+      "workspace_ref": "specdev-worktree/T-18",
+      "status": "removed",
+      "updated_at": "2026-08-10T05:51:42+0800"
+    },
+    {
+      "ticket_id": "T-19",
+      "owner": "Worker-T-19",
+      "provider": "git",
+      "base_sha": "2018ce1dc671f0d9bb3c6f61f4078625c7863001",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-19",
+      "workspace_ref": "specdev-worktree/T-19",
+      "status": "removed",
+      "updated_at": "2026-08-10T08:03:19+0800"
+    },
+    {
+      "ticket_id": "T-12",
+      "owner": "Worker-T-12",
+      "provider": "git",
+      "base_sha": "e758c7a12d31e8385b4993c406ae5acc04b18635",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-12",
+      "workspace_ref": "specdev-worktree/T-12",
+      "status": "integrated",
+      "updated_at": "2026-08-10T14:48:22+0800"
+    },
+    {
+      "ticket_id": "T-13",
+      "owner": "Worker-T-13",
+      "provider": "git",
+      "base_sha": "e758c7a12d31e8385b4993c406ae5acc04b18635",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-13",
+      "workspace_ref": "specdev-worktree/T-13",
+      "status": "integrated",
+      "updated_at": "2026-08-10T14:48:22+0800"
+    },
+    {
+      "ticket_id": "T-14",
+      "owner": "Worker-T-14",
+      "provider": "git",
+      "base_sha": "e758c7a12d31e8385b4993c406ae5acc04b18635",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-14",
+      "workspace_ref": "specdev-worktree/T-14",
+      "status": "integrated",
+      "updated_at": "2026-08-10T14:48:22+0800"
+    },
+    {
+      "ticket_id": "T-15",
+      "owner": "Worker-T-15",
+      "provider": "git",
+      "base_sha": "90f122329c1b3104c4176962f900b3af50fe98f3",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-15",
+      "workspace_ref": "specdev-worktree/T-15",
+      "status": "integrated",
+      "updated_at": "2026-08-11T12:04:07+0800"
+    },
+    {
+      "ticket_id": "T-16",
+      "owner": "Worker-T-16",
+      "provider": "git",
+      "base_sha": "b29c9ff3",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-16",
+      "workspace_ref": "specdev-worktree/T-16",
+      "status": "integrated",
+      "updated_at": "2026-08-11T23:04:33+0800"
+    },
+    {
+      "ticket_id": "T-20",
+      "owner": "Worker-T-20",
+      "provider": "git",
+      "base_sha": "b29c9ff3",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-20",
+      "workspace_ref": "specdev-worktree/T-20",
+      "status": "integrated",
+      "updated_at": "2026-08-11T12:35:00+0800"
+    },
+    {
+      "ticket_id": "T-17",
+      "owner": "Worker-T-17 / Lead",
+      "provider": "git",
+      "base_sha": "2465ccc4f453372a170ba86b2336985889e1ff2b",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-17",
+      "workspace_ref": "specdev-worktree/T-17",
+      "status": "integrated",
+      "updated_at": "2026-08-11T13:41:38+0800"
+    },
+    {
+      "ticket_id": "T-21",
+      "owner": "Worker-T-21 / Lead",
+      "provider": "git",
+      "base_sha": "4aa188af",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-21",
+      "workspace_ref": "specdev-worktree/T-21",
+      "status": "integrated",
+      "updated_at": "2026-08-11T14:31:00+0800"
+    },
+    {
+      "ticket_id": "T-23",
+      "owner": "Worker-T-23 / Lead平台验收",
+      "provider": "git",
+      "base_sha": "fa569c0c",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-23",
+      "workspace_ref": "specdev-worktree/T-23",
+      "status": "integrated",
+      "updated_at": "2026-08-11T20:34:42+0800"
+    },
+    {
+      "ticket_id": "T-24",
+      "owner": "Worker-T-24 / Lead审查",
+      "provider": "git",
+      "base_sha": "aa476d23",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-24",
+      "workspace_ref": "specdev-worktree/T-24",
+      "status": "integrated",
+      "updated_at": "2026-08-11T15:26:00+0800"
+    },
+    {
+      "ticket_id": "T-22",
+      "owner": "Worker-T-22 / Lead platform owner",
+      "provider": "git",
+      "base_sha": "4231ec3f4ed93167ab3c7a69b8c2160d886113ff",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-22",
+      "workspace_ref": "specdev-worktree/T-22",
+      "status": "blocked",
+      "updated_at": "2026-08-11T16:48:55+0800"
+    },
+    {
+      "ticket_id": "T-25",
+      "owner": "Worker-T-25 / Lead final owner",
+      "provider": "git",
+      "base_sha": "10a79be8",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-25",
+      "workspace_ref": "specdev-worktree/T-25",
+      "status": "blocked",
+      "updated_at": "2026-08-11T23:32:42+0800"
+    },
+    {
+      "ticket_id": "T-26",
+      "owner": "Worker-T-26 / Root Lead",
+      "provider": "git",
+      "base_sha": "1ad0f271b47808666547dae87f15fa43237a07f4",
+      "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-26",
+      "workspace_ref": "specdev-worktree/T-26",
+      "status": "integrated",
+      "updated_at": "2026-08-11T22:52:23+0800"
+    }
+  ]
 }

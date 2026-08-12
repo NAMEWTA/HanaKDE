@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
 
 import { execute as readDocument, parameters as readDocumentParameters } from "../plugins/office/tools/read-document.ts";
+import { readOfficeDocument } from "../plugins/office/lib/read-document.ts";
 import { execute as listCapabilities } from "../plugins/office/tools/list-capabilities.ts";
 import { renderHtmlToPdf } from "../plugins/office/lib/html-to-pdf.ts";
 import { isOfficeEnabledForAgentConfig } from "../plugins/office/lib/availability.ts";
@@ -139,10 +140,12 @@ describe("office plugin tools", () => {
   it("reads documents from ResourceIO refs by materializing through plugin resources", async () => {
     const filePath = path.join(tempDir, "resource-note.md");
     fs.writeFileSync(filePath, "hello from resource ref", "utf-8");
+    const cleanup = vi.fn();
     const materialize = vi.fn(async () => ({
       filePath,
       resourceKey: "mount:docs/resource-note.md",
       resource: { kind: "mount", mountId: "docs", path: "resource-note.md" },
+      cleanup,
     }));
 
     const result = await readDocument({
@@ -157,6 +160,30 @@ describe("office plugin tools", () => {
       filePath,
       resourceKey: "mount:docs/resource-note.md",
     });
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses canonical extraction for full Office resource reads while preserving product adapters", async () => {
+    const extract = vi.fn(async () => ({
+      ok: true as const,
+      markdown: "# Canonical\nbody from shared extraction",
+      format: "docx",
+      warnings: [],
+      extractorVersion: "anydoc@test",
+    }));
+    const result = await readOfficeDocument({
+      resource: { kind: "mount", mountId: "docs", path: "report.docx" },
+    }, { documentExtraction: { extract } });
+
+    expect(result).toMatchObject({
+      ext: ".docx",
+      kind: "binary",
+      content: "# Canonical\nbody from shared extraction",
+      extractorVersion: "anydoc@test",
+    });
+    expect(extract).toHaveBeenCalledWith(expect.objectContaining({
+      filenameHint: "report.docx",
+    }));
   });
 
   it("declares ResourceIO materialize/read capabilities for Office document reads", () => {

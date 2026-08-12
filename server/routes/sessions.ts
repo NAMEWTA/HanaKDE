@@ -6,6 +6,7 @@ import fs from "fs/promises";
 import path from "path";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.ts";
+import { bodyFromRouteError, routeError, statusFromRouteError } from "./route-errors.ts";
 import { t } from "../../lib/i18n.ts";
 import { dropUninstalledPluginCards, extractBlocks, pluginInstalledPredicate, resolveMediaGenerationBlocks } from "../block-extractors.ts";
 import { normalizePluginChatSurfaceBlocks } from "../plugin-chat-surface.ts";
@@ -171,28 +172,6 @@ function sessionWorkspaceMountFields(engine, sessionPath, fallback = null) {
   };
 }
 
-function routeError(message, code, status) {
-  const err: any = new Error(message);
-  err.code = code;
-  err.status = status;
-  return err;
-}
-
-function statusFromRouteError(err) {
-  return Number.isInteger(err?.status) ? err.status : 500;
-}
-
-function bodyFromRouteError(err) {
-  return {
-    error: err?.message || String(err),
-    ...(err?.code ? { code: err.code } : {}),
-    ...(err?.sessionId ? { sessionId: err.sessionId } : {}),
-    ...(err?.currentPath ? { currentPath: err.currentPath } : {}),
-    ...(err?.requestedPath ? { requestedPath: err.requestedPath } : {}),
-    ...(err?.lifecycle ? { lifecycle: err.lifecycle } : {}),
-  };
-}
-
 async function resumeBrowserForSessionSwitch(bm, sessionPath) {
   if (typeof bm.resumeForSessionIfAvailable === "function") {
     return await bm.resumeForSessionIfAvailable(sessionPath);
@@ -209,6 +188,14 @@ async function resumeBrowserForSessionSwitch(bm, sessionPath) {
   };
 }
 
+/**
+ * 把建会话失败的异常分层成 { status, body }。
+ *
+ * 唯一正确的做法是在抛错点就带上 code 和 status——新增抛错点必须这么写。
+ * 下面那串文案正则只服务于还没来得及带码的历史抛错点：它依赖错误信息的字面量，
+ * 上游改一次文案就会失灵，翻译一变更是直接漏判。所以它是只减不增的兜底，
+ * 不要再往里加语言或新的匹配分支。
+ */
 function classifySessionCreationError(err) {
   const message = err?.message || String(err);
   if (err?.status && Number.isInteger(err.status)) {
@@ -932,6 +919,7 @@ export function createSessionsRoute(engine, hub = null) {
             ? engine.getSessionPermissionMode(s.path)
             : engine.permissionMode || null),
           pinnedAt: s.pinnedAt || null,
+          pinOrder: Number.isFinite(s.pinOrder) ? s.pinOrder : null,
           agentDeleted: s.agentDeleted === true,
           readOnlyReason: s.readOnlyReason || (s.agentDeleted === true ? "agent_deleted" : null),
           continuationAvailable: s.continuationAvailable === true,
@@ -996,6 +984,7 @@ export function createSessionsRoute(engine, hub = null) {
         workspaceMountId: s.workspaceMountId || null,
         workspaceLabel: s.workspaceLabel || null,
         pinnedAt: s.pinnedAt || null,
+        pinOrder: Number.isFinite(s.pinOrder) ? s.pinOrder : null,
         agentDeleted: s.agentDeleted === true,
         readOnlyReason: s.readOnlyReason || (s.agentDeleted === true ? "agent_deleted" : null),
         continuationAvailable: s.continuationAvailable === true,
@@ -1128,11 +1117,63 @@ export function createSessionsRoute(engine, hub = null) {
         sessionPath,
       });
       if (!auth.allowed) return c.json({ error: "insufficient_scope", reason: auth.reason }, 403);
-      const pinnedAt = await engine.setSessionPinned({
+      const { pinnedAt, pinOrder } = await engine.setSessionPinned({
         ...(sessionId ? { sessionId } : {}),
         sessionPath,
       }, pinned);
-      return c.json({ ok: true, pinnedAt, sessionId: sessionId || engine.getSessionIdForPath?.(sessionPath) || null });
+      return c.json({
+        ok: true,
+        pinnedAt,
+        pinOrder: Number.isFinite(pinOrder) ? pinOrder : null,
+        sessionId: sessionId || engine.getSessionIdForPath?.(sessionPath) || null,
+      });
+    } catch (err) {
+      return c.json(bodyFromRouteError(err), statusFromRouteError(err));
+    }
+  });
+
+  // 重排置顶区：提交完整有序的 sessionId 列表，服务端整体重新编号
+  route.post("/sessions/pin-order", async (c) => {
+    try {
+      const requestContext = createRequestContext(c, engine);
+      const body = await safeJson(c);
+      const rawSessionIds = Array.isArray(body?.sessionIds) ? body.sessionIds : null;
+      if (!rawSessionIds || rawSessionIds.length === 0) {
+        return c.json({ error: t("error.missingParam", { param: "sessionIds" }) }, 400);
+      }
+
+      const refs = [];
+      const seen = new Set();
+      for (const rawSessionId of rawSessionIds) {
+        const sessionId = normalizeRequestSessionId(rawSessionId);
+        if (!sessionId) {
+          return c.json({ error: t("error.missingParam", { param: "sessionIds" }) }, 400);
+        }
+        if (seen.has(sessionId)) {
+          return c.json({
+            error: `setSessionPinOrder: duplicate session ${sessionId}`,
+            code: "session_pin_order_duplicate",
+            sessionId,
+          }, 400);
+        }
+        seen.add(sessionId);
+        // 每个 session 都独立解析定位并鉴权：一次请求跨多个 session，
+        // 授权不能只看列表里的第一个。
+        const sessionRef = resolveSessionLocatorFromBody({ sessionId }, "setSessionPinOrder");
+        if (!isValidSessionPath(sessionRef.sessionPath, engine.agentsDir)) {
+          return c.json({ error: "Invalid session path" }, 403);
+        }
+        const auth = authorizeSessionRoute(requestContext, "sessions.write", {
+          kind: "session",
+          studioId: requestContext.studioId,
+          sessionPath: sessionRef.sessionPath,
+        });
+        if (!auth.allowed) return c.json({ error: "insufficient_scope", reason: auth.reason }, 403);
+        refs.push({ sessionId: sessionRef.sessionId });
+      }
+
+      const orders = await engine.setSessionPinOrder(refs);
+      return c.json({ ok: true, orders });
     } catch (err) {
       return c.json(bodyFromRouteError(err), statusFromRouteError(err));
     }
@@ -1804,12 +1845,11 @@ export function createSessionsRoute(engine, hub = null) {
       });
       return c.json({ ok: true, ...result });
     } catch (err) {
-      const status = Number.isInteger(err?.status)
-        ? err.status
-        : err?.message === "session_busy"
-          ? 409
-          : 400;
-      return c.json(bodyFromRouteError(err), status);
+      // 无码默认 400（重放失败绝大多数是请求本身的问题），session_busy 仍单独回 409。
+      return c.json(
+        bodyFromRouteError(err),
+        statusFromRouteError(err, err?.message === "session_busy" ? 409 : 400),
+      );
     }
   });
 
@@ -1880,12 +1920,11 @@ export function createSessionsRoute(engine, hub = null) {
       }, childPath);
       return c.json(response);
     } catch (err) {
-      const status = Number.isInteger(err?.status)
-        ? err.status
-        : err?.message === "session_busy"
-          ? 409
-          : 500;
-      return c.json(bodyFromRouteError(err), status);
+      // 无码默认 500（fork 失败多半是文件系统或引擎侧的问题），session_busy 仍单独回 409。
+      return c.json(
+        bodyFromRouteError(err),
+        statusFromRouteError(err, err?.message === "session_busy" ? 409 : 500),
+      );
     }
   });
 
@@ -1996,6 +2035,11 @@ export function createSessionsRoute(engine, hub = null) {
         createOptions.workspaceLabel = workspaceSelection.mount.label || null;
       }
       let newSessionPath, newSessionId, newAgentId;
+      // @ui-focus-ok: this asks "is the caller switching to a different agent
+      // than the one already on screen?", which is a question about the focus
+      // itself. The caller's own view wins when it says so; the server's focus
+      // is the last resort for deciding whether this is a switch at all, and
+      // the agent being switched to is the explicit one either way.
       if (agentId && agentId !== (body.currentAgentId || engine.currentAgentId)) {
         ({ sessionPath: newSessionPath, sessionId: newSessionId, agentId: newAgentId } = await engine.createSessionForAgent(
           agentId,
@@ -2013,7 +2057,7 @@ export function createSessionsRoute(engine, hub = null) {
           createOptions,
         ));
       }
-      engine.persistSessionMeta();
+      engine.persistSessionMeta(newSessionPath);
       if (projectId && typeof engine.setSessionProjectAssignment === "function") {
         await engine.setSessionProjectAssignment({ sessionPath: newSessionPath, projectId });
       }
@@ -2111,7 +2155,7 @@ export function createSessionsRoute(engine, hub = null) {
       const newSessionPath = result.sessionPath;
       const newAgentId = result.agentId;
       const newSessionId = result.sessionId || engine.getSessionIdForPath?.(newSessionPath) || null;
-      engine.persistSessionMeta?.();
+      engine.persistSessionMeta?.(newSessionPath);
       if (projectId && typeof engine.setSessionProjectAssignment === "function") {
         await engine.setSessionProjectAssignment({ sessionPath: newSessionPath, projectId });
       }
@@ -2148,7 +2192,8 @@ export function createSessionsRoute(engine, hub = null) {
       }, newSessionPath);
       return c.json(response);
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      const classified = classifySessionCreationError(err);
+      return c.json(classified.body, classified.status);
     }
   });
 
@@ -2240,7 +2285,8 @@ export function createSessionsRoute(engine, hub = null) {
       const bm = BrowserManager.instance();
       const suspendPath = oldSessionPath;
       if (suspendPath && bm.isRunning(suspendPath)) {
-        await bm.suspendForSession(suspendPath);
+        // viewer 开着就让它跟着切，不再因为切换会话把窗口藏起来
+        await bm.suspendForSession(suspendPath, { keepViewerVisible: true });
       }
 
       await engine.switchSession(sessionPath);
@@ -2251,8 +2297,14 @@ export function createSessionsRoute(engine, hub = null) {
 
       const session = engine.getSessionByPath(sessionPath);
 
-      // 从 manifest 归属解析 agentId，避免依赖 engine 焦点指针的时序
-      const switchedAgentId = engine.resolveSessionOwnership?.(sessionPath)?.agentId || engine.currentAgentId;
+      // viewer 跟随：无论是否 resume 成功都告知 viewer 当前 session（没有标签页组就显示空态）。
+      // 不改变窗口可见性，viewer 没开着时这条通知只更新标题缓存。
+      void bm.notifyViewerSession(sessionPath, session?.title || null);
+
+      // 从 manifest 归属解析 agentId，避免依赖 engine 焦点指针的时序。
+      // switchSession 只接受 agents/{id}/sessions/*.jsonl 布局的路径，归属要么
+      // 来自 manifest，要么从这个布局推出来，所以走到这里一定解析得到 agentId。
+      const switchedAgentId = engine.resolveSessionOwnership(sessionPath).agentId;
       const switchedAgent = engine.getAgent(switchedAgentId);
 
       // switchSession 已同步设置焦点到目标 session。
@@ -2304,39 +2356,18 @@ export function createSessionsRoute(engine, hub = null) {
         currentModelUnavailableReason: modelAvailability?.available === false
           ? (modelAvailability.reason || "temporarily_unavailable")
           : null,
-        // #1624：restore 时算好的工具/prompt 漂移提示（无漂移或已 dismiss → null）
-        capabilityDrift: engine.getSessionCapabilityDriftNotice?.(sessionPath) || null,
       });
     } catch (err) {
       const errDetail = `${err.message}\n${err.stack || ""}`;
       switchLog.error(`error: ${errDetail}`);
       try { appendFileSync(path.join(engine.hanakoHome, "switch-error.log"), `${new Date().toISOString()}\n${errDetail}\n---\n`); } catch {}
-      return c.json({ error: err.message }, 500);
+      // 日志保持全量，响应按下游语义分层：session-coordinator 抛的 409/404/503
+      // 不该在这里被压平成 500，否则用户只看得到"未知错误"，无从判断该刷新还是重试。
+      return c.json(bodyFromRouteError(err), statusFromRouteError(err));
     }
   });
 
-  // #1624：关闭当前 fingerprint 的"工具能力有更新"提示（跟 session 走，指纹再变才重新提示）
-  route.post("/sessions/capability-drift/dismiss", async (c) => {
-    try {
-      const body = await safeJson(c);
-      const { path: sessionPath, fingerprint } = body || {};
-      if (!sessionPath) {
-        return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
-      }
-      if (typeof fingerprint !== "string" || !fingerprint) {
-        return c.json({ error: t("error.missingParam", { param: "fingerprint" }) }, 400);
-      }
-      if (!isActiveDesktopSessionPath(sessionPath, engine.agentsDir)) {
-        return c.json({ error: "Invalid session path" }, 403);
-      }
-      await engine.dismissSessionCapabilityDrift(sessionPath, fingerprint);
-      return c.json({ ok: true });
-    } catch (err) {
-      return c.json({ error: err.message }, 500);
-    }
-  });
-
-  // #1624：显式刷新 Agent 工具——fresh compact：压缩旧对话 + 用当前配置重建 prompt/工具快照
+  // 显式更新 Agent 能力：fresh compact 压缩旧对话，再用当前配置重建 prompt/工具快照。
   route.post("/sessions/fresh-compact", async (c) => {
     try {
       const body = await safeJson(c);
@@ -2354,11 +2385,10 @@ export function createSessionsRoute(engine, hub = null) {
       return c.json({
         ok: true,
         ...result,
-        capabilityDrift: engine.getSessionCapabilityDriftNotice?.(sessionPath) || null,
       });
     } catch (err) {
       lifecycleLog.error(`fresh-compact failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      return c.json(bodyFromRouteError(err), statusFromRouteError(err));
     }
   });
 
@@ -2374,12 +2404,26 @@ export function createSessionsRoute(engine, hub = null) {
     return c.json(bm.getBrowserSessionStates());
   });
 
+  // 打开指定 session 的浏览器（侧栏徽章左键入口）：冷状态先恢复，再让 viewer 展示该 session
+  route.post("/browser/open-session", async (c) => {
+    const body = await safeJson(c);
+    const { sessionPath } = body;
+    if (!sessionPath) return c.json({ error: "missing sessionPath" }, 400);
+    const bm = BrowserManager.instance();
+    const resume = await bm.resumeForSessionIfAvailable(sessionPath);
+    const session = engine.getSessionByPath(sessionPath);
+    await bm.notifyViewerSession(sessionPath, session?.title || null);
+    return c.json({ ok: true, resume });
+  });
+
   // 关闭指定 session 的浏览器
   route.post("/browser/close-session", async (c) => {
     const body = await safeJson(c);
-    const { sessionPath } = body;
+    const { sessionPath, revoke } = body;
     if (!sessionPath) return c.json({ error: "missing sessionPath" });
     const bm = BrowserManager.instance();
+    // 急停（revoke）不只是关窗，还要撤销该 session 的 agent 浏览器授权。
+    if (revoke === true) bm.revokeBrowserAuthorization(sessionPath);
     await bm.closeBrowserForSession(sessionPath);
     hub?.eventBus?.emit?.({ type: "browser_status", running: false, url: null }, sessionPath);
     return c.json({ ok: true, sessions: bm.getBrowserSessionStates() });
@@ -2730,3 +2774,8 @@ function sessionFileLifecycleFields(file, engine) {
     ...(source.resource ? { resource: source.resource } : {}),
   };
 }
+
+// 仅供测试使用的内部函数出口；生产调用一律走 route handler。
+// 这个出口跟 classifySessionCreationError 的文案正则兜底同生共死：它存在的唯一理由
+// 是让那段兜底可被直接测到。兜底删除之日，这个出口一并删除，不要往里加第二个成员。
+export const __testables = { classifySessionCreationError };

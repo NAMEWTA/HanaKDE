@@ -18,11 +18,12 @@
 import fs from "fs";
 import path from "path";
 import { createHash } from "crypto";
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import { builtinModules } from "module";
 import { pathToFileURL } from "url";
 import ts from "typescript";
 import {
+  buildAnydocRuntimeSmokeScript,
   buildBetterSqliteRuntimeSmokeScript,
   buildJiebaRuntimeSmokeScript,
   buildExternalPackage,
@@ -167,15 +168,72 @@ export function prepareNodeRuntime({
  *
  * @param {{ rootDir: string, viteBundleDir: string, bundleOutDir: string, entry?: string, log?: (msg: string) => void }} params
  */
+export function stageDocumentExtractionRuntimeAssets({ rootDir, bundleOutDir, log = (msg) => console.log(msg) }) {
+  const sourceDir = path.join(rootDir, "lib", "document-extract");
+  const anydocSource = path.join(sourceDir, "anydoc-child.cjs");
+  const htmlSource = path.join(sourceDir, "html-child.ts");
+  for (const source of [anydocSource, htmlSource]) {
+    if (!fs.existsSync(source)) {
+      throw new Error(`[build-server] required document extraction child missing: ${source}`);
+    }
+  }
+
+  const anydocTarget = path.join(bundleOutDir, "anydoc-child.cjs");
+  fs.copyFileSync(anydocSource, anydocTarget);
+  const htmlTarget = path.join(bundleOutDir, "html-child.ts");
+  execFileSync("npx", [
+    "esbuild",
+    htmlSource,
+    "--bundle",
+    "--platform=node",
+    "--format=esm",
+    "--target=node24",
+    "--external:jsdom",
+    `--outfile=${htmlTarget}`,
+  ], { cwd: rootDir, stdio: "inherit" });
+
+  if (!fs.existsSync(anydocTarget) || !fs.existsSync(htmlTarget)) {
+    throw new Error("[build-server] document extraction child staging produced an incomplete bundle");
+  }
+  log("[build-server] document extraction child assets staged beside bundle/index.js");
+  return {
+    anydoc: anydocTarget,
+    html: htmlTarget,
+  };
+}
+
 export function buildViteServerBundle({ rootDir, viteBundleDir, bundleOutDir, entry, log = (msg) => console.log(msg) }) {
   log("[build-server] running Vite bundle...");
-  execSync("npx vite build --config vite.config.server.js", {
+  const effectiveEntry = entry || "server/main-full.ts";
+  execFileSync("npx", ["vite", "build", "--config", "vite.config.server.js", "--ssr", effectiveEntry], {
     cwd: rootDir,
     stdio: "inherit",
     env: entry ? { ...process.env, HANA_SERVER_BUNDLE_ENTRY: entry } : process.env,
   });
 
+  fs.rmSync(bundleOutDir, { recursive: true, force: true });
+  fs.mkdirSync(bundleOutDir, { recursive: true });
   fs.cpSync(viteBundleDir, bundleOutDir, { recursive: true });
+
+  const indexPath = path.join(bundleOutDir, "index.js");
+  if (!fs.existsSync(indexPath)) {
+    const entryBase = path.basename(effectiveEntry).replace(/\.[^.]+$/, "");
+    const candidate = path.join(bundleOutDir, `${entryBase}.js`);
+    if (!fs.existsSync(candidate)) {
+      throw new Error(`[build-server] SSR bundle did not produce bundle/index.js or ${entryBase}.js`);
+    }
+    fs.renameSync(candidate, indexPath);
+  }
+  const bundleSource = fs.readFileSync(indexPath, "utf8");
+  if (/data:application\/(?:node|javascript)/u.test(bundleSource)) {
+    throw new Error("[build-server] SSR bundle inlined a child runtime as a data URL; refusing to package");
+  }
+  for (const childName of ["anydoc-child.cjs", "html-child.ts"]) {
+    if (!bundleSource.includes(childName)) {
+      throw new Error(`[build-server] SSR bundle does not retain ${childName} runtime location`);
+    }
+  }
+  stageDocumentExtractionRuntimeAssets({ rootDir, bundleOutDir, log });
   log("[build-server] Vite bundle copied to bundle/");
 }
 
@@ -500,8 +558,9 @@ async function readNftTraceSource(filePath) {
  * protected package directory (every package.json-declared external, since
  * their conditional-export / CJS-ESM resolution isn't always traced
  * correctly, plus their installed optionalDependencies). Then re-verifies
- * external entrypoints and runs the better-sqlite3 / @node-rs/jieba runtime
- * smoke tests when those packages are present in `externalPackageNames`.
+ * external entrypoints and runs the better-sqlite3 / @node-rs/jieba /
+ * @firecrawl/anydoc runtime smoke tests when those packages are present in
+ * `externalPackageNames`.
  *
  * @param {{
  *   outDir: string, nftRoots: string[], externalPackageNames: string[],
@@ -611,6 +670,20 @@ export async function pruneServerNodeModulesViaNft({
   if (externalPackageNames.includes("@node-rs/jieba")) {
     const smokeScript = path.join(outDir, ".jieba-smoke.mjs");
     fs.writeFileSync(smokeScript, buildJiebaRuntimeSmokeScript());
+    try {
+      runWithTargetNode(path.basename(smokeScript));
+    } finally {
+      fs.rmSync(smokeScript, { force: true });
+    }
+  }
+
+  // A packaged server whose document converter cannot load its native binary
+  // is a broken product, so this is a hard build failure. The runtime side is
+  // deliberately the opposite: a failed load there degrades one extraction
+  // attempt into a reported error and never takes the session down with it.
+  if (externalPackageNames.includes("@firecrawl/anydoc")) {
+    const smokeScript = path.join(outDir, ".anydoc-smoke.mjs");
+    fs.writeFileSync(smokeScript, buildAnydocRuntimeSmokeScript());
     try {
       runWithTargetNode(path.basename(smokeScript));
     } finally {

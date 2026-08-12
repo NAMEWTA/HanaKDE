@@ -1,14 +1,20 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
 import { ResourceAccessPolicy } from "../lib/resource-io/resource-access-policy.ts";
 import {
+  attachInternalLocalResourceAuthority,
+} from "../lib/resource-io/resource-refs.ts";
+import {
   RESOURCE_LIST_BLOCKED_ENTRIES,
-  RESOURCE_SCOPE_ROOT,
   type ResourceRef,
 } from "../lib/resource-io/types.ts";
+
+const TEST_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SECURE_FS_HELPER_FIXTURE_ROOT = path.join(TEST_ROOT, "tests", "fixtures", "secure-fs-helper");
 
 const CAPABILITY_KEYS = [
   "stat",
@@ -35,6 +41,7 @@ describe("LocalFsProvider", () => {
   let tempRoot: string | null = null;
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (tempRoot) fs.rmSync(tempRoot, { recursive: true, force: true });
     tempRoot = null;
   });
@@ -57,6 +64,7 @@ describe("LocalFsProvider", () => {
   it("creates an absent expected-version target once and never overwrites a conflict", async () => {
     const { cwd, provider } = makeProvider();
     const ref = { kind: "local-file" as const, path: path.join(cwd, "Recovered.md") };
+    useWrittenHelper();
 
     const created = await provider.writeExpectedVersion(ref, "# recovered\n", null);
     expect(created).toMatchObject({ changeType: "created" });
@@ -197,14 +205,10 @@ describe("LocalFsProvider", () => {
     );
     const scopedRef = (relativePath: string): ResourceRef => {
       const ref = {
-        kind: "local-file",
+        kind: "local-file" as const,
         path: path.join(cwd, "linked-scope", relativePath),
-      } as ResourceRef;
-      Object.defineProperty(ref, RESOURCE_SCOPE_ROOT, {
-        value: fs.realpathSync(cwd),
-        enumerable: false,
-      });
-      return ref;
+      };
+      return attachInternalLocalResourceAuthority(ref, { scopeRoot: fs.realpathSync(cwd) });
     };
     const fileRef = scopedRef("Secret.md");
     const directoryRef = scopedRef("");
@@ -397,6 +401,7 @@ describe("LocalFsProvider", () => {
     });
     expect(fs.readFileSync(source, "utf-8")).toBe("old");
 
+    useWrittenHelper();
     const saved = await provider.writeExpectedVersion(
       { kind: "local-file", path: "draft.md" },
       "new",
@@ -472,6 +477,14 @@ describe("LocalFsProvider", () => {
       code: "knowledge_resource_conflict",
     });
   });
+
+  function useWrittenHelper(): void {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv(
+      "HANA_SECURE_FS_HELPER_PATH",
+      path.join(SECURE_FS_HELPER_FIXTURE_ROOT, "written.cjs"),
+    );
+  }
 });
 
 function makeProviderWithPolicy() {

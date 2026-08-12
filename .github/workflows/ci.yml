@@ -79,6 +79,10 @@ jobs:
         if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/download-mingit.js
 
+      - name: Build secure filesystem helper for Windows server smoke
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
+        run: node scripts/build-secure-fs-helper.mjs x64
+
       - name: Build Windows server bundle for standalone smoke
         if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/build-server.mjs win32 x64

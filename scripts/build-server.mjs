@@ -67,6 +67,7 @@ import {
 } from "./build-server-plugin-runtime-deps.mjs";
 import { copyServerRuntimeAssets } from "./build-server-runtime-assets.mjs";
 import { packDualKindSeed } from "./build-server-artifact.mjs";
+import { copySecureFsHelperRuntime } from "./build-secure-fs-helper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -81,6 +82,10 @@ console.log(`[build-server] Building for ${platform}-${arch}...`);
 // ── 0. 清理 ──
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
+
+// The helper is built by the package/CI entrypoint and staged before any
+// signing or seed packing. Missing supported-platform output fails closed.
+copySecureFsHelperRuntime({ rootDir: ROOT, outDir, platform, arch });
 
 // ── 1. Node.js runtime ──
 const { isWin, cachedNpmCli, runWithTargetNode } = prepareNodeRuntime({
@@ -119,7 +124,7 @@ copyServerDataFiles({
   outDir,
   libFiles: LIB_DATA_GLOBS,
   libDirs: LIB_TEMPLATE_DIRS,
-  // i18n locales（lib/i18n.js 通过 fromRoot("desktop","src","locales") 引用）
+  // i18n locales（lib/i18n.ts 通过 fromRoot("desktop","src","locales") 引用）
   extraDirs: [{ relSource: path.join("desktop", "src", "locales") }],
 });
 

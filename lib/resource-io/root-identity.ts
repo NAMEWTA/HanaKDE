@@ -9,6 +9,21 @@ import type {
 type LocalRootPrivate = Readonly<{
   canonicalPath: string;
   comparisonPath: string;
+  nativeIdentity: LocalRootNativeIdentity;
+}>;
+
+type LocalRootIdentitySnapshot = Readonly<{
+  device: string;
+  inode: string;
+  mode: string;
+  birthtimeMs: number;
+  nativeIdentity: LocalRootNativeIdentity;
+}>;
+
+export type LocalRootNativeIdentity = Readonly<{
+  device: string;
+  inode: string;
+  birthtimeNs: string;
 }>;
 
 type IntrinsicallyDisjointProof = Readonly<{
@@ -24,10 +39,7 @@ export function resolveLocalFsRootIdentity(
   rootPath: string,
 ): ProviderRootIdentity {
   const canonicalPath = nativeRealpath(rootPath);
-  const stat = fs.statSync(canonicalPath);
-  if (!stat.isDirectory()) {
-    throw rootIdentityError("source root must be a directory");
-  }
+  const snapshot = captureLocalRootIdentitySnapshot(canonicalPath);
   const caseMode = localCaseMode();
   const comparisonPath = caseMode === "insensitive"
     ? canonicalPath.normalize("NFC").toLocaleLowerCase("en-US")
@@ -37,16 +49,16 @@ export function resolveLocalFsRootIdentity(
   // roots look identical and deny a valid source registration. realpath is a
   // conservative fallback: aliases resolve to the same canonical path, while
   // roots without a usable file identity never share an opaque id by accident.
-  const opaqueRootId = hasStableInode(stat)
-    ? digest(["local_fs", "inode", String(stat.dev), String(stat.ino)])
+  const opaqueRootId = hasStableInode(snapshot)
+    ? digest(["local_fs", "inode", snapshot.device, snapshot.inode])
     : digest(["local_fs", "canonical-path", comparisonPath]);
   const scopeToken = digest([
     opaqueRootId,
     comparisonPath,
-    String(stat.dev),
-    String(stat.ino),
-    String(stat.mode),
-    String(stat.birthtimeMs),
+    snapshot.device,
+    snapshot.inode,
+    snapshot.mode,
+    String(snapshot.birthtimeMs),
   ]);
   const identity: ProviderRootIdentity = Object.freeze({
     providerId,
@@ -58,8 +70,46 @@ export function resolveLocalFsRootIdentity(
   localRootPrivate.set(identity, Object.freeze({
     canonicalPath,
     comparisonPath,
+    nativeIdentity: snapshot.nativeIdentity,
   }));
   return identity;
+}
+
+function captureLocalRootIdentitySnapshot(canonicalPath: string): LocalRootIdentitySnapshot {
+  let stat: fs.BigIntStats;
+  try {
+    stat = fs.lstatSync(canonicalPath, { bigint: true });
+  } catch {
+    throw rootIdentityError("source root identity is unavailable");
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw rootIdentityError("source root must be a directory");
+  }
+  const birthtimeMs = Number(stat.birthtimeNs) / 1_000_000;
+  if (!Number.isFinite(birthtimeMs)) {
+    throw rootIdentityError("source root identity is unavailable");
+  }
+  return Object.freeze({
+    device: stat.dev.toString(),
+    inode: stat.ino.toString(),
+    mode: stat.mode.toString(),
+    birthtimeMs,
+    nativeIdentity: Object.freeze({
+      device: stat.dev.toString(),
+      inode: stat.ino.toString(),
+      birthtimeNs: stat.birthtimeNs.toString(),
+    }),
+  });
+}
+
+/**
+ * Private local-root authority for in-process ResourceIO seams. A copied
+ * ProviderRootIdentity has no WeakMap entry and therefore cannot yield it.
+ */
+export function localRootNativeIdentity(
+  identity: ProviderRootIdentity,
+): LocalRootNativeIdentity | null {
+  return localRootPrivate.get(identity)?.nativeIdentity || null;
 }
 
 export class ProviderRootIdentityBroker {
@@ -98,11 +148,13 @@ export class ProviderRootIdentityBroker {
         : "unknown";
     }
     if (a.identityNamespace !== "local_fs") return "unknown";
-    if (a.opaqueRootId === b.opaqueRootId) return "same";
 
     const aPrivate = localRootPrivate.get(a);
     const bPrivate = localRootPrivate.get(b);
     if (!aPrivate || !bPrivate) return "unknown";
+    if (a.opaqueRootId === b.opaqueRootId) {
+      return a.scopeToken === b.scopeToken ? "same" : "unknown";
+    }
     const aPath = aPrivate.comparisonPath;
     const bPath = bPrivate.comparisonPath;
     if (isStrictAncestor(aPath, bPath)) return "ancestor";
@@ -139,10 +191,18 @@ function isStrictAncestor(parent: string, child: string): boolean {
     && !path.isAbsolute(relative);
 }
 
-function hasStableInode(stat: fs.Stats): boolean {
-  return Number.isSafeInteger(stat.dev)
-    && Number.isSafeInteger(stat.ino)
-    && stat.ino > 0;
+function hasStableInode(snapshot: LocalRootIdentitySnapshot): boolean {
+  let device: number;
+  let inode: number;
+  try {
+    device = Number(BigInt(snapshot.device));
+    inode = Number(BigInt(snapshot.inode));
+  } catch {
+    return false;
+  }
+  return Number.isSafeInteger(device)
+    && Number.isSafeInteger(inode)
+    && inode > 0;
 }
 
 function digest(parts: readonly string[]): string {

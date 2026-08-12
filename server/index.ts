@@ -1,11 +1,11 @@
 /**
  * HanaAgent Server — HTTP + WebSocket API
  *
- * 启动方式：
- *   node server/index.js              （独立运行）
- *   Electron main.js fork 启动        （桌面应用内嵌）
+ * 启动方式（本文件只导出 startServer，自身不自举，由上层组合入口调用）：
+ *   npm run server                              （独立运行，经 launch.js）
+ *   Electron main.cjs spawn server/bootstrap.ts （桌面应用内嵌）
  *
- * 当通过 fork() 启动时，会通过 IPC 通知父进程端口号。
+ * 无 IPC 通道：就绪与端口写入 HANA_HOME/server-info.json，桌面端轮询该文件。
  */
 import crypto from "crypto";
 import fs from "fs";
@@ -59,6 +59,7 @@ import { registerOpenRoutes } from "./composition/open-root.ts";
 import type { CompositionRoot, CompositionContext } from "./composition/contract.ts";
 import { registerTaskRegistryBusHandlers } from "./task-bus-handlers.ts";
 import { registerDeferredResultBusHandlers } from "./deferred-result-bus-handlers.ts";
+import { registerLoopBusHandlers } from "./loop-bus-handlers.ts";
 import { resolveHanakoHome } from "../shared/hana-runtime-paths.ts";
 import { DATA_EPOCH } from "../shared/contract-versions.cjs";
 import { readDataEpochStamp } from "../shared/data-epoch.cjs";
@@ -75,6 +76,7 @@ import { createDataEpochCheckpointProvider } from "../core/data-epoch-checkpoint
 import { BrowserManager } from "../lib/browser/browser-manager.ts";
 import { ConfirmStore } from "../lib/confirm-store.ts";
 import { DeferredResultStore } from "../lib/deferred-result-store.ts";
+import { LoopStore } from "../lib/loop/loop-store.ts";
 import { SubagentRunStore } from "../lib/subagent-run-store.ts";
 import { SubagentThreadStore } from "../lib/subagent-thread-store.ts";
 import { ActivityHub } from "../lib/activity-hub.ts";
@@ -471,8 +473,6 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     channelsDir: engine.channelsDir,
   });
 
-  if (process.platform === "win32") engine.startWin32LegacySandboxMaintenance();
-
   // ── 初始化 Hub（调度中枢，包装 engine） ──
   const hub = new Hub({ engine });
 
@@ -486,6 +486,11 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
   engine.setDeferredResultStore(deferredResultStore);
   registerDeferredResultBusHandlers(hub.eventBus, deferredResultStore);
 
+  const loopStore = new LoopStore(
+    path.join(hanakoHome, ".ephemeral", "loop-state.json"),
+    { log },
+  );
+
   await engine.registerExtensionFactory(createDeferredResultExtension(deferredResultStore));
   await engine.registerExtensionFactory(createCompactionGuardExtension({
     usageLedger: engine.usageLedger,
@@ -494,6 +499,16 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     getSessionProviderCacheAffinityKey: (sessionPath) => (
       engine.getSessionProviderCacheAffinityKey(sessionPath)
     ),
+    getSessionTransformContext: (sessionPath) => (
+      engine.getSessionTransformContext(sessionPath)
+    ),
+    getSessionAgentRunRuntime: (sessionPath) => (
+      engine.getSessionAgentRunRuntime(sessionPath)
+    ),
+    getProviderCompatOptions: (sessionPath) => (
+      engine.getProviderCompatOptionsForSession(sessionPath)
+    ),
+    getRequestReasoningLevel: (ctx) => engine.resolveRequestReasoningLevel(ctx),
     buildUsageContext: ({ ctx }) => {
       const sessionPath = ctx?.sessionManager?.getSessionFile?.() || null;
       const bridgeContext = sessionPath ? engine.getBridgeContextForSessionPath(sessionPath) : null;
@@ -903,6 +918,38 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     }),
   };
 
+  // ── 循环服务接线 ──
+  // 位置要求：启动期 session 恢复之后（recoverAtBoot 会重新武装闹钟并按需续跑），
+  // 且桥接投递地址可取之后。bridge manager 是按需初始化的，因此桥接钩子在调用
+  // 时才取实例；未就绪时抛错而不静默降级（fail-closed）。
+  const requireBridgeManager = () => {
+    const manager = bridgeManagerRef.get();
+    if (!manager) throw new Error("loop: bridge delivery is not available");
+    return manager;
+  };
+  engine.setLoopServices({
+    store: loopStore,
+    bridgeHooks: {
+      executeLoopTurn: (sessionKey: string, agentId: string, text: string) =>
+        requireBridgeManager().executeLoopTurn(sessionKey, text, { agentId }),
+      sendNotice: (sessionKey: string, agentId: string, text: string) =>
+        requireBridgeManager().sendLoopNotice(sessionKey, agentId, text),
+      resolveSessionId: (sessionKey: string, agentId: string) => {
+        const agent = engine.getAgent?.(agentId);
+        return agent
+          ? engine.bridgeSessionManager?.resolveSessionIdForSessionKey?.(sessionKey, agent) ?? null
+          : null;
+      },
+      ensureSessionId: async (sessionKey: string, agentId: string) => {
+        const agent = engine.getAgent?.(agentId);
+        if (!agent) return null;
+        return engine.bridgeSessionManager?.ensureSessionForSessionKey?.(sessionKey, agent) ?? null;
+      },
+    },
+  });
+  registerLoopBusHandlers(hub.eventBus, () => engine.loopController);
+  engine.loopController?.recoverAtBoot();
+
   // `/mobile`、`/desktop` 网页客户端入口的供货模式判定（HANA_RENDERER_DIST /
   // desktop/dist-renderer / guide 三分支）已随路由挂载移入
   // composition/open-root.ts 的 decideMobileStaticRouteOptions；这里不再重复。
@@ -950,6 +997,10 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
     return c.json({
       status: "ok",
       version: appVersion,
+      // @ui-focus-ok: a client asking for health on first load has no agent of
+      // its own yet, and this tells it which agent the server was last left on
+      // so it can open there. It reports the focus rather than deciding who
+      // owns anything, and the fields below it describe that same agent.
       agentId: engine.currentAgentId || null,
       agent: engine.agentName,
       agentYuan: engine.agent?.config?.agent?.yuan || "hanako",

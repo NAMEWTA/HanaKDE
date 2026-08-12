@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import dns from "dns";
 import fs from "fs";
 import net from "net";
@@ -16,10 +15,19 @@ import type {
   ResourceVersion,
 } from "../types.ts";
 
+const DEFAULT_MATERIALIZE_LEASE_MS = 5 * 60_000;
+type MaterializeLeaseTimer = ReturnType<typeof setTimeout>;
+
 type Options = {
   fetch?: typeof fetch;
   resolveHostname?: (hostname: string) => Promise<string[]>;
   materializeRoot?: string;
+  materializeLeaseMs?: number;
+  setMaterializeLeaseTimeout?: (
+    callback: () => void,
+    delayMs: number,
+  ) => MaterializeLeaseTimer;
+  clearMaterializeLeaseTimeout?: (timer: MaterializeLeaseTimer) => void;
   timeoutMs?: number;
   maxBytes?: number;
   maxRedirects?: number;
@@ -31,6 +39,12 @@ export class UrlProvider {
   declare fetchImpl: typeof fetch;
   declare resolveHostname: (hostname: string) => Promise<string[]>;
   declare materializeRoot: string;
+  declare materializeLeaseMs: number;
+  declare setMaterializeLeaseTimeout: (
+    callback: () => void,
+    delayMs: number,
+  ) => MaterializeLeaseTimer;
+  declare clearMaterializeLeaseTimeout: (timer: MaterializeLeaseTimer) => void;
   declare timeoutMs: number;
   declare maxBytes: number;
   declare maxRedirects: number;
@@ -39,6 +53,9 @@ export class UrlProvider {
     fetch: fetchImpl = globalThis.fetch,
     resolveHostname = defaultResolveHostname,
     materializeRoot = path.join(os.tmpdir(), "hana-resource-io-url"),
+    materializeLeaseMs = DEFAULT_MATERIALIZE_LEASE_MS,
+    setMaterializeLeaseTimeout = setTimeout,
+    clearMaterializeLeaseTimeout = clearTimeout,
     timeoutMs = 10_000,
     maxBytes = 10 * 1024 * 1024,
     maxRedirects = 3,
@@ -47,6 +64,9 @@ export class UrlProvider {
     this.fetchImpl = fetchImpl;
     this.resolveHostname = resolveHostname;
     this.materializeRoot = materializeRoot;
+    this.materializeLeaseMs = normalizeLeaseMs(materializeLeaseMs);
+    this.setMaterializeLeaseTimeout = setMaterializeLeaseTimeout;
+    this.clearMaterializeLeaseTimeout = clearMaterializeLeaseTimeout;
     this.timeoutMs = timeoutMs;
     this.maxBytes = maxBytes;
     this.maxRedirects = maxRedirects;
@@ -104,16 +124,70 @@ export class UrlProvider {
     const read = await this.read(normalized);
     fs.mkdirSync(this.materializeRoot, { recursive: true });
     const ext = extensionFromUrl(normalized.url);
-    const filePath = path.join(
-      this.materializeRoot,
-      `${crypto.createHash("sha256").update(normalized.url).digest("hex")}${ext}`,
-    );
-    fs.writeFileSync(filePath, read.content);
+    const stageDir = fs.mkdtempSync(path.join(this.materializeRoot, "stage-"));
+    const filePath = path.join(stageDir, `resource${ext}`);
+    try {
+      fs.writeFileSync(filePath, read.content);
+    } catch {
+      try {
+        fs.rmSync(stageDir, { recursive: true, force: true });
+      } catch {
+        // The original staging failure is the caller-visible failure.
+      }
+      throw new ResourceIOError("Resource materialization failed", {
+        code: "materialize_failed",
+        status: 500,
+      });
+    }
+    let released = false;
+    let leaseTimer: MaterializeLeaseTimer | null = null;
+    const cleanup = () => {
+      if (released) return;
+      try {
+        fs.rmSync(stageDir, { recursive: true, force: true });
+      } catch {
+        throw new ResourceIOError("Materialized resource cleanup failed", {
+          code: "materialize_cleanup_failed",
+          status: 500,
+        });
+      }
+      released = true;
+      if (leaseTimer) {
+        const timer = leaseTimer;
+        leaseTimer = null;
+        try {
+          this.clearMaterializeLeaseTimeout(timer);
+        } catch {
+          // The staging directory is already released; the timer was only a fallback.
+        }
+      }
+    };
+    try {
+      leaseTimer = this.setMaterializeLeaseTimeout(() => {
+        try {
+          cleanup();
+        } catch {
+          // Explicit cleanup reports failures; lease expiry must not throw asynchronously.
+        }
+      }, this.materializeLeaseMs);
+      leaseTimer?.unref?.();
+    } catch {
+      try {
+        cleanup();
+      } catch {
+        // The original lease setup failure remains the caller-visible error.
+      }
+      throw new ResourceIOError("Resource materialization failed", {
+        code: "materialize_failed",
+        status: 500,
+      });
+    }
     return {
       resourceKey: read.resourceKey,
       resource: read.resource,
       filePath,
       version: read.version,
+      cleanup,
     };
   }
 
@@ -224,6 +298,13 @@ export class UrlProvider {
     }
     return url;
   }
+}
+
+function normalizeLeaseMs(value: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.max(1, Math.floor(parsed))
+    : DEFAULT_MATERIALIZE_LEASE_MS;
 }
 
 function normalizeUrlRef(ref: ResourceRef): Extract<ResourceRef, { kind: "url" }> {

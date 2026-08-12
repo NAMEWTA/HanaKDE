@@ -41,6 +41,38 @@ const REQUIRED_TOP_LEVEL_DIRECTORIES = [
   "scripts",
 ] as const;
 
+const REMOVED_LEGACY_COMPATIBILITY_MARKERS = [
+  ["desktop/main.cjs", "settleLegacyGpuPreferenceMigration"],
+  ["desktop/main.cjs", "settleLegacyGpuPreferenceAfterServerStart"],
+  ["desktop/src/shared/gpu-startup-policy.cjs", "legacySafeModeMigration"],
+  ["desktop/src/shared/gpu-startup-policy.cjs", "state?.safeMode?.enabled"],
+  ["desktop/src/shared/gpu-startup-policy.cjs", "if (state.safeMode) items.push"],
+  ["server/routes/preferences.ts", "legacy-gpu-safe-mode"],
+  ["server/http/route-security.ts", "legacy-gpu-safe-mode"],
+  ["core/preferences-manager.ts", "compareAndDeleteLegacyHardwareAccelerationPreference"],
+  ["core/engine.ts", "compareAndDeleteLegacyHardwareAccelerationPreference"],
+  ["core/session-manifest/store.ts", "repairLegacyScanMetadata"],
+  ["core/desktop-session-submit.ts", "Compatibility for older embedders"],
+  ["core/mcp/manager.ts", "Read-time compatibility: connectors saved before the permission policy"],
+  ["core/mcp/manager.ts", "McpRuntime"],
+  ["core/mcp/manager.ts", "input.servers"],
+  ["core/mcp/manager.ts", "mcp.servers"],
+  ["core/mcp/manager.ts", "authorization_token"],
+  ["core/mcp/manager.ts", "connector.baseUrl"],
+  ["core/mcp/manager.ts", " || connector.clientId"],
+  ["core/mcp/manager.ts", " || connector.clientSecret"],
+  ["core/mcp/manager.ts", "autoReconnect !== false"],
+  ["core/engine.ts", "plugin-data\", \"mcp"],
+  ["shared/persistence/store-registry.ts", "plugin-data/mcp"],
+  ["server/routes/mcp.ts", "/plugins/mcp"],
+  ["server/routes/mcp.ts", "/servers"],
+  ["server/composition/open-root.ts", "/api/plugins/mcp"],
+  ["server/http/route-security.ts", "/api/plugins/mcp"],
+  ["desktop/src/react/settings/tabs/mcp/mcp-config.ts", "raw.baseUrl"],
+  ["desktop/src/react/settings/tabs/mcp/mcp-config.ts", "raw.isActive"],
+  ["desktop/src/react/components/input/mcp-approval-actions.ts", "data?.servers"],
+] as const;
+
 function resolveSilverBulletReferenceRoot(): string {
   const configuredRoot = process.env.SILVERBULLET_REFERENCE_ROOT?.trim();
   const root = configuredRoot ? path.resolve(configuredRoot) : repositoryRoot;
@@ -202,7 +234,7 @@ describe("KW-RULE-PREFLIGHT executable repository contract", () => {
 
     expect(packageContract).toMatchObject({
       name: "hanako",
-      version: "0.416.51",
+      version: "0.446.6",
       scripts: {
         typecheck:
           "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
@@ -212,6 +244,13 @@ describe("KW-RULE-PREFLIGHT executable repository contract", () => {
       },
     });
     expect(packageContract.dependencies?.["better-sqlite3"]).toBeTruthy();
+  });
+
+  it("does not retain the retired T-03 legacy compatibility shims", () => {
+    for (const [relativePath, marker] of REMOVED_LEGACY_COMPATIBILITY_MARKERS) {
+      const source = fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
+      expect(source, `${relativePath} must not retain ${marker}`).not.toContain(marker);
+    }
   });
 
   it("keeps every audited implementation seam and top-level repository area present", () => {

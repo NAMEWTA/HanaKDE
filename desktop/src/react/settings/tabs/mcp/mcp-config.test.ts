@@ -17,7 +17,7 @@ describe('mcp connector config helpers', () => {
     })).toBe('API_KEY=********\nBASE_URL=https://example.com');
   });
 
-  it('converts Cherry and Claude style MCP JSON into Hana connector inputs', () => {
+  it('converts external MCP JSON into Hana connector inputs', () => {
     const connectors = connectorsFromMcpJson(JSON.stringify({
       mcpServers: {
         remote: {
@@ -25,7 +25,7 @@ describe('mcp connector config helpers', () => {
           url: 'https://mcp.example.com/mcp',
           headers: { Authorization: 'Bearer secret' },
           timeout: 45,
-          isActive: true,
+          autoStart: true,
         },
         local: {
           command: 'npx',
@@ -33,17 +33,23 @@ describe('mcp connector config helpers', () => {
           env: { API_KEY: 'secret' },
           registryUrl: 'https://registry.npmmirror.com',
         },
+        parked: {
+          command: 'npx',
+          args: ['-y', 'mcp-server-parked'],
+          enabled: false,
+        },
       },
     }));
 
     expect(connectors).toEqual([
       {
+        // isActive said "on", which is also the default, so nothing is carried
+        // over for it: an imported server is on unless it opts out.
         name: 'remote',
         transport: 'streamable-http',
         url: 'https://mcp.example.com/mcp',
         headers: { Authorization: 'Bearer secret' },
         timeout: 45,
-        autoStart: true,
       },
       {
         name: 'local',
@@ -53,6 +59,33 @@ describe('mcp connector config helpers', () => {
         env: { API_KEY: 'secret' },
         registryUrl: 'https://registry.npmmirror.com',
       },
+      {
+        name: 'parked',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', 'mcp-server-parked'],
+        enabled: false,
+      },
     ]);
+  });
+
+  it('does not import removed baseUrl or isActive aliases', () => {
+    expect(() => connectorsFromMcpJson(JSON.stringify({
+      mcpServers: {
+        old: { baseUrl: 'https://mcp.example.com/mcp', transport: 'remote' },
+      },
+    }))).toThrow(/missing url/);
+
+    const [connector] = connectorsFromMcpJson(JSON.stringify({
+      mcpServers: {
+        current: {
+          url: 'https://mcp.example.com/mcp',
+          transport: 'remote',
+          isActive: true,
+        },
+      },
+    }));
+
+    expect(connector).not.toHaveProperty('autoStart');
   });
 });

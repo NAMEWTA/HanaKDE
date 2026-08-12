@@ -4,19 +4,19 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-12
 title: 执行单 owner 生产切换
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: "生产 watcher、mutation fan-out 与 baseline owner 的一次性 stop-then-start 切换具有全局事故半径且禁止双运行。"
 ready: true
 risk: critical
-blocked_by: [T-10, T-11]
+blocked_by: [T-10, T-11, T-19]
 contract_ids: [AC-009, AC-010, AC-011, AC-012, AC-013]
-owner: unassigned
-expected_changes: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
-writable_paths: ["<Path>core/engine.ts</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>"]
-read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>desktop/main.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>"]
-shared_paths: []
-shared_path_owners: []
+owner: Worker-T-12
+expected_changes: ["<Path>core/engine.ts</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>shared/persistence/store-registry.ts</Path>", "<Path>scripts/scan-persistent-stores.mjs</Path>", "<Path>scripts/generate-persistence-schema-fingerprint.mjs</Path>", "<Path>build/persistence-store-inventory.json</Path>", "<Path>build/persistence-schema-fingerprint.json</Path>", "<Path>build/persistence-startup-receipt.json</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/resource-io-route.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/persistence-store-registry.test.ts</Path>", "<Path>tests/persistence-schema-tripwire.test.ts</Path>", "<Path>tests/server-composition-boundary.test.ts</Path>", "<Path>tests/http-route-security.test.ts</Path>"]
+writable_paths: ["<Path>core/engine.ts</Path>", "<Path>core/workspace-runtime/**</Path>", "<Path>server/composition/**</Path>", "<Path>server/resource-events-ws.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>desktop/main.cjs</Path>", "<Path>desktop/preload.cjs</Path>", "<Path>desktop/src/react/types.ts</Path>", "<Path>desktop/src/react/services/resource-events.ts</Path>", "<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>", "<Path>shared/persistence/store-registry.ts</Path>", "<Path>scripts/scan-persistent-stores.mjs</Path>", "<Path>scripts/generate-persistence-schema-fingerprint.mjs</Path>", "<Path>build/persistence-store-inventory.json</Path>", "<Path>build/persistence-schema-fingerprint.json</Path>", "<Path>build/persistence-startup-receipt.json</Path>", "<Path>tests/engine-resource-events.test.ts</Path>", "<Path>tests/engine-lifecycle.test.ts</Path>", "<Path>tests/production-workspace-runtime.test.ts</Path>", "<Path>tests/resource-io-route.test.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/persistence-store-registry.test.ts</Path>", "<Path>tests/persistence-schema-tripwire.test.ts</Path>", "<Path>tests/server-composition-boundary.test.ts</Path>", "<Path>tests/http-route-security.test.ts</Path>"]
+read_only_paths: ["<Path>lib/resource-io/**</Path>", "<Path>desktop/workspace-watch-registry.cjs</Path>", "<Path>core/knowledge-workspace/**</Path>", "<Path>lib/file-history/**</Path>", "<Path>server/routes/file-history.ts</Path>", "<Path>shared/workspace-observation.ts</Path>"]
+shared_paths: ["<Path>core/engine.ts</Path>", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>", "<Path>server/composition/open-root.ts</Path>", "<Path>server/http/route-security.ts</Path>", "<Path>tests/file-history-production-boundary.test.ts</Path>", "<Path>tests/server-composition-boundary.test.ts</Path>", "<Path>tests/http-route-security.test.ts</Path>"]
+shared_path_owners: ["<Path>core/engine.ts</Path> => T-19 narrow session File Tool injection until W3 integration; T-12 owns later production cutover work", "<Path>core/workspace-runtime/production-workspace-runtime.ts</Path> => T-12 W4 production assembly only", "<Path>server/composition/open-root.ts</Path> and <Path>tests/server-composition-boundary.test.ts</Path> => T-12 owns the one File History mount/inventory entry", "<Path>server/http/route-security.ts</Path> and <Path>tests/http-route-security.test.ts</Path> => T-12 owns the narrow file-history files.read/LOCAL_ONLY classification", "<Path>shared/persistence/store-registry.ts</Path>, persistence scanner/generator, generated receipts, and their tests => D-T12-06 grants only activated-store registration and real SQLite introspection; T-21 retains all other build/package ownership", "<Path>tests/file-history-production-boundary.test.ts</Path> => T-12 may authorize Engine assembly assertions only; T-13 exclusively owns <Path>lib/file-history/**</Path>"]
 ---
 
 # Ticket T-12: 执行单 owner 生产切换
@@ -84,10 +84,64 @@ shared_path_owners: []
 ## 7. 路径访问契约
 
 - **预计修改点：** Engine/server composition、event bridge 和 lifecycle tests。
+- **D-T19-02 接口交接：** T-19 在 W3 先以 object-identity 方式为内建 File Tool 注入 session-scoped sandbox `resourceIO`，并在 `<Path>tests/engine-build-tools.test.ts</Path>` 证明非 File Tool 不会得到该对象。T-12 不重做或扩大该 injection；在 W3 integrated 后继续拥有 `<Path>core/engine.ts</Path>` 的 production cutover 变更。
 - **可写范围：** 仅 frontmatter `writable_paths`；Kernel/Workspace 实现为只读消费者契约。
 - **只读上下文：** Resource Kernel、workspace coordinator、Desktop main 与下游 consumers。
 - **共享路径：** 无；T-12 是 production assembly/cutover 唯一 owner。
 - **保留或不动：** History、Knowledge、Extraction 产品模型和平台 package。
+
+### D-T12-05: W4 File History production assembly authorization
+
+- **Checkpoint / accepted dependency：** T-12 creation base 是 `e758c7a12d31e8385b4993c406ae5acc04b18635`；resume checkpoint 是 `e6a687ba17752b4b5da3d46d6000f68b29abeaa9`。T-13 已接受的治理 checkpoint 是 `eba0480fc46fb929ab4473ff514f96ea0ecab09a`，History domain candidate 是 `e4600aff1fcd71285f8032fb610425ced5ead7cb`；二者均为本轮 assembly 的固定输入，不重放、不 rebase。
+- **授权与唯一 owner：** T-12 只在本 Ticket frontmatter 的 assembly/composition/security/test paths 内工作：Engine 创建、root-switch teardown、dispose 与 `getFileHistoryService()`；production workspace runtime 只构造授权 main binding；open-root 只挂载既有 route；route-security 只允许三个 File History read endpoint 使用 `files.read`，其余 `/api/file-history/*` 为 `LOCAL_ONLY`。History store、capture/policy、route implementation 与 Knowledge implementation 保持只读。
+- **消费契约：** File History 是 main-only 的 logical `WorkspaceObservation` 和 `ResourceEventBus` consumer，复用 canonical observation、shared baseline、root proof 与授权 ResourceIO relative path；禁止 private watcher、baseline walk、full scan、raw root projection 或第二个 EventBus fact。
+- **W4 closure：** T-12 production seam 已与已接受的 T-13/T-14 candidates 完成 combined Node 24 matrix；14 files / 220 tests、typecheck、authorized-path ESLint、SpecDev validator 和独立 standards/specification reviews 全部通过。三个 W4 Tickets 可以标为 `done` 并进入一次本地 integration merge；G5 restore convergence 仍独立负责。
+
+### D-T12-06: File History production persistence registration
+
+- **等级与触发事实：** 已健康的 main assembly 创建 `FileHistoryService`，而 persistence scanner 仍以 `dormant-file-history-input` 排除 `<Path>lib/file-history/**</Path>`，使真实 SQLite owner、registry、inventory 和 schema fingerprint 不一致。
+- **批准、范围与所有权：** Root Lead 于 `2026-08-10T14:12:37+0800` 批准 ticket-level deviation。T-12 仅扩展 registry/scanner/generator、三份 receipt 与已列 persistence tests：注册已激活的 `file-history-sqlite`、移除 dormant exclusion、增加 constructor census，并以真实 `FileHistoryStore` SQLite DDL introspector 重建 receipt；`lib/file-history/**` 仍为 T-13 read-only，T-21 仍拥有无关 manifests/build/package inputs。
+- **安全不变量与验收：** `file-history-sqlite` 是真实 production store，fingerprint 从 runtime DDL introspection 产生；不重新引入 private watcher/baseline 或 raw root/store locator 泄漏。private-store destination 必须在 main Workspace 外，并拒绝 Hana home ancestor symlink 指向 Workspace 的链路。
+
+### D-T12-01: legacy IPC watcher owner path correction
+
+- **等级 / 触发事实：** ticket；`<Path>desktop/main.cjs</Path>` 的 `watch-workspace`/`unwatch-workspace` IPC 处理器可对任意 absolute root 创建 `chokidar` physical watcher，且 `<Path>desktop/preload.cjs</Path>` 将该能力暴露给任意 renderer。当前 React 没有调用点不改变其作为可调用生产 owner 的事实。
+- **批准与范围：** Lead 于 2026-08-10 批准仅将 `<Path>desktop/main.cjs</Path>`、`<Path>desktop/preload.cjs</Path>`、`<Path>desktop/src/react/types.ts</Path>` 和 `<Path>desktop/src/react/__tests__/services/resource-events.test.ts</Path>` 加入 T-12；原有 T-12 engine tests 仍是定向生命周期测试。此修订只移除 legacy absolute-root IPC owner，并将 renderer 保持为 logical EventBus consumer。
+- **并行 / 所有权审计：** T-13 仅拥有 `<Path>lib/file-history/**</Path>`、`<Path>server/routes/file-history.ts</Path>` 和 file-history tests；T-14 仅拥有 Knowledge core/lib/route/tests；均与新增 T-12 路径不交叉。T-11 曾拥有 `<Path>desktop/main.cjs</Path>` 的 isolated proof，但已 integrated/removed，且 Evidence 明确将 production cutover 留给 T-12。
+- **不扩大内容：** 不修改 `<Path>desktop/workspace-watch-registry.cjs</Path>`、`<Path>desktop/src/modules/platform.js</Path>` 或其测试；这些路径不再从 production main/preload reachable。不得保留 disabled fallback、compat flag 或另一条 root watch IPC。
+- **反向验证：** 在 source/behavior tests 中证明 main 和 preload 不再注册、暴露或可调用 `watch-workspace`，renderer 不发起 `/api/resource-io/subscribe` physical watch lease，且 Engine stop-old/prove-release/start-new 的 overlap count 始终为 0。
+
+### D-T12-03: renderer catch-up safe projection
+
+- **等级 / 触发事实：** ticket；`<Path>server/routes/resource-io.ts</Path>` 将 `isLocalLoopbackRequest()` 的 `/resource-io/events` 结果原样返回。renderer reconnect 会调用该 HTTP route；Engine 的 main bridge 同时生成带绝对 `local-file.path`/`filePath` 的内部事件。因此 renderer 可以在 client-side validation/requery 之前收到 raw root，违反 AC-026 与本 Ticket 的 event bridge 隐私合同。
+- **批准与范围：** Lead 于 2026-08-10 批准把 `<Path>server/routes/resource-io.ts</Path>`、`<Path>tests/resource-io-route.test.ts</Path>` 和现有 renderer catch-up tests 加入 T-12。T-10 已完成且没有并发 owner；此授权只覆盖 renderer-facing catch-up projection，不改变 ResourceIO mutation、route authority、root identity 或 LAN lease contract。
+- **固定合同：** HTTP catch-up 对 renderer 不返回内部 `ResourceRef`、`resourceKey`、absolute path、raw root 或 scope secret。只要内部页为 stale 或含一个以上增量事实，响应必须是 `{ stale: true, latestSequence, events: [], resync: "resource-stat-required" }`；空的 current page 仍可为 `{ stale: false, latestSequence, events: [] }`。renderer 仅通过现有 authoritative requery 恢复；不得按 local/remote principal 保留兼容分叉，也不得依赖 client-only filter。
+- **并行 / 所有权审计：** T-13 不拥有此 route/test；T-14 只拥有 Knowledge route/core tests；T-10 的 Resource Kernel ownership 已完成。T-12 是唯一本轮 renderer/event bridge owner。
+- **反向验证：** local-loopback 与 remote route tests 均将 internal local-file event 投影为无路径 resync；renderer catch-up 只接收 safe cursor projection，`JSON.stringify` 不含 fixture absolute root；empty current page 不触发无谓 requery；不存在 local fallback/allowlist 分支。
+
+### D-T12-04: production workspace assembly depth correction
+
+- **等级 / 触发事实：** ticket；标准轴审查确认 T-12 将 shared-baseline adapter、single-owner cutover state machine、production watcher/baseline adapter、observation-to-EventBus bridge 及 root/count helpers 共同堆入 `<Path>core/engine.ts</Path>`，使 Engine 成为浅模块且难以在不构造 Engine 的情况下独立验证。
+- **批准与范围：** Lead 于 2026-08-10 批准将 `<Path>core/workspace-runtime/**</Path>` 和 `<Path>tests/production-workspace-runtime.test.ts</Path>` 加入 T-12。新增的 `<Path>core/workspace-runtime/production-workspace-runtime.ts</Path>`（或相邻同层深模块）拥有 cutover、shared baseline、production observation adapter 与纯 helper；Engine 只保留自己的生命周期编排、ResourceEventBus 注入和 watch-subscription repartition。不得把 core 代码移入 `<Path>server/**</Path>` 或制造 core-to-server 反向依赖；`<Path>server/composition/**</Path>` 仍只保留 composition/HTTP health adapter。
+- **并行 / 所有权审计：** T-11 的 workspace infrastructure worktree 已 integrated/removed；T-13 与 T-14 将该目录作为只读上下文，当前没有并发 writer。T-12 因此是本轮 production assembly extraction 的唯一 owner；不得修改 T-11 的 root authority、watch coordinator 或既有 observation contract。
+- **固定合同：** 新深模块以小接口接收 root authority、watch adapter、EventBus mutation sink 和 T-14 exported shared-baseline port types，封装 stop-old/prove-release/start-new、健康计数、relative-path-only source differences、repair cursor 与 root/path validation。不得保留 duplicate local type contract、compatibility cast 或 second watcher/baseline owner。
+- **反向验证：** 模块级测试独立覆盖 cutover/recovery、fresh source baseline、repair lower-bound、normal-change one-fact flow、root/path privacy；Engine integration 继续覆盖 A/B repartition、session switch、dispose 和 zero overlap。结构扫描须证明 `<Path>core/engine.ts</Path>` 不再定义 cutover state machine、shared-baseline adapter、production watcher/baseline adapter 或其纯 helper。
+
+### W4 correction record: round 1/3
+
+- **Checkpoint / workspace：** immutable W4 base `e758c7a12d31e8385b4993c406ae5acc04b18635`; `<Path>specdev-worktree/T-12</Path>`; current candidate remains uncommitted and must not be merged.
+- **Failure standard：** canonical-main descendants must never fall back to `ResourceWatchRegistry` while a main authority is claimed, including DEGRADED/RECONCILING/FAILED/start-failure; root A-to-B switch must stop/prove/repartition every active subscription and retain receipt with overlap 0; cross-agent session switching must use the same lifecycle hook; Engine must provide T-14's real `{ subscribe, requestRepair }` canonical shared-baseline adapter; D-T12-03 must keep every renderer-facing catch-up response path-free.
+- **Cross-contract cursor decision (D-W4-01)：** The adapter's baseline/difference `cursor`, Knowledge `lastCompleteSequence`, and repair `afterSequence` are all process-local `ResourceEventBus.sequence`. `WorkspaceObservation.cursor` remains only the physical observer's private ordering signal and cannot enter the Knowledge store or comparison path. Because the bus resets after process restart, every main bind and rebind must publish a fresh `coverage: "source"` generation before accepting new-process events; resource coverage is allowed only within that binding lifecycle. At a root-revalidated stable baseline/difference point, capture `resourceEventBus.latestSequence()`; resource events emitted later must reach T-14 replay rather than being swallowed by that baseline. Source snapshots contain safe relative upsert/deleted facts only.
+- **Preserve green behavior：** explicit unavailable `desk.home_folder` remains fail-closed across restart; `last_cwd` never becomes main; renderer lease cleanup and resource subscriptions remain idempotent; mount and disjoint preview retain physical registry behavior; legacy absolute-root IPC remains removed; stop-old/prove-release/start-new ordering remains mandatory.
+- **Required proof before review：** focused lifecycle/resource/route/renderer tests cover the listed failure states, A/B repartition, session switch, actual main shared-port wiring, a baseline-in-flight later-ResourceEvent replay with deliberately unequal workspace and bus cursors, persisted sequence 8/new bus 0/source baseline 0/event 1 restart recovery, and safe catch-up projection; path and fallback scans plus Evidence must name commands and results.
+
+### W4 correction record: round 2/3
+
+- **Checkpoint / workspace：** immutable W4 base `e758c7a12d31e8385b4993c406ae5acc04b18635`; `<Path>specdev-worktree/T-12</Path>`; this correction preserves every round-1 requirement and the candidate remains uncommitted and unmergeable.
+- **Single fact flow：** A normal `workspace.changed` must bridge exactly one fact through `ResourceEventBus`; the shared-baseline adapter must not additionally emit `coverage: "resources"` for that same change. The shared port is source bind/repair only.
+- **Fresh repair semantics：** An initial subscriber may receive an already completed source baseline. A repair caused by `sequence_gap`, `catch_up_stale`, `event_hint_invalid`, or `event_hint_unresolvable` must run canonical `reportGap` or `retryMain`, await the next healthy source baseline, and never satisfy the request by replaying cached entries.
+- **Cursor and directory semantics：** A source baseline cursor must equal the stable `ResourceEventBus.latestSequence()` at its revalidated publication point. `afterSequence` is a lower bound: permit `0 <= afterSequence <= latestAtRepairStart`, capture and publish `latestAtRepairStart` for the fresh source baseline, and fail closed only when `afterSequence > latestAtRepairStart`. Events after that captured cursor replay. Do not manufacture a cursor from an old value or request minimum. Directory create, modify, and delete must request source reconciliation (or an equivalent complete descendant reconciliation) so no old descendants remain indexed; a file-only reread is insufficient.
+- **Required proof before review：** show one normal change produces only its EventBus fact; each repair reason causes a fresh canonical baseline; gap after 5/current bus 7 publishes cursor 7 and replays event 8 during the baseline; an attempted cursor above the current bus cannot suppress a later event; and directory mutations reconcile descendants. Keep the real T-14 port, A/B ownership, restart, renderer safety, and prior round proof green.
 
 ## 8. 验证矩阵
 
@@ -108,8 +162,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-009`：N consumers 对 canonical root 始终只有一个 physical watcher。
-- [ ] `AC-010`：cutover 与恢复全过程 watcher/mutation/baseline overlap 为 0。
-- [ ] `AC-011`/`AC-012`：production mutation、observation 与 catch-up 进入唯一 EventBus/baseline owner。
-- [ ] `AC-013`：failure/retry health state 可见且正确。
-- [ ] 重复 production owner 与兼容开关扫描为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>`。
+- [x] `AC-009`：N consumers 对 canonical root 始终只有一个 physical watcher。
+- [x] `AC-010`：cutover 与恢复全过程 watcher/mutation/baseline overlap 为 0。
+- [x] `AC-011`/`AC-012`：production mutation、observation 与 catch-up 进入唯一 EventBus/baseline owner。
+- [x] `AC-013`：failure/retry health state 可见且正确。
+- [x] 重复 production owner 与兼容开关扫描为零并记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>`。

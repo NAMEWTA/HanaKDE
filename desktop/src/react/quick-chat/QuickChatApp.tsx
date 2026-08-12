@@ -337,7 +337,7 @@ export function QuickChatApp() {
           ui: { avatars: false, agents: false, welcome: true },
         });
         if (cancelled) return;
-        loadAvatars(healthData.avatars);
+        loadAvatars(healthData.avatars, healthData.agentId);
 
         const nextAgents = Array.isArray(agentsData.agents) ? agentsData.agents : [];
         const preferred = applyRuntimeAgentList(nextAgents, {
@@ -669,7 +669,8 @@ export function QuickChatApp() {
 
   const canSend = (!!draft.trim() || attachments.length > 0) && !sending && !isStreaming && !!connection;
   const expanded = sessionItems.length > 0 || isStreaming;
-  const displayError = error || inlineError;
+  // 快捷面板只有一行的位置，显示人话正文；详情留给主窗口的错误条展开区。
+  const displayError = error || inlineError?.text || null;
   const title = sessionTitle || t('quickChat.title');
 
   useLayoutEffect(() => {

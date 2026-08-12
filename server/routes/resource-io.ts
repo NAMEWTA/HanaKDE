@@ -29,6 +29,7 @@ const MUTATION_AUTHORITY_FIELDS = new Set([
   "studioId",
   "owner",
   "ownerId",
+  "workspaceId",
   "scope",
   "scopes",
   "scopeToken",
@@ -265,11 +266,7 @@ export function createResourceIoRoute(engine, {
             resync: "resource-stat-required",
           }
         : result;
-      return c.json(
-        isLocalLoopbackRequest(c)
-          ? response
-          : projectRemoteResourceEvents(response),
-      );
+      return c.json(projectResourceEvents(response));
     } catch (err) {
       return errorJson(c, err, 500);
     }
@@ -1089,7 +1086,7 @@ function isLocalLoopbackRequest(c) {
   );
 }
 
-function projectRemoteResourceEvents(result) {
+function projectResourceEvents(result) {
   const events = Array.isArray(result?.events) ? result.events : [];
   const requiresResync = result?.stale === true || events.length > 0;
   return compactObject({

@@ -26,8 +26,13 @@ import {
 } from "./workspace-fixture.ts";
 import { launchWindowsElectronOverCdp } from "./windows-electron-cdp.ts";
 import type { ElectronMainProcessApplication } from "./electron-main-process-application.ts";
+import {
+  ENGINE_TOOL_HARNESS_MODEL_ID,
+  ENGINE_TOOL_HARNESS_PROVIDER_ID,
+} from "./engine-tool-harness.ts";
 
 type KnowledgeFixtures = {
+  engineToolHarness: boolean;
   workspaceSandbox: KnowledgeWorkspaceSandbox;
   launchConfig: KnowledgeLaunchConfig;
   installDialogStub(
@@ -97,6 +102,7 @@ const runtimesByStory: Readonly<Record<string, readonly KnowledgeRuntime[]>> = {
   "E2E-KW-022": ["web-open"],
   "E2E-KW-023": ["desktop-full"],
   "E2E-KW-024": ["desktop-full"],
+  "E2E-KW-025": ["desktop-full"],
 };
 
 function isRuntimeApplicable(testInfo: { title: string }, runtime: KnowledgeRuntime): boolean {
@@ -105,6 +111,7 @@ function isRuntimeApplicable(testInfo: { title: string }, runtime: KnowledgeRunt
 }
 
 export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
+  engineToolHarness: [false, { option: true }],
   knowledgeBrowser: [async ({ playwright }, use, workerInfo) => {
     // Desktop scenarios use Electron's own Chromium. Do not launch an unused
     // Playwright Chromium process alongside it: on Windows that extra native
@@ -125,8 +132,10 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
       await browser.close();
     }
   }, { scope: "worker" }],
-  workspaceSandbox: async ({ playwright: _playwright }, use, testInfo) => {
-    const sandbox = await createKnowledgeWorkspaceSandbox(testInfo.workerIndex);
+  workspaceSandbox: async ({ engineToolHarness }, use, testInfo) => {
+    const sandbox = await createKnowledgeWorkspaceSandbox(testInfo.workerIndex, {
+      engineToolHarness,
+    });
     try {
       await use(sandbox);
     } finally {
@@ -165,7 +174,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
     }
   },
   knowledgeApp: async (
-    { knowledgeBrowser, launchConfig, playwright, workspaceSandbox },
+    { engineToolHarness, knowledgeBrowser, launchConfig, playwright, workspaceSandbox },
     use,
     testInfo,
   ) => {
@@ -214,11 +223,16 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
           electronApplication.process(),
         );
         serverPid = serverInfo.pid;
+        const apiFetch = createAuthenticatedApiFetch(serverInfo);
+        if (engineToolHarness) {
+          await selectEngineToolHarnessModel(apiFetch);
+          await appPage.reload({ waitUntil: "domcontentloaded" });
+        }
         await use({
           page: appPage,
           runtime,
           electronApplication,
-          apiFetch: createAuthenticatedApiFetch(serverInfo),
+          apiFetch,
         });
       } finally {
         try {
@@ -333,6 +347,22 @@ function createAuthenticatedApiFetch(
       headers,
     });
   };
+}
+
+async function selectEngineToolHarnessModel(
+  apiFetch: (pathname: string, init?: RequestInit) => Promise<Response>,
+): Promise<void> {
+  const response = await apiFetch("/api/models/set", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      modelId: ENGINE_TOOL_HARNESS_MODEL_ID,
+      provider: ENGINE_TOOL_HARNESS_PROVIDER_ID,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Engine tool harness model selection failed (${response.status})`);
+  }
 }
 
 async function waitForDesktopMainWindow(

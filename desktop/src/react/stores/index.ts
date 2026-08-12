@@ -32,6 +32,11 @@ import {
   createKnowledgeClipboardSlice,
   type KnowledgeClipboardSlice,
 } from './knowledge-clipboard-slice';
+import {
+  createFileHistorySlice,
+  type FileHistorySlice,
+} from './file-history-slice';
+import { createSidebarUiSlice, type SidebarUiSlice } from './sidebar-ui-slice';
 import { configureMessageLiveVersionSessionKeyResolver } from './message-live-version';
 
 export type StoreState = ConnectionSlice &
@@ -60,7 +65,9 @@ export type StoreState = ConnectionSlice &
   ComputerOverlaySlice &
   ScreenshotSlice &
   KnowledgeClipboardSlice &
-  KnowledgeWorkspaceSlice;
+  FileHistorySlice &
+  KnowledgeWorkspaceSlice &
+  SidebarUiSlice;
 
 export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createConnectionSlice(set, _get),
@@ -89,7 +96,9 @@ export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createComputerOverlaySlice(set),
   ...createScreenshotSlice(set),
   ...createKnowledgeClipboardSlice(set),
+  ...createFileHistorySlice(set, _get),
   ...createKnowledgeWorkspaceSlice(set, _get),
+  ...createSidebarUiSlice(set, _get),
 }));
 
 configureMessageLiveVersionSessionKeyResolver((sessionPath) => (
@@ -124,5 +133,7 @@ export type {
   ComputerOverlaySlice,
   ScreenshotSlice,
   KnowledgeClipboardSlice,
+  FileHistorySlice,
   KnowledgeWorkspaceSlice,
+  SidebarUiSlice,
 };

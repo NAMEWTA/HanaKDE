@@ -2,6 +2,9 @@ import fs from "fs/promises";
 import path from "path";
 
 import { readPdfDocument } from "./read-pdf.ts";
+import {
+  isCanonicalDocumentPath,
+} from "../../../lib/knowledge-workspace/document-index-extractor.ts";
 
 const TEXT_EXTS = new Set([".txt", ".md", ".markdown", ".csv", ".tsv", ".html", ".htm"]);
 const DOCX_EXTS = new Set([".docx"]);
@@ -11,6 +14,24 @@ const DEFAULT_MAX_CHARS = 20000;
 const DEFAULT_SHEET_LIMIT = 8;
 const DEFAULT_ROW_LIMIT = 200;
 const DEFAULT_COLUMN_LIMIT = 50;
+
+function resourceFilename(resource) {
+  if (resource?.kind === "local-file" || resource?.kind === "mount") {
+    return path.basename(resource.path || "");
+  }
+  if (resource?.kind === "url") {
+    try {
+      return path.basename(new URL(resource.url).pathname);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function resourceKind(filename) {
+  return path.extname(filename).toLowerCase() === ".pdf" ? "pdf" : "binary";
+}
 
 function asPositiveInt(value, fallback, max) {
   const n = Number(value);
@@ -46,6 +67,7 @@ async function resolveInputPath(input, options: any = {}) {
       filePath,
       resourceKey: materialized?.resourceKey || null,
       resource: materialized?.resource || input.resource,
+      cleanup: typeof materialized?.cleanup === "function" ? materialized.cleanup : null,
     };
   }
   return {
@@ -165,50 +187,89 @@ async function readTextLike(filePath, ext) {
 }
 
 export async function readOfficeDocument(input: any = {}, options: any = {}) {
-  const { filePath, resourceKey, resource } = await resolveInputPath(input, options);
-  const ext = path.extname(filePath).toLowerCase();
-  const outputFormat = input.outputFormat === "html" || input.outputFormat === "json" || input.outputFormat === "markdown"
+  const requestedOutputFormat = input.outputFormat === "html" || input.outputFormat === "json" || input.outputFormat === "markdown"
     ? input.outputFormat
     : "text";
-  const maxChars = asPositiveInt(input.maxChars, DEFAULT_MAX_CHARS, 200000);
-
-  let result;
-  if (DOCX_EXTS.has(ext)) {
-    if (outputFormat === "json" || outputFormat === "markdown") {
-      throw new Error("docx JSON/Markdown output is not supported; use text or html");
+  const resourceName = resourceFilename(input.resource);
+  if (
+    input?.resource
+    && options?.documentExtraction
+    && isCanonicalDocumentPath(resourceName)
+    && requestedOutputFormat !== "html"
+    && requestedOutputFormat !== "json"
+    && !input.pageRange
+    && input.maxPages === undefined
+  ) {
+    const extraction = await options.documentExtraction.extract({
+      resource: input.resource,
+      filenameHint: resourceName,
+      context: { auditRead: true, reason: "office-read-document-extract" },
+    });
+    if (extraction.ok === false) {
+      const error = new Error(extraction.message);
+      (error as any).code = `OFFICE_DOCUMENT_EXTRACTION_${extraction.reason.replace(/-/g, "_").toUpperCase()}`;
+      throw error;
     }
-    result = await readDocx(filePath, outputFormat);
-  } else if (XLSX_EXTS.has(ext)) {
-    if (outputFormat === "html" || outputFormat === "markdown") {
-      throw new Error("xlsx HTML/Markdown output is not supported by office_read-document; use text or json");
-    }
-    result = await readXlsx(filePath, { ...input, outputFormat });
-  } else if (PDF_EXTS.has(ext)) {
-    if (outputFormat === "html" || outputFormat === "json") {
-      throw new Error("pdf HTML/JSON output is not supported; use markdown or text");
-    }
-    result = await readPdfDocument(filePath, { ...input, outputFormat, maxChars });
-  } else if (TEXT_EXTS.has(ext) || !ext) {
-    if (outputFormat === "html" || outputFormat === "json" || outputFormat === "markdown") {
-      throw new Error(`${ext || "text"} HTML/JSON/Markdown output is not supported; use text`);
-    }
-    result = await readTextLike(filePath, ext);
-  } else {
-    throw new Error(`unsupported Office read format "${ext || "(none)"}"; supported: .docx, .xlsx, .xlsm, .pdf, .txt, .md, .csv, .tsv, .html`);
+    const maxChars = asPositiveInt(input.maxChars, DEFAULT_MAX_CHARS, 200000);
+    const truncated = truncateText(extraction.markdown, maxChars);
+    return {
+      resource: input.resource,
+      filename: resourceName,
+      ext: path.extname(resourceName).toLowerCase(),
+      kind: resourceKind(resourceName),
+      format: requestedOutputFormat,
+      content: truncated.text,
+      truncated: truncated.truncated,
+      warnings: extraction.warnings,
+      extractorVersion: extraction.extractorVersion,
+    };
   }
+  const { filePath, resourceKey, resource, cleanup } = await resolveInputPath(input, options);
+  try {
+    const ext = path.extname(filePath).toLowerCase();
+    const outputFormat = requestedOutputFormat;
+    const maxChars = asPositiveInt(input.maxChars, DEFAULT_MAX_CHARS, 200000);
 
-  if (typeof result.content === "string" && result.kind !== "pdf") {
-    const truncated = truncateText(result.content, maxChars);
-    result.content = truncated.text;
-    result.truncated = truncated.truncated;
+    let result;
+    if (DOCX_EXTS.has(ext)) {
+      if (outputFormat === "json" || outputFormat === "markdown") {
+        throw new Error("docx JSON/Markdown output is not supported; use text or html");
+      }
+      result = await readDocx(filePath, outputFormat);
+    } else if (XLSX_EXTS.has(ext)) {
+      if (outputFormat === "html" || outputFormat === "markdown") {
+        throw new Error("xlsx HTML/Markdown output is not supported by office_read-document; use text or json");
+      }
+      result = await readXlsx(filePath, { ...input, outputFormat });
+    } else if (PDF_EXTS.has(ext)) {
+      if (outputFormat === "html" || outputFormat === "json") {
+        throw new Error("pdf HTML/JSON output is not supported; use markdown or text");
+      }
+      result = await readPdfDocument(filePath, { ...input, outputFormat, maxChars });
+    } else if (TEXT_EXTS.has(ext) || !ext) {
+      if (outputFormat === "html" || outputFormat === "json" || outputFormat === "markdown") {
+        throw new Error(`${ext || "text"} HTML/JSON/Markdown output is not supported; use text`);
+      }
+      result = await readTextLike(filePath, ext);
+    } else {
+      throw new Error(`unsupported Office read format "${ext || "(none)"}"; supported: .docx, .xlsx, .xlsm, .pdf, .txt, .md, .csv, .tsv, .html`);
+    }
+
+    if (typeof result.content === "string" && result.kind !== "pdf") {
+      const truncated = truncateText(result.content, maxChars);
+      result.content = truncated.text;
+      result.truncated = truncated.truncated;
+    }
+
+    return {
+      filePath,
+      ...(resourceKey ? { resourceKey } : {}),
+      ...(resource ? { resource } : {}),
+      filename: path.basename(filePath),
+      ext,
+      ...result,
+    };
+  } finally {
+    await cleanup?.();
   }
-
-  return {
-    filePath,
-    ...(resourceKey ? { resourceKey } : {}),
-    ...(resource ? { resource } : {}),
-    filename: path.basename(filePath),
-    ext,
-    ...result,
-  };
 }

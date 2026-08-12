@@ -22,6 +22,7 @@ import {
   upsertConversationAgentActivity as upsertConversationAgentActivityAction,
 } from '../stores/channel-actions';
 import { showError } from '../utils/ui-helpers';
+import { errorWithCode, presentError } from '../errors/error-presenter';
 import { handleAppEvent } from './app-event-actions';
 import {
   PREVIEW_DOCUMENT_CHANGE_REFRESH_OPTIONS,
@@ -299,10 +300,32 @@ function setCompactionBusy(msg: any, busy: boolean): void {
   const { key, sessionId, sessionPath } = compactionIdentity(msg);
   if (!key) return;
   useStore.setState((state: any) => {
-    const withoutIdentity = (state.compactingSessions || []).filter((item: string) => (
+    const compactingSessions = state.compactingSessions || [];
+    const wasBusy = compactingSessions.some((item: string) => (
+      item === key || item === sessionId || item === sessionPath
+    ));
+    const withoutIdentity = compactingSessions.filter((item: string) => (
       item !== key && item !== sessionId && item !== sessionPath
     ));
-    return { compactingSessions: busy ? [...withoutIdentity, key] : withoutIdentity };
+    const compactionModeBySession = { ...(state.compactionModeBySession || {}) };
+    const priorMode = wasBusy
+      ? compactionModeBySession[key]
+        || (sessionId ? compactionModeBySession[sessionId] : null)
+        || (sessionPath ? compactionModeBySession[sessionPath] : null)
+      : null;
+    const incomingMode = typeof msg.mode === 'string' && msg.mode.trim()
+      ? msg.mode.trim()
+      : null;
+    delete compactionModeBySession[key];
+    if (sessionId) delete compactionModeBySession[sessionId];
+    if (sessionPath) delete compactionModeBySession[sessionPath];
+    if (busy && (incomingMode || priorMode)) {
+      compactionModeBySession[key] = incomingMode || priorMode;
+    }
+    return {
+      compactingSessions: busy ? [...withoutIdentity, key] : withoutIdentity,
+      compactionModeBySession,
+    };
   });
 }
 
@@ -655,7 +678,10 @@ export function handleServerMessage(msg: any): void {
           : prev?.thumbnailUrl ?? null
         : null;
       const thumbnailFresh = bRunning && hasFreshThumbnail;
-      setBrowserStateForPath(bsp, { running: bRunning, url: bUrl, thumbnail: bThumbnail, thumbnailCapturedAt, thumbnailUrl, thumbnailFresh });
+      // 卡片的"收起"是用户意图，状态更新不该把它抹掉；只有浏览器重新启用（running false→true）
+      // 才算新一轮会话，卡片回归。
+      const collapsed = bRunning && !prev?.running ? false : (prev?.collapsed ?? false);
+      setBrowserStateForPath(bsp, { running: bRunning, url: bUrl, thumbnail: bThumbnail, thumbnailCapturedAt, thumbnailUrl, thumbnailFresh, collapsed });
       break;
     }
 
@@ -880,8 +906,9 @@ export function handleServerMessage(msg: any): void {
       const metadata = msg.metadata && typeof msg.metadata === 'object' ? msg.metadata : {};
       if (!sp) { console.warn('[ws] event missing sessionPath:', msg.type); break; }
       const hasPinnedAt = Object.prototype.hasOwnProperty.call(metadata, 'pinnedAt');
+      const hasPinOrder = Object.prototype.hasOwnProperty.call(metadata, 'pinOrder');
       const hasProjectId = Object.prototype.hasOwnProperty.call(metadata, 'projectId');
-      if (hasPinnedAt || hasProjectId) {
+      if (hasPinnedAt || hasPinOrder || hasProjectId) {
         useStore.setState((s) => ({
           sessions: s.sessions.map((session) => {
             if (session.path !== sp && (!sid || session.sessionId !== sid)) return session;
@@ -889,6 +916,9 @@ export function handleServerMessage(msg: any): void {
               ...session,
               ...(hasPinnedAt
                 ? { pinnedAt: typeof metadata.pinnedAt === 'string' ? metadata.pinnedAt : null }
+                : {}),
+              ...(hasPinOrder
+                ? { pinOrder: typeof metadata.pinOrder === 'number' ? metadata.pinOrder : null }
                 : {}),
               ...(hasProjectId
                 ? { projectId: typeof metadata.projectId === 'string' && metadata.projectId.trim() ? metadata.projectId.trim() : null }
@@ -899,9 +929,6 @@ export function handleServerMessage(msg: any): void {
       }
       if (sp === useStore.getState().currentSessionPath && typeof metadata.thinkingLevel === 'string') {
         useStore.getState().setThinkingLevel(metadata.thinkingLevel);
-      }
-      if (Object.prototype.hasOwnProperty.call(metadata, 'capabilityDrift')) {
-        useStore.getState().setSessionCapabilityDrift(sp, metadata.capabilityDrift || null);
       }
       break;
     }
@@ -1006,15 +1033,25 @@ export function handleServerMessage(msg: any): void {
 
     case 'error': {
       const { sessionPath: sp } = sessionIdentityFromMessage(msg);
+      const presented = presentError(errorWithCode(
+        String(msg.message ?? ''),
+        typeof msg.code === 'string' ? msg.code : null,
+      ));
       if (!sp) {
-        if (msg.code === 'session_identity_unresolved' || msg.code === 'session_identity_mismatch') {
-          useStore.getState().addToast(msg.message || 'Unable to resolve session identity', 'error', 6000);
+        // 身份类错误本身就说明没有会话可以挂靠，落不到 inline 位，只能弹 toast。
+        // internal_contract 同理：服务端认定调用方没带身份，用户看不到就等于故障消失了。
+        if (
+          msg.code === 'session_identity_unresolved'
+          || msg.code === 'session_identity_mismatch'
+          || msg.code === 'internal_contract'
+        ) {
+          useStore.getState().addToast(presented.text, 'error', 6000, { errorCode: msg.code });
         } else {
           console.warn('[ws] event missing sessionPath:', msg.type);
         }
         break;
       }
-      useStore.getState().setInlineError(sp, msg.message);
+      useStore.getState().setInlineError(sp, presented);
       break;
     }
 

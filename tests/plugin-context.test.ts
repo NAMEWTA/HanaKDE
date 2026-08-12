@@ -701,6 +701,56 @@ describe("createPluginContext with accessLevel", () => {
     bus.emit({ type: "llm_usage", entry: { requestId: "req-2" } }, null);
     off();
     expect(events).toEqual([{ type: "llm_usage", entry: { requestId: "req-2" } }]);
+
+    const typedPayloads = [];
+    const offTyped = ctx.bus.subscribe("llm_usage", (payload) => typedPayloads.push(payload));
+    bus.emit({ type: "llm_usage", payload: { requestId: "req-3" } }, null);
+    offTyped();
+    expect(typedPayloads).toEqual([{ requestId: "req-3" }]);
+  });
+
+  it("adapts the SDK type-first bus overloads at the plugin boundary", async () => {
+    const bus = await makeBus();
+    const ctx = createPluginContext({
+      pluginId: "test", pluginDir: "/tmp/test",
+      dataDir: "/tmp/data", bus, accessLevel: "restricted",
+    } as any);
+    const typedPayloads = [];
+    const callbackEvents = [];
+    const offTyped = ctx.bus.subscribe("todo.changed", (payload) => typedPayloads.push(payload));
+    const offCallback = ctx.bus.subscribe((event) => callbackEvents.push(event), { types: ["todo.changed"] });
+
+    expect(() => ctx.bus.subscribe(
+      "todo.changed",
+      null as unknown as (payload: unknown) => void,
+    )).toThrow(TypeError);
+
+    ctx.bus.emit("todo.changed", { todoId: "todo-1" });
+
+    expect(typedPayloads).toEqual([{ todoId: "todo-1" }]);
+    expect(callbackEvents).toEqual([{ type: "todo.changed", payload: { todoId: "todo-1" } }]);
+    bus.emit({ type: "todo.changed", todoId: "todo-raw" }, null);
+    expect(typedPayloads).toEqual([{ todoId: "todo-1" }, { type: "todo.changed", todoId: "todo-raw" }]);
+    expect(callbackEvents).toEqual([
+      { type: "todo.changed", payload: { todoId: "todo-1" } },
+      { type: "todo.changed", todoId: "todo-raw" },
+    ]);
+    offTyped();
+    offCallback();
+    ctx.bus.emit("todo.changed", { todoId: "todo-2" });
+    expect(typedPayloads).toHaveLength(2);
+    expect(callbackEvents).toHaveLength(2);
+  });
+
+  it("enforces usage.read for type-first bus overloads", async () => {
+    const bus = await makeBus();
+    const ctx = createPluginContext({
+      pluginId: "test", pluginDir: "/tmp/test",
+      dataDir: "/tmp/data", bus, accessLevel: "restricted",
+    } as any);
+
+    expect(() => ctx.bus.subscribe("llm_usage", () => undefined)).toThrow(/usage\.read/);
+    expect(() => ctx.bus.emit("llm_usage", { requestId: "req-1" })).toThrow(/usage\.read/);
   });
 
   it("filters llm_usage out of global restricted subscriptions without usage.read", async () => {

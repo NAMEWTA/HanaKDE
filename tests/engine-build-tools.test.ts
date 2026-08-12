@@ -21,7 +21,7 @@ function permissionTool(name, execute = vi.fn(), kind: "read" | "routine" | "rev
 
 describe("HanaEngine.buildTools", () => {
   let tmpDir;
-  let engines: HanaEngine[] = [];
+  const engines: HanaEngine[] = [];
 
   afterEach(async () => {
     for (const engine of engines.splice(0).reverse()) {
@@ -400,6 +400,239 @@ describe("HanaEngine.buildTools", () => {
     expect(customTools.map((tool) => tool.name)).toEqual(["automation"]);
   });
 
+  it("composes MCP manager tools with the same session context as plugin tools", async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-build-tools-mcp-"));
+    const agentDir = path.join(tmpDir, "agents", "focus");
+    const workspace = path.join(tmpDir, "workspace");
+    const sessionPath = path.join(agentDir, "sessions", "main.jsonl");
+    const execute = vi.fn(async () => ({ content: [{ type: "text", text: "ok" }] }));
+    const agent = { id: "focus", agentDir, config: {}, tools: [] };
+
+    const engine = Object.create(HanaEngine.prototype);
+    engine.hanakoHome = tmpDir;
+    engine.getAgent = vi.fn(() => agent);
+    engine._pluginManager = null;
+    // MCP tools come from the engine-owned manager, not the plugin registry.
+    engine._mcp = {
+      getAllTools: () => [{
+        name: "mcp_github_search",
+        _pluginId: "mcp",
+        execute,
+      }],
+    };
+    engine._prefs = { getFileBackup: () => ({ enabled: false }) };
+    engine._readPreferences = () => ({ sandbox: true });
+    engine._confirmStore = null;
+    engine._emitEvent = vi.fn();
+    engine.getSessionPermissionMode = vi.fn(() => "operate");
+    engine._agentMgr = { agent };
+
+    const { customTools } = engine.buildTools(workspace, [], {
+      agentDir,
+      workspace,
+      getSessionPath: () => sessionPath,
+      getPermissionMode: () => "operate",
+    });
+
+    const mcpTool = customTools.find((tool) => tool.name === "mcp_github_search");
+    expect(mcpTool).toBeTruthy();
+
+    await mcpTool.execute("call-1", { q: "hana" }, {
+      sessionManager: { getSessionFile: () => sessionPath },
+    });
+
+    // Same wrapper as plugin tools: the runtime context arrives as the fifth
+    // argument, carrying the resolved agent and session identity.
+    expect(execute).toHaveBeenCalledWith(
+      "call-1",
+      { q: "hana" },
+      expect.objectContaining({ sessionManager: expect.any(Object) }),
+      undefined,
+      expect.objectContaining({ agentId: "focus", sessionPath }),
+    );
+  });
+
+  it("injects session sandbox ResourceIO only into the object-identical File Tool", async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-build-tools-file-resource-"));
+    const agentDir = path.join(tmpDir, "agents", "focus");
+    const workspace = path.join(tmpDir, "workspace");
+    const sessionPath = path.join(agentDir, "sessions", "main.jsonl");
+    const fileExecute = vi.fn(async (..._args: any[]) => ({ content: [{ type: "text", text: "file" }] }));
+    const namedFileExecute = vi.fn(async (..._args: any[]) => ({ content: [{ type: "text", text: "custom" }] }));
+    const pluginExecute = vi.fn(async (..._args: any[]) => ({ content: [{ type: "text", text: "plugin" }] }));
+    const mcpExecute = vi.fn(async (..._args: any[]) => ({ content: [{ type: "text", text: "mcp" }] }));
+    const ownedFileTool = permissionTool("stage_files", fileExecute);
+    const customToolNamedFile = permissionTool("file", namedFileExecute);
+    const agent = {
+      id: "focus",
+      agentDir,
+      config: {},
+      tools: [ownedFileTool],
+      _fileTool: ownedFileTool,
+    };
+    const engine = Object.create(HanaEngine.prototype);
+    engine.hanakoHome = tmpDir;
+    engine.getAgent = vi.fn(() => agent);
+    engine.getResourceIO = vi.fn(() => {
+      throw new Error("buildTools must not use engine-global ResourceIO");
+    });
+    engine._pluginManager = {
+      getAllTools: () => [{ ...permissionTool("plugin_tool", pluginExecute), _pluginId: "test_plugin" }],
+    };
+    engine._mcp = {
+      getAllTools: () => [{ name: "mcp_github_search", _pluginId: "mcp", execute: mcpExecute }],
+    };
+    engine._prefs = { getFileBackup: () => ({ enabled: false }) };
+    engine._readPreferences = () => ({ sandbox: true });
+    engine._confirmStore = null;
+    engine._emitEvent = vi.fn();
+    engine.getSessionPermissionMode = vi.fn(() => "operate");
+    engine._agentMgr = { agent };
+
+    const { customTools } = engine.buildTools(workspace, [ownedFileTool, customToolNamedFile], {
+      agentDir,
+      workspace,
+      getSessionPath: () => sessionPath,
+      getPermissionMode: () => "operate",
+    });
+    const runtime = { sessionManager: { getSessionFile: () => sessionPath } };
+    for (const name of ["stage_files", "file", "plugin_tool", "mcp_github_search"]) {
+      const tool = customTools.find((candidate) => candidate.name === name);
+      await tool.execute(`call-${name}`, {}, runtime);
+    }
+
+    const fileContext = fileExecute.mock.calls[0]![4]!;
+    expect(fileContext).toEqual(expect.objectContaining({
+      agentId: "focus",
+      sessionPath,
+      resourceIO: expect.objectContaining({
+        stat: expect.any(Function),
+        read: expect.any(Function),
+        materialize: expect.any(Function),
+      }),
+    }));
+    expect(namedFileExecute).toHaveBeenCalledTimes(1);
+    expect(pluginExecute).toHaveBeenCalledTimes(1);
+    expect(mcpExecute).toHaveBeenCalledTimes(1);
+    for (const execute of [namedFileExecute, pluginExecute, mcpExecute]) {
+      expect(execute.mock.calls[0]![4]!).not.toHaveProperty("resourceIO");
+    }
+    expect(engine.getResourceIO).not.toHaveBeenCalled();
+  });
+
+  it("does not inject session sandbox ResourceIO into a deferred MCP bridge", async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-build-tools-bridge-resource-"));
+    const agentDir = path.join(tmpDir, "agents", "focus");
+    const workspace = path.join(tmpDir, "workspace");
+    const sessionPath = path.join(agentDir, "sessions", "main.jsonl");
+    const fileExecute = vi.fn(async (..._args: any[]) => ({ content: [{ type: "text", text: "file" }] }));
+    const ownedFileTool = permissionTool("stage_files", fileExecute);
+    const agent = {
+      id: "focus",
+      agentDir,
+      config: {},
+      tools: [ownedFileTool],
+      _fileTool: ownedFileTool,
+    };
+    const mcpCall = vi.fn(async (..._args: any[]) => ({ content: [{ type: "text", text: "ok" }] }));
+    const parameterSchema = { type: "object", properties: {} };
+    const catalogEntries = ["alpha", "beta"].map((toolName) => ({
+      name: `demo_${toolName}`,
+      toolName,
+      description: `Demo ${toolName}`,
+      paramsSummary: "",
+      serverId: "demo",
+      serverLabel: "Demo",
+      deferrable: true,
+      pinned: false,
+      schemaRef: () => parameterSchema,
+    }));
+    const engine = Object.create(HanaEngine.prototype);
+    engine.hanakoHome = tmpDir;
+    engine.getAgent = vi.fn(() => agent);
+    engine.getResourceIO = vi.fn(() => {
+      throw new Error("buildTools must not use engine-global ResourceIO");
+    });
+    engine._pluginManager = null;
+    engine._mcp = {
+      getAllTools: () => catalogEntries.map((entry) => ({
+        name: `mcp_${entry.name}`,
+        description: entry.description,
+        parameters: parameterSchema,
+        _pluginId: "mcp",
+        execute: vi.fn(),
+      })),
+      getConfig: () => ({ deferEnabled: true, deferThreshold: 1 }),
+      getCatalogEntries: () => catalogEntries,
+      resolveToolPermissionKind: () => "review",
+      callTool: mcpCall,
+    };
+    engine._prefs = { getFileBackup: () => ({ enabled: false }) };
+    engine._readPreferences = () => ({ sandbox: true });
+    engine._confirmStore = null;
+    engine._emitEvent = vi.fn();
+    engine.getSessionPermissionMode = vi.fn(() => "operate");
+    engine._agentMgr = { agent };
+
+    const { customTools } = engine.buildTools(workspace, [ownedFileTool], {
+      agentDir,
+      workspace,
+      getSessionPath: () => sessionPath,
+      getPermissionMode: () => "operate",
+    });
+    const bridge = customTools.find((tool) => tool.name === "mcp_call");
+    const fileTool = customTools.find((tool) => tool.name === "stage_files");
+    expect(bridge).toBeTruthy();
+    expect(fileTool).toBeTruthy();
+
+    const runtime = { sessionManager: { getSessionFile: () => sessionPath } };
+    await fileTool.execute("file-call", {}, runtime);
+
+    await bridge.execute("bridge-call", {
+      server: "demo",
+      tool: "demo_alpha",
+      arguments: {},
+    }, runtime);
+
+    expect(mcpCall).toHaveBeenCalledWith("demo", "alpha", {}, expect.any(Object));
+    const fileResourceIO = fileExecute.mock.calls[0]![4]!.resourceIO;
+    const bridgeContext = mcpCall.mock.calls[0]![3]!;
+    expect(fileResourceIO).toEqual(expect.objectContaining({
+      stat: expect.any(Function),
+      read: expect.any(Function),
+      materialize: expect.any(Function),
+    }));
+    expect(bridgeContext.resourceIO).not.toBe(fileResourceIO);
+    expect(bridgeContext.resourceIO).not.toEqual(expect.objectContaining({
+      stat: expect.any(Function),
+      read: expect.any(Function),
+      materialize: expect.any(Function),
+    }));
+    expect(engine.getResourceIO).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate names between MCP tools and custom tools", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-build-tools-mcp-duplicate-"));
+    const agentDir = path.join(tmpDir, "agents", "focus");
+    const agent = { id: "focus", agentDir, config: {}, tools: [] };
+
+    const engine = Object.create(HanaEngine.prototype);
+    engine.hanakoHome = tmpDir;
+    engine.getAgent = vi.fn(() => agent);
+    engine._pluginManager = null;
+    engine._mcp = {
+      getAllTools: () => [{ ...permissionTool("mcp_duplicate"), _pluginId: "mcp" }],
+    };
+    engine._prefs = { getFileBackup: () => ({ enabled: false }) };
+    engine._readPreferences = () => ({ sandbox: true });
+    engine._agentMgr = { agent };
+
+    expect(() => engine.buildTools(tmpDir, [permissionTool("mcp_duplicate")], {
+      agentDir,
+      workspace: tmpDir,
+    })).toThrow(/duplicate tool name "mcp_duplicate" across custom tools and mcp tools/);
+  });
+
   it("passes a session workbench execution boundary into plugin tools", async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-build-tools-boundary-"));
     const agentDir = path.join(tmpDir, "agents", "focus");
@@ -680,6 +913,12 @@ describe("HanaEngine.buildTools", () => {
     const engine = Object.create(HanaEngine.prototype);
     engine.hanakoHome = tmpDir;
     engine.registerSessionFile = registerSessionFile;
+    engine.getSessionIdForPath = vi.fn(() => "sess_touch");
+    engine._activityHub = { upsert: vi.fn((entry) => entry) };
+    engine._projectAgentFileChangeResource = vi.fn(async (resource) => ({
+      sourceKey: "main",
+      relativePath: path.basename(resource.path),
+    }));
     engine.getAgent = vi.fn(() => ({ id: "focus", agentDir, tools: [] }));
     engine._pluginManager = null;
     engine._prefs = { getFileBackup: () => ({ enabled: false }) };
@@ -733,30 +972,48 @@ describe("HanaEngine.buildTools", () => {
       filePath: path.join(workspace, "draft.md"),
       origin: "agent_edit",
     });
-    expect(engine._emitEvent).toHaveBeenCalledWith(expect.objectContaining({
-      type: "resource.changed",
-      source: "agent_tool",
-      reason: "agent_write",
-      sessionPath,
-      fileId: "sf_created",
-      origin: "agent_write",
-      operation: "created",
-      resource: expect.objectContaining({
-        filePath: path.join(workspace, "draft.md"),
-      }),
-    }), sessionPath);
-    expect(engine._emitEvent).toHaveBeenCalledWith(expect.objectContaining({
-      type: "resource.changed",
-      source: "agent_tool",
-      reason: "agent_edit",
-      sessionPath,
-      fileId: "sf_modified",
-      origin: "agent_edit",
-      operation: "modified",
-      resource: expect.objectContaining({
-        filePath: path.join(workspace, "draft.md"),
-      }),
-    }), sessionPath);
+    expect(writeResult.details.agentFileChange).toMatchObject({
+      sessionId: "sess_touch",
+      operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      resource: { sourceKey: "main", relativePath: "draft.md" },
+    });
+    expect(editResult.details.agentFileChange).toMatchObject({
+      sessionId: "sess_touch",
+      operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      resource: { sourceKey: "main", relativePath: "draft.md" },
+    });
+    expect(engine._activityHub.upsert).toHaveBeenCalledTimes(2);
+    for (const [entry] of engine._activityHub.upsert.mock.calls) {
+      expect(entry).toMatchObject({
+        kind: "agent_tool",
+        status: "done",
+        sessionId: "sess_touch",
+        sessionPath,
+        operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      });
+    }
+    const resourceChanges = engine._emitEvent.mock.calls
+      .filter(([event]) => event?.type === "resource.changed")
+      .map(([event, routedSessionPath]) => ({ event, routedSessionPath }));
+    expect(resourceChanges).toHaveLength(2);
+    expect(resourceChanges.map(({ event }) => event.reason)).toEqual([
+      "agent_write",
+      "agent_edit",
+    ]);
+    const authoritativeDraftPath = path.join(fs.realpathSync(workspace), "draft.md");
+    for (const { event, routedSessionPath } of resourceChanges) {
+      expect(routedSessionPath).toBe(sessionPath);
+      expect(event).toMatchObject({
+        source: "agent_tool",
+        sessionPath,
+        operationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+        resource: expect.objectContaining({
+          path: authoritativeDraftPath,
+        }),
+      });
+      expect(event).not.toHaveProperty("fileId");
+      expect(event).not.toHaveProperty("sessionFile");
+    }
   });
 
   it("registers write and edit session files when Pi SDK uses the file_path alias", async () => {

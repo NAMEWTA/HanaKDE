@@ -1,5 +1,9 @@
 import path from "path";
 import { Type } from "../pi-sdk/index.ts";
+import {
+  createDocumentExtractionService,
+  type DocumentExtractionServiceOptions,
+} from "../document-extract/index.ts";
 import { serializeSessionFile } from "../session-files/session-file-response.ts";
 import { copyFileRefToPath, statFileRef } from "../file-ref/resource-io.ts";
 import { getToolSessionPath } from "./tool-session.ts";
@@ -68,29 +72,82 @@ function errorResult(err) {
   };
 }
 
+function extractionResourceFromParams(params: any = {}, sessionId: string | null, sessionPath: string | null) {
+  if (params.resource && typeof params.resource === "object" && !Array.isArray(params.resource)) {
+    return params.resource;
+  }
+  if (typeof params.fileId === "string" && params.fileId.trim()) {
+    return {
+      kind: "session-file",
+      fileId: params.fileId.trim(),
+      ...(sessionId ? { sessionId } : {}),
+      ...(sessionPath ? { sessionPath } : {}),
+    };
+  }
+  throw new Error("extract requires an authorized ResourceIO resource or fileId");
+}
+
+function extractionResult(result: any) {
+  if (!result.ok) {
+    return {
+      content: [{ type: "text", text: result.message }],
+      details: { extraction: { ok: false, reason: result.reason } },
+    };
+  }
+  return {
+    content: [{ type: "text", text: result.markdown }],
+    details: {
+      extraction: {
+        ok: true,
+        format: result.format,
+        warnings: result.warnings,
+        extractorVersion: result.extractorVersion,
+      },
+    },
+  };
+}
+
+function extractionErrorResult(err: any) {
+  if (err?.name === "AbortError") {
+    return {
+      content: [{ type: "text", text: "Document extraction cancelled." }],
+      details: { extraction: { ok: false, reason: "parse-failed" } },
+    };
+  }
+  return {
+    content: [{ type: "text", text: "Document extraction could not read the authorized resource." }],
+    details: { extraction: { ok: false, reason: "parse-failed" } },
+  };
+}
+
 export function createFileTool({
   getCwd,
   getSessionPath,
   getAuthorizedFolders,
   resolveSessionFile,
   registerSessionFile,
+  getResourceIO,
+  documentExtractionOptions = {},
 }: {
   getCwd?: any;
   getSessionPath?: any;
   getAuthorizedFolders?: any;
   resolveSessionFile?: any;
   registerSessionFile?: any;
+  getResourceIO?: () => any;
+  documentExtractionOptions?: Omit<DocumentExtractionServiceOptions, "resourceIO">;
 } = {}) {
   return {
     name: "file",
     label: "File",
-    description: "File operations: stat to inspect metadata without reading content, copy to materialize a file into the workspace.",
+    description: "File operations: stat metadata, copy files into the workspace, or extract authorized documents into Markdown.",
     parameters: Type.Object({
       action: Type.Union([
         Type.Literal("stat"),
         Type.Literal("copy"),
+        Type.Literal("extract"),
       ], {
-        description: "File action to perform. v0 supports stat and copy only.",
+        description: "File action to perform.",
       }),
       ref: Type.Optional(Type.Object({}, {
         description: "Typed FileRef for stat, such as { type: 'session_file', fileId } or { type: 'path', path }.",
@@ -98,6 +155,10 @@ export function createFileTool({
       } as any)),
       source: Type.Optional(Type.Object({}, {
         description: "Typed FileRef for copy source, such as { type: 'session_file', fileId } or { type: 'path', path }.",
+        additionalProperties: true,
+      } as any)),
+      resource: Type.Optional(Type.Object({}, {
+        description: "Authorized ResourceIO target for extract, such as { kind: 'session-file', fileId } or { kind: 'mount', mountId, path }.",
         additionalProperties: true,
       } as any)),
       target: Type.Optional(Type.Object({}, {
@@ -116,6 +177,9 @@ export function createFileTool({
       path: Type.Optional(Type.String({
         description: "Workspace source path shorthand. Relative paths resolve from the current working directory.",
       })),
+      formatHint: Type.Optional(Type.String({
+        description: "Optional filename-only format hint for extract, such as report.pdf.",
+      })),
       targetDir: Type.Optional(Type.String({
         description: "Copy destination directory. Relative paths resolve inside the current working directory.",
       })),
@@ -133,7 +197,7 @@ export function createFileTool({
         description: "What to do when the copy target exists. Defaults to fail. Use rename to add a numeric suffix. Use overwrite only when explicitly requested.",
       })),
     }),
-    execute: async (_toolCallId, params: any = {}, _signal = null, _onUpdate = null, ctx: any = {}) => {
+    execute: async (_toolCallId, params: any = {}, signal = null, _onUpdate = null, ctx: any = {}) => {
       const cwd = ctx?.sessionManager?.getCwd?.() || getCwd?.() || process.cwd();
       const sessionPath = params.sessionPath
         || getToolSessionPath(ctx)
@@ -191,6 +255,39 @@ export function createFileTool({
               ...(mediaItem ? { media: { items: [mediaItem], mediaUrls: [copied.filePath] } } : {}),
             },
           };
+        }
+
+        if (params.action === "extract") {
+          const resourceIO = ctx?.resourceIO || getResourceIO?.();
+          if (!resourceIO) {
+            throw new Error("extract requires the ResourceIO kernel");
+          }
+          try {
+            const extraction = createDocumentExtractionService({
+              resourceIO,
+              ...documentExtractionOptions,
+            });
+            const result = await extraction.extract({
+              resource: extractionResourceFromParams(params, sessionId, sessionPath),
+              ...(params.formatHint ? { filenameHint: params.formatHint } : {}),
+              ...(signal ? { signal } : {}),
+              context: {
+                source: "agent_tool",
+                reason: "document-extract",
+                ...(sessionId ? { sessionId } : {}),
+                ...(sessionPath ? { sessionPath } : {}),
+                principal: {
+                  kind: "agent",
+                  ...(sessionId ? { sessionId } : {}),
+                  ...(sessionPath ? { sessionPath } : {}),
+                },
+                auditRead: true,
+              },
+            });
+            return extractionResult(result);
+          } catch (err) {
+            return extractionErrorResult(err);
+          }
         }
 
         throw new Error(`unsupported file action: ${params.action || "unknown"}`);

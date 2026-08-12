@@ -4,14 +4,14 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-22
 title: 通过 Windows 阻断门
-status: ready
+status: blocked
 planning_depth: deep
 planning_depth_reason: "Windows case/junction/locked-file/watcher/native extraction/NSIS production package 是平台原生安全与发布阻断 Gate。"
-ready: true
+ready: false
 risk: critical
 blocked_by: [T-21]
 contract_ids: [AC-009, AC-010, AC-014, AC-015, AC-016, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-027]
-owner: unassigned
+owner: Worker-T-22 / Lead platform owner
 expected_changes: ["<Path>scripts/platform/windows/**</Path>", "<Path>tests/platform/windows/**</Path>"]
 writable_paths: ["<Path>scripts/platform/windows/**</Path>", "<Path>tests/platform/windows/**</Path>"]
 read_only_paths: ["<Path>package.json</Path>", "<Path>package-lock.json</Path>", "<Path>desktop/**</Path>", "<Path>lib/**</Path>", "<Path>core/**</Path>", "<Path>server/**</Path>"]

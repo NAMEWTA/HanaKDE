@@ -16,10 +16,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { randomUUID } from "node:crypto";
-import { migrateConfigScope } from "../shared/migrate-config-scope.ts";
-import { migrateToProvidersYaml } from "./migrate-providers.ts";
-import { migrateProviderMediaConfig } from "./provider-media-config.ts";
-import { runMigrations } from "./migrations.ts";
+import { healCredentialFileModes } from "./credential-file-healer.ts";
+import { PLUGIN_DATA_DIRNAME } from "./plugin-config.ts";
 import { createServerRuntimeContext } from "./server-runtime-context.ts";
 import { StudioCronService } from "./studio-cron-service.ts";
 import { createRuntimeExecutionBoundary } from "./execution-boundary.ts";
@@ -42,8 +40,11 @@ import { PluginDevService } from "./plugin-dev-service.ts";
 import { createPluginDevTools } from "./plugin-dev-tools.ts";
 import { DefaultResourceLoader, SessionManager, SettingsManager } from "../lib/pi-sdk/index.ts";
 import { compactSessionWithCachePreservationRecoveringRuntime } from "./session-compactor.ts";
+import { resolveRequestReasoningLevelForContext } from "./request-reasoning-level.ts";
 import { getFreshCompactNoopReason } from "../lib/fresh-compact/policy.ts";
 import { DeferredResultCoordinator } from "../lib/deferred-result-coordinator.ts";
+import { LoopAlarmService } from "../lib/loop/alarm-service.ts";
+import { LoopController } from "../lib/loop/loop-controller.ts";
 import {
   getToolSessionPath,
   normalizeToolRuntimeContext,
@@ -53,6 +54,7 @@ import { loadLocale } from "../lib/i18n.ts";
 import { createApprovalGateway, createModelApprovalReviewer } from "../lib/approval-gateway.ts";
 import { callText } from "./llm-client.ts";
 import { SESSION_APPROVAL_POLICIES } from "./session-permission-mode.ts";
+import { readCompiledResetAt } from "../lib/memory/compiled-memory-state.ts";
 
 /** 已知的外部 AI 工具技能目录（相对 $HOME） */
 export const WELL_KNOWN_SKILL_PATHS = [
@@ -67,27 +69,6 @@ function findUniqueModelById(models, id) {
   if (!id || !Array.isArray(models)) return null;
   const matches = models.filter(m => m.id === id);
   return matches.length === 1 ? matches[0] : null;
-}
-
-function readSessionThinkingLevel(ctx) {
-  try {
-    const level = ctx?.sessionManager?.buildSessionContext?.()?.thinkingLevel;
-    return typeof level === "string" ? level : null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveRequestReasoningLevel(models, prefs, ctx) {
-  const sessionThinkingLevel = readSessionThinkingLevel(ctx);
-  const defaultThinkingLevel = typeof models.getModelDefaultThinkingLevel === "function"
-    ? models.getModelDefaultThinkingLevel(ctx?.model || null, prefs.getThinkingLevel())
-    : prefs.getThinkingLevel();
-  const preferenceThinkingLevel = models.resolveThinkingLevel(defaultThinkingLevel);
-  const preferenceRequestsMax = preferenceThinkingLevel === "xhigh" || preferenceThinkingLevel === "max";
-  return preferenceRequestsMax && sessionThinkingLevel === "high"
-    ? preferenceThinkingLevel
-    : (sessionThinkingLevel || preferenceThinkingLevel);
 }
 
 function resolveChannelsEnabledForToolAvailability(engine) {
@@ -125,8 +106,6 @@ import { SessionCoordinator } from "./session-coordinator.ts";
 import { SessionManifestResolver } from "./session-manifest/resolver.ts";
 import { SessionManifestStore } from "./session-manifest/store.ts";
 import { ensureSessionRefForPath as establishSessionRefForPath } from "./session-manifest/ref.ts";
-import { ensureLegacySessionManifestMigration } from "./session-manifest/startup-migration.ts";
-import { listSkippedMetaSources } from "./session-manifest/legacy-migration.ts";
 import {
   moveSessionManifestDbFilesAside,
   sanitizeSessionManifestFileSuffix,
@@ -154,7 +133,12 @@ import {
 } from "./knowledge-workspace/knowledge-copy-service.ts";
 import type { SourceRegistry } from "./knowledge-workspace/source-registry.ts";
 import {
+  FileHistoryService,
+  type MainFileHistoryBinding,
+} from "../lib/file-history/file-history-service.ts";
+import {
   KnowledgeIndexRuntime,
+  type KnowledgeIndexRuntimeOptions,
 } from "./knowledge-workspace/knowledge-index-runtime.ts";
 import type {
   KnowledgeIndexCoordinator,
@@ -162,21 +146,48 @@ import type {
 import type {
   KnowledgeIndexHealth,
 } from "../lib/knowledge-workspace/knowledge-index-store.ts";
-import type {
-  KnowledgeResourceAddress,
+import {
+  parseKnowledgeResourceAddress,
+  type KnowledgeResourceAddress,
 } from "../shared/knowledge-workspace-contract.ts";
+import { isOperationCorrelationId } from "../shared/knowledge-diagnostics.ts";
+import { isAgentFileChangeSessionId } from "../shared/workspace-history.ts";
 import {
   createKnowledgeWorkspaceError,
   isKnowledgeWorkspaceError,
 } from "../shared/knowledge-workspace-errors.ts";
 import type {
+  ResourceDescriptor,
+  ResourceMutationResult,
   ResourceOperationContext,
 } from "../lib/resource-io/types.ts";
 import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
-import { resourceKeyForRef } from "../lib/resource-io/resource-refs.ts";
 import { ResourceWatchRegistry } from "../lib/resource-io/resource-watch-registry.ts";
+import {
+  createResourceMainRootAuthority,
+} from "./workspace-runtime/index.ts";
+import type { MainWorkspaceRuntime } from "./workspace-runtime/main-workspace-runtime.ts";
+import {
+  EMPTY_PRODUCTION_OWNER_COUNTS,
+  MainWorkspaceKnowledgeSharedBaselineAdapter,
+  canonicalPhysicalWatchPath,
+  createProductionWorkspaceRuntime,
+  createSingleOwnerProductionCutover,
+  isSameOrPhysicalDescendant,
+  resolveExistingWorkspaceDirectory,
+} from "./workspace-runtime/production-workspace-runtime.ts";
+import type {
+  ProductionCutoverSnapshot,
+  SingleOwnerProductionCutover,
+} from "./workspace-runtime/production-workspace-runtime.ts";
+import { MAIN_WORKSPACE_CUTOVER_DESCRIPTOR } from "../shared/workspace-observation.ts";
+
+export {
+  MainWorkspaceKnowledgeSharedBaselineAdapter,
+  createSingleOwnerProductionCutover,
+};
+
 import { externalReadPathsFromSessionFiles } from "../lib/sandbox/win32-policy.ts";
-import { Win32LegacySandboxCleanupQueue } from "../lib/sandbox/win32-legacy-migration.ts";
 import { t } from "../lib/i18n.ts";
 import { CheckpointStore } from "../lib/checkpoint-store.ts";
 import {
@@ -186,6 +197,45 @@ import {
 import { workspaceRootsForSandbox } from "../shared/workspace-scope.ts";
 import { wrapWithCheckpoint } from "../lib/checkpoint-wrapper.ts";
 import { wrapWithSessionPermission } from "../lib/tools/session-permission-wrapper.ts";
+import { createToolCatalog } from "./tool-catalog.ts";
+import { hashCacheContractValue } from "../lib/llm/cache-prefix-contract.ts";
+import { resolveReferenceBudgetTokens } from "./session-reminders.ts";
+import { createBridgeTools, registerBridgeCapabilityDelegates } from "./tool-catalog-bridge.ts";
+import { summarizeToolParameters } from "./mcp/manager.ts";
+
+/** Matches the MCP config default; used when no manager config is available. */
+const DEFAULT_TOOL_DEFER_THRESHOLD = 10;
+
+/**
+ * Snapshots the catalog listing for the session that is being built.
+ *
+ * The fingerprint covers the catalog's tool names, so a later refresh that adds
+ * or drops a tool produces a different value and the owning session can notice
+ * it has been holding a stale listing. It deliberately ignores descriptions and
+ * schemas: a reworded description is not news worth interrupting a session for.
+ */
+function buildToolCatalogManifestSnapshot(catalog, modelContextWindowTokens) {
+  // Only MCP-origin names are fingerprinted. Those are the ones a connector
+  // refresh can change underneath a running session; builtin rows move only
+  // when the application itself changes, and including them here would make a
+  // builtin-defer session look like it had lost every tool.
+  const names = catalog.all()
+    .filter((entry) => entry.origin === "mcp")
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+  const budgetTokens = resolveReferenceBudgetTokens(modelContextWindowTokens);
+  const { tier, text } = catalog.manifest(budgetTokens);
+  return {
+    text,
+    tier,
+    // Carried so the session renders against the budget the tier was chosen
+    // for, rather than re-deriving it from whatever model state is reachable
+    // at render time.
+    budgetTokens,
+    fingerprint: hashCacheContractValue(names),
+    names,
+  };
+}
 import { filterToolObjectsByAvailability } from "./tool-availability.ts";
 import { TaskRegistry } from "../lib/task-registry.ts";
 import { BrowserManager } from "../lib/browser/browser-manager.ts";
@@ -211,6 +261,7 @@ import { SessionCollabDraftStore } from "../lib/session-collab/draft-store.ts";
 import { NotificationService } from "../lib/notifications/notification-service.ts";
 import { SpeechRecognitionService } from "./speech-recognition-service.ts";
 import { UniversalMediaManager } from "./media/universal-media-manager.ts";
+import { McpManager } from "./mcp/manager.ts";
 import { createCurrentTurnNativeMediaStore } from "./current-turn-native-media.ts";
 import {
   getSkillNameTranslationCachePath,
@@ -226,8 +277,8 @@ import {
 import { assertValidAgentId, isValidAgentId } from "../shared/agent-id.ts";
 
 const moduleLog = createModuleLogger("engine");
+const mcpLog = createModuleLogger("mcp");
 const toolAvailabilityLog = createModuleLogger("tool-availability");
-const win32SandboxCleanupLog = createModuleLogger("win32-sandbox-cleanup");
 
 type KnowledgeEngineCopyOptions = ResourceOperationContext & {
   sourceRegistry: SourceRegistry;
@@ -243,13 +294,13 @@ type KnowledgeExternalEngineCopyInput = {
   localDate: string;
 };
 
-export function runBestEffortStartupMigrationStep(label, operation, log: any = () => {}) {
+export function runBestEffortStartupStep(label, operation, log: any = () => {}) {
   try {
     return { ok: true, value: operation() };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    moduleLog.error(`startup migration ${label} failed: ${message}`);
-    log(`[migrations] ${label} 失败，应用继续启动；该步骤将在下次启动重试`);
+    moduleLog.error(`startup step ${label} failed: ${message}`);
+    log(`[startup] ${label} 失败，应用继续启动`);
     return { ok: false, error };
   }
 }
@@ -273,6 +324,17 @@ function sessionBelongsToProject(projectId) {
   };
 }
 
+type EngineResourceWatchSubscription = {
+  input: Record<string, unknown>;
+  resources: unknown[];
+  physicalSubscriptionId: string | null;
+  logicalReleases: Array<() => void>;
+};
+
+type EngineRetainedResourceWatch = {
+  resource: unknown;
+  release: (() => void) | null;
+};
 export class HanaEngine {
   declare _activityHub: any;
   declare _agentMgr: any;
@@ -300,7 +362,12 @@ export class HanaEngine {
   declare _hubCallbacks: any;
   declare _imageStripNotified: any;
   declare _listeners: any;
+  declare _loopStore: any;
+  declare _loopAlarm: any;
+  declare _loopController: any;
+  declare _loopBridgeHooks: any;
   declare _media: any;
+  declare _mcp: any;
   declare _models: any;
   declare _notifications: any;
   declare _outboundProxyRuntime: any;
@@ -311,16 +378,30 @@ export class HanaEngine {
   declare _prefs: any;
   declare _resourceAccess: any;
   declare _resourceEventBus: any;
+  declare _fileHistoryService: FileHistoryService | null;
+  declare _mainFileHistoryBinding: (() => MainFileHistoryBinding | null) | null;
+  declare _fileHistoryStoreKey: string | null;
   declare _knowledgeIndexRuntime: KnowledgeIndexRuntime | null;
+  declare _mainWorkspaceSharedBaseline: MainWorkspaceKnowledgeSharedBaselineAdapter | null;
+  declare _mainWorkspaceRuntime: MainWorkspaceRuntime | null;
+  declare _mainWorkspaceCutover: SingleOwnerProductionCutover | null;
+  declare _mainWorkspaceRoot: string | null;
+  declare _mainWorkspaceCanonicalRoot: string | null;
+  declare _projectAgentFileChangeResource: ((
+    resource: ResourceDescriptor,
+  ) => Promise<KnowledgeResourceAddress | null>) | null;
+  declare _mainWorkspaceUnavailable: boolean;
   declare _resourceLoader: any;
   declare _resourceIO: any;
   declare _resourceWatchRegistry: any;
+  declare _resourceWatchSubscriptions: Map<string, EngineResourceWatchSubscription>;
+  declare _retainedResourceWatches: Map<string, EngineRetainedResourceWatch>;
+  declare _logicalMainResourceWatchRefs: Map<string, number>;
   declare _resources: any;
   declare _runtimeContext: any;
   declare _sessionCoord: any;
   declare _sessionFiles: any;
   declare _sessionExecutions: any;
-  declare _sessionManifestMigration: any;
   declare _sessionManifestResolver: any;
   declare _sessionManifestStore: any;
   declare _sessionManifestStoreRecovery: any;
@@ -338,7 +419,6 @@ export class HanaEngine {
   declare _usageLedger: any;
   declare _videoStripNotified: any;
   declare _visionBridge: any;
-  declare _win32LegacySandboxCleanupQueue: any;
   declare agentsDir: any;
   declare appVersion: any;
   declare channelsDir: any;
@@ -366,7 +446,19 @@ export class HanaEngine {
     this._resourceAccess = null;
     this._resourceIO = null;
     this._resourceEventBus = null;
+    this._fileHistoryService = new FileHistoryService({ privateStoreRoot: this.hanakoHome });
+    this._mainFileHistoryBinding = null;
+    this._fileHistoryStoreKey = null;
     this._knowledgeIndexRuntime = null;
+    this._mainWorkspaceSharedBaseline = new MainWorkspaceKnowledgeSharedBaselineAdapter({
+      currentResourceEventSequence: () => this._resourceEvents().latestSequence(),
+    });
+    this._mainWorkspaceRuntime = null;
+    this._mainWorkspaceCutover = null;
+    this._mainWorkspaceRoot = null;
+    this._mainWorkspaceCanonicalRoot = null;
+    this._projectAgentFileChangeResource = null;
+    this._mainWorkspaceUnavailable = false;
     this.agentsDir = path.join(hanakoHome, "agents");
     this.userDir = path.join(hanakoHome, "user");
     this.channelsDir = path.join(hanakoHome, "channels");
@@ -388,12 +480,14 @@ export class HanaEngine {
       eventBus: this._resourceEvents(),
       resolveWatchTarget: (resource) => this.getResourceIO().resolveWatchTarget(resource),
     });
+    this._resourceWatchSubscriptions = new Map();
+    this._retainedResourceWatches = new Map();
+    this._logicalMainResourceWatchRefs = new Map();
     this._sessionManifestStoreRecovery = null;
     this._sessionManifestStore = this._openSessionManifestStore();
     this._sessionManifestResolver = this._sessionManifestStore
       ? new SessionManifestResolver({ store: this._sessionManifestStore })
       : null;
-    this._sessionManifestMigration = this._runSessionManifestStartupMigration();
     this._currentTurnNativeMedia = createCurrentTurnNativeMediaStore();
     this._pluginInstallRecords = new PluginInstallRecords({ hanakoHome });
     this._automationSuggestionStore = new AutomationSuggestionStore();
@@ -434,6 +528,15 @@ export class HanaEngine {
       registerSessionFile: (entry) => this.serializeSessionFile(this.registerSessionFile(entry)),
       onProviderChanged: () => this.onProviderChanged(),
       builtinAdapters: builtinMediaAdapters,
+    });
+    this._mcp = new McpManager({
+      dataDir: path.join(this.hanakoHome, "mcp"),
+      log: mcpLog,
+    }, {
+      // A connector tool may come back asking the user a question. The store is
+      // read lazily because it is installed after this manager is built.
+      getConfirmStore: () => this._confirmStore,
+      emitEvent: (event, sessionPath) => this._emitEvent(event, sessionPath),
     });
     this._sessionProjects = new SessionProjectCatalogStore({ userDir: this.userDir });
 
@@ -503,11 +606,12 @@ export class HanaEngine {
       getResourceLoader: () => this._resourceLoader,
       getSkills: () => this._skills,
       buildTools: (cwd, ct, opts) => this.buildTools(cwd, ct, opts),
+      getLiveToolCatalogNames: () => this.getLiveToolCatalogNames(),
       emitEvent: (e, sp) => this._emitEvent(e, sp),
       emitDevLog: (t, l) => this.emitDevLog(t, l),
       getHomeCwd: (agentId) => this.getHomeCwd(agentId),
       agentIdFromSessionPath: (p) => this.agentIdFromSessionPath(p),
-      switchAgentOnly: (id) => this._agentMgr.switchAgentOnly(id),
+      switchAgentOnly: (id) => this.switchAgentOnly(id),
       getConfig: () => this.config,
       getPrefs: () => this._prefs,
       getAgents: () => this._agentMgr.agents,
@@ -603,7 +707,6 @@ export class HanaEngine {
       getModels: () => this._models,
       getPrefs: () => this._prefs,
       getSkills: () => this._skills,
-      getSession: () => this._sessionCoord.session,
       getSessionCoordinator: () => this._sessionCoord,
       getHub: () => this._hubCallbacks,
       emitEvent: (e, sp) => this._emitEvent(e, sp),
@@ -676,6 +779,12 @@ export class HanaEngine {
     // subagent AbortController 存储（engine 级别，跨 agent 共享）
     this._subagentControllers = new Map();
     this._subagentRunStore = null;
+
+    // 循环服务：由 server 层在 store 与桥接投递就绪后经 setLoopServices 注入
+    this._loopStore = null;
+    this._loopAlarm = null;
+    this._loopController = null;
+    this._loopBridgeHooks = null;
     this._taskRegistry.registerHandler("subagent", {
       abort: (taskId) => {
         const ctrl = this._subagentControllers.get(taskId);
@@ -729,7 +838,7 @@ export class HanaEngine {
     this._videoStripNotified = new Set();
 
     // UI context（用户当前视野）：sessionPath → { currentViewed, activeFile,
-    // activePreview, pinnedFiles }。由前端每次发 prompt 时带过来，经 server/routes/chat.js
+    // activePreview, pinnedFiles }。由前端每次发 prompt 时带过来，经 server/routes/chat.ts
     // 写入；current_status 工具按需读取 ui_context 来解析“这个 / 当前打开的”等指代。
     this._uiContextBySession = new Map();
 
@@ -738,12 +847,6 @@ export class HanaEngine {
     this._devLogsMax = 200;
 
     this._outboundProxyRuntime = null;
-    this._win32LegacySandboxCleanupQueue = process.platform === "win32"
-      ? new Win32LegacySandboxCleanupQueue({
-          hanakoHome: this.hanakoHome,
-          log: win32SandboxCleanupLog,
-        })
-      : null;
 
     // 设置起始 agentId
     this._agentMgr.activeAgentId = startId;
@@ -804,6 +907,139 @@ export class HanaEngine {
     return this._deferredResultStore || null;
   }
 
+  /**
+   * 循环服务接线。bridgeHooks 由 server 层在 bridge-manager 就绪后注入：
+   * { executeLoopTurn(sessionKey, agentId, text), sendNotice(sessionKey, agentId, text),
+   *   resolveSessionId(sessionKey, agentId), ensureSessionId(sessionKey, agentId) }
+   * 未注入时桥接循环的投递按服务不可用抛错（fail-closed），桌面循环不受影响。
+   */
+  setLoopServices({ store, bridgeHooks = null }) {
+    this._loopAlarm?.dispose?.();
+    this._loopController?.dispose?.();
+    this._loopStore = store || null;
+    this._loopBridgeHooks = bridgeHooks;
+    this._loopAlarm = null;
+    this._loopController = null;
+    if (!store) return;
+
+    const requireBridgeHooks = () => {
+      if (!this._loopBridgeHooks) throw new Error("loop: bridge delivery is not wired");
+      return this._loopBridgeHooks;
+    };
+    const targetResetError = (detail) => {
+      const err: any = new Error(`loop target session was reset: ${detail}`);
+      err.code = "loop_target_reset";
+      return err;
+    };
+    // 桌面：sessionId → 当前活跃路径；换代/归档 → loop_target_reset
+    const resolveDesktopPath = (sessionId) => {
+      // resolveSessionRef 经 SessionManifestResolver 按 sessionId 解析 manifest，
+      // 当前 locator 路径在 manifest 上是 currentLocator.path；查无此 id 时抛
+      // session_manifest_not_found，对循环而言即目标已换代。清单服务本身不可用
+      // 是另一类故障，原样上抛而不伪装成换代。
+      let manifest;
+      try {
+        manifest = this.resolveSessionRef({ sessionId });
+      } catch (error: any) {
+        if (error?.code === "session_manifest_not_found" || error?.code === "session_manifest_ref_required") {
+          throw targetResetError(sessionId);
+        }
+        throw error;
+      }
+      const sessionPath = manifest?.currentLocator?.path ?? null;
+      if (!sessionPath || !this._sessionCoord.isRunnableSessionPath(sessionPath)) {
+        throw targetResetError(sessionId);
+      }
+      return sessionPath;
+    };
+    const resolveTargetSessionPathSoft = (target) => {
+      // 守恒检查用的软解析：解析不到返回 null（视为无后台任务），不抛错
+      try {
+        if (target.kind === "desktop") return resolveDesktopPath(target.sessionId);
+        const hooks = this._loopBridgeHooks;
+        if (!hooks) return null;
+        if (hooks.resolveSessionId(target.sessionKey, target.agentId) !== target.sessionId) return null;
+        const agent = this.getAgent?.(target.agentId);
+        return agent
+          ? this.bridgeSessionManager?.resolveSessionPathForSessionKey?.(target.sessionKey, agent) ?? null
+          : null;
+      } catch {
+        return null;
+      }
+    };
+    const hasLiveBackgroundWork = (target) => {
+      const sessionPath = resolveTargetSessionPathSoft(target);
+      if (!sessionPath) return false;
+      if (this.taskRegistry?.hasActiveForParentSession?.(sessionPath)) return true;
+      return (this._deferredResultStore?.listPending?.(sessionPath)?.length ?? 0) > 0;
+    };
+
+    const controller = new LoopController({
+      store,
+      hasLiveBackgroundWork,
+      deliverLoopMessage: (target, message) => {
+        if (target.kind === "desktop") {
+          const sessionPath = resolveDesktopPath(target.sessionId);
+          return this._sessionCoord.deliverCustomMessage(sessionPath, message, { triggerTurn: true });
+        }
+        const hooks = requireBridgeHooks();
+        if (hooks.resolveSessionId(target.sessionKey, target.agentId) !== target.sessionId) {
+          throw targetResetError(target.sessionKey);
+        }
+        return hooks.executeLoopTurn(target.sessionKey, target.agentId, message.content);
+      },
+      recordNotice: (target, message) => {
+        if (target.kind === "desktop") {
+          const sessionPath = resolveDesktopPath(target.sessionId);
+          return this._sessionCoord.deliverCustomMessage(sessionPath, message, { triggerTurn: false });
+        }
+        return requireBridgeHooks().sendNotice(target.sessionKey, target.agentId, message.content);
+      },
+      isTargetMidStream: (target) => {
+        if (target.kind !== "desktop") return false;
+        const sessionPath = resolveTargetSessionPathSoft(target);
+        return sessionPath ? this._sessionCoord.isSessionStreaming(sessionPath) : false;
+      },
+      isTargetRunnable: (target) => {
+        try {
+          if (target.kind === "desktop") { resolveDesktopPath(target.sessionId); return true; }
+          return this._loopBridgeHooks?.resolveSessionId?.(target.sessionKey, target.agentId) === target.sessionId;
+        } catch {
+          return false;
+        }
+      },
+      resolveSessionIdForPath: (sessionPath) => this.getSessionIdForPath?.(sessionPath) ?? null,
+      resolveTargetFromSessionRef: async (ref, { ensure = false } = {}) => {
+        if (ref?.kind === "desktop" && (ref.sessionId || ref.sessionPath)) {
+          const sessionId = ref.sessionId || this.getSessionIdForPath?.(ref.sessionPath);
+          return sessionId ? { kind: "desktop", sessionId } : null;
+        }
+        if (ref?.kind === "bridge" && ref.sessionKey) {
+          const hooks = requireBridgeHooks();
+          let sessionId = hooks.resolveSessionId(ref.sessionKey, ref.agentId);
+          if (!sessionId && ensure) sessionId = await hooks.ensureSessionId(ref.sessionKey, ref.agentId);
+          return sessionId
+            ? { kind: "bridge", sessionId, sessionKey: ref.sessionKey, agentId: ref.agentId }
+            : null;
+        }
+        return null;
+      },
+    });
+    const alarm = new LoopAlarmService({
+      store,
+      hasLiveBackgroundWork,
+      deliverWakeup: (key, reason) => controller.deliverWakeupTurn(key, reason),
+      hooks: {
+        onDeliveryExhausted: (key, err) => controller.pauseForDeliveryFailure(key, err),
+      },
+    });
+    controller.attachAlarm(alarm);
+    this._loopAlarm = alarm;
+    this._loopController = controller;
+  }
+
+  get loopController() { return this._loopController; }
+
   setSubagentRunStore(store) {
     this._subagentRunStore = store || null;
   }
@@ -861,9 +1097,50 @@ export class HanaEngine {
     });
   }
   recordSessionFileOperation(entry) {
-    const file = this.registerSessionFile(entry);
-    this._emitResourceChangedForSessionFileOperation(file, entry);
-    return file;
+    return this.registerSessionFile(entry);
+  }
+  async recordAgentFileChange(entry: {
+    sessionId?: unknown;
+    sessionPath?: unknown;
+    operationId?: unknown;
+    mutation?: ResourceMutationResult | null;
+  }) {
+    const sessionId = entry?.sessionId;
+    const sessionPath = entry?.sessionPath;
+    const operationId = entry?.operationId;
+    const mutation = entry?.mutation;
+    if (
+      !isAgentFileChangeSessionId(sessionId)
+      || typeof sessionPath !== "string"
+      || !sessionPath
+      || !isOperationCorrelationId(operationId)
+      || !mutation?.resource
+      || typeof this._projectAgentFileChangeResource !== "function"
+      || !this._activityHub
+    ) {
+      return null;
+    }
+    const projected = await this._projectAgentFileChangeResource(mutation.resource);
+    const parsedResource = parseKnowledgeResourceAddress(projected);
+    if (!parsedResource.ok || parsedResource.value.sourceKey !== "main") return null;
+
+    const now = Date.now();
+    const activity = this._activityHub.upsert({
+      id: `agent-tool:${operationId}`,
+      kind: "agent_tool",
+      status: "done",
+      sessionId,
+      sessionPath,
+      operationId,
+      startedAt: now,
+      finishedAt: now,
+    });
+    if (activity?.operationId !== operationId || activity?.sessionId !== sessionId) return null;
+    return Object.freeze({
+      sessionId,
+      operationId,
+      resource: Object.freeze({ ...parsedResource.value }),
+    });
   }
   _resourceEvents() {
     if (!this._resourceEventBus) {
@@ -885,40 +1162,149 @@ export class HanaEngine {
   resourceEventsSince(sequence) {
     return this._resourceEvents().since(sequence);
   }
-  _emitResourceChangedForSessionFileOperation(file, entry: any = {}) {
-    const origin = typeof file?.origin === "string" ? file.origin : entry?.origin;
-    if (origin !== "agent_write" && origin !== "agent_edit") return;
+  getFileHistoryService(): FileHistoryService | null {
+    return this._fileHistoryService ?? null;
+  }
+  async _closeFileHistoryService(): Promise<void> {
+    await this._fileHistoryService?.close();
+    this._fileHistoryStoreKey = null;
+  }
+  async _activateMainFileHistory(log: (message: string) => void = () => {}): Promise<void> {
+    const binding = this._mainFileHistoryBinding?.();
+    if (!binding) return;
+    const service = this._fileHistoryService;
+    if (!service) return;
+    if (service.isAvailable() && this._fileHistoryStoreKey === binding.historyStoreKey) return;
+    try {
+      await service.activateMain(binding);
+      this._fileHistoryStoreKey = service.isAvailable() ? binding.historyStoreKey : null;
+    } catch {
+      this._fileHistoryStoreKey = null;
+      log("[workspace] main file history failed to activate");
+    }
+  }
+  getProductionWorkspaceHealth(): ProductionCutoverSnapshot {
+    if (this._mainWorkspaceCutover?.snapshot) return this._mainWorkspaceCutover.snapshot();
+    if (this._mainWorkspaceUnavailable) {
+      return Object.freeze({
+        state: "FAILED" as const,
+        overlap: 0,
+        legacy: EMPTY_PRODUCTION_OWNER_COUNTS,
+        coordinator: EMPTY_PRODUCTION_OWNER_COUNTS,
+      });
+    }
+    return Object.freeze({
+      state: "DEGRADED" as const,
+      overlap: 0,
+      legacy: EMPTY_PRODUCTION_OWNER_COUNTS,
+      coordinator: EMPTY_PRODUCTION_OWNER_COUNTS,
+    });
+  }
+  _getMainWorkspaceSharedBaseline(): MainWorkspaceKnowledgeSharedBaselineAdapter {
+    if (!this._mainWorkspaceSharedBaseline) {
+      this._mainWorkspaceSharedBaseline = new MainWorkspaceKnowledgeSharedBaselineAdapter({
+        currentResourceEventSequence: () => this._resourceEvents().latestSequence(),
+      });
+    }
+    return this._mainWorkspaceSharedBaseline;
+  }
+  _hasConfiguredMainWorkspaceHome(): boolean {
+    const configuredHome = this._agentMgr?.agent?.config?.desk?.home_folder;
+    return typeof configuredHome === "string"
+      ? configuredHome.trim().length > 0
+      : configuredHome !== null && configuredHome !== undefined;
+  }
+  _resolveActiveMainWorkspaceRoot(): string | null {
+    const configuredHome = this._agentMgr?.agent?.config?.desk?.home_folder;
+    const hasConfiguredHome = this._hasConfiguredMainWorkspaceHome();
 
-    const sessionPath = file?.sessionPath || entry?.sessionPath;
-    const filePath = file?.filePath || entry?.filePath;
-    if (!sessionPath || !filePath) return;
+    // `last_cwd` is session history and may name a mounted workspace. Main
+    // ownership is the agent's configured home only. Keep an unavailable
+    // explicit home fail-closed rather than silently observing the default.
+    if (hasConfiguredHome) {
+      return resolveExistingWorkspaceDirectory(configuredHome);
+    }
+    return resolveExistingWorkspaceDirectory(this.getHomeCwd(this._agentMgr?.activeAgentId));
+  }
+  async _startProductionWorkspaceRuntime(log: (message: string) => void = () => {}) {
+    const hasConfiguredHome = this._hasConfiguredMainWorkspaceHome();
+    const rootPath = this._resolveActiveMainWorkspaceRoot();
+    if (!rootPath) {
+      await this._stopProductionWorkspaceRuntime();
+      this._mainWorkspaceUnavailable = hasConfiguredHome;
+      return this.getProductionWorkspaceHealth();
+    }
+    this._mainWorkspaceUnavailable = false;
 
-    const fileId = file?.id || file?.fileId || null;
-    const operation = entry?.operation || file?.operation || (
-      Array.isArray(file?.operations) ? file.operations[file.operations.length - 1] : null
-    );
-    this._resourceEvents().changed({
-      changeType: operation === "created" ? "created" : "modified",
-      resourceKey: resourceKeyForRef({ kind: "local-file", path: filePath }),
-      resource: {
-        kind: "local-file",
-        provider: "local_fs",
-        path: filePath,
-        filePath,
-      },
-      version: {
-        ...(file?.mtimeMs !== undefined ? { mtimeMs: file.mtimeMs } : {}),
-        ...(file?.size !== undefined ? { size: file.size } : {}),
-        ...(file?.version ? { sequence: file.version } : {}),
-      },
-      source: "agent_tool",
-      reason: origin,
-      sessionPath,
-      fileId,
-      origin,
-      operation,
-      sessionFile: file,
-    } as any);
+    if (this._mainWorkspaceCutover && this._mainWorkspaceRoot === rootPath) {
+      try {
+        await this._mainWorkspaceCutover.start();
+        if (this.getProductionWorkspaceHealth().state === "HEALTHY") await this._activateMainFileHistory(log);
+      } catch {
+        log("[workspace] main workspace coordinator failed to start");
+      }
+      return this.getProductionWorkspaceHealth();
+    }
+
+    await this._stopProductionWorkspaceRuntime();
+    const assembly = createProductionWorkspaceRuntime({
+      rootPath,
+      rootAuthority: createResourceMainRootAuthority({ resourceIO: this.getResourceIO() }),
+      resourceEvents: this._resourceEvents(),
+      legacyWatchRegistry: this._resourceWatchRegistry,
+      isolatedProof: () => this._proveMainWorkspaceCutoverDescriptor(),
+      beforeCoordinatorStart: () => this._repartitionActiveResourceWatches(),
+      sharedBaseline: this._getMainWorkspaceSharedBaseline(),
+      historyResourceIO: this.getResourceIO(),
+    });
+    this._mainWorkspaceRuntime = assembly.runtime;
+    this._mainWorkspaceCutover = assembly.cutover;
+    this._mainWorkspaceRoot = rootPath;
+    this._mainWorkspaceCanonicalRoot = assembly.canonicalRoot;
+    this._mainFileHistoryBinding = assembly.fileHistoryBinding;
+    this._projectAgentFileChangeResource = assembly.projectAgentFileChangeResource;
+
+    try {
+      await assembly.cutover.start();
+      if (this.getProductionWorkspaceHealth().state === "HEALTHY") await this._activateMainFileHistory(log);
+    } catch {
+      log("[workspace] main workspace coordinator failed to start");
+    }
+    return this.getProductionWorkspaceHealth();
+  }
+  async _stopProductionWorkspaceRuntime() {
+    await this._closeFileHistoryService();
+    const cutover = this._mainWorkspaceCutover;
+    if (!cutover) {
+      this._mainFileHistoryBinding = null;
+      this._mainWorkspaceSharedBaseline?.detach();
+      this._mainWorkspaceCanonicalRoot = null;
+      this._projectAgentFileChangeResource = null;
+      this._mainWorkspaceUnavailable = false;
+      return this.getProductionWorkspaceHealth();
+    }
+    await cutover.stop();
+    this._mainFileHistoryBinding = null;
+    this._mainWorkspaceRuntime = null;
+    this._mainWorkspaceCutover = null;
+    this._mainWorkspaceRoot = null;
+    this._mainWorkspaceCanonicalRoot = null;
+    this._projectAgentFileChangeResource = null;
+    this._mainWorkspaceUnavailable = false;
+    return this.getProductionWorkspaceHealth();
+  }
+  _proveMainWorkspaceCutoverDescriptor() {
+    const descriptor = MAIN_WORKSPACE_CUTOVER_DESCRIPTOR;
+    const requiredOrder = descriptor.requiredOrder;
+    if (
+      descriptor.phase !== "isolated-proof"
+      || descriptor.productionOwner !== null
+      || requiredOrder[0] !== "stop-old-owner"
+      || requiredOrder[1] !== "prove-old-owner-released"
+      || requiredOrder[2] !== "start-new-owner"
+    ) {
+      throw new Error("main workspace cutover proof is unavailable");
+    }
   }
   _sessionFileOptionsWithLocator(options: any = {}) {
     const next = { ...(options || {}) };
@@ -1060,6 +1446,7 @@ export class HanaEngine {
   }
   get speechRecognition() { return this._speechRecognition; }
   get media() { return this._media; }
+  get mcp() { return this._mcp; }
   get resources() { return this._resources; }
   getResourceService() {
     if (!this._resources) throw new Error("resource service is not initialized");
@@ -1100,14 +1487,16 @@ export class HanaEngine {
       const runtime = this.getRuntimeContext();
       const hostId = runtime.serverNodeId || runtime.serverId;
       if (!hostId) throw new Error("knowledge index host identity is unavailable");
-      this._knowledgeIndexRuntime = new KnowledgeIndexRuntime({
+      const options: KnowledgeIndexRuntimeOptions = {
         hanakoHome: this.hanakoHome,
         hostId,
         pid: process.pid,
         resourceIO: this.getResourceIO(),
         resourceEvents: this._resourceEvents(),
+        sharedBaseline: this._getMainWorkspaceSharedBaseline().port,
         retainWatch: (resource) => this.retainResourceWatch(resource),
-      });
+      };
+      this._knowledgeIndexRuntime = new KnowledgeIndexRuntime(options);
     }
     try {
       return await this._knowledgeIndexRuntime.bindWorkspace(sourceRegistry);
@@ -1279,26 +1668,179 @@ export class HanaEngine {
       signal,
     });
   }
+  _logicalMainWatchRefs(): Map<string, number> {
+    if (!this._logicalMainResourceWatchRefs) this._logicalMainResourceWatchRefs = new Map();
+    return this._logicalMainResourceWatchRefs;
+  }
+  _engineResourceWatchSubscriptions(): Map<string, EngineResourceWatchSubscription> {
+    if (!this._resourceWatchSubscriptions) this._resourceWatchSubscriptions = new Map();
+    return this._resourceWatchSubscriptions;
+  }
+  _retainedResourceWatchRecords(): Map<string, EngineRetainedResourceWatch> {
+    if (!this._retainedResourceWatches) this._retainedResourceWatches = new Map();
+    return this._retainedResourceWatches;
+  }
+  _isActiveMainWatchTarget(target: any): boolean {
+    const rootPath = this._mainWorkspaceCanonicalRoot;
+    if (
+      !rootPath
+      || target?.ref?.kind !== "local-file"
+      || typeof target?.filePath !== "string"
+    ) {
+      return false;
+    }
+    const candidatePath = canonicalPhysicalWatchPath(target.filePath);
+    return candidatePath !== null && isSameOrPhysicalDescendant(rootPath, candidatePath);
+  }
+  _partitionResourceWatch(resource: unknown) {
+    const target = this.getResourceIO().resolveWatchTarget(resource);
+    if (!target || typeof target.resourceKey !== "string" || !target.resourceKey) {
+      throw new Error("resource watch target is unavailable");
+    }
+    return Object.freeze({
+      resource,
+      resourceKey: target.resourceKey,
+      logicalMain: this._isActiveMainWatchTarget(target),
+    });
+  }
+  _retainLogicalMainResourceWatch(resourceKey: string): () => void {
+    const refs = this._logicalMainWatchRefs();
+    refs.set(resourceKey, (refs.get(resourceKey) || 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const count = refs.get(resourceKey) || 0;
+      if (count <= 1) refs.delete(resourceKey);
+      else refs.set(resourceKey, count - 1);
+    };
+  }
+  _releaseEngineSubscriptionBinding(subscription: EngineResourceWatchSubscription): void {
+    if (subscription.physicalSubscriptionId) {
+      this._resourceWatchRegistry.unsubscribe(subscription.physicalSubscriptionId);
+      subscription.physicalSubscriptionId = null;
+    }
+    while (subscription.logicalReleases.length > 0) {
+      const release = subscription.logicalReleases[subscription.logicalReleases.length - 1];
+      release();
+      subscription.logicalReleases.pop();
+    }
+  }
+  _bindEngineSubscription(subscription: EngineResourceWatchSubscription): string[] {
+    const partitions = subscription.resources.map((resource) => this._partitionResourceWatch(resource));
+    const logicalReleases: Array<() => void> = [];
+    let physicalSubscriptionId: string | null = null;
+    try {
+      for (const partition of partitions) {
+        if (partition.logicalMain) {
+          logicalReleases.push(this._retainLogicalMainResourceWatch(partition.resourceKey));
+        }
+      }
+      const physicalResources = partitions
+        .filter((partition) => !partition.logicalMain)
+        .map((partition) => partition.resource);
+      if (physicalResources.length > 0) {
+        const physical = this._resourceWatchRegistry.subscribe({
+          ...subscription.input,
+          resources: physicalResources,
+        });
+        physicalSubscriptionId = physical?.subscriptionId || null;
+        if (!physicalSubscriptionId) throw new Error("resource watch unavailable");
+      }
+    } catch (error) {
+      for (const release of logicalReleases.splice(0).reverse()) release();
+      throw error;
+    }
+    subscription.logicalReleases = logicalReleases;
+    subscription.physicalSubscriptionId = physicalSubscriptionId;
+    return partitions.map((partition) => partition.resourceKey);
+  }
+  _bindRetainedResourceWatch(record: EngineRetainedResourceWatch): void {
+    const partition = this._partitionResourceWatch(record.resource);
+    record.release = partition.logicalMain
+      ? this._retainLogicalMainResourceWatch(partition.resourceKey)
+      : this._resourceWatchRegistry.retain(record.resource);
+  }
+  _repartitionActiveResourceWatches(): void {
+    const subscriptions = [...this._engineResourceWatchSubscriptions().values()];
+    const retained = [...this._retainedResourceWatchRecords().values()];
+
+    // Release every previous binding before assigning the new canonical main.
+    // A failed release aborts this handoff before a new coordinator can start.
+    for (const subscription of subscriptions) this._releaseEngineSubscriptionBinding(subscription);
+    for (const record of retained) {
+      record.release?.();
+      record.release = null;
+    }
+    for (const subscription of subscriptions) this._bindEngineSubscription(subscription);
+    for (const record of retained) this._bindRetainedResourceWatch(record);
+  }
   retainResourceWatch(resource) {
     if (!this._resourceWatchRegistry || typeof this._resourceWatchRegistry.retain !== "function") {
       throw new Error("resource watch unavailable");
     }
-    return this._resourceWatchRegistry.retain(resource);
+    const id = randomUUID();
+    const record: EngineRetainedResourceWatch = { resource, release: null };
+    this._bindRetainedResourceWatch(record);
+    this._retainedResourceWatchRecords().set(id, record);
+    let released = false;
+    return () => {
+      if (released) return;
+      const active = this._retainedResourceWatchRecords().get(id);
+      if (!active) return;
+      active.release?.();
+      active.release = null;
+      this._retainedResourceWatchRecords().delete(id);
+      released = true;
+    };
   }
   subscribeResourceWatch(input) {
     if (!this._resourceWatchRegistry || typeof this._resourceWatchRegistry.subscribe !== "function") {
       throw new Error("resource watch unavailable");
     }
-    return this._resourceWatchRegistry.subscribe(input);
+    const resources = Array.isArray(input?.resources)
+      ? input.resources
+      : input?.resource
+        ? [input.resource]
+        : [];
+    if (!resources.length) throw new Error("ResourceWatchRegistry subscription requires resources");
+    const { resource: _resource, resources: _resources, ...metadata } = input || {};
+    const record: EngineResourceWatchSubscription = {
+      input: metadata,
+      resources,
+      physicalSubscriptionId: null,
+      logicalReleases: [],
+    };
+    const resourceKeys = this._bindEngineSubscription(record);
+    const subscriptionId = randomUUID();
+    this._engineResourceWatchSubscriptions().set(subscriptionId, record);
+    return {
+      subscriptionId,
+      resourceKeys,
+    };
   }
   unsubscribeResourceWatch(subscriptionId) {
     if (!this._resourceWatchRegistry || typeof this._resourceWatchRegistry.unsubscribe !== "function") {
       throw new Error("resource watch unavailable");
     }
-    return this._resourceWatchRegistry.unsubscribe(subscriptionId);
+    const subscriptions = this._engineResourceWatchSubscriptions();
+    const subscription = subscriptions.get(subscriptionId);
+    if (!subscription) return this._resourceWatchRegistry.unsubscribe(subscriptionId);
+
+    // Preserve the Engine receipt after a failed physical release so route
+    // lease retries cannot under-release logical subscriptions.
+    this._releaseEngineSubscriptionBinding(subscription);
+    subscriptions.delete(subscriptionId);
+    return true;
   }
   resourceWatchDiagnostics() {
-    return this._resourceWatchRegistry?.diagnostics?.() || { subscriptions: 0, watches: [] };
+    const diagnostics = this._resourceWatchRegistry?.diagnostics?.() || { subscriptions: 0, watches: [] };
+    return {
+      ...diagnostics,
+      logicalSubscriptions: this._engineResourceWatchSubscriptions().size,
+      retainedLogicalWatches: this._retainedResourceWatchRecords().size,
+      logicalMainResources: this._logicalMainWatchRefs().size,
+    };
   }
   getResource(resourceId) { return this.getResourceService().getResource(resourceId); }
   resolveResourceContent(resourceId) { return this.getResourceService().resolveContent(resourceId); }
@@ -1358,7 +1900,28 @@ export class HanaEngine {
   invalidateAgentListCache() { this._agentMgr.invalidateAgentListCache(); }
   async createAgent(opts) { return this._agentMgr.createAgent(opts); }
   async switchAgent(agentId) {
-    return this._agentMgr.switchAgent(agentId);
+    const result = await this._agentMgr.switchAgent(agentId);
+    await this._startProductionWorkspaceRuntime();
+    return result;
+  }
+  async switchAgentOnly(agentId) {
+    const previousAgentId = this.currentAgentId;
+    try {
+      const result = await this._agentMgr.switchAgentOnly(agentId);
+      await this._startProductionWorkspaceRuntime();
+      return result;
+    } catch (error) {
+      // AgentManager restores its previous active agent on activation failure.
+      // Keep that owner's coordinator alive, or re-establish it if a caller
+      // reached this hook with an already-diverged lifecycle state.
+      if (
+        this.currentAgentId === previousAgentId
+        && this._mainWorkspaceRoot !== this._resolveActiveMainWorkspaceRoot()
+      ) {
+        await this._startProductionWorkspaceRuntime();
+      }
+      throw error;
+    }
   }
   async deleteAgent(agentId) { return this._agentMgr.deleteAgent(agentId); }
   setPrimaryAgent(agentId) { return this._agentMgr.setPrimaryAgent(agentId); }
@@ -1477,6 +2040,26 @@ export class HanaEngine {
     }
   }
 
+  getLossyLocalCompactionSummarySource(sessionPath) {
+    const sessionId = this.getSessionIdForPath(sessionPath);
+    if (!sessionId) {
+      throw new Error("Instant local compaction could not resolve the session identity");
+    }
+    const ownership = this.resolveSessionOwnership({ sessionId, sessionPath });
+    const agent = ownership?.agentId ? this._agentMgr.getAgent(ownership.agentId) : null;
+    if (!agent?.summaryManager) {
+      throw new Error("Instant local compaction could not resolve the session's summary owner");
+    }
+    const record = agent.summaryManager.getSummary(sessionId);
+    return {
+      summary: record?.summary || "",
+      cursor: record?.cursor || null,
+      createdAt: record?.created_at || null,
+      updatedAt: record?.updated_at || null,
+      resetAt: readCompiledResetAt(path.dirname(agent.summariesDir)),
+    };
+  }
+
   _openSessionManifestStore() {
     const dbPath = path.join(this.hanakoHome, "session-manifest.db");
     try {
@@ -1513,37 +2096,9 @@ export class HanaEngine {
     }
   }
 
-  _runSessionManifestStartupMigration() {
-    if (!this._sessionManifestStore) {
-      return {
-        status: "unavailable",
-        error: this._sessionManifestStoreRecovery?.error || null,
-      };
-    }
-    try {
-      const result = ensureLegacySessionManifestMigration({
-        hanaHome: this.hanakoHome,
-        store: this._sessionManifestStore,
-        appVersion: this.appVersion,
-      });
-      if (result.status === "failed") {
-        moduleLog.warn(`Session manifest startup migration failed: ${result.error?.message || "unknown error"}`);
-      }
-      return result;
-    } catch (error) {
-      moduleLog.warn(`Session manifest startup migration crashed: ${error?.message || String(error)}`);
-      return {
-        status: "failed",
-        error,
-      };
-    }
-  }
   /**
-   * 聚合三路 session 元数据"待恢复"信号，供 /api/health 附块与侧边栏提示消费。
-   * 三源：① manifest store 本身不可用/被隔离重建（_sessionManifestStoreRecovery）
-   * ② 运行期发生过的 session-meta 隔离（_sessionCoord.listMetaQuarantines）
-   * ③ 迁移账本里全集的 too_large/parse_error legacy 源（listSkippedMetaSources）。
-   * 三源全空 → { degraded: false, reasons: [] }。纯读聚合，不产生副作用。
+   * 聚合 manifest store 与运行期 session-meta 隔离两路恢复信号，供 /api/health
+   * 附块与侧边栏提示消费。纯读聚合，不产生副作用。
    */
   getSessionMetadataRecoveryStatus() {
     const reasons: Array<{ kind: string; detail: string }> = [];
@@ -1557,10 +2112,6 @@ export class HanaEngine {
 
     for (const quarantine of this._sessionCoord?.listMetaQuarantines?.() || []) {
       reasons.push({ kind: "meta_quarantined", detail: describeMetaSourcePath(quarantine?.metaPath) });
-    }
-
-    for (const skipped of listSkippedMetaSources(this._sessionManifestStore)) {
-      reasons.push({ kind: "meta_skipped", detail: describeMetaSourcePath(skipped?.path) });
     }
 
     return { degraded: reasons.length > 0, reasons };
@@ -1578,8 +2129,35 @@ export class HanaEngine {
   getSessionProviderCacheAffinityKey(p) {
     return this._sessionCoord.getSessionProviderCacheAffinityKey(p);
   }
+  /**
+   * Per-session provider quirks that shape the request body. A live request and
+   * the compaction request for the same session share a cache prefix, so both
+   * have to normalize with the same options; this is the one place that answers
+   * what those options are, so neither path can drift from the other.
+   */
+  getProviderCompatOptionsForSession(p) {
+    return {
+      deepseekRoleplayReasoningPatch: this._sessionCoord.isDeepSeekRoleplayReasoningPatchEnabled(p),
+      deepseekRoleplayReasoningContext: this._sessionCoord.getDeepSeekRoleplayReasoningContext(p),
+    };
+  }
+  /**
+   * The reasoning level a request on this session carries. Same reason as the
+   * provider options above: the live request and the compaction request for one
+   * session ride the same cache prefix, so they cannot each decide for
+   * themselves whether reasoning is on. Both ask this.
+   */
+  resolveRequestReasoningLevel(ctx) {
+    return resolveRequestReasoningLevelForContext(this._models, this._prefs, ctx);
+  }
   getSessionStreamFn(p) {
     return this._sessionCoord.getSessionStreamFn(p);
+  }
+  getSessionAgentRunRuntime(p) {
+    return this._sessionCoord.getSessionAgentRunRuntime(p);
+  }
+  getSessionTransformContext(p) {
+    return this._sessionCoord.getSessionTransformContext(p);
   }
   async switchSession(p) {
     const result = await this._sessionCoord.switchSession(p);
@@ -1609,7 +2187,6 @@ export class HanaEngine {
     return this._sessionCoord.consumeRenderedSessionReminderBlock(p, receipt);
   }
   consumeSessionReminderBlock(p) { return this._sessionCoord.consumeSessionReminderBlock(p); }
-  noteSessionTimeObserved(p, observedAt) { return this._sessionCoord.noteSessionTimeObserved(p, observedAt); }
   get focusSessionPath() { return this._sessionCoord.currentSessionPath; }
   getMessages(p) { return this._sessionCoord.getSessionByPath(p)?.messages ?? []; }
   getSessionWorkspaceFolders(p = this.currentSessionPath) {
@@ -1674,14 +2251,9 @@ export class HanaEngine {
   /** 确保桌面 session 已加载进 cache 但不改 UI 焦点（Phase 2-C：/rc 接管态用） */
   async ensureSessionLoaded(p) { return this._sessionCoord.ensureSessionLoaded(p); }
   async reloadSessionRuntime(p, opts = {}) { return this._sessionCoord.reloadSessionRuntime(p, opts); }
-  /** #1624：当前应展示的"工具能力有更新"提示（无漂移 / 已 dismiss → null） */
-  getSessionCapabilityDriftNotice(p) { return this._sessionCoord.getSessionCapabilityDriftNotice(p); }
   getSessionModelAvailability(p = this.currentSessionPath) {
     return this._sessionCoord.getSessionModelAvailability(p);
   }
-  markCapabilitySnapshotsStale(opts = {}) { return this._sessionCoord.markCapabilitySnapshotsStale(opts); }
-  /** #1624：记录当前 fingerprint 已被用户关闭，持久化到 session-meta */
-  async dismissSessionCapabilityDrift(p, fingerprint) { return this._sessionCoord.dismissSessionCapabilityDrift(p, fingerprint); }
   isSessionStreaming(p) { return this._sessionCoord.isSessionStreaming(p); }
   isSessionSwitching(p) { return this._sessionCoord.isSessionSwitching(p); }
   async abortSessionByPath(p, options) { return this._sessionCoord.abortSessionByPath(p, options); }
@@ -1734,6 +2306,7 @@ export class HanaEngine {
   async saveSessionTitle(p, t) { return this._sessionCoord.saveSessionTitle(p, t); }
   async clearSessionTitle(p) { return this._sessionCoord.clearSessionTitle(p); }
   async setSessionPinned(p, pinned) { return this._sessionCoord.setSessionPinned(p, pinned); }
+  async setSessionPinOrder(orderedRefs) { return this._sessionCoord.setSessionPinOrder(orderedRefs); }
   async setSessionPluginMeta(p, patch) { return this._sessionCoord.setSessionPluginMeta(p, patch); }
   createSessionContext() { return this._sessionCoord.createSessionContext(); }
   async promoteActivitySession(f, agentId) { return this._sessionCoord.promoteActivitySession(f, agentId); }
@@ -1804,7 +2377,18 @@ export class HanaEngine {
   async refreshModels() { return this._models.refreshAvailable(); }
 
   getHomeFolder(agentId) { return this._configCoord.getHomeFolder(agentId); }
-  setHomeFolder(agentId, folder) { return this._configCoord.setHomeFolder(agentId, folder); }
+  async setHomeFolder(agentId, folder) {
+    const targetAgentId = agentId || this.currentAgentId;
+    const updatesFocusedAgent = targetAgentId === this.currentAgentId;
+    const previousRoot = updatesFocusedAgent
+      ? this._resolveActiveMainWorkspaceRoot()
+      : null;
+    const result = await this._configCoord.setHomeFolder(agentId, folder);
+    if (updatesFocusedAgent && this._resolveActiveMainWorkspaceRoot() !== previousRoot) {
+      await this._startProductionWorkspaceRuntime();
+    }
+    return result;
+  }
   getHeartbeatMaster() { return this._configCoord.getHeartbeatMaster(); }
   setHeartbeatMaster(v) { return this._configCoord.setHeartbeatMaster(v); }
   getChannelsEnabled() { return this._configCoord.getChannelsEnabled(); }
@@ -1959,9 +2543,6 @@ export class HanaEngine {
   setSessionThinkingLevel(sessionPath, level) { return this._sessionCoord.setSessionThinkingLevel(sessionPath, level); }
   getSandbox() { return this._prefs.getSandbox(); }
   setSandbox(v) { this._prefs.setSandbox(v); }
-  startWin32LegacySandboxMaintenance() {
-    this._win32LegacySandboxCleanupQueue?.enqueueProfileCleanup?.();
-  }
   getSandboxNetwork() {
     if (process.platform === "win32") return true;
     return this._prefs.getSandboxNetwork();
@@ -1975,9 +2556,6 @@ export class HanaEngine {
   }
   getHardwareAcceleration() { return this._prefs.getHardwareAcceleration(); }
   setHardwareAcceleration(v) { this._prefs.setHardwareAcceleration(v); }
-  compareAndDeleteLegacyHardwareAccelerationPreference() {
-    return this._prefs.compareAndDeleteLegacyHardwareAccelerationPreference();
-  }
   getFileBackup() { return this._prefs.getFileBackup(); }
   setFileBackup(p) { this._prefs.setFileBackup(p); }
   listCheckpoints() { return this._checkpointStore.list(); }
@@ -2003,6 +2581,13 @@ export class HanaEngine {
   setLearnSkills(p) { this._prefs.setLearnSkills(p); }
   getLocale() { return this._prefs.getLocale(); }
   setLocale(l) { this._prefs.setLocale(l); }
+  getUserName() { return this._prefs.getUserName(); }
+  setUserName(n) {
+    this._prefs.setUserName(n);
+    // 名字是全局的：改一次，所有已经加载的 agent 都要立刻改口，
+    // 而不是等到进程重启才生效。
+    this._agentMgr?.refreshResolvedUserNames?.();
+  }
   getSetupComplete() { return this._prefs.getSetupComplete(); }
   markSetupComplete() { return this._prefs.markSetupComplete(); }
   getEditor() { return this._prefs.getEditor(); }
@@ -2045,21 +2630,42 @@ export class HanaEngine {
   setAutoCheckUpdates(v) { this._prefs.setAutoCheckUpdates(v); }
   getKeepAwake() { return this._prefs.getKeepAwake(); }
   setKeepAwake(v) { this._prefs.setKeepAwake(v); }
-  setMemoryEnabled(v) { return this._configCoord.setMemoryEnabled(v); }
   setMemoryMasterEnabled(id, v) { return this._configCoord.setMemoryMasterEnabled(id, v); }
-  persistSessionMeta() { return this._configCoord.persistSessionMeta(); }
+  persistSessionMeta(sessionPath) { return this._configCoord.persistSessionMeta(sessionPath); }
   get permissionMode() { return this._sessionCoord.getPermissionMode(); }
   getSessionPermissionMode(sessionPath) { return this._sessionCoord.getPermissionMode(sessionPath); }
   setSessionPermissionMode(mode) { return this._sessionCoord.setPermissionMode(mode); }
   setSessionPermissionModeForSession(sessionPath, mode, options) { return this._sessionCoord.setSessionPermissionMode(sessionPath, mode, options); }
   setCurrentSessionPermissionMode(mode) { return this._sessionCoord.setCurrentSessionPermissionMode(mode); }
   setPendingSessionPermissionMode(mode) { return this._sessionCoord.setPendingPermissionMode(mode); }
+  allowSessionInvocationCapability(ref, capability) { return this._sessionCoord.allowInvocationCapability(ref, capability); }
+  // Read on every permission decision, including on engines built without a
+  // session coordinator. No coordinator means no session ever granted anything,
+  // so an empty list is the accurate answer and the fail-closed one.
+  getSessionAllowedInvocationCapabilities(sessionPath) { return this._sessionCoord?.getAllowedInvocationCapabilities(sessionPath) || []; }
   getSessionPermissionModeDefault() { return this._sessionCoord.getPermissionModeDefault(); }
   setSessionPermissionModeDefault(mode) { return this._sessionCoord.setPermissionModeDefault(mode); }
   get accessMode() { return this._sessionCoord.getAccessMode(); }
   setAccessMode(mode) { return this._sessionCoord.setAccessMode(mode); }
   setPlanMode(enabled) { return this._sessionCoord.setPlanMode(enabled); }
-  async updateConfig(p, opts) { return this._configCoord.updateConfig(p, opts); }
+  async updateConfig(p, opts) {
+    const updatesMainWorkspaceRoot = Object.prototype.hasOwnProperty.call(p?.desk || {}, "home_folder");
+    const targetAgentId = opts?.agentId ?? this.currentAgentId;
+    const updatesFocusedAgent = targetAgentId === this.currentAgentId;
+    const previousRoot = updatesMainWorkspaceRoot && updatesFocusedAgent
+      ? this._resolveActiveMainWorkspaceRoot()
+      : null;
+    const result = await this._configCoord.updateConfig(p, opts);
+    if (
+      updatesMainWorkspaceRoot
+      && updatesFocusedAgent
+      && targetAgentId === this.currentAgentId
+      && this._resolveActiveMainWorkspaceRoot() !== previousRoot
+    ) {
+      await this._startProductionWorkspaceRuntime();
+    }
+    return result;
+  }
 
   getPreferences() { return this._readPreferences(); }
   savePreferences(p) { return this._writePreferences(p); }
@@ -2322,7 +2928,7 @@ export class HanaEngine {
   _resolveExecutionModel(r) { return this._models.resolveExecutionModel(r); }
   _resolveProviderCredentials(p) { return this._models.resolveProviderCredentials(p); }
   resolveProviderCredentials(p) { return this._resolveProviderCredentials(p); }
-  resolveProviderCredentialsFresh(p) { return this._models.resolveProviderCredentialsFresh(p); }
+  resolveProviderCredentialsFresh(p, options) { return this._models.resolveProviderCredentialsFresh(p, options); }
   resolveModelWithCredentials(ref) { return this._models.resolveModelWithCredentials(ref); }
   resolveModelWithCredentialsFresh(ref) { return this._models.resolveModelWithCredentialsFresh(ref); }
   async refreshAvailableModels() { return this._models.refreshAvailable(); }
@@ -2347,64 +2953,15 @@ export class HanaEngine {
   async init(log: any = () => {}) {
     const startupTimer = Date.now();
 
-    // 0. Config scope 迁移（全局字段从 agent config → preferences）
-    const configScopeStep = runBestEffortStartupMigrationStep("config-scope", () => {
-      migrateConfigScope({
-        agentsDir: this.agentsDir,
-        prefs: this._prefs,
-        primaryAgentId: this._prefs.getPrimaryAgent(),
-        log,
-      });
+    // Credential custody is current security maintenance; it only tightens
+    // permissions on canonical files.
+    runBestEffortStartupStep("credential-custody", () => {
+      const healed = healCredentialFileModes({ hanakoHome: this.hanakoHome, log });
+      if (healed.failed.length > 0) {
+        log(`[credential-custody] ${healed.failed.length} 个文件未能收紧权限，已记录；应用继续启动`);
+      }
     }, log);
 
-    // 0b. Provider 迁移（旧数据 → added-models.yaml，只跑一次）
-    const providerSourceStep = runBestEffortStartupMigrationStep("provider-source", () => {
-      migrateToProvidersYaml(this.hanakoHome, this.agentsDir, log);
-    }, log);
-
-    let providerMediaStep = { ok: false };
-    let providerOverridesStep = { ok: false };
-    if (providerSourceStep.ok) {
-      // 0b2. Provider media 迁移（旧 type:image 模型 → media.image_generation）
-      providerMediaStep = runBestEffortStartupMigrationStep("provider-media", () => {
-        migrateProviderMediaConfig(this.hanakoHome, log);
-      }, log);
-
-      if (providerMediaStep.ok) {
-        // 0c. Model overrides 迁移（config.models.overrides → added-models.yaml，只跑一次）
-        providerOverridesStep = runBestEffortStartupMigrationStep("provider-overrides", () => {
-          this._models.providerRegistry.migrateOverridesToAddedModels(this.agentsDir, log);
-        }, log);
-      } else {
-        log("[migrations] provider-overrides 等待 provider-media；应用继续启动");
-      }
-    } else {
-      log("[migrations] provider-media 与 provider-overrides 等待 provider-source；应用继续启动");
-    }
-
-    // 0d. 统一数据迁移（版本号驱动，新迁移统一加在 migrations.js）
-    const legacyPrerequisitesReady = configScopeStep.ok
-      && providerSourceStep.ok
-      && providerMediaStep.ok
-      && providerOverridesStep.ok;
-    if (legacyPrerequisitesReady) {
-      const registryStep = runBestEffortStartupMigrationStep("migration-registry", () => runMigrations({
-        hanakoHome: this.hanakoHome,
-        agentsDir: this.agentsDir,
-        prefs: this._prefs,
-        providerRegistry: this._models.providerRegistry,
-        log,
-      }), log);
-      const migrationStatus = registryStep.ok ? registryStep.value : null;
-      if (migrationStatus?.pendingIds.length > 0) {
-        log(
-          `[migrations] 应用继续启动；仍有 ${migrationStatus.pendingIds.length} 条迁移待重试：`
-          + `#${migrationStatus.pendingIds.join(", #")}`,
-        );
-      }
-    } else {
-      log("[migrations] migration-registry 等待启动迁移前置步骤；应用继续启动，下次启动重试");
-    }
     this._runtimeContext = createServerRuntimeContext({
       hanakoHome: this.hanakoHome,
       appVersion: this.appVersion,
@@ -2459,7 +3016,7 @@ export class HanaEngine {
     this._skills = new SkillManager({ skillsDir, externalPaths });
     this._coreExtensionFactories = [
       /**
-       * Provider payload 兼容化（chat 路径）。与 callText 共享 core/provider-compat.js，
+       * Provider payload 兼容化（chat 路径）。与 callText 共享 core/provider-compat.ts，
        * 是两条调用路径唯一的 normalize 入口——末端只在"流式 vs 非流式 fetch"分叉。
        *
        * ctx.model 是 Pi SDK 标准入参，正常 chat session 都会带；少数 edge case
@@ -2470,7 +3027,7 @@ export class HanaEngine {
         pi.on("context", (event, ctx) => {
           const model = ctx?.model;
           if (!model) return;
-          const reasoningLevel = resolveRequestReasoningLevel(this._models, this._prefs, ctx);
+          const reasoningLevel = this.resolveRequestReasoningLevel(ctx);
           const messages = normalizeProviderContextMessages(event.messages, model, {
             mode: "chat",
             reasoningLevel,
@@ -2485,12 +3042,12 @@ export class HanaEngine {
           const requestModel = ctx?.model
             || findUniqueModelById(this._models.availableModels, p.model)
             || null;
-          const reasoningLevel = resolveRequestReasoningLevel(this._models, this._prefs, ctx);
+          const reasoningLevel = this.resolveRequestReasoningLevel(ctx);
           const sessionPath = ctx?.sessionManager?.getSessionFile?.() || null;
-          const deepseekRoleplayReasoningPatch = this._sessionCoord
-            .isDeepSeekRoleplayReasoningPatchEnabled(sessionPath);
-          const deepseekRoleplayReasoningContext = this._sessionCoord
-            .getDeepSeekRoleplayReasoningContext(sessionPath);
+          const {
+            deepseekRoleplayReasoningPatch,
+            deepseekRoleplayReasoningContext,
+          } = this.getProviderCompatOptionsForSession(sessionPath);
           // The SDK hook exposes the serialized body, but not whether maxTokens came
           // from user intent or buildBaseOptions' model-derived default. Keep source
           // unspecified here; output-budget removes only values matching that SDK default.
@@ -2569,9 +3126,8 @@ export class HanaEngine {
       moduleLog.warn("⚠ 未找到可用模型，请在设置中配置 API key");
       this._models.defaultModel = null;
     } else {
-      // migrations #5 之后 models.chat 必为 {id, provider} 对象；
-      // 非对象说明 agent 从未配置过或 migration 未识别（added-models.yaml 里
-      // 没对应 provider），保守视为未配置。
+      // The current baseline stores chat selections as {id, provider} pairs.
+      // Any other shape is treated as not configured rather than upgraded.
       const chatRef = this.agent.config.models?.chat;
       const ref = (typeof chatRef === "object" && chatRef?.id && chatRef?.provider) ? chatRef : null;
       if (!ref) {
@@ -2608,6 +3164,10 @@ export class HanaEngine {
     // 9. 清理过期的 .ephemeral session 文件（>7 天）
     this._cleanEphemeralSessions();
 
+    // The Engine owns the one physical main-workspace observer. Consumers
+    // only observe ResourceEventBus facts after this one-way cutover.
+    await this._startProductionWorkspaceRuntime(log);
+
     const totalTime = ((Date.now() - startupTimer) / 1000).toFixed(1);
     log(`✿ 初始化完成（${totalTime}s）`);
   }
@@ -2640,6 +3200,11 @@ export class HanaEngine {
 
   async dispose() {
     try {
+      try {
+        await this._stopProductionWorkspaceRuntime();
+      } catch {
+        moduleLog.warn("[workspace] main workspace coordinator did not stop cleanly");
+      }
       // 先卸载 plugins（它们可能依赖 engine 资源）
       if (this._pluginManager) {
         for (const p of this._pluginManager.listPlugins()) {
@@ -2651,9 +3216,12 @@ export class HanaEngine {
       this._pluginDevEventBusCleanup?.();
       this._pluginDevEventBusCleanup = null;
       this._media?.dispose?.();
+      await this._mcp?.dispose?.();
       this._skills?.unwatch();
       this._deferredResultCoordinator?.dispose?.();
       this._deferredResultCoordinator = null;
+      this._loopAlarm?.dispose?.();
+      this._loopController?.dispose?.();
       await this._agentMgr.disposeAll(this._sessionCoord);
       await this._sessionCoord.cleanupSession();
     } finally {
@@ -2679,12 +3247,13 @@ export class HanaEngine {
    */
   async initPlugins(bus) {
     this._media?.start?.(bus);
+    await this._mcp?.start?.(bus);
     const builtinPluginsDir = path.join(this.productDir, "..", "plugins");
     const userPluginsDir = path.join(this.hanakoHome, "plugins");
     const devPluginsDir = path.join(this.hanakoHome, "plugins-dev");
     const pluginDevRunsDir = path.join(this.hanakoHome, "plugin-dev-runs");
     const pluginDevSourcesDir = path.join(this.hanakoHome, "plugin-dev-sources");
-    const pluginDataDir = path.join(this.hanakoHome, "plugin-data");
+    const pluginDataDir = path.join(this.hanakoHome, PLUGIN_DATA_DIRNAME);
     fs.mkdirSync(pluginDevSourcesDir, { recursive: true });
 
     // Read app version for plugin compatibility check
@@ -2793,12 +3362,120 @@ export class HanaEngine {
   async syncPluginExtensions() {
     this._syncExtensionFactories();
     await this._reloadResourceLoaderForExtensionFactories();
-    this._sessionCoord?.markCapabilitySnapshotsStale?.({ reason: "plugin.lifecycle.changed" });
   }
 
   // ════════════════════════════
   //  工具构建
   // ════════════════════════════
+
+  /**
+   * Decide whether this tool set defers, and build the catalog if it does.
+   *
+   * Returns null for the ordinary case: few enough tools that loading them all
+   * costs less than the machinery to avoid it. The count is per tool across all
+   * servers, and excludes tools that cannot defer (pinned by the user, or
+   * declared non-deferrable), because those stay in the prefix either way.
+   *
+   * Deferral is all-or-nothing across servers on purpose. Deferring only the
+   * larger connectors would make a tool's availability depend on which company
+   * shipped it, which is exactly the kind of hidden ranking the catalog avoids.
+   */
+  _planDeferredToolAssembly(mcpTools, pluginTools) {
+    const config = this._mcp?.getConfig?.() || null;
+    const deferEnabled = config ? config.deferEnabled !== false : true;
+    if (!deferEnabled) return null;
+    const threshold = Number.isSafeInteger(config?.deferThreshold) && config.deferThreshold > 0
+      ? config.deferThreshold
+      : DEFAULT_TOOL_DEFER_THRESHOLD;
+
+    const liveMcpEntries = this._liveMcpCatalogEntries(mcpTools);
+
+    const builtinDeferEnabled = this._prefs?.getBuiltinToolDeferEnabled?.() === true;
+    const builtinEntries = builtinDeferEnabled
+      ? (pluginTools || [])
+        .filter((tool) => tool?.name && tool.deferrable !== false)
+        .map((tool) => ({
+          name: tool.name,
+          toolName: tool.name,
+          description: tool.description || "",
+          paramsSummary: summarizeToolParameters(tool.parameters),
+          serverId: tool._pluginId || "plugin",
+          serverLabel: tool._pluginId || "plugin",
+          origin: "builtin",
+          deferrable: true,
+          pinned: false,
+          schemaRef: () => tool.parameters || { type: "object", properties: {} },
+        }))
+      : [];
+
+    const deferrable = [...liveMcpEntries, ...builtinEntries]
+      .filter((entry) => entry.deferrable !== false && entry.pinned !== true);
+    if (deferrable.length <= threshold) return null;
+
+    const catalog = createToolCatalog();
+    // Pinned tools are registered too: the model should be able to see that
+    // they exist and read their schema, they simply also stay loaded.
+    if (liveMcpEntries.length > 0) catalog.registerSource("mcp", liveMcpEntries);
+    if (builtinEntries.length > 0) catalog.registerSource("builtin", builtinEntries);
+
+    const builtinToolsByName = new Map<string, any>(
+      (pluginTools || []).map((tool) => [tool?.name, tool] as [string, any]),
+    );
+    const bridgeTools = createBridgeTools({
+      catalog,
+      mcpCall: (serverId, toolName, args, ctx) => this._mcp.callTool(serverId, toolName, args, ctx),
+      resolveMcpPermission: (serverId, toolName) =>
+        this._mcp?.resolveToolPermissionKind?.(serverId, toolName) ?? "review",
+      // A deferred builtin keeps its own permission voice rather than being
+      // flattened into the MCP policy model.
+      resolveBuiltinInvocation: (name, params) => {
+        const target = builtinToolsByName.get(name);
+        const resolver = target?.sessionPermission?.resolveInvocation;
+        return typeof resolver === "function" ? resolver(params) : null;
+      },
+      builtinCall: (name, args, ctx) => {
+        const target = builtinToolsByName.get(name);
+        if (typeof target?.execute !== "function") {
+          throw new Error(`Deferred tool ${name} is no longer available`);
+        }
+        return target.execute(`bridge_${name}`, args, ctx, undefined, ctx);
+      },
+      log: toolAvailabilityLog,
+    });
+
+    const deferredToolNames = new Set(deferrable.map((entry) => (
+      entry.origin === "builtin" ? entry.name : `mcp_${entry.name}`
+    )));
+    return { catalog, bridgeTools, deferredToolNames };
+  }
+
+  /**
+   * Catalog rows for the MCP tools currently published. Only tools that are
+   * actually published can be deferred, so a row in config that never made it
+   * to a live listing is not a catalog entry.
+   */
+  _liveMcpCatalogEntries(mcpTools = null) {
+    const entries = typeof this._mcp?.getCatalogEntries === "function"
+      ? (this._mcp.getCatalogEntries() || [])
+      : [];
+    const published = new Set(
+      (Array.isArray(mcpTools) ? mcpTools : (this._mcp?.getAllTools?.() || []))
+        .map((tool) => tool?.name),
+    );
+    return entries.filter((entry) => published.has(`mcp_${entry.name}`));
+  }
+
+  /**
+   * The catalog's tool names as they stand right now, for a session to compare
+   * against the listing it was given. Returns null when there is no MCP manager
+   * to ask, which reads as "no basis to claim anything changed".
+   */
+  getLiveToolCatalogNames() {
+    if (!this._mcp) return null;
+    return this._liveMcpCatalogEntries()
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right));
+  }
 
   buildTools(cwd, customTools, opts: any = {}) {
     // Executable background runtimes bind one persisted identity snapshot at assembly time.
@@ -2863,86 +3540,13 @@ export class HanaEngine {
 
     // Append plugin tools
     const pluginTools = this._pluginManager?.getAllTools() || [];
+    const mcpTools = this._mcp?.getAllTools() || [];
     const executionBoundary = this._runtimeContext
       ? this.createExecutionBoundary({ workbenchRoot: cwd })
       : null;
     const executionScope = executionBoundary
       ? { serverNodeId: executionBoundary.serverNodeId, executionBoundary }
       : {};
-    const withRuntimeContext = (tool) => {
-      if (!tool?.execute) return tool;
-      return {
-        ...tool,
-        execute: (toolCallId, params, signalOrRuntimeCtx, onUpdate, piCtx) => {
-          const { ctx: runtimeCtx } = normalizeToolRuntimeContext(signalOrRuntimeCtx, piCtx);
-          const runtimeSessionPath = runtimeCtx?.sessionPath
-            || getToolSessionPath(runtimeCtx)
-            || getSessionPath()
-            || null;
-          const sessionRef = resolveRuntimeSessionRef(runtimeCtx);
-          const sessionPath = runtimeSessionPath || sessionRef?.sessionPath || null;
-          const mergedCtx = {
-            ...runtimeCtx,
-            ...(sessionRef ? { sessionId: sessionRef.sessionId, sessionRef } : {}),
-            ...(sessionPath ? { sessionPath } : {}),
-            ...(opts.bridgeContext ? { bridgeContext: opts.bridgeContext } : {}),
-            ...(opts.notificationContext ? { notificationContext: opts.notificationContext } : {}),
-            allowHumanApproval,
-            approvalPolicy,
-            agentId,
-            ...executionScope,
-          };
-          return tool.execute(toolCallId, params, signalOrRuntimeCtx, onUpdate, mergedCtx);
-        },
-      };
-    };
-    const runtimeCustomTools = ct.map(withRuntimeContext);
-    const wrappedPluginTools = pluginTools.map(t => ({
-      ...t,
-      execute: (toolCallId, params, signalOrRuntimeCtx, onUpdate, piCtx) => {
-        const { ctx: runtimeCtx } = normalizeToolRuntimeContext(signalOrRuntimeCtx, piCtx);
-        const runtimeSessionPath = runtimeCtx?.sessionPath
-          || getToolSessionPath(runtimeCtx)
-          || getSessionPath()
-          || null;
-        const sessionRef = resolveRuntimeSessionRef(runtimeCtx);
-        const sessionPath = runtimeSessionPath || sessionRef?.sessionPath || null;
-        const mergedCtx = {
-          ...runtimeCtx,
-          ...(sessionRef ? { sessionId: sessionRef.sessionId, sessionRef } : {}),
-          ...(sessionPath ? { sessionPath } : {}),
-          ...(opts.bridgeContext ? { bridgeContext: opts.bridgeContext } : {}),
-          ...(opts.notificationContext ? { notificationContext: opts.notificationContext } : {}),
-          allowHumanApproval,
-          approvalPolicy,
-          agentId,
-          ...executionScope,
-        };
-        return t.execute(toolCallId, params, signalOrRuntimeCtx, onUpdate, mergedCtx);
-      },
-    }));
-    const pluginDevTools = this._pluginDevService && this._prefs.getPluginDevToolsEnabled?.() === true
-      ? createPluginDevTools({
-          pluginDevService: this._pluginDevService,
-          getAgentId: () => agentId,
-        })
-      : [];
-    assertUniqueBuiltToolNames([
-      { source: "custom tools", tools: baseCustomTools },
-      { source: "extra custom tools", tools: extraCustomTools },
-      { source: "plugin tools", tools: pluginTools },
-      { source: "plugin development tools", tools: pluginDevTools },
-    ]);
-    const allTools = filterToolObjectsByAvailability(
-      [...runtimeCustomTools, ...wrappedPluginTools, ...pluginDevTools],
-      toolAgent?.config || {},
-      {
-        agentId,
-        channelsEnabled: resolveChannelsEnabledForToolAvailability(this),
-      },
-      { warn: (msg) => toolAvailabilityLog.warn(msg) },
-    );
-
     const effectiveAgentDir = opts.agentDir || this.agent.agentDir;
     const effectiveWorkspace = opts.workspace !== undefined ? opts.workspace : this.homeCwd;
     const workspaceFolders = opts.workspaceFolders || [];
@@ -3000,7 +3604,6 @@ export class HanaEngine {
         hanakoHome: this.hanakoHome,
       });
     };
-
     const resourceIO = createSandboxResourceIO({
       cwd,
       agentDir: effectiveAgentDir,
@@ -3018,6 +3621,88 @@ export class HanaEngine {
       resourceService: this._resources || null,
       studioId: this._runtimeContext?.studioId || null,
     });
+    const withRuntimeContext = (tool, contextResourceIO = null) => {
+      if (!tool?.execute) return tool;
+      return {
+        ...tool,
+        execute: (toolCallId, params, signalOrRuntimeCtx, onUpdate, piCtx) => {
+          const { ctx: runtimeCtx } = normalizeToolRuntimeContext(signalOrRuntimeCtx, piCtx);
+          const runtimeSessionPath = runtimeCtx?.sessionPath
+            || getToolSessionPath(runtimeCtx)
+            || getSessionPath()
+            || null;
+          const sessionRef = resolveRuntimeSessionRef(runtimeCtx);
+          const sessionPath = runtimeSessionPath || sessionRef?.sessionPath || null;
+          const mergedCtx = {
+            ...runtimeCtx,
+            ...(sessionRef ? { sessionId: sessionRef.sessionId, sessionRef } : {}),
+            ...(sessionPath ? { sessionPath } : {}),
+            ...(opts.bridgeContext ? { bridgeContext: opts.bridgeContext } : {}),
+            ...(opts.notificationContext ? { notificationContext: opts.notificationContext } : {}),
+            allowHumanApproval,
+            approvalPolicy,
+            agentId,
+            ...executionScope,
+            ...(contextResourceIO ? { resourceIO: contextResourceIO } : {}),
+          };
+          return tool.execute(toolCallId, params, signalOrRuntimeCtx, onUpdate, mergedCtx);
+        },
+      };
+    };
+    // Deferred assembly is decided once, here, and never revisited for the life
+    // of this tool set. The session's cacheable prefix is the tool schemas plus
+    // the system prompt, and a running session asserts that prefix on every
+    // request, so a tool set that changed shape mid-session would break the
+    // cache and fail the contract. Everything dynamic goes through the
+    // conversation stream instead.
+    const deferPlan = this._planDeferredToolAssembly(mcpTools, pluginTools);
+    const directMcpTools = deferPlan
+      ? mcpTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
+      : mcpTools;
+    const directPluginTools = deferPlan
+      ? pluginTools.filter((tool) => !deferPlan.deferredToolNames.has(tool?.name))
+      : pluginTools;
+    const bridgeTools = deferPlan ? deferPlan.bridgeTools : [];
+
+    const runtimeCustomTools = ct.map((tool) => withRuntimeContext(
+      tool,
+      tool === toolAgent?._fileTool ? resourceIO : null,
+    ));
+    // Plugin tools and MCP tools both need the same session context injection;
+    // withRuntimeContext is that wrapper, so neither gets its own copy of it.
+    const wrappedPluginTools = directPluginTools.map(withRuntimeContext);
+    const wrappedMcpTools = directMcpTools.map(withRuntimeContext);
+    const wrappedBridgeTools = bridgeTools.map(withRuntimeContext);
+    if (deferPlan) {
+      // withRuntimeContext returns copies, and the permission layer keys its
+      // delegation registry on object identity, so the objects that actually
+      // reach that layer are the ones that must be registered.
+      registerBridgeCapabilityDelegates(wrappedBridgeTools, { catalog: deferPlan.catalog });
+    }
+    const pluginDevTools = this._pluginDevService && this._prefs.getPluginDevToolsEnabled?.() === true
+      ? createPluginDevTools({
+          pluginDevService: this._pluginDevService,
+          getAgentId: () => agentId,
+        })
+      : [];
+    assertUniqueBuiltToolNames([
+      { source: "custom tools", tools: baseCustomTools },
+      { source: "extra custom tools", tools: extraCustomTools },
+      { source: "plugin tools", tools: directPluginTools },
+      { source: "mcp tools", tools: directMcpTools },
+      { source: "mcp bridge tools", tools: bridgeTools },
+      { source: "plugin development tools", tools: pluginDevTools },
+    ]);
+    const allTools = filterToolObjectsByAvailability(
+      [...runtimeCustomTools, ...wrappedPluginTools, ...wrappedMcpTools, ...wrappedBridgeTools, ...pluginDevTools],
+      toolAgent?.config || {},
+      {
+        agentId,
+        channelsEnabled: resolveChannelsEnabledForToolAvailability(this),
+      },
+      { warn: (msg) => toolAvailabilityLog.warn(msg) },
+    );
+
     let result = createSandboxedTools(cwd, allTools, {
       agentDir: effectiveAgentDir,
       workspace: effectiveWorkspace,
@@ -3035,13 +3720,13 @@ export class HanaEngine {
       getSessionIdForPath: (sessionPath) => this.getSessionIdForPath(sessionPath),
       resolveSessionFile: resolveRuntimeSessionFile,
       recordFileOperation: (entry) => this.recordSessionFileOperation(entry),
+      recordAgentFileChange: (entry) => this.recordAgentFileChange(entry),
       getVisionBridge: () => this.getVisionBridge(),
       isVisionAuxiliaryEnabled: () => this.isVisionAuxiliaryEnabled(),
       getTerminalSessionManager: () => this._terminalSessions,
       getAgentId: () => agentId,
       resourceIO,
       emitEvent: (event, sessionPath) => this._emitEvent(event, sessionPath),
-      legacyCleanupQueue: this._win32LegacySandboxCleanupQueue,
     } as any);
     assertUniqueBuiltToolNames([
       { source: "Pi built-in tools", tools: result.tools },
@@ -3066,7 +3751,19 @@ export class HanaEngine {
       ? opts.getPermissionMode
       : (sessionPath) => this.getSessionPermissionMode(sessionPath);
     // 拦截上下文（如 { isSubagent }）：classify 据此做与 mode 无关的固定边界（防自递归等）。
-    const permissionContext = opts.permissionContext || null;
+    //
+    // The session's capability grants are exposed as a getter rather than a
+    // snapshot: the permission wrapper spreads this object on every tool call,
+    // so a grant issued mid-session applies to the very next call without
+    // rebuilding the tool set. getSessionPath() resolves the session this tool
+    // set was built for, so a grant can never leak into another session.
+    const readSessionGrants = (sessionPath) => this.getSessionAllowedInvocationCapabilities(sessionPath);
+    const permissionContext = {
+      ...(opts.permissionContext || {}),
+      get preAuthorizedInvocationCapabilities() {
+        return readSessionGrants(getSessionPath());
+      },
+    };
     result = {
       ...result,
       tools: wrapWithSessionPermission(result.tools, {
@@ -3128,7 +3825,7 @@ export class HanaEngine {
     }
 
     // Startup assertion: every built-in tool must be categorized in
-    // shared/tool-categories.js. All session-creation paths route through
+    // shared/tool-categories.ts. All session-creation paths route through
     // this function, so a single check here catches the whole surface.
     assertAllBuiltInToolsPermissionCovered([
       ...result.tools,
@@ -3142,7 +3839,15 @@ export class HanaEngine {
         .filter(Boolean),
     ]);
 
-    return result;
+    // The manifest travels in the build result rather than being stashed here.
+    // The session that owns this tool set is the only thing that should hold it,
+    // and the engine has no business keeping a map from sessions to catalogs.
+    return {
+      ...result,
+      toolCatalogManifest: deferPlan
+        ? buildToolCatalogManifestSnapshot(deferPlan.catalog, opts.modelContextWindowTokens)
+        : null,
+    };
   }
 
   // ════════════════════════════

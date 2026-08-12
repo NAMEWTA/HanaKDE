@@ -8,7 +8,7 @@
 import fs from "fs";
 import { getPiModel } from "../lib/pi-sdk/index.ts";
 import { lookupKnown, lookupKnownProvider } from "../shared/known-models.ts";
-import { atomicWriteSync } from "../shared/safe-fs.ts";
+import { writeSecretFileSync } from "../shared/secret-fs.ts";
 import {
   getEndpointDefaultReasoningCapability,
   normalizeModelProtocolCompat,
@@ -332,7 +332,7 @@ function buildModelEntry(
 
   // Pi SDK compat 覆盖：
   // 1. 非 OpenAI provider 不发 developer role（dashscope 等不支持）— 与 reasoning 无关
-  // 2. thinkingFormat 由 shared/model-capabilities.js 统一派生，避免请求层按 provider 猜
+  // 2. thinkingFormat 由 shared/model-capabilities.ts 统一派生，避免请求层按 provider 猜
   // 3. Gemini OpenAI 兼容层（/v1beta/openai）严格校验，不识别 store 字段会 400。
   //    Native google-generative-ai 不走 Chat Completions，不需要这组 OpenAI 字段兼容。
   if (provider !== "openai") {
@@ -490,7 +490,7 @@ export function syncModels(providers, opts: Record<string, any> = {}) {
   if (oldStr === newStr) return false;
 
   // 原子写入：先写 tmp 文件，再 rename
-  atomicWriteSync(modelsJsonPath, newStr);
+  writeSecretFileSync(modelsJsonPath, newStr);
 
   return true;
 }

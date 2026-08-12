@@ -4,6 +4,8 @@
 import { useSettingsStore } from './store';
 import { hanaFetch, hanaUrl } from './api';
 import { t } from './helpers';
+import { errorWithCode, localizedReasonOrRaw } from '../errors/error-presenter';
+import { normalizeSessionRouteError } from '../../../../shared/error-user-messages.ts';
 import {
   createRemoteResource,
   failRemoteLoad,
@@ -46,6 +48,11 @@ export async function loadAgents() {
   }
 }
 
+/**
+ * 设置页的头像。user 头像与 agent 无关，直接取 health 的可用性标记；
+ * agent 头像属于设置页当前选中的那个 agent —— 它未必是服务端正在聚焦的
+ * agent，所以可用性从 agents 列表里那一条读，URL 也显式带上 agentId。
+ */
 export async function loadAvatars() {
   const ts = Date.now();
   const store = useSettingsStore.getState();
@@ -53,16 +60,15 @@ export async function loadAvatars() {
     const res = await hanaFetch('/api/health');
     const data = await res.json();
     const avatars = data.avatars || {};
-    for (const role of ['agent', 'user']) {
-      if (avatars[role]) {
-        const url = hanaUrl(`/api/avatar/${role}?t=${ts}`);
-        if (role === 'agent') store.set({ agentAvatarUrl: url });
-        else store.set({ userAvatarUrl: url });
-      } else {
-        if (role === 'agent') store.set({ agentAvatarUrl: null });
-        else store.set({ userAvatarUrl: null });
-      }
-    }
+    const agentId = store.getSettingsAgentId();
+    const agent = agentId ? (store.agents || []).find((a: any) => a.id === agentId) : null;
+
+    store.set({
+      userAvatarUrl: avatars.user ? hanaUrl(`/api/avatar/user?t=${ts}`) : null,
+      agentAvatarUrl: agentId && agent?.hasAvatar
+        ? hanaUrl(`/api/avatar/agent?agentId=${encodeURIComponent(agentId)}&t=${ts}`)
+        : null,
+    });
   } catch {}
 }
 
@@ -190,7 +196,6 @@ function applySettingsSnapshot(snapshot: SettingsSnapshot, resourceKey: string, 
     pluginAllowFullAccess: snapshot.plugins?.allowFullAccess === true,
     pluginDevToolsEnabled: snapshot.plugins?.devToolsEnabled === true,
     pluginUserDir: snapshot.plugins?.userDir || '',
-    pluginSettingsTabs: Array.isArray(snapshot.plugins?.settingsTabs) ? snapshot.plugins.settingsTabs : [],
   });
 }
 
@@ -239,7 +244,6 @@ export async function loadSettingsSnapshot(options: { retainSameKeyData?: boolea
       pluginAllowFullAccess: undefined,
       pluginDevToolsEnabled: undefined,
       pluginUserDir: '',
-      pluginSettingsTabs: [],
     }),
   });
 
@@ -297,12 +301,8 @@ export async function loadPluginSettings() {
     pluginDevToolsEnabled: store.pluginSettingsStatus === 'idle' ? undefined : store.pluginDevToolsEnabled,
   });
   try {
-    const [settingsRes, tabsRes] = await Promise.all([
-      hanaFetch('/api/plugins/settings'),
-      hanaFetch('/api/plugins/settings-tabs'),
-    ]);
+    const settingsRes = await hanaFetch('/api/plugins/settings');
     const data = await settingsRes.json();
-    const tabs = await tabsRes.json();
     if (data.error) throw new Error(data.error);
     store.set({
       pluginSettingsStatus: 'ready',
@@ -310,7 +310,6 @@ export async function loadPluginSettings() {
       pluginAllowFullAccess: data.allow_full_access === true,
       pluginDevToolsEnabled: data.plugin_dev_tools_enabled === true,
       pluginUserDir: data.plugins_dir || '',
-      pluginSettingsTabs: Array.isArray(tabs) ? tabs : [],
     });
   } catch (err) {
     console.error('[plugins] load settings failed:', err);
@@ -336,7 +335,12 @@ export async function switchToAgent(agentId: string) {
       body: JSON.stringify({ id: agentId }),
     });
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    // 走到这里响应一定是 2xx：非 2xx 已经在 hanaFetch 边界抛成带码的异常了。
+    // 剩下要防的是 2xx 里仍带 error 字段的老写法，它同样要把码带过 throw。
+    if (data.error) {
+      const routeError = normalizeSessionRouteError(data);
+      throw errorWithCode(routeError.message, routeError.code);
+    }
 
     store.set({
       settingsAgentId: null,
@@ -347,7 +351,8 @@ export async function switchToAgent(agentId: string) {
     await loadAgents();
     store.showToast(t('settings.agent.switched', { name: data.agent.name }), 'success');
   } catch (err: any) {
-    store.showToast(t('settings.agent.switchFailed') + ': ' + err.message, 'error');
+    console.error('[agents] switch failed:', err);
+    store.showToast(t('settings.agent.switchFailed') + ': ' + localizedReasonOrRaw(err, t), 'error');
   }
 }
 
@@ -360,11 +365,17 @@ export async function setPrimaryAgent(agentId: string) {
       body: JSON.stringify({ id: agentId }),
     });
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    // 同 switchToAgent：非 2xx 已在 hanaFetch 边界抛成带码的异常，这里只补 2xx 带
+    // error 字段的老写法，同样要把码带过 throw，catch 才有得翻。
+    if (data.error) {
+      const routeError = normalizeSessionRouteError(data);
+      throw errorWithCode(routeError.message, routeError.code);
+    }
 
     await loadAgents();
     store.showToast(t('settings.agent.setPrimary'), 'success');
   } catch (err: any) {
-    store.showToast(t('settings.agent.setPrimaryFailed') + ': ' + err.message, 'error');
+    console.error('[agents] set primary failed:', err);
+    store.showToast(t('settings.agent.setPrimaryFailed') + ': ' + localizedReasonOrRaw(err, t), 'error');
   }
 }

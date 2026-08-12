@@ -93,6 +93,28 @@ describe("ActivityHub", () => {
     expect(hub.get("workflow-1").kind).toBe("workflow");
   });
 
+  it("keeps an in-memory agent tool operation correlation", () => {
+    const operationId = "4f53a0f2-9b10-4f93-8f7b-9c8f73de6182";
+    const hub = new ActivityHub();
+
+    hub.upsert({
+      id: `agent-tool:${operationId}`,
+      kind: "agent_tool",
+      status: "done",
+      sessionId: "sess_main",
+      sessionPath: "/s/a.jsonl",
+      operationId,
+      startedAt: 1000,
+      finishedAt: 1001,
+    });
+
+    expect(hub.get(`agent-tool:${operationId}`)).toMatchObject({
+      kind: "agent_tool",
+      sessionId: "sess_main",
+      operationId,
+    });
+  });
+
   it("非法 kind/status 兜底（新建默认 subagent/running）", () => {
     const hub = new ActivityHub();
     hub.upsert({ id: "x", kind: "bogus", status: "weird", sessionPath: "/s/a.jsonl" });
@@ -208,7 +230,7 @@ function makeFakeStore(initial = []) {
 }
 
 describe("ActivityHub 持久化背书", () => {
-  it("workflow / workflow_agent / subagent 写穿 store；heartbeat / cron 不写（瞬时）", () => {
+  it("workflow / workflow_agent / subagent 写穿 store；heartbeat / cron / agent_tool 不写（瞬时）", () => {
     const store = makeFakeStore();
     const hub = new ActivityHub(null, store);
     hub.upsert({ id: "wf-1", kind: "workflow", status: "running", sessionPath: "/s/a.jsonl" });
@@ -217,6 +239,13 @@ describe("ActivityHub 持久化背书", () => {
     hub.upsert({ id: "step-1", kind: "workflow_step", status: "done", sessionPath: "/s/a.jsonl", parentTaskId: "wf-1", stepKind: "pipeline" });
     hub.upsert({ id: "hb-1", kind: "heartbeat", status: "running", sessionPath: "/s/a.jsonl" });
     hub.upsert({ id: "cron-1", kind: "cron", status: "running", sessionPath: "/s/a.jsonl" });
+    hub.upsert({
+      id: "agent-tool:4f53a0f2-9b10-4f93-8f7b-9c8f73de6182",
+      kind: "agent_tool",
+      status: "done",
+      sessionPath: "/s/a.jsonl",
+      operationId: "4f53a0f2-9b10-4f93-8f7b-9c8f73de6182",
+    });
 
     const persistedIds = store.upsert.mock.calls.map((c) => c[0].id);
     expect(persistedIds).toContain("wf-1");
@@ -225,6 +254,7 @@ describe("ActivityHub 持久化背书", () => {
     expect(persistedIds).toContain("step-1");
     expect(persistedIds).not.toContain("hb-1");
     expect(persistedIds).not.toContain("cron-1");
+    expect(persistedIds).not.toContain("agent-tool:4f53a0f2-9b10-4f93-8f7b-9c8f73de6182");
   });
 
   it("subagent 写穿 + 回灌保留 label / access / childSessionPath（重启右侧子助手卡完整复原）", () => {

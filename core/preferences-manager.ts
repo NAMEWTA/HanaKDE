@@ -95,7 +95,6 @@ export class PreferencesManager {
       log.warn(`automatic preference maintenance skipped because the source is unreadable: ${this._path}`);
     } else {
       this._runConstructorMaintenance("retired experiments", () => this._migrateRetiredExperiments());
-      this._runConstructorMaintenance("legacy defaults", () => this._migrateLegacyDefaults());
       this._runConstructorMaintenance("workspace state gc", () => this.gcWorkspaceUiState());
     }
   }
@@ -111,25 +110,6 @@ export class PreferencesManager {
   _migrateRetiredExperiments() {
     const next = stripRetiredExperimentValues(this._cache);
     if (next === this._cache) return;
-    this.savePreferences(next);
-  }
-
-  /**
-   * 一次性迁移：把历史版本"无脑写入"的旧默认值回退到"未表达偏好"。
-   *
-   * 51ecc435 把 sandbox_network 的 default 从关改成开（!== false），
-   * 但老用户 preferences.json 里仍有 `sandbox_network: false` —— 这是早期
-   * 默认时无脑写入的，不是用户的显式选择。本 migration 把它清掉一次，
-   * 让 getter 走新默认（开）。带 marker 防止重跑：用户之后显式关掉时
-   * 不会再被覆盖。
-   *
-   * @private
-   */
-  _migrateLegacyDefaults() {
-    if (this._cache._defaultsRelaxedMigrated) return;
-    const next = { ...this._cache };
-    if (next.sandbox_network === false) delete next.sandbox_network;
-    next._defaultsRelaxedMigrated = true;
     this.savePreferences(next);
   }
 
@@ -257,26 +237,6 @@ export class PreferencesManager {
       prefs.hardware_acceleration = !!enabled;
     }
     this.savePreferences(prefs);
-  }
-
-  /**
-   * 只消费旧版 GPU 自动安全模式写下的 `false`。
-   *
-   * 该操作由 server 在数据版本闸门通过后调用。比较当前缓存值再删除，
-   * 避免桌面启动阶段持有的旧快照覆盖用户随后作出的新选择。
-   */
-  compareAndDeleteLegacyHardwareAccelerationPreference() {
-    if (!Object.prototype.hasOwnProperty.call(this._cache, "hardware_acceleration")) {
-      return { status: "already-absent" };
-    }
-    if (this._cache.hardware_acceleration !== false) {
-      return { status: "value-changed" };
-    }
-
-    const prefs = this._mutableCopy();
-    delete prefs.hardware_acceleration;
-    this.savePreferences(prefs);
-    return { status: "deleted" };
   }
 
   /** 读取新会话默认权限模式。首次安装没有该字段时默认 auto。 */
@@ -516,6 +476,21 @@ export class PreferencesManager {
     this.savePreferences(prefs);
   }
 
+  /**
+   * 读取用户名（全局）。名字描述的是使用者本人，不属于任何一个 agent，
+   * 所以正源在这里，而不是各 agent 的 config.yaml。
+   */
+  getUserName() {
+    return this._cache.userName || "";
+  }
+
+  /** 保存用户名（全局） */
+  setUserName(name) {
+    const prefs = this._mutableCopy();
+    prefs.userName = typeof name === "string" ? name.trim() : "";
+    this.savePreferences(prefs);
+  }
+
   /** 读取编辑器排版偏好 */
   getEditor() {
     return normalizeEditorTypography(this._cache.editor);
@@ -718,6 +693,27 @@ export class PreferencesManager {
     };
     this.savePreferences(prefs);
     return prefs.plugin_dev_tools.enabled;
+  }
+
+  /**
+   * 读取内置/插件工具的延迟加载开关（全局，默认关闭）。
+   *
+   * 默认关闭是刻意的：内置工具是 Agent 的基本能力，把它们移出前缀会改变
+   * 每个 session 的既有行为。外部 MCP 工具默认延迟，内置工具需要显式 opt-in。
+   */
+  getBuiltinToolDeferEnabled() {
+    return this._cache.builtin_tool_defer?.enabled === true;
+  }
+
+  /** 保存内置/插件工具的延迟加载开关 */
+  setBuiltinToolDeferEnabled(value) {
+    const prefs = this._mutableCopy();
+    prefs.builtin_tool_defer = {
+      ...(prefs.builtin_tool_defer || {}),
+      enabled: value === true,
+    };
+    this.savePreferences(prefs);
+    return prefs.builtin_tool_defer.enabled;
   }
 
   /** 读取用户手动禁用的插件 ID 列表 */

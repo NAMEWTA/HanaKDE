@@ -499,6 +499,58 @@ describe('buildItemsFromHistory user image restoration', () => {
     });
   });
 
+  it('只保留经过校验的 Agent 文件变化关联，拒绝原始路径或 Agent id 旁路字段', () => {
+    const items = buildItemsFromHistory({
+      messages: [{
+        id: 'a-agent-file-change',
+        role: 'assistant',
+        content: '已更新文件',
+      }],
+      blocks: [
+        {
+          type: 'file',
+          afterIndex: 0,
+          filePath: '/tmp/visible-plan.md',
+          label: 'visible-plan.md',
+          ext: 'md',
+          agentFileChange: {
+            sessionId: 'sess_current',
+            operationId: 'f5bb9a31-3dc0-4d85-b0c7-e7bdf65ee2f8',
+            resource: { sourceKey: 'main', relativePath: 'notes/plan.md' },
+          },
+        },
+        {
+          type: 'file',
+          afterIndex: 0,
+          filePath: '/tmp/unlinked-plan.md',
+          label: 'unlinked-plan.md',
+          ext: 'md',
+          agentFileChange: {
+            sessionId: 'sess_current',
+            operationId: 'f5bb9a31-3dc0-4d85-b0c7-e7bdf65ee2f8',
+            resource: { sourceKey: 'main', relativePath: 'notes/plan.md' },
+            filePath: '/private/workspace/notes/plan.md',
+            agentId: 'agent-private',
+          },
+        },
+      ],
+    });
+
+    const first = items[0];
+    expect(first.type).toBe('message');
+    if (first.type !== 'message') throw new Error('expected message');
+    const fileBlocks = first.data.blocks?.filter((block) => block.type === 'file') || [];
+    expect(fileBlocks).toHaveLength(2);
+    expect(fileBlocks[0]).toMatchObject({
+      agentFileChange: {
+        sessionId: 'sess_current',
+        operationId: 'f5bb9a31-3dc0-4d85-b0c7-e7bdf65ee2f8',
+        resource: { sourceKey: 'main', relativePath: 'notes/plan.md' },
+      },
+    });
+    expect(fileBlocks[1]).not.toHaveProperty('agentFileChange');
+  });
+
   it('保留不依赖 iframe route 的 chat.surface 插件卡片', () => {
     const items = buildItemsFromHistory({
       messages: [{

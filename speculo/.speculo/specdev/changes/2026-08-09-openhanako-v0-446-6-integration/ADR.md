@@ -200,3 +200,21 @@ HanaKDE 当前尚未发布，本次上游整合被明确定位为颠覆性基线
 
 ### Consequences
 原计划 DoD 中“旧 HanaKDE profile 可迁移”和“migration 可回滚”删除。Spec、Ticket 与测试不得重新引入相关路径；若未来发布后需要 schema 升级，必须基于当时真实发布数据另建 change。
+
+## ADR-012: 安全条件写入是 ResourceIO 的系统本体 primitive
+
+**Status:** accepted
+**Source:** D-T15-03 / Root Lead decision
+**Supersedes:** Node-only local-provider proof attempt in D-T15-02
+
+### Context
+AC-016 要求 stale version、root replacement、scope escape 与 symlink/junction TOCTOU 都在 disk write 前 fail closed。Node v22 缺少可在 macOS 和 Windows 上使用的 dirfd-relative traversal；重复 pathname proof 或 `O_NOFOLLOW` 只能保护 final path 的一部分，无法把 root、ancestor、target identity 和 write effect 原子绑定。
+
+### Decision
+将 secure conditional write 作为 ResourceIO 内部系统 primitive，而非 File History/route/plugin 特性。一个 bounded framed native helper 由 `lib/resource-io/native-secure-write.ts` 调用：macOS 以 directory handle + `openat` no-follow traversal，Windows 以 handle-first `CreateFileW`、reparse inspection、final-path/file-id proof。只在 verified target handle 上检查 expected version、truncate 和 write；任何 helper 缺失、unsupported platform、frame/proof failure 均 fail closed。上层继续只调用 `ResourceIO.writeExpectedVersion`；proof 不序列化、不进入 route/UI/日志。
+
+### Trade-off
+引入跨平台 native implementation、dev build 和后续 package closure，换取一个深层 module：调用者无需理解 dirfd、reparse、file ID 或 handle lifetime，所有本地 conditional writes 在同一 seam 获得相同安全性质。拒绝 Node fallback 和 restore-special helper，以避免双 mutation authority 或伪安全降级。
+
+### Consequences
+T-15 建立 helper 的 source、internal runner、local provider integration 与 isolated fixtures；T-21 只在后续将已验证 helper 纳入 production artifact/package/CI closure，T-22/T-23 给出真实 Windows/macOS Evidence。任何新 ResourceIO public method、route parameter、raw root/native identity disclosure，或无法用 C++ handle primitives证明的后端，必须重新走 deviation control。

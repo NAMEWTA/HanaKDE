@@ -4,16 +4,16 @@ artifact: ticket
 change: 2026-08-09-openhanako-v0-446-6-integration
 id: T-18
 title: 融合 @ 搜索交互生命周期
-status: ready
+status: done
 planning_depth: standard
 planning_depth_reason: "跨 input menu、query provider 与 renderer state 的多文件 UI 切片，但不改变共享持久化、安全 authority 或数据 schema。"
 ready: true
 risk: medium
 blocked_by: [T-09]
 contract_ids: [AC-024]
-owner: unassigned
-expected_changes: ["<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>"]
-writable_paths: ["<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>", "<Path>desktop/src/react/__tests__/utils/file-mention-items.test.ts</Path>", "<Path>desktop/src/react/__tests__/utils/mention-items.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/at-search-lifecycle.spec.ts</Path>"]
+owner: Worker-T-18 / Lead
+expected_changes: ["<Path>desktop/src/react/components/InputArea.tsx</Path>", "<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/stores/desk-actions.ts</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/desk-actions.test.ts</Path>"]
+writable_paths: ["<Path>desktop/src/react/components/InputArea.tsx</Path>", "<Path>desktop/src/react/components/input/**</Path>", "<Path>desktop/src/react/stores/desk-actions.ts</Path>", "<Path>desktop/src/react/utils/file-mention-items.ts</Path>", "<Path>desktop/src/react/utils/mention-items.ts</Path>", "<Path>desktop/src/react/__tests__/components/FileMentionMenu.test.tsx</Path>", "<Path>desktop/src/react/__tests__/components/InputArea.file-mention.test.tsx</Path>", "<Path>desktop/src/react/__tests__/stores/desk-actions.test.ts</Path>", "<Path>desktop/src/react/__tests__/utils/file-mention-items.test.ts</Path>", "<Path>desktop/src/react/__tests__/utils/mention-items.test.ts</Path>", "<Path>tests/knowledge-workspace-e2e/specs/at-search-lifecycle.spec.ts</Path>"]
 read_only_paths: ["<Path>lib/search/**</Path>", "<Path>lib/knowledge-workspace/**</Path>", "<Path>desktop/src/react/components/knowledge-workspace/**</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -82,6 +82,8 @@ shared_path_owners: []
 ## 7. 路径访问契约
 
 - **预计修改点：** input components、mention utilities 与定向 tests。
+- **D-T18-02：** Lead 批准将 `<Path>desktop/src/react/components/InputArea.tsx</Path>` 作为 host lifecycle 的精确可写入口；该路径是本 Ticket 已锁定的 InputArea 接缝，不扩展到 `components/**`。
+- **D-T18-03：** Lead 审计确认 lifecycle 已创建 `AbortSignal`，但 Desk adapter 没有接收或传递它，导致 close/unmount 只能阻止 stale UI write，不能实体取消 HTTP。仅授权 `<Path>desktop/src/react/stores/desk-actions.ts</Path>` 与 `<Path>desktop/src/react/__tests__/stores/desk-actions.test.ts</Path>` 增加 optional signal 透传；route、provider、backend、ResourceRef 和其他 Desk action 均保持不变。
 - **可写范围：** 仅 frontmatter `writable_paths`；Search/Knowledge backend 只读。
 - **只读上下文：** search providers、Knowledge query 和 Resource contracts。
 - **共享路径：** 无；与 Workspace/Extraction Tickets 可并行。
@@ -107,8 +109,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-024`：`@` query/loading/cancel/stale response 修复在 HanaKDE providers 上成立。
-- [ ] keyboard、ARIA、localization、theme 与窄布局回归通过。
-- [ ] 不引入 Search backend 或 Resource truth duplication。
-- [ ] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-18.md</Path>`。
-- [ ] 修改范围未超出 `writable_paths`。
+- [x] `AC-024`：`@` query/loading/cancel/stale response 修复在 HanaKDE providers 上成立。
+- [x] keyboard、ARIA、localization、theme 与窄布局回归通过。
+- [x] 不引入 Search backend 或 Resource truth duplication。
+- [x] 验证记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-18.md</Path>`。
+- [x] 修改范围未超出 `writable_paths`。
