@@ -1,0 +1,15 @@
+{
+  "schema_version": 3,
+  "artifact": "change-status",
+  "change": "2026-08-13-hanakde-engineering-cognitive-mentor",
+  "change_status": "active",
+  "current_work": "specdev/engineering-cognitive-mentor",
+  "created_at": "2026-08-13T00:00:00+08:00",
+  "updated_at": "2026-08-13T00:00:00+08:00",
+  "completed_at": null,
+  "archived": false,
+  "archive_path": null,
+  "blockers": [],
+  "deviations": [],
+  "worktrees": []
+}
