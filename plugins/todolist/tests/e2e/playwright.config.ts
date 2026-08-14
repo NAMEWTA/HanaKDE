@@ -1,24 +1,23 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig } from "@playwright/test";
+
+const pageUrl = process.env.HANA_TODO_E2E_URL;
+if (!pageUrl) {
+  throw new Error("HANA_TODO_E2E_URL must point to the real loaded todolist Page; fake servers are intentionally unsupported.");
+}
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "*.spec.ts",
-  workers: 1,
+  timeout: 45_000,
+  expect: { timeout: 10_000 },
   fullyParallel: false,
-  retries: 0,
-  timeout: 30_000,
-  outputDir: "plugins/todolist/tests/e2e/test-results",
-  reporter: [["line"], ["json", { outputFile: "plugins/todolist/tests/e2e/test-results/report.json" }]],
+  workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:41739",
+    baseURL: pageUrl,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    ...devices["Desktop Chrome"],
   },
-  webServer: {
-    command: "node --experimental-strip-types server.ts",
-    url: "http://127.0.0.1:41739/health",
-    reuseExistingServer: false,
-    timeout: 30_000,
-  },
+  projects: [
+    { name: "desktop", use: { viewport: { width: 1440, height: 1000 } } },
+    { name: "narrow", use: { viewport: { width: 390, height: 844 } } },
+  ],
 });

@@ -1,6 +1,24 @@
-import { getApplication, sessionKey } from "../src/runtime.ts";
+import { pluginWritePermission, toolExecute, type ToolContextLike, type ToolInput } from "../src/interfaces/tool.ts";
+
 export const name = "delete_confirm";
-export const description = "Confirm a previously prepared permanent Trash purge.";
-export const sessionPermission = { kind: "review" };
-export const parameters = { type: "object", properties: { confirmationId: { type: "string" } }, required: ["confirmationId"] };
-export async function execute(input: any, ctx: any) { const result = getApplication(ctx).confirmPurge(input.confirmationId, sessionKey(ctx)); return { content: [{ type: "text", text: JSON.stringify(result) }], details: { purge: result } }; }
+export const description = "Confirm a previously prepared permanent purge. The token is single-use and actor/session/version-bound.";
+export const sessionPermission = pluginWritePermission(
+  "Permanently remove one confirmed Trash item and plugin-private linked records.",
+  "todolist-purge",
+);
+export const parameters = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    token: { type: "string" },
+  },
+  required: ["id", "token"],
+};
+
+export async function execute(input: ToolInput, ctx: ToolContextLike) {
+  return toolExecute(ctx, (runtime, invocation) => runtime.application.confirmPurge(
+    String(input.id),
+    String(input.token),
+    invocation,
+  ));
+}

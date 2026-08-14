@@ -1,6 +1,26 @@
-import { getApplication } from "../src/runtime.ts";
+import { pluginWritePermission, toolExecute, type ToolContextLike, type ToolInput } from "../src/interfaces/tool.ts";
+
 export const name = "reopen";
-export const description = "Reopen one completed Todo using optimistic version control.";
-export const sessionPermission = { kind: "plugin_output", describeSideEffect: () => ({ kind: "plugin_data_write", summary: "Reopen one Todo in the todolist private store.", ruleId: "todolist-reopen" }) };
-export const parameters = { type: "object", properties: { id: { type: "string" }, expectedVersion: { type: "number" } }, required: ["id", "expectedVersion"] };
-export async function execute(input: any, ctx: any) { const result = getApplication(ctx).reopen(input.id, input.expectedVersion); return { content: [{ type: "text", text: JSON.stringify(result.todo) }], details: { todo: result.todo } }; }
+export const description = "Reopen one completed Todo without silently reviving old schedules or Agent Runs.";
+export const sessionPermission = pluginWritePermission(
+  "Reopen one Todo in the private store.",
+  "todolist-reopen",
+);
+export const parameters = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    expectedVersion: { type: "number" },
+    commandId: { type: "string" },
+  },
+  required: ["id", "expectedVersion"],
+};
+
+export async function execute(input: ToolInput, ctx: ToolContextLike) {
+  return toolExecute(ctx, (runtime, invocation) => runtime.application.reopenTodo(
+    String(input.id),
+    input.expectedVersion,
+    invocation,
+    typeof input.commandId === "string" ? input.commandId : undefined,
+  ));
+}

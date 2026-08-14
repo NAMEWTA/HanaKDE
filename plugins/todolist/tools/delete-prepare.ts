@@ -1,6 +1,24 @@
-import { getApplication, sessionKey } from "../src/runtime.ts";
+import { pluginWritePermission, toolExecute, type ToolContextLike, type ToolInput } from "../src/interfaces/tool.ts";
+
 export const name = "delete_prepare";
-export const description = "Prepare a confirmed permanent purge of Trash items.";
-export const sessionPermission = { kind: "review" };
-export const parameters = { type: "object", properties: { todoIds: { type: "array", items: { type: "string" } } }, required: ["todoIds"] };
-export async function execute(input: any, ctx: any) { const result = getApplication(ctx).preparePurge(input.todoIds, sessionKey(ctx)); return { content: [{ type: "text", text: JSON.stringify({ count: result.count, expiresAt: result.expiresAt }) }], details: { confirmation: result } }; }
+export const description = "Prepare a short-lived permanent purge confirmation bound to actor, session, Todo id, and Todo version.";
+export const sessionPermission = pluginWritePermission(
+  "Create one short-lived, actor/session-bound purge confirmation.",
+  "todolist-purge-prepare",
+);
+export const parameters = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    expectedVersion: { type: "number" },
+  },
+  required: ["id", "expectedVersion"],
+};
+
+export async function execute(input: ToolInput, ctx: ToolContextLike) {
+  return toolExecute(ctx, (runtime, invocation) => runtime.application.preparePurge(
+    String(input.id),
+    input.expectedVersion,
+    invocation,
+  ));
+}

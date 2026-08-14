@@ -1,7 +1,25 @@
-import { getApplication } from "../src/runtime.ts";
+import { readOnlyPermission, toolExecute, type ToolContextLike, type ToolInput } from "../src/interfaces/tool.ts";
 
 export const name = "query";
-export const description = "Query persistent Todo items with bounded pagination.";
-export const sessionPermission = { readOnly: true };
-export const parameters = { type: "object", properties: { status: { type: "string", enum: ["pending", "completed", "all"] }, includeTrash: { type: "boolean" }, projectId: { type: ["string", "null"] }, view: { type: "string", enum: ["inbox", "today", "upcoming", "completed", "all", "calendar"] }, timeZone: { type: "string" }, search: { type: "string" }, limit: { type: "number" }, cursor: { type: "string" } } };
-export async function execute(input: any, ctx: any) { const result = getApplication(ctx).query(input); return { content: [{ type: "text", text: JSON.stringify(result) }], details: { todos: result } }; }
+export const description = "Query persistent Todos with stable bounded pagination and reason-bearing Today/Upcoming/Review projections.";
+export const sessionPermission = readOnlyPermission;
+export const parameters = {
+  type: "object",
+  properties: {
+    view: { type: "string", enum: ["today", "inbox", "upcoming", "all", "calendar", "completed", "trash", "automation", "review", "project"] },
+    includeTrash: { type: "boolean" },
+    projectId: { type: ["string", "null"] },
+    timeZone: { type: "string" },
+    today: { type: "string" },
+    search: { type: "string" },
+    tags: { type: "array", items: { type: "string" } },
+    priorities: { type: "array", items: { type: "string" } },
+    modes: { type: "array", items: { type: "string" } },
+    limit: { type: "number" },
+    cursor: { type: "string" },
+  },
+};
+
+export async function execute(input: ToolInput, ctx: ToolContextLike) {
+  return toolExecute(ctx, (runtime) => runtime.application.query(input as never));
+}
