@@ -9,13 +9,45 @@
         "specdev/grill-with-docs",
         "specdev/spec",
         "specdev/tickets",
-        "specdev/goal-plan"
-      ]
+        "specdev/wayfinder",
+        "specdev/goal-plan",
+        "specdev/implement",
+        "specdev/complete"
+      ],
+      "claimed_investigations": []
     },
     {
       "change": "2026-08-12-openhanako-v0-446-6-platform-gates",
-      "current_work": null,
+      "current_work": "specdev/tickets",
       "works_run": []
+    },
+    {
+      "change": "2026-08-13-personal-quant-finance-workbench",
+      "current_work": "specdev/goal-plan",
+      "works_run": [
+        "specdev/wayfinder",
+        "specdev/grill-with-docs",
+        "specdev/spec",
+        "specdev/tickets",
+        "specdev/goal-plan"
+      ],
+      "claimed_investigations": []
+    },
+    {
+      "change": "2026-08-13-markdown-wechat-plugin",
+      "current_work": null,
+      "works_run": [
+        "specdev/grill-with-docs",
+        "specdev/spec"
+      ],
+      "claimed_investigations": [],
+      "claimed_investigations": []
+    },
+    {
+      "change": "2026-08-13-hanakde-engineering-cognitive-mentor",
+      "current_work": "specdev/engineering-cognitive-mentor",
+      "works_run": [],
+      "claimed_investigations": []
     }
   ],
   "archived": [

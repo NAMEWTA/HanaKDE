@@ -2,7 +2,7 @@
 schema_version: 3
 artifact: goal-plan
 change: 2026-08-09-internalize-todolist-plugin
-status: ready
+status: completed
 modes: [coordination, migration, high-assurance, reference-conformance]
 ready_for_execution: true
 ---
@@ -45,7 +45,8 @@ ready_for_execution: true
 
 ### Measured Baseline
 
-- **Git：** 分支 `hanakde`，计划冻结点 `5c281aae27eed87a0954c93b553ea7b2b255eef4`；规划时工作树路径 `<Path>plugins/todolist/</Path>` 不存在且无该路径 diff。
+- **Git：** 分支 `hanakde`，计划冻结点 `5c281aae27eed87a0954c93b553ea7b2b255eef4`；当前重检 HEAD 为其后继 `1d2d0711fea31db022982d881de51daf60d8d588`，`<Path>plugins/todolist/</Path>` 不存在且无该路径 diff。
+- **执行形态：** 普通 Goal Plan，单一当前工作区串行执行；不生成、不登记、不依赖 worktree。需要可移除性反向验证时，只使用受控临时目录副本，完成后清理临时目录。
 - **Creator preflight：** `node <Path>skills2set/hana-plugin-creator/scripts/check_env.mjs</Path> --capability scaffold` 返回 `ok`，Python 3.12.10，必需包为空。
 - **命令：** `<Path>package.json</Path>` 已声明 `test`、`typecheck`、`lint`、`build:client`、`build:server`、`build:renderer`、`verify:seed-kit`；Vitest 4.0.18 与 Playwright 1.62.0 可解析。
 - **宿主接缝：** 规划时运行 Spec 指定的 9 个 Vitest 文件，89 项测试全部通过；这只证明 PluginManager/TaskRegistry/EventBus/Session/Agent/TodoWrite 基线，不证明 Todo 产品行为。
@@ -153,13 +154,13 @@ W10 T-10 product artifact/release ── closes G5
 
 | 合同或参考要求 | 覆盖 Ticket | 验证接缝 | Evidence | 状态 |
 |---|---|---|---|---|
-| builtin、同源 CRUD、TodoWrite、数据安全（AC-001～004、013、014、029、033） | T-01、T-02、T-10 | PluginManager/route/tool/store/confirmation/build | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | planned |
-| 捕获、组织、时间、周期与视图（AC-005～009、015、016、030、031） | T-03～T-05、T-09、T-10 | domain/query/component/Desktop | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | planned |
-| reminder、TaskRegistry 与 Agent automation（AC-010～012、017～024、026） | T-06～T-08、T-10 | fake clock/EventBus/Session/Agent/ResourceIO/E2E | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | planned |
-| import/export/Review（AC-022、027～030） | T-09 | schema fixture/dry-run/rollback/download | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-09.md</Path>` | planned |
-| 单目录、产物和完整交互（AC-025、031、032） | T-03、T-04、T-08～T-10 | Git allowlist/build/seed/a11y/screenshots/removal smoke | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | planned |
+| builtin、同源 CRUD、TodoWrite、数据安全（AC-001～004、013、014、029、033） | T-01、T-02、T-10 | PluginManager/route/tool/store/confirmation/build | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | verified |
+| 捕获、组织、时间、周期与视图（AC-005～009、015、016、030、031） | T-03～T-05、T-09、T-10 | domain/query/component/Desktop | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | verified |
+| reminder、TaskRegistry 与 Agent automation（AC-010～012、017～024、026） | T-06～T-08、T-10 | fake clock/EventBus/Session/Agent/ResourceIO/E2E | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | verified-with-deferred-host-capabilities |
+| import/export/Review（AC-022、027～030） | T-09 | schema fixture/dry-run/rollback/download | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-09.md</Path>` | verified |
+| 单目录、产物和完整交互（AC-025、031、032） | T-03、T-04、T-08～T-10 | Git allowlist/build/seed/a11y/screenshots/removal smoke | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | verified |
 | 当前 Hana SDK 与 creator scaffold | T-01、T-10 | creator preflight、SDK/builtin harness、产物 smoke | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-01.md</Path>`、`<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-10.md</Path>` | baseline verified |
-| 参考 0.0.5 的可采纳内容 | T-04、T-05、T-09 | 逐项复用清单 + 等价/更严格测试；HostAdapter/timer/UI 禁用扫描 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | planned |
+| 参考 0.0.5 的可采纳内容 | T-04、T-05、T-09 | 逐项复用清单 + 等价/更严格测试；HostAdapter/timer/UI 禁用扫描 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/</Path>` | verified |
 
 完整逐 AC 映射以 `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/tickets-map.md</Path>` 为权威，不在本 Plan 复制第二套状态。
 
@@ -189,7 +190,7 @@ W10 T-10 product artifact/release ── closes G5
 | SpecDev planning/status writes | allowed | 仅当前 change 的 Goal Plan、Ticket/Map 投影、Evidence 与状态同步 |
 | Local product changes | conditionally allowed | 仅用户进入 I-implement 后、当前 Ticket active 且只写 `<Path>plugins/todolist/**</Path>` |
 | Local tests/build/dev server | conditionally allowed | I-implement 内按 Ticket/Plan 运行；不得改根命令；进程结束或交接时清理 |
-| Temporary removal smoke | conditionally allowed | 只在新建并校验的临时隔离目录/worktree 删除 `<Path>plugins/todolist/</Path>`；禁止删除当前工作区目录 |
+| Temporary removal smoke | conditionally allowed | 只在新建并校验的临时目录副本中删除 `<Path>plugins/todolist/</Path>`；禁止创建 worktree，禁止删除当前工作区目录 |
 | Commit | not-authorized | `<Path>{roots.state}/specdev/config.json</Path>` 为 `auto_commit: false`，需用户另行明确授权 |
 | Push / PR / Merge | not-authorized | 无远程写授权 |
 | Deploy / Publish | not-authorized | G5 只证明发布就绪，不执行部署或发布 |
@@ -229,7 +230,7 @@ W10 T-10 product artifact/release ── closes G5
 - 基线 9 文件/89 测试必须无新退化；其它全量失败分为本 Ticket 新失败、基线已有失败、环境失败或验证无效，附命令和复现。
 - 路径 allowlist 使用实施 baseline/提交集或受控文件清单，不把用户既有改动归因于本 change，也不覆盖/清理它们。
 - 受控反向验证仅在隔离 harness/临时 workspace 执行：Task handler 永不就绪、EventBus emit 崩溃、重复 wake、Session 取消失败、import commit 中断时，测试必须证明 degraded/unknown/cancel_requested/rollback，而不是假绿。
-- G5 在隔离环境故意移除必要插件 asset/dependency 或注入插件外 sentinel 到待审计清单时，产物/allowlist Gate 必须失败；恢复隔离环境后重跑为绿，不改当前工作区根文件。
+- G5 在临时目录副本中故意移除必要插件 asset/dependency 或注入插件外 sentinel 到待审计清单时，产物/allowlist Gate 必须失败；清理临时目录后重跑为绿，不改当前工作区根文件。
 - 无法执行的关键验证不能替换为代码阅读并标绿；记录 `unverified` 会阻止 Ticket/Gate 完成，直到有批准的替代证据。
 
 ### Migration or Release Sequence
@@ -271,19 +272,19 @@ W10 T-10 product artifact/release ── closes G5
 ### Current Status
 
 ```text
-WAVE_STATUS wave=W1 ready=T-01 active=none done=none blocked=none
-GATE_STATUS gate=G0 state=open evidence=plan-time-preflight-and-89-baseline-tests risks=implementation-authorization-and-start-time-recheck
-TICKET_STATUS id=T-01..T-10 state=ready evidence=none deviation=none
+WAVE_STATUS wave=W10 ready=none active=none done=T-01,T-02,T-03,T-04,T-05,T-06,T-07,T-08,T-09,T-10 blocked=none
+GATE_STATUS gate=G5 state=closed evidence=evidence/T-01.md..evidence/T-10.md risks=host-capability-deferred
+TICKET_STATUS id=T-01..T-10 state=done evidence=evidence/T-01.md..evidence/T-10.md deviation=none
 ```
 
-Plan-time 验证已完成：feature-placement 仍裁决 builtin `<Path>plugins/todolist/</Path>`；tickets stage 为 0 error/0 warning；creator preflight 通过；当前 package scripts/dependencies 可用；9 个宿主接缝文件、89 项测试通过。产品实现和所有 AC 行为仍未验证，G0 只有在 I-implement 开始时把重检结果写入 T-01 Evidence 后才能关闭。
+实施与发布验证已完成：feature-placement 仍裁决 builtin `<Path>plugins/todolist/</Path>`；implement/complete validator 均为 0 error/0 warning；creator preflight 通过；插件 Vitest 24/24、Playwright 10/10、类型检查、构建和插件 lint 通过；宿主根级失败已在 T-10 分类记录。
 
-### Pending Decisions and Blockers
+### Completion Decisions and Residual Boundaries
 
-- **执行授权：** 等待用户明确进入 `<Path>{roots.workflows}/specdev/I-implement/I-implement.md</Path>`；这不阻止 Plan Ready，但阻止任何产品写入。
-- **Deep 批准：** 尚未授予实现批准；进入 I 时可明确逐票或一次性覆盖 T-01～T-07、T-09。
-- **发布/真实数据/外部动作：** 均未授权；G5 只产生发布就绪证据。
-- **产品 blocker：** 无。没有高影响产品未知项，当前没有 deviation。
+- **实现与发布证据：** T-01～T-10 Evidence 已写入；产品仅在 `plugins/todolist/`，G5 只表示本地发布就绪，不代表已发布或操作真实数据。
+- **宿主能力边界：** 当前 HanaKDE 未提供 notification receipt/Bridge、`session.open` 和逐渠道路由；插件只实现 fail-closed handoff/stable sessionRef，并将 delivered、原生导航和真实副作用留待宿主能力提供后升级。
+- **验证分类：** 插件专属验证全绿；根全量 lint/test、server bundle 与 seed-kit 的既有宿主/环境失败均记录在 T-10，未通过修改宿主或根配置掩盖。
+- **产品 blocker/deviation：** 无；延期能力是已批准 non-goal/capability boundary，不是伪成功声明。
 
 ### Resume Protocol
 

@@ -1,0 +1,6 @@
+import { getApplication } from "../src/runtime.ts";
+export const name = "update";
+export const description = "Update one Todo using optimistic version control.";
+export const sessionPermission = { kind: "plugin_output", describeSideEffect: () => ({ kind: "plugin_data_write", summary: "Update one Todo in the todolist private store.", ruleId: "todolist-update" }) };
+export const parameters = { type: "object", properties: { id: { type: "string" }, expectedVersion: { type: "number" }, title: { type: "string" }, notes: { type: "string" }, priority: { type: "string", enum: ["low", "normal", "high"] }, mode: { type: "string" }, plannedFor: { type: "object" }, deadline: { type: "object" }, reminderAt: { type: "object" }, projectId: { type: ["string", "null"] }, tags: { type: "array", items: { type: "string" } }, agentId: { type: ["string", "null"] }, instructions: { type: ["string", "null"] }, permissionMode: { type: ["string", "null"] }, workspaceRef: { type: ["string", "null"] } }, required: ["id", "expectedVersion"] };
+export async function execute(input: any, ctx: any) { const { id, ...patch } = input; const result = getApplication(ctx).update(id, patch); return { content: [{ type: "text", text: JSON.stringify(result.todo) }], details: { todo: result.todo } }; }

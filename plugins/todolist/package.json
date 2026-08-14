@@ -1,0 +1,13 @@
+{
+  "name": "@hana/builtin-todolist",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run tests --exclude 'tests/e2e/**' --exclude '**/dist-server/**' --exclude '**/dist-*/**'",
+    "build": "node --experimental-strip-types build.ts",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "todolist",
+  "name": "Hana Todo",
+  "version": "0.1.0",
+  "description": "持久 Todo、项目、时间、自动化与复盘工作台。",
+  "trust": "full-access",
+  "hidden": true,
+  "activationEvents": ["onStartup", "onPageOpen", "onToolCall"],
+  "contributes": {
+    "page": {
+      "title": { "zh-CN": "Todo", "zh-TW": "Todo", "ja": "Todo", "ko": "Todo", "en": "Todo" },
+      "route": "/page",
+      "icon": "check-circle"
+    }
+  }
+}

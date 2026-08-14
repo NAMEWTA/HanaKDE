@@ -45,7 +45,7 @@ _Avoid_: 多层项目树、用 tag 模拟唯一归属
 **一级行动导航**：Todo Page 的稳定一级入口 `Today`、`Inbox`、`Upcoming`、`Projects`、`All`；Calendar、Completed、Automation、Review 属于二级视图，不建立另一套 Todo 状态。
 _Avoid_: Day Todo、按分析维度组织一级入口
 
-**快速捕获**：默认创建到 Inbox 的低摩擦 Todo 输入；只有 Today、具体 Project 或明确日期页面可以继承当前可见上下文，继承值和自然语言解析出的日期、Project、tag、提醒或执行模式都必须显示为可移除的 chip/预览。
+**快速捕获**：默认创建到 Inbox 的低摩擦 Todo 输入；只有 Today、具体 Project 或明确日期页面可以继承当前可见上下文，继承值必须显示为可移除的 chip/预览。首版不做自然语言识别；日期、Project、tag、提醒或执行模式只能由显式控件设置。
 _Avoid_: 隐式 selectedDate、不可见字段改写
 
 **Automation 视图**：Todo Page 的二级运维视图，集中展示 AutomationRun 状态、失败原因、权限待办、重试/取消和 Hana Session 跳转；Todo 详情只保留最近运行摘要、状态与跳转。

@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-internalize-todolist-plugin
 id: T-06
 title: 修复调度巡查并交付提醒 handoff
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: 涉及后台生命周期、TaskRegistry at-least-once 调度、幂等 claim、崩溃恢复与外部桌面通知副作用。
 ready: true
@@ -31,7 +31,7 @@ shared_path_owners: []
 - **目标：** 以 TaskRegistry 为唯一到期权威，修复插件启动早于 `task:*` handler 就绪导致的自动巡查失效，并提供诚实、可恢复的桌面提醒 handoff。
 - **可观察产出：** 冷启动晚就绪后 schedule 正常注册；到期 reminder 只产生一个稳定 handoff，UI 显示 handed_off/failed/unknown 而不声称 OS delivered。
 - **来源：** US-003、US-008、US-011，AC-009～012、AC-023、AC-024、AC-029，ADR-014，D-021、D-025。
-- **当前事实：** 宿主 task handlers 晚于 plugin startup 注册；全局 `notification` event 可触发桌面通知但没有送达确认。两项都必须在插件内适配。
+- **当前事实：** 宿主 task handlers 晚于 plugin startup 注册；全局 `notification` event 可触发桌面通知但没有送达确认。两项都必须在插件内适配，但 receipt、Bridge 和逐渠道路由不是当前宿主能力，必须延后到未来基础能力变更。
 - **Planning Depth 原因：** 后台 at-least-once、进程崩溃窗口和外部副作用会造成漏提醒或重复提醒，需 Deep 状态机与恢复证据。
 
 ## 2. 决策状态
@@ -57,7 +57,7 @@ shared_path_owners: []
 
 | IN（本 Ticket 构建） | REUSE（复用且不改变契约） | OUT（明确不做） |
 |---|---|---|
-| task handler readiness、schedule identity/register/cancel/recovery、reminder claim/handoff/retry、独立开关和诊断 | TaskRegistry、full-access EventBus、现有 `notification` event、T-04 trigger、T-05 occurrence identity | 宿主启动重排、新 notification capability、OS/Bridge 回执、Todo due 扫描 timer、Agent Session 执行 |
+| task handler readiness、schedule identity/register/cancel/recovery、reminder claim/handoff/retry、独立开关和诊断 | TaskRegistry、full-access EventBus、现有 `notification` event、T-04 trigger、T-05 occurrence identity | 宿主启动重排、新 notification capability、receipt/Bridge/逐渠道路由、Todo due 扫描 timer、Agent Session 执行 |
 
 ## 4. 要构建什么
 
@@ -65,7 +65,7 @@ shared_path_owners: []
 
 ## 5. 实现契约
 
-- **入口或接缝：** plugin lifecycle、TaskRegistry bus handlers、schedule/reminder application service、EventBus `notification` event、Page diagnostics/actions。
+- **入口或接缝：** plugin lifecycle、TaskRegistry bus handlers、schedule/reminder application service、现有 EventBus `notification` event、Page diagnostics/actions；不得假设未提供的 receipt/Bridge 接口。
 - **输入与输出：** readiness 返回 ready/exhausted diagnostics；handler 输入 stable schedule identity/trigger payload；handoff 输出 claimed/handed_off/failed/unknown/duplicate。
 - **公共接口变化：** 新增插件私有 task handler 与 reminder routes/tools；不新增宿主 capability 或普通 Session 内部 handler tool。
 - **不变量：** TaskRegistry 唯一 due authority；同一 trigger identity 最多一个有效 claim；handed_off 不等于 delivered；自动 retry 不重发外部通知；开关互不干扰。
@@ -88,7 +88,7 @@ shared_path_owners: []
 - **可写范围：** `<Path>plugins/todolist/**</Path>`。
 - **只读上下文：** TaskRegistry、server handler 顺序、plugin EventBus、chat notification 消费与既有测试。
 - **共享路径：** 无；T-06 在 T-05 后独占插件根写入。
-- **保留或不动：** 宿主 task/notification/context 代码、公共测试、根配置及其它插件。
+- **保留或不动：** 宿主 task/notification/context 代码、公共测试、根配置及其它插件；缺失的通知送达确认能力留待后续 HanaKDE 基础 change。
 
 ## 8. 验证矩阵
 
@@ -110,8 +110,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-009、AC-012：默认 manual，提醒/Agent 开关相互独立且不隐式复活。
-- [ ] AC-010、AC-011：先 claim 后 handoff，handed_off 不冒充 delivered，重复/崩溃/显式 retry 合同成立。
-- [ ] AC-023、AC-024：有限 readiness retry、重启补偿、幂等 wake/cancel 生效且没有第二到期 scanner。
-- [ ] AC-029：后台失败可诊断，CRUD 仍可用，无静默 fallback。
-- [ ] Evidence 完整，产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。
+- [x] AC-009、AC-012：默认 manual，提醒/Agent 开关相互独立且不隐式复活。
+- [x] AC-010、AC-011：先 claim 后 handoff，handed_off 不冒充 delivered，重复/崩溃/显式 retry 合同成立。
+- [x] AC-023、AC-024：有限 readiness retry、重启补偿、幂等 wake/cancel 生效且没有第二到期 scanner。
+- [x] AC-029：后台失败可诊断，CRUD 仍可用，无静默 fallback。
+- [x] Evidence 完整，产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。

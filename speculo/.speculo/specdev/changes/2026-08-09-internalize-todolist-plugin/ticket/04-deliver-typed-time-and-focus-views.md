@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-internalize-todolist-plugin
 id: T-04
 title: 交付类型化时间与聚焦视图
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: 引入 date/zoned exact time wire 与持久 schema、DST 歧义处理和跨时区查询不变量。
 ready: true
@@ -41,7 +41,7 @@ shared_path_owners: []
 - `plannedFor`、`deadline`、`trigger` 分离；设置前两者不创建 reminder 或 Agent 自动化。
 - date 是浮动日历日期；exact time 同时保存 local、IANA timezone、解析后的 instant 和 overlap 时的明确 offset。
 - DST gap 拒绝；overlap 要求用户选择 offset；系统时区变化不得改写已存 instant。
-- `attentionDate` 按显示时区从 plannedFor 优先、deadline 后备派生；Today 分 Overdue/Today，Upcoming 仅未来且每 Todo 出现一次，无日期不进入。
+- `attentionDate` 按显示时区取 `min(plannedFor, deadline)` 派生；相同日期保留计划与截止两个出现理由；Today 分 Overdue/Today，Upcoming 仅未来且每 Todo 出现一次，无日期不进入。
 - Calendar 是同一 store 的时间意图投影，不创建第三份状态。
 
 ### 已采用的低影响假设
@@ -67,7 +67,7 @@ shared_path_owners: []
 - **入口或接缝：** typed-time domain service、Todo mutation DTO、focus query service、Page date/time editor。
 - **输入与输出：** date `{kind: date, date}`；exact `{kind: exact, local, timezone, offset?}`，规范输出含 instant；query 输入含 displayTimezone/window/cursor。
 - **公共接口变化：** 扩展插件内 Todo DTO/routes/tools；宿主接口不变。
-- **不变量：** date 不绑定 instant；exact instant 保存后稳定；gap 永不落库；overlap 未选 offset 永不猜测；attention 投影每 Todo 最多一次。
+- **不变量：** date 不绑定 instant；exact instant 保存后稳定；gap 永不落库；overlap 未选 offset 永不猜测；attentionDate 是 plannedFor/deadline 较早日期且 attention 投影每 Todo 最多一次。
 - **状态或数据流：** user input -> typed parser -> zone resolution -> validation -> transaction -> timezone-aware query projection -> Page DTO。
 - **错误与失败行为：** invalid_date、invalid_timezone、dst_gap、dst_overlap_requires_offset、invalid_window、stale_version 稳定且字段可定位。
 - **兼容要求：** 无时间的旧 Todo 字段为空且不进入 focus views；组织与 Trash 过滤继续组合。
@@ -93,7 +93,7 @@ shared_path_owners: []
 
 | 行为或风险 | 验证接缝 | 命令或步骤 | 预期结果 | Evidence |
 |---|---|---|---|---|
-| 正常路径 | time domain/query | `npx vitest run <Path>plugins/todolist/tests/time-projections.test.ts</Path>` | date/exact roundtrip、attentionDate、Today/Upcoming/Calendar 成员正确 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-04.md</Path>` |
+| 正常路径 | time domain/query | `npx vitest run <Path>plugins/todolist/tests/time-projections.test.ts</Path>` | date/exact roundtrip、min(plannedFor,deadline) attentionDate、Today/Upcoming/Calendar 成员正确 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-04.md</Path>` |
 | 失败路径 | DST/validation fixture | 同一测试执行 gap、未选择 overlap offset、非法 zone/window | 明确拒绝且 store/version 不变 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-04.md</Path>` |
 | UI E2E（owner：当前执行 owner） | Page planning views | `npx playwright test --config=<Path>plugins/todolist/tests/e2e/playwright.config.ts</Path> <Path>plugins/todolist/tests/e2e/planning-views.spec.ts</Path>` | 日期编辑、分组、日历、歧义选择在桌面/窄布局可用 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-04.md</Path>` |
 | 回归 | capture/organization/lifecycle | `npx vitest run <Path>plugins/todolist/tests/capture-organization.integration.test.ts</Path> <Path>plugins/todolist/tests/todo-lifecycle.integration.test.ts</Path>` | chip 写入、Project、Trash 语义保持 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-04.md</Path>` |
@@ -109,8 +109,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-005：Today/Upcoming 成员、分组、去重和无日期排除满足合同。
-- [ ] AC-008：date 浮动、exact instant 稳定，DST gap/overlap 按合同处理。
-- [ ] AC-009、AC-030：时间字段不隐式启用副作用，Calendar 只是同源投影。
-- [ ] AC-031：规划视图在五语言、键盘和窄布局下可用。
-- [ ] Evidence 完整，产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。
+- [x] AC-005：Today/Upcoming 成员、分组、去重和无日期排除满足合同。
+- [x] AC-008：date 浮动、exact instant 稳定，DST gap/overlap 按合同处理。
+- [x] AC-009、AC-030：时间字段不隐式启用副作用，Calendar 只是同源投影。
+- [x] AC-031：规划视图在五语言、键盘和窄布局下可用。
+- [x] Evidence 完整，产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。

@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-internalize-todolist-plugin
 id: T-01
 title: 建立 builtin 插件与持久 CRUD 闭环
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: 新增 builtin 插件贡献、私有持久 schema、authenticated routes 与 Agent tool 公共合同，并涉及权限和分发边界。
 ready: true
@@ -109,9 +109,9 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-001、AC-002、AC-004：builtin Page 与 namespaced tools 通过同一持久 store 完成稳定 version CRUD 和有界查询。
-- [ ] AC-003、AC-033：`todo_write` 保持不变，普通 Session 只看到用户级 `todo_*` tools。
-- [ ] AC-029：无效、冲突、权限和存储失败均稳定、脱敏、原子。
-- [ ] 验证矩阵全部执行并记录到 `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-01.md</Path>`。
-- [ ] 实际项目修改未超出 `writable_paths`，没有宿主或公共测试改动。
-- [ ] Ticket、Tickets Map 和 Evidence 状态一致，未发生未批准偏差。
+- [x] AC-001、AC-002、AC-004：builtin Page 与 namespaced tools 通过同一持久 store 完成稳定 version CRUD 和有界查询。
+- [x] AC-003、AC-033：`todo_write` 保持不变，普通 Session 只看到用户级 `todo_*` tools。
+- [x] AC-029：无效、冲突、权限和存储失败均稳定、脱敏、原子。
+- [x] 验证矩阵全部执行并记录到 `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-01.md</Path>`。
+- [x] 实际项目修改未超出 `writable_paths`，没有宿主或公共测试改动。
+- [x] Ticket、Tickets Map 和 Evidence 状态一致，未发生未批准偏差。

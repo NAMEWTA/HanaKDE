@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "artifact": "design-tree",
+  "change": "2026-08-13-personal-quant-finance-workbench",
+  "status": "consensus",
+  "round": 3,
+  "nodes": [
+    {
+      "id": "D-001",
+      "title": "首要市场与研究池",
+      "question": "V0 首先服务哪个市场和对象规模？这会决定 AssetRef、provider、交易日历、测试 fixtures 和 UI 文案的第一组外部承诺。",
+      "depends_on": [],
+      "recommendation": "以 CN A-share daily 为首要市场，支持一个明确身份的标的和小规模用户导入 universe；保留 market x dataset capability matrix，不宣称其他市场同构支持。",
+      "status": "answered",
+      "round": 1,
+      "answer": "用户确认：首要市场聚焦 A 股和港股；后续能力按市场 x 数据集 x 工作流分别验证，不把两者未经验证地宣传为同构。",
+      "log_ref": "LOG-001"
+    },
+    {
+      "id": "D-002",
+      "title": "V0 数据来源策略",
+      "question": "V0 的可运行数据入口采用什么优先级？这会决定 provider 合同、许可证门、网络权限和没有外部 provider 时的可用性。",
+      "depends_on": [],
+      "recommendation": "采用用户 CSV/JSON/Parquet 导入 + 一个有书面权利基础的 HTTPS provider 双路径；在 provider 未通过稳定性、PIT、单位和许可门前，不把 a-stock-data 的网页端点列为默认稳定源。",
+      "status": "answered",
+      "round": 1,
+      "answer": "用户确认首板应认真研究并尽可能复用四个参考项目的数据源获取逻辑；具体出厂 provider、授权和降级策略由 D-007 细化。",
+      "log_ref": "LOG-003"
+    },
+    {
+      "id": "D-003",
+      "title": "AI 默认与外发同意",
+      "question": "模型摘要和 Agent 研究在 V0 是否默认启用？哪些数据可以送入模型？这会决定模型预算、隐私提示、宿主 Session/Agent 使用方式和确定性路径是否独立。",
+      "depends_on": [],
+      "recommendation": "默认关闭；确定性快照/质量/筛选不依赖模型。用户明确批准外发和预算后，最多执行一次 bounded synthesis，只发送用户选中的公开证据片段，私有持仓/文档默认不发送。",
+      "status": "answered",
+      "round": 1,
+      "answer": "用户确认按默认：AI 默认关闭；确定性数据路径独立；公开证据可在用户批准、预算确认后外发；持仓、成本、笔记和私有研报逐次预览并授权。",
+      "log_ref": "LOG-006"
+    },
+    {
+      "id": "D-004",
+      "title": "个人资料与持仓范围",
+      "question": "V0 是否纳入个人持仓、成本、笔记或研报？这会改变存储归属、ResourceIO、字段级外发、删除/导出和安全验收；它不等于券商接入。",
+      "depends_on": [],
+      "recommendation": "V0 不接券商、不保存 broker credential；允许先保存研究池和公开证据，个人持仓/私有研报推迟到完成字段级 egress、删除、导出和 ResourceIO 契约后再进入 V4。",
+      "status": "answered",
+      "round": 1,
+      "answer": "用户确认首板应纳入个人资料与持仓能力；具体账本、导入、私有研报和券商边界由 D-008 细化。",
+      "log_ref": "LOG-004"
+    },
+    {
+      "id": "D-005",
+      "title": "V0 核心承诺",
+      "question": "首版是先证明证据级研究闭环，还是同时承诺基础回测？回测会立刻要求 PIT、历史 universe、规则/日历、复权、T+1、费用、滑点和容量全部可验证。",
+      "depends_on": [],
+      "recommendation": "V0 承诺证据级单标的/小 universe：快照、质量门、一个声明式筛选、底稿、可选摘要和导出；基础回测进入 V2，待官方规则、PIT、成本和容量证据齐备后启用。",
+      "status": "answered",
+      "round": 1,
+      "answer": "用户确认：首板必须做到相对完整、可直接上线的内置插件；不能把证据级最小切片当作首版产品承诺。回测、个人资料/持仓、实时性和自动化都进入首版能力路线，具体可用性、质量等级和边界仍需下一轮锁定。",
+      "log_ref": "LOG-002"
+    },
+    {
+      "id": "D-006",
+      "title": "实时性与自动化程度",
+      "question": "V0 是否需要实时行情、后台刷新、自动监控或通知？这会改变 activation、TaskRegistry schedule、网络长连接、数据许可和取消/停机语义。",
+      "depends_on": [],
+      "recommendation": "V0 采用手动刷新或用户触发的短轮询，显示 staleAt；不启用高频 feed、raw WebSocket、无人值守监控或交易通知。可恢复监控进入 V3，并重新验证系统边界。",
+      "status": "answered",
+      "round": 1,
+      "answer": "用户确认首板应纳入实时性与自动化能力，并要求尽可能复用参考项目逻辑；具体刷新、任务、告警和后台运行等级由 D-009 细化。",
+      "log_ref": "LOG-005"
+    },
+    {
+      "id": "D-007",
+      "title": "A/HK 数据源出厂策略",
+      "question": "相对完整且可直接上线，是否要求安装后无需用户配置即可取得 A 股/港股行情与研究数据？当公开端点条款或质量不稳定时，是采用用户自配 provider、内置多源实验能力，还是允许某些模块以明确 unavailable 状态上线？",
+      "depends_on": ["D-001"],
+      "recommendation": "采用三层策略：内置只启用有条款/质量证据的 HTTPS 源；用户可配置合法 provider；参考项目中的公开端点以 provider inventory/可选实验源存在，失败或许可未知时显示 unavailable，不静默冒充稳定数据。A/HK 每个 dataset 单独发布 supported/experimental/blocked。",
+      "status": "answered",
+      "round": 2,
+      "answer": "用户确认按默认：采用内置多源适配器和能力探测；有条款/质量证据的源自动启用；其他源明确标记 experimental/unavailable；允许用户配置 provider 或导入文件。",
+      "log_ref": "LOG-007"
+    },
+    {
+      "id": "D-008",
+      "title": "个人资料与持仓产品形态",
+      "question": "首版的个人资料/持仓是否包含手工持仓账本、CSV/ResourceIO 导入、成本/股数/P&L、私有研报/笔记索引？是否明确排除券商账号、自动同步和下单？哪些字段默认允许送入模型？",
+      "depends_on": ["D-001"],
+      "recommendation": "首版支持本地手工/文件导入的持仓账本、研究笔记和私有研报引用，字段可删除/导出；排除券商 credential、自动同步和交易执行。模型默认只看用户主动选择的摘要/片段，股数、成本和原文必须逐次确认。",
+      "status": "answered",
+      "round": 2,
+      "answer": "用户确认按默认：首版支持手工账本、CSV/ResourceIO 导入、成本/股数/P&L、研究笔记和私有研报引用；排除券商账号、自动同步和下单；个人字段默认不外发。",
+      "log_ref": "LOG-008"
+    },
+    {
+      "id": "D-009",
+      "title": "实时行情与自动化 SLA",
+      "question": "A 股和港股的实时性要达到什么可验收等级？需要页面可见的自动刷新、后台监控、条件告警、定时研究任务或系统通知吗？应用退出/机器休眠时是否必须继续执行？",
+      "depends_on": ["D-001", "D-005"],
+      "recommendation": "首版提供市场时段内可见的 live quote refresh、用户可配置频率和 stale 标识；提供可暂停/可恢复的监控与定时研究任务，但不承诺 tick 级、后台永久在线或券商级告警送达。退出/休眠后任务显示 recovering/paused，除非未来建立系统级 worker。",
+      "status": "answered",
+      "round": 2,
+      "answer": "用户确认按默认：首版提供交易时段 live quote、可配置刷新频率、stale 标识、可暂停/恢复监控和定时研究任务；不承诺 tick 级、后台永久运行或券商级送达。",
+      "log_ref": "LOG-009"
+    },
+    {
+      "id": "D-010",
+      "title": "Agent 自主权与研究动作",
+      "question": "首版 Agent 是否可以自主选择数据工具、批量分析 A/HK 标的、创建筛选/回测/监控任务和写入研究记录？哪些动作必须用户确认？是否永远禁止买卖、仓位和下单？",
+      "depends_on": ["D-003", "D-005"],
+      "recommendation": "允许 Agent 在声明的预算、数据集和工具 allowlist 内自主读取、比较和生成草稿任务；创建长期任务、读取个人持仓/私有资料、外发模型和写入用户文件前需要确认；永远禁止交易动作。",
+      "status": "answered",
+      "round": 3,
+      "answer": "用户选择方案 1：公开数据只读分析可自动化；持久化长期任务、个人资料/私有研报读取、模型外发、通知和写入用户文件必须用户确认；交易、仓位、券商和资金动作永久禁止。",
+      "log_ref": "LOG-010"
+    },
+    {
+      "id": "D-011",
+      "title": "相对完整的首版能力承诺",
+      "question": "请确认首版必须同时出现哪些用户可见模块：A/HK 行情与 K 线、资产/自选、财务/公告/研报/新闻、筛选/因子、回测、监控/告警、组合/持仓、Agent 研究、导入导出？模块若数据质量不同，是否允许以 partial/experimental 上线？",
+      "depends_on": ["D-001", "D-005", "D-007", "D-008", "D-009", "D-010"],
+      "recommendation": "模块入口可以完整，但每个市场 x 数据集 x workflow 必须显示能力等级；行情/资产/自选/持仓账本/研究底稿/导入导出为 supported 基线，回测/监控/Agent/港股深度数据按证据通过后启用，experimental 不得伪装为金融正确性保证。",
+      "status": "answered",
+      "round": 3,
+      "answer": "用户确认：首版所有规划模块全部上线，包括 A/HK 行情与 K 线、资产/自选、财务/公告/研报/新闻、筛选/因子、回测、监控/告警、组合/持仓、Agent 研究、导入导出。上线含义是每个模块都有可操作入口、完整状态和替代路径；具体市场/数据集/provider 可以如实标记 supported/partial/experimental/unavailable，但不得隐藏模块或将不可用结果伪装为可信结果。",
+      "log_ref": "LOG-011"
+    }
+  ]
+}

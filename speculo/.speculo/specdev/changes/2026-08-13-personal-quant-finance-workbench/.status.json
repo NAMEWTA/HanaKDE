@@ -1,0 +1,15 @@
+{
+  "schema_version": 3,
+  "artifact": "change-status",
+  "change": "2026-08-13-personal-quant-finance-workbench",
+  "change_status": "active",
+  "current_work": null,
+  "created_at": "2026-08-13T09:47:03+08:00",
+  "updated_at": "2026-08-13T12:32:00+08:00",
+  "completed_at": null,
+  "archived": false,
+  "archive_path": null,
+  "blockers": [],
+  "deviations": [],
+  "worktrees": []
+}

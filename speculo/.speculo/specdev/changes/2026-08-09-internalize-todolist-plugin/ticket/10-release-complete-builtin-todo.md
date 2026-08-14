@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-internalize-todolist-plugin
 id: T-10
 title: 发布完整 builtin Todo 产品
-status: ready
+status: done
 planning_depth: standard
 planning_depth_reason: 汇合全部纵向切片并验证现有 build/seed 分发、五语言可访问 UI、删除插件可恢复性和严格路径白名单，不新增宿主公共合同。
 ready: true
@@ -39,9 +39,10 @@ shared_path_owners: []
 ### 已锁定决策
 
 - 所有实现性修复仍只写 `<Path>plugins/todolist/</Path>`；根脚本、依赖、公共测试、宿主和其它插件完全只读。
+- 所有生产源代码、运行时、React 页面和测试使用 TypeScript；JSON/YAML 仅用于 manifest、package 和测试/构建元数据，不引入 Python 运行时或脚本依赖。
 - 使用仓库既有 typecheck、lint、server/renderer build、seed 和 test 命令，不修改命令定义来制造绿色。
 - 产物必须从构建/seed 目录独立加载，不依赖 workspace symlink 或未复制源码。
-- 在临时隔离副本/worktree 中删除插件目录执行非 Todo smoke，绝不删除当前用户工作区中的目录。
+- 在临时目录副本中删除插件目录执行非 Todo smoke，绝不创建 worktree，也绝不删除当前用户工作区中的目录。
 - 路径审计相对于实施前记录的基线/实施提交集进行，不能把当前工作区既有无关改动归因于本 change，也不能覆盖它们。
 - zh-CN、zh-TW、ja、ko、en、键盘、焦点、ARIA、主题和窄布局均是 Gate；截图/像素检查必须确认无空白、裁切、遮挡或错位。
 
@@ -68,10 +69,10 @@ shared_path_owners: []
 - **入口或接缝：** 完整插件 test suite、Desktop/narrow Playwright、root type/lint/build/seed/test commands、产物内容和 Git path audit。
 - **输入与输出：** 实施基线与提交集、构建产物、locale/theme/viewport matrix；输出为命令状态、截图、产物清单、路径差异和可移除 smoke。
 - **公共接口变化：** 无；只收口已批准 builtin 插件贡献。
-- **不变量：** 产品写入根唯一；既有 `todo_write`/宿主/其它插件不变；产物自包含；删插件后非 Todo 系统成立；失败分类诚实。
+- **不变量：** 产品写入根唯一；生产实现为 TypeScript；既有 `todo_write`/宿主/其它插件不变；产物自包含；删插件后非 Todo 系统成立；失败分类诚实。
 - **状态或数据流：** source plugin -> existing build/seed -> product artifact -> PluginManager load -> Desktop E2E；baseline -> implementation diff -> allowlist report。
 - **错误与失败行为：** 新失败、基线失败、环境失败、无效验证分开记录；不得跳过、放宽、吞错或改根命令。
-- **兼容要求：** builtin source priority、community plugin behavior、TaskRegistry 其它 handlers、TodoWrite 和非 Todo build/test 均保持。
+- **兼容要求：** builtin source priority、community plugin behavior、TaskRegistry 其它 handlers、TodoWrite 和非 Todo build/test 均保持；宿主未提供的通知回执、Bridge、`session.open` 等能力不在发布候选中虚构。
 - **安全与隐私要求：** 最终 manifest capability 与实际使用一致；产物/日志/截图/导出不泄漏 secret、完整 transcript 或绝对 workspace path。
 
 ## 6. 执行路线
@@ -98,7 +99,7 @@ shared_path_owners: []
 | 正常路径 | 插件全量 + 产品构建 | `npx vitest run <Path>plugins/todolist/tests</Path>`，再运行既有 typecheck/lint/build/seed 命令 | 插件行为绿色，产物包含 builtin、assets 和 runtime deps 且可加载 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-10.md</Path>` |
 | 失败路径 | 产物/能力/路径故障检查 | 从精确产物加载并检查缺依赖、capability mismatch、隐藏 tool、敏感内容 | 无 workspace fallback；失败稳定且无敏感泄漏 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-10.md</Path>` |
 | UI E2E（owner：当前集成 owner） | Desktop/narrow Playwright + screenshots | 运行 `<Path>plugins/todolist/tests/e2e/</Path>` 全套五语言/主题/viewport 场景并检查截图/像素 | 主流程可用，无空白、裁切、遮挡、错位或焦点丢失 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-10.md</Path>` |
-| 路径/可移除性 | Git allowlist + 临时隔离 smoke | 对实施基线审计产品 diff；在临时 worktree 删除 `<Path>plugins/todolist/</Path>` 后运行非 Todo build/test | 产品 diff 仅插件根，非 Todo 引擎仍构建运行，当前工作区未被删除 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-10.md</Path>` |
+| 路径/可移除性 | Git allowlist + 临时目录 smoke | 对实施基线审计产品 diff；在临时目录副本删除 `<Path>plugins/todolist/</Path>` 后运行非 Todo build/test | 产品 diff 仅插件根，非 Todo 引擎仍构建运行，当前工作区未被删除且未生成 worktree | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-10.md</Path>` |
 | 回归 | 仓库既有测试 | 运行 `<Path>package.json</Path>` 定义的适用全量测试并单列基线/环境失败 | TodoWrite、PluginManager、TaskRegistry、EventBus、其它插件无新回归 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-10.md</Path>` |
 
 ## 9. 发布、迁移与恢复
@@ -112,9 +113,9 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-001、AC-032：既有 build/seed 产物包含并加载 builtin Todo，运行依赖完整且不靠 workspace symlink。
-- [ ] AC-025：实施产品新增/修改/删除/生成文件全部位于 `<Path>plugins/todolist/</Path>`。
-- [ ] AC-031：五语言、键盘、焦点、ARIA、主题和桌面/窄布局全流程通过截图与交互 Gate。
-- [ ] AC-003、AC-023、AC-029、AC-033：TodoWrite、readiness、错误和 tool catalog 回归通过。
-- [ ] 临时隔离环境删除插件后非 Todo build/test 通过，当前工作区与用户改动未受破坏。
-- [ ] Evidence 完整，所有失败正确分类，Ticket、Map 与状态同步。
+- [x] AC-001、AC-032：既有 build/seed 产物包含并加载 builtin Todo，TypeScript 运行依赖完整且不靠 workspace symlink。
+- [x] AC-025：实施产品新增/修改/删除/生成文件全部位于 `<Path>plugins/todolist/</Path>`。
+- [x] AC-031：五语言、键盘、焦点、ARIA、主题和桌面/窄布局全流程通过截图与交互 Gate。
+- [x] AC-003、AC-023、AC-029、AC-033：TodoWrite、readiness、错误和 tool catalog 回归通过。
+- [x] 临时隔离环境删除插件后非 Todo build/test 通过，当前工作区与用户改动未受破坏。
+- [x] Evidence 完整，所有失败正确分类，Ticket、Map 与状态同步。

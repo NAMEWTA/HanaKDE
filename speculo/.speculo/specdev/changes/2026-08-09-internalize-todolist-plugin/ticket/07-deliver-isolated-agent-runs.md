@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-internalize-todolist-plugin
 id: T-07
 title: 交付隔离的 Agent 自动化运行协议
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: 涉及 Agent/Session/Task 权限、外部副作用、Run/Attempt 持久 schema、隐私边界与异步 fail-closed 取消。
 ready: true
@@ -58,7 +58,7 @@ shared_path_owners: []
 
 | IN（本 Ticket 构建） | REUSE（复用且不改变契约） | OUT（明确不做） |
 |---|---|---|
-| Run/Attempt/Hold schema、精确 claim、Session/Agent 调用、结果收敛、retry、取消、ResourceRef 与内部 handlers | T-06 TaskRegistry readiness/schedule、宿主 Session/Agent/Task/ResourceIO、T-02 confirmation | 自建 Agent runtime、轮询巡查、跨 Todo 合并会话、复制对话、自动完成 Todo、扩大 workspace |
+| Run/Attempt/Hold schema、精确 claim、Session/Agent 调用、结果收敛、retry、取消、ResourceRef 与内部 handlers | T-06 TaskRegistry readiness/schedule、宿主已提供的 Session/Agent/Task/ResourceIO、T-02 confirmation | 自建 Agent runtime、轮询巡查、跨 Todo 合并会话、复制对话、自动完成 Todo、扩大 workspace、假设未提供的 Session 打开/导航能力 |
 
 ## 4. 要构建什么
 
@@ -68,7 +68,7 @@ shared_path_owners: []
 
 - **入口或接缝：** scheduler internal handler、automation application service、Session/Agent/Task/ResourceIO capabilities、automation routes/tools。
 - **输入与输出：** handler 输入 stable Todo/occurrence/schedule identity；Run 输出 state、attempts、sessionRef、summary/result/diagnostic；mutation 需要 expectedVersion 和授权 context。
-- **公共接口变化：** 新增用户级 automation query/retry/cancel tools 与 routes；claim、runner、completion handler 均为 plugin-private。
+- **公共接口变化：** 新增用户级 automation query/retry/cancel tools 与 routes；claim、runner、completion handler 均为 plugin-private；不新增 `session.open` 或其它宿主接口。
 - **不变量：** Todo×occurrence 唯一 Run；每 Run 唯一 Session；retry 追加 Attempt；Run/Todo 状态正交；cancelled 必须有宿主确认；无消息副本和绝对路径。
 - **状态或数据流：** due claim -> Run queued -> Session created -> running Attempt -> succeeded/failed/needs_action；cancel -> cancel_requested -> host confirmation -> cancelled 或 visible failure。
 - **错误与失败行为：** incomplete_configuration、permission_denied、workspace_unavailable、session_unavailable、duplicate_claim、cancel_failed、result_invalid、capability_unavailable 稳定可见。
@@ -111,8 +111,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-017～019：Run/Session/Attempt 隔离与结果正交合同成立。
-- [ ] AC-020：future/queued/running 取消按 fail-closed 状态机执行，不乐观标记 cancelled。
-- [ ] AC-022、AC-026：Session 是对话权威，store 无消息副本/绝对路径，ResourceRef 不扩大 workspace。
-- [ ] AC-009、AC-012、AC-029、AC-033：显式授权、独立开关、稳定失败和内部 handler 隐藏成立。
-- [ ] Evidence 完整且产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。
+- [x] AC-017～019：Run/Session/Attempt 隔离与结果正交合同成立。
+- [x] AC-020：future/queued/running 取消按 fail-closed 状态机执行，不乐观标记 cancelled。
+- [x] AC-022、AC-026：Session 是对话权威，store 无消息副本/绝对路径，ResourceRef 不扩大 workspace。
+- [x] AC-009、AC-012、AC-029、AC-033：显式授权、独立开关、稳定失败和内部 handler 隐藏成立。
+- [x] Evidence 完整且产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。
