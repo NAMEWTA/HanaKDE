@@ -1,16 +1,18 @@
 # Upstream Sync Ledger
 
-本 ledger 是 HanaKDE 对 OpenHanako v0.446.6 target 的 staged sync 记录。它只
+本 ledger 是 HanaKDE 对 OpenHanako 的 staged sync 记录。它只
 记录已经落入本地 integration ancestry 的事实；新的 upstream commit 必须先冻结
 来源、计算 overlap，再按本表方法复核，不能把 rerere 或无冲突 merge 当作语义答案。
 
 ## Frozen target
 
-- **Repository target:** `openhanako v0.446.6` / package version `0.446.6`
+- **Repository target:** `openhanako v0.447.4` / package version `0.447.4`
+- **Previous absorbed ancestor:** `v0.446.6` / `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`
 - **Initial freeze:** T-01 `fabe31dd`
 - **Current documentation baseline:** T-24 dispatch `de0eb983`
-- **Integration branch:** `speculo/2026-08-09-openhanako-v0-446-6-integration/integration`
-- **Rule:** final target must remain an ancestor of the final HEAD; patch equivalence is insufficient.
+- **Visible sync branch (keep):** `speculo/upstream-sync/v0.447.4`
+- **Historical integration branch (deleted after v0.446.6):** `speculo/2026-08-09-openhanako-v0-446-6-integration/integration`
+- **Rule:** final target must remain an ancestor of the final HEAD; patch equivalence is insufficient. Merge the **named tag**, not a raw SHA, and do not delete the sync branch until Git Graph shows the diamond.
 
 ## Checkpoint ledger
 
@@ -35,6 +37,7 @@
 | T-21 | `e1b232b3` | production packaging integration | keep target helper/closure/manifest; no release side effect | clean package/open rehearsal, 48 independent tests |
 | T-23 | `7d15baea` | platform harness integration | keep macOS runner; do not promote arm64-only review to done | 20 independent tests plus atomic-event hardening, arm64 DMG inventory |
 | T-24 | `de0eb983` | documentation work baseline | this ledger is candidate documentation, not final completion | docs/link/terminology review |
+| 2026-08-19 v0.447.4 | `7fffcc71` | upstream accepted + semantic integration | absorb frozen `v0.447.4`; keep HanaKDE ResourceIO/Knowledge/History owners | named-tag `--no-ff` merge + 8 files / 185 tests |
 
 ## Five-way decision vocabulary
 
@@ -140,3 +143,68 @@ cherry-pick, commit, push, or publish an upstream change.
 checkpoint without a second owner, watcher, parser, route kernel, or raw
 absolute-path Renderer API. Any future overlap that changes these ownership or
 security facts must stop at the affected checkpoint and return to Spec/Grill.
+
+## 2026-08-19 Absorb OpenHanako v0.447.4
+
+This checkpoint merges the frozen named tag `v0.447.4` with `git merge --no-ff`
+so Git Graph shows a recent diamond from `upstream/main` / `v0.447.4` into the
+HanaKDE line. It does not squash, rebase, or cherry-pick, and it keeps the
+named sync branch.
+
+### Frozen inputs and topology
+
+- **Frozen upstream tag:** `v0.447.4` =
+  `c6d0405294be67cb134c2758f6472748ee73e2be`.
+- **Previous absorbed ancestor:** `v0.446.6` =
+  `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`.
+- **Local baseline:** `hanakde` =
+  `532bb876ef3348137f90376e6212196b03fd5f11`.
+- **Sync branch:** `speculo/upstream-sync/v0.447.4`.
+- **Merge commit:** `7fffcc71bc07b6a0c14ca1f12b106f1be96f3b23`
+  (`merge(upstream): absorb OpenHanako v0.447.4`), parents
+  `532bb876` + `c6d04052`.
+- **Ancestry commands:**
+  - `git merge-base --is-ancestor v0.447.4 HEAD` → 0
+  - `git merge-base --is-ancestor 5f08a4f HEAD` → 0
+  - `git merge-base hanakde v0.447.4` before merge was `5f08a4f`
+  - `git rev-list --left-right --count hanakde...v0.447.4` before merge was `441	7`
+- **Upstream commits in this slice:** `a14a13bc`, `61a2a6bf`, `bed24b93`,
+  `b3927f07`, `d96b5d67`, `ecc2c055`, `c6d04052`.
+
+### Conflict files and five-way classification
+
+| Path | Classification | Decision |
+|---|---|---|
+| `core/engine.ts` | semantic integration | Keep HanaKDE `randomUUID` and `runBestEffortStartupStep`; add only `migrateAgentPersonaFileNames` and run it as `agents-md-rename` before agent init. Do not import unused upstream migration helpers. ResourceIO / Knowledge / History owners unchanged. |
+| `server/routes/desk.ts` | semantic integration | Keep HanaKDE `discloseNativeDetails` on file-action errors; accept upstream `SAFE_CRON_STORE_ERRORS` / `cronStoreRouteFailure`. |
+| `scripts/compute-cli-closure.mjs` | upstream accepted | Take the non-volatile justification text (no source line numbers). |
+| `export-manifest.json` | semantic integration | Rename `lib/public-ishiki-templates` → `lib/agents-public-templates`; keep HanaKDE `lib/knowledge-workspace/**` export entries. |
+| `build/cli-runtime-closure.json` | generated | Regenerated: 9688 files (source-graph=703, runtime-asset=13, nft-runtime-trace=8972). |
+| `build/persistence-schema-fingerprint.json` | generated | Regenerated compatible pin `sha256:375db568da7c8d05b377a818e203725045a78304f2681d06eeceeae528c46905`. |
+| `build/persistence-store-inventory.json` | generated | Regenerated: 63 stores, 765 sites. |
+
+### Five-way decision record
+
+| Classification | Paths or behavior | Decision |
+|---|---|---|
+| upstream accepted | AGENTS.md persona rename, template directory rename, cron-store recovery, Windows stale-seed cleanup, closure justification rewrite, locales/settings copy | Accept as the owning upstream increment. |
+| HanaKDE kept | ResourceIO / Knowledge / History / restore owners; engine assembly; native path disclosure on Desk file actions; knowledge-workspace export entries | Preserve local contracts. `core/engine.ts` overlap is a 12-line startup rename, not an owner change. |
+| semantic integration | The four source conflict paths above | Combine accepted upstream behavior with HanaKDE helpers and export surface. |
+| generated | closure, persistence fingerprint, persistence inventory | Rebuild from final merged source; do not hand-edit. |
+| deleted duplicate | none | Template rename is upstream accepted, not a second-owner deletion. |
+
+### Owner, security, and affected-test receipt
+
+- No second ResourceIO, watcher, History store, Knowledge parser, or restore writer was added.
+- Focused overlap tests: 8 files / 185 tests passed
+  (`agents-md-startup-migration`, `cron-store`, `desk-route-cron`,
+  `persona-source`, `workspace-instruction-files-exclude`,
+  `agent-manager-create-defaults`, `first-run-default-workspace`,
+  `windows-installer-contract`).
+- `git diff --check` on the merge result was clean.
+
+**Compatibility conclusion:** `v0.447.4` is an ancestor of the sync HEAD, and
+the recent Git Graph diamond is the named-tag merge `7fffcc71`. Future syncs
+must freeze the next tag, merge that tag with `--no-ff` on a kept named
+branch, and re-run this overlap/classify/scan/test/record loop. Do not reuse
+this SHA as evidence for a later upstream tip.
