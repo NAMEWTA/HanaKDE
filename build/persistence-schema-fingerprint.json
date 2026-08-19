@@ -630,7 +630,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:33f6572889557b0cdac4f3f75f5d1ca737dfdb13f7323833ce28505e20e7d327",
+  "payloadFingerprint": "sha256:375db568da7c8d05b377a818e203725045a78304f2681d06eeceeae528c46905",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -814,7 +814,8 @@
       "id": "agent-profile",
       "identityContract": "agentId owns the profile; each filename has a fixed semantic role.",
       "migrationEntry": [
-        "lib/compat/checks/config-yaml.ts"
+        "lib/compat/checks/config-yaml.ts",
+        "core/agents-md-migration.ts"
       ],
       "openEntry": [
         "AgentManager.loadAgents",
@@ -827,8 +828,8 @@
       "pathPatterns": [
         "agents/{agentId}/config.yaml",
         "agents/{agentId}/identity.md",
-        "agents/{agentId}/ishiki.md",
-        "agents/{agentId}/public-ishiki.md",
+        "agents/{agentId}/AGENTS.md",
+        "agents/{agentId}/AGENTS.public.md",
         "agents/{agentId}/appearance-summary.json",
         "agents/{agentId}/avatars/{fileName}",
         "agents/{agentId}/pinned.md",
@@ -3138,8 +3139,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Repins deterministic source receipts after the authorized T-26 Agent mutation correlation changed Engine, ActivityHub and session serialization imports; runtime-introspected schemas, persistence owners, DATA_EPOCH, migration, checkpoint and restore contracts are unchanged.",
-    "payloadFingerprint": "sha256:33f6572889557b0cdac4f3f75f5d1ca737dfdb13f7323833ce28505e20e7d327"
+    "compatibilityReason": "Repins deterministic source receipts after absorbing OpenHanako v0.447.4 (AGENTS.md persona rename and automation store recovery writes) onto the existing HanaKDE persistence owners; runtime-introspected schemas, DATA_EPOCH, migration, checkpoint and restore contracts are unchanged.",
+    "payloadFingerprint": "sha256:375db568da7c8d05b377a818e203725045a78304f2681d06eeceeae528c46905"
   },
   "schemas": [
     {
@@ -3221,7 +3222,7 @@
       "contract": "agent config and authored Markdown/image profile protocol",
       "kind": "directory-contract",
       "module": "core/agent-manager.ts",
-      "sourceHash": "sha256:a1f883d4596d7fd7abb1ceab44c099deb152351421511933436b765441a4dff2",
+      "sourceHash": "sha256:077173fbec071cc4b86099c186392bb1e85340d689f4d75702130687473f737d",
       "storeId": "agent-profile"
     },
     {
@@ -3235,14 +3236,14 @@
       "contract": "token-scoped import plan/package and export package protocol",
       "kind": "directory-contract",
       "module": "lib/character-cards/service.ts",
-      "sourceHash": "sha256:04d85be0fcff0b7a8d6187e648ced184d79ee1cfbbddba91fec4b40886a26dd0",
+      "sourceHash": "sha256:407c0265bf71fb054c6e4df2bd10320114e24b03e9a1b7e6e837db70165e66c6",
       "storeId": "character-card-staging"
     },
     {
       "contract": "CronStore job registry and run receipt protocol",
       "kind": "directory-contract",
       "module": "lib/desk/cron-store.ts",
-      "sourceHash": "sha256:cf6c580927341b5004cbbf00d809b5be4fe549e0949c03c7f15f103c4708e219",
+      "sourceHash": "sha256:bb1664a1ce588406d4fafebd71b5726938ff4a8a619b380c0936ceadb217f37c",
       "storeId": "cron-automation"
     },
     {
@@ -3301,7 +3302,7 @@
       "contract": "bounded base64 cover upload temporary-directory lifecycle",
       "kind": "directory-contract",
       "module": "server/routes/desk.ts",
-      "sourceHash": "sha256:e776c59607f77a1fa0a74dff1097e5bff587a30ab702edf407035b6a93d667cf",
+      "sourceHash": "sha256:d145b9d55e5e100c0b9a127c735d4e457d6ea5a74e4c2f95ea9df3004f6cb8e6",
       "storeId": "desk-cover-upload-staging"
     },
     {
@@ -3336,7 +3337,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:f108bd0c1c18f5d7618ad025f847076208b67cffdb2c378dfa5484d9a83acabf",
+      "sourceHash": "sha256:5e486a4074e2a9c2d3d6e30e94a06d5353d256340818a855c602e1c5ab31a7ed",
       "storeId": "desktop-window-version-state"
     },
     {
@@ -3613,7 +3614,7 @@
         {
           "contract": "core/session-coordinator.ts Hana metadata extensions",
           "module": "core/session-coordinator.ts",
-          "sourceHash": "sha256:2a8552569f98d831d742da0c00a6fad4ea73409330b562cdbffa2629f3f29de9"
+          "sourceHash": "sha256:af8cbd283c5ec81e85fdd3e8da32c79b2526c9adaa0aa563e9616ffec0b0a621"
         },
         {
           "contract": "core/session-jsonl-file.ts repair contract",
@@ -3711,7 +3712,7 @@
       "contract": "bridge index, legacy session metadata, title, and vision sidecar readers",
       "kind": "runtime-contract",
       "module": "core/bridge-session-manager.ts",
-      "sourceHash": "sha256:c50224c29af58ed7d9753f549c7c2a483844388b0982487365f33ce4b4be06c0",
+      "sourceHash": "sha256:7ed05febd0506adb3cdc38c86a652f1c47a4e1a499f9308a7e940faaae1297ef",
       "storeId": "session-sidecars"
     },
     {
@@ -3944,6 +3945,22 @@
       "reason": "Creates the memory directory and records legacy memories.db import state.",
       "sourceFile": "core/agent.ts",
       "storeId": "agent-memory"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "ordinal": 0,
+      "reason": "Renames agent persona files onto their current names.",
+      "sourceFile": "core/agents-md-migration.ts",
+      "storeId": "agent-profile"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "ordinal": 0,
+      "reason": "Renames agent persona files onto their current names.",
+      "sourceFile": "core/agents-md-migration.ts",
+      "storeId": "agent-profile"
     },
     {
       "exemptionId": null,
@@ -6715,6 +6732,14 @@
     },
     {
       "exemptionId": null,
+      "kind": "copy-file",
+      "ordinal": 0,
+      "reason": "Writes cron jobs or execution receipts.",
+      "sourceFile": "lib/desk/cron-store.ts",
+      "storeId": "cron-automation"
+    },
+    {
+      "exemptionId": null,
       "kind": "mkdir",
       "ordinal": 0,
       "reason": "Writes cron jobs or execution receipts.",
@@ -6724,6 +6749,22 @@
     {
       "exemptionId": null,
       "kind": "mkdir",
+      "ordinal": 0,
+      "reason": "Writes cron jobs or execution receipts.",
+      "sourceFile": "lib/desk/cron-store.ts",
+      "storeId": "cron-automation"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "ordinal": 0,
+      "reason": "Writes cron jobs or execution receipts.",
+      "sourceFile": "lib/desk/cron-store.ts",
+      "storeId": "cron-automation"
+    },
+    {
+      "exemptionId": null,
+      "kind": "write-file",
       "ordinal": 0,
       "reason": "Writes cron jobs or execution receipts.",
       "sourceFile": "lib/desk/cron-store.ts",
