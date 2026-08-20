@@ -1,0 +1,23 @@
+{
+  "schema_version": 3,
+  "artifact": "change-status",
+  "change": "2026-08-09-internalize-todolist-plugin",
+  "change_status": "archived",
+  "current_work": null,
+  "created_at": "2026-08-09T10:05:39+08:00",
+  "updated_at": "2026-08-20T15:00:00+08:00",
+  "completed_at": "2026-08-13T18:58:00+08:00",
+  "archived": true,
+  "archive_path": "<Path>{roots.state}/specdev/archive/2026-08/2026-08-09-internalize-todolist-plugin/</Path>",
+  "archived_at": "2026-08-20T15:00:00+08:00",
+  "promotion_summary": {
+    "adr_created": 0,
+    "context_terms_promoted": 0,
+    "research_created": 0,
+    "knowledge_candidates_deferred": 1,
+    "ticket_evidence_retained": 10
+  },
+  "blockers": [],
+  "deviations": [],
+  "worktrees": []
+}

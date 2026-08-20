@@ -451,8 +451,9 @@
       "base_sha": "4231ec3f4ed93167ab3c7a69b8c2160d886113ff",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-22",
       "workspace_ref": "specdev-worktree/T-22",
-      "status": "blocked",
-      "updated_at": "2026-08-11T16:48:55+0800"
+      "status": "removed",
+      "updated_at": "2026-08-20T15:00:00+0800",
+      "note": "Worktree gone; remaining Windows gate is owned by 2026-08-12-openhanako-v0-446-6-platform-gates. Audit side-branch fad195c2 is tagged recovery/t22-audit-fad195c2."
     },
     {
       "ticket_id": "T-25",
@@ -461,8 +462,9 @@
       "base_sha": "10a79be8",
       "branch": "speculo/2026-08-09-openhanako-v0-446-6-integration/T-25",
       "workspace_ref": "specdev-worktree/T-25",
-      "status": "blocked",
-      "updated_at": "2026-08-11T23:32:42+0800"
+      "status": "removed",
+      "updated_at": "2026-08-20T15:00:00+0800",
+      "note": "Worktree gone; remaining umbrella acceptance is owned by 2026-08-12-openhanako-v0-446-6-platform-gates."
     },
     {
       "ticket_id": "T-26",

@@ -1,0 +1,64 @@
+name: Sync Upstream Mirror
+
+# Keep origin/main a fast-forward-only mirror of upstream/main.
+# Never push tags: upstream v* tags must not land on origin, because
+# .github/workflows/build.yml treats refs/tags/v* as product releases.
+
+on:
+  schedule:
+    - cron: "17 16 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fast-forward origin/main from upstream/main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git init --bare mirror.git
+          cd mirror.git
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote add upstream https://github.com/liliMozi/openhanako.git
+
+          git fetch --no-tags --prune origin refs/heads/main:refs/remotes/origin/main
+          git fetch --no-tags --prune upstream refs/heads/main:refs/remotes/upstream/main
+
+          BEFORE="$(git rev-parse --verify refs/remotes/origin/main)"
+          AFTER="$(git rev-parse --verify refs/remotes/upstream/main)"
+          COUNTS="$(git rev-list --left-right --count refs/remotes/origin/main...refs/remotes/upstream/main)"
+          ORIGIN_AHEAD="${COUNTS%%	*}"
+          UPSTREAM_AHEAD="${COUNTS#*	}"
+
+          {
+            echo "### Upstream mirror"
+            echo ""
+            echo "- origin/main before: \`$BEFORE\`"
+            echo "- upstream/main: \`$AFTER\`"
+            echo "- ahead/behind (origin...upstream): ${ORIGIN_AHEAD} / ${UPSTREAM_AHEAD}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$ORIGIN_AHEAD" != "0" ]; then
+            echo "::error::origin/main has ${ORIGIN_AHEAD} unique commit(s); refusing non-fast-forward mirror update"
+            exit 1
+          fi
+
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "origin/main already matches upstream/main"
+            echo "- result: already up to date" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git push --ff-only origin refs/remotes/upstream/main:refs/heads/main
+
+          {
+            echo "- origin/main after: \`$AFTER\`"
+            echo "- result: fast-forwarded ${UPSTREAM_AHEAD} commit(s)"
+            echo "- tags pushed: none"
+          } >> "$GITHUB_STEP_SUMMARY"

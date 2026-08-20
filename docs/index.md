@@ -41,6 +41,7 @@
 - [8. 关键入口点](#8-关键入口点)
 - [9. 不存在但可能被期待的目录](#9-不存在但可能被期待的目录)
 - [10. v0.446.6 集成文档](#10-v04466-集成文档)
+- [11. Git 分支与上游镜像](#11-git-分支与上游镜像)
 
 ---
 
@@ -684,10 +685,11 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 | 文件 | 说明 |
 |------|------|
 | `build.yml` (29KB) | **主构建流水线** — 跨 4 并行 job 构建所有平台安装程序（macOS arm64/x64、Windows x64、Linux x64），发布到 GitHub Releases、发布更新列车清单、镜像到 AtomGit |
-| `ci.yml` | **持续集成** — PR/推送到 main：类型检查、lint、测试、Windows 独立包构建、开放组合冒烟测试 |
-| `close-prs.yml` | 自动关闭 PR（项目目前仅接受 Issue） |
+| `ci.yml` | **持续集成** — PR/推送到 `hanakde`：类型检查、lint、测试、Windows 独立包构建、开放组合冒烟测试 |
+| `close-prs.yml` | 自动关闭非仓库 owner 的 PR；owner 的 PR 仍可合入 `hanakde` |
 | `mirror-release-to-atomgit.yml` | 镜像发布到 AtomGit（加速中国区访问） |
 | `publish-train.yml` | 发布训练流水线（手动触发，用于发布/重试更新列车） |
+| `sync-upstream-mirror.yml` | 将 `origin/main` fast-forward 到 `upstream/main`；不推送 tags |
 
 ---
 
@@ -838,9 +840,21 @@ CSP 策略在 `vite.csp-profiles.ts` 中集中定义，覆盖 6 个 HTML 入口�
 
 本 change 的当前架构、同步方法和故障诊断以以下文档为准：
 
+- [Git 分支模型](maintenance/git-branch-model.md)
 - [集成架构](architecture/openhanako-v0.446.6-integration.md)
 - [Upstream sync ledger](upstream-sync-ledger.md)
 - [Resource consistency troubleshooting](troubleshooting/resource-consistency.md)
 
 这些文档引用实际代码路径、SpecDev Evidence 和 Git fixed points；平台 Gate 的
 `ready`/`review`/`integrated` 状态不能互相推断，最终 verdict 仍由 T-25 产生。
+
+---
+
+## 11. Git 分支与上游镜像
+
+长期远端分支只有：
+
+- `origin/hanakde`：产品主分支与 GitHub 默认分支
+- `origin/main`：`upstream/main` 的只读 fast-forward 镜像
+
+日常开发使用 `feature/*`，上游吸收使用 `sync/upstream-vX.Y.Z`，合入后删除。完整契约见 [Git 分支模型](maintenance/git-branch-model.md)。

@@ -10,9 +10,11 @@
 - **Previous absorbed ancestor:** `v0.446.6` / `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`
 - **Initial freeze:** T-01 `fabe31dd`
 - **Current documentation baseline:** T-24 dispatch `de0eb983`
-- **Visible sync branch (keep):** `speculo/upstream-sync/v0.447.4`
+- **Completed sync branch (deleted after diamond + ledger):** `speculo/upstream-sync/v0.447.4`
 - **Historical integration branch (deleted after v0.446.6):** `speculo/2026-08-09-openhanako-v0-446-6-integration/integration`
-- **Rule:** final target must remain an ancestor of the final HEAD; patch equivalence is insufficient. Merge the **named tag**, not a raw SHA, and do not delete the sync branch until Git Graph shows the diamond.
+- **Proof tag:** `hanakde-includes-v0.447.4`
+- **Branch model:** [docs/maintenance/git-branch-model.md](maintenance/git-branch-model.md)
+- **Rule:** final target must remain an ancestor of the final HEAD; patch equivalence is insufficient. Merge the **named tag**, not a raw SHA. Keep the sync branch only until Git Graph shows the diamond, the ledger records the merge SHA, and `hanakde-includes-vX.Y.Z` exists; then delete the sync branch. Long-term evidence is ancestry, this ledger, and the proof tag.
 
 ## Checkpoint ledger
 
@@ -60,14 +62,20 @@ these areas route back to the owning Ticket and require a new Evidence checkpoin
 
 ## Next sync procedure
 
-1. Freeze source commit and record its SHA beside the local target SHA.
-2. Generate a path overlap report against the current integration HEAD.
-3. Re-run architecture/security ownership scans before applying semantic merges.
-4. Apply one staged checkpoint at a time; run affected contract tests and update this
-   ledger with the actual merge SHA.
-5. Regenerate closure/export/seed receipts from source and compare them deterministically.
-6. Keep platform Gate residuals visible; do not waive Windows/macOS blockers because a
+1. Freeze a named upstream tag and record its SHA beside the local `hanakde` SHA.
+   Do not use moving `upstream/main` as the merge input.
+2. Create `sync/upstream-vX.Y.Z` from current `hanakde`.
+3. Generate a path overlap report against the current integration HEAD.
+4. Re-run architecture/security ownership scans before applying semantic merges.
+5. `git merge --no-ff <tag>` one staged checkpoint at a time; run affected contract
+   tests and update this ledger with the actual merge SHA.
+6. Regenerate closure/export/seed receipts from source and compare them deterministically.
+7. PR into `hanakde`. Confirm `git merge-base --is-ancestor <tag> hanakde`, tag
+   `hanakde-includes-vX.Y.Z`, then delete the sync branch locally and on `origin`.
+8. Keep platform Gate residuals visible; do not waive Windows/macOS blockers because a
    macOS/Linux development build is green.
+9. Keep origin/main a fast-forward mirror of upstream/main. Never push upstream `v*`
+   tags to origin.
 
 ## 2026-08-12 Knowledge workspace resource convergence
 
@@ -263,13 +271,14 @@ Ancestry after the named-tag absorb is intact:
 
 #### Refs retained for the next sync
 
-- Tag `v0.447.4` (upstream freeze)
-- Tag `hanakde-includes-v0.447.4`
-- Tag `todo-plugin-includes-v0.447.4` on `feature/todo-plugin`
-- Branch `speculo/upstream-sync/v0.447.4`
+- Tag `v0.447.4` (upstream freeze; local / `upstream` only, not on `origin`)
+- Tag `hanakde-includes-v0.447.4` (product proof that the freeze is an ancestor)
 - Remote `upstream` → `https://github.com/liliMozi/openhanako.git`
+- Remote `origin` long-lived branches: `hanakde` (product), `main` (mirror)
 
-Do not delete the named sync branch. The next absorb must freeze the next
-named tag, merge it with `--no-ff` onto `hanakde`, classify overlap with this
-vocabulary, regenerate receipts from source, and rerun the full verification
-loop.
+The named sync branch `speculo/upstream-sync/v0.447.4` and `feature/todo-plugin`
+are deleted after the diamond, ledger, and proof tag are in place. The next
+absorb must freeze the next named tag, create `sync/upstream-vX.Y.Z` from
+`hanakde`, merge that tag with `--no-ff`, classify overlap with this
+vocabulary, regenerate receipts from source, PR into `hanakde`, then delete
+the sync branch.
