@@ -379,8 +379,8 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 | `permission/` | 权限系统：approval-review-context、safety-policy、tool-invocation-permission |
 | `session-files/` (4 文件) | 会话文件：bridge-inbound-files、browser-screenshot-file、session-file-registry、session-file-response |
 | `identity-templates/` | Agent 身份 Markdown 模板（hanako、butter、ming） |
-| `ishiki-templates/` | "意识"（Ishiki）Markdown 模板 |
-| `public-ishiki-templates/` | 公开 Ishiki 模板 |
+| `agents-templates/` | AGENTS.md 人格 Markdown 模板 |
+| `agents-public-templates/` | 公开 AGENTS.md 人格模板 |
 | `yuan/` | Yuan 角色定义（hanako、butter、kong、ming） |
 | `pi-sdk/` | PI SDK 适配器层：index、search-tools、session-options、stream-guard、tool-outcome-adapter（**所有 PI SDK 导入必须经过此层**） |
 | `agent-review/` | Agent 审查轮次协调器 |
@@ -423,7 +423,7 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 | `zip-writer.ts` / `extract-zip.ts` | ZIP 文件读写 |
 | `default-models.json` / `known-models.json` / `known-model-fallbacks.json` | 模型目录数据 |
 | `config.example.yaml` | 示例配置 |
-| `identity.example.md` / `ishiki.example.md` / `pinned.example.md` | 示例模板 |
+| `identity.example.md` / `agents.example.md` / `pinned.example.md` | 示例模板 |
 
 ---
 
