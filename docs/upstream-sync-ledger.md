@@ -37,7 +37,8 @@
 | T-21 | `e1b232b3` | production packaging integration | keep target helper/closure/manifest; no release side effect | clean package/open rehearsal, 48 independent tests |
 | T-23 | `7d15baea` | platform harness integration | keep macOS runner; do not promote arm64-only review to done | 20 independent tests plus atomic-event hardening, arm64 DMG inventory |
 | T-24 | `de0eb983` | documentation work baseline | this ledger is candidate documentation, not final completion | docs/link/terminology review |
-| 2026-08-19 v0.447.4 | `7fffcc71` | upstream accepted + semantic integration | absorb frozen `v0.447.4`; keep HanaKDE ResourceIO/Knowledge/History owners | named-tag `--no-ff` merge + 8 files / 185 tests |
+| 2026-08-19 v0.447.4 | `7fffcc71` | upstream accepted + semantic integration | absorb frozen `v0.447.4`; keep HanaKDE ResourceIO/Knowledge/History owners | named-tag `--no-ff` merge |
+| 2026-08-20 v0.447.4 closure | `a07c22f4` | semantic integration + generated | restore HanaKDE closure justification; rename AGENTS.md docs; pin preflight to `0.447.4` | full vitest + typecheck + renderer; see review subsection |
 
 ## Five-way decision vocabulary
 
@@ -177,7 +178,7 @@ named sync branch.
 |---|---|---|
 | `core/engine.ts` | semantic integration | Keep HanaKDE `randomUUID` and `runBestEffortStartupStep`; add only `migrateAgentPersonaFileNames` and run it as `agents-md-rename` before agent init. Do not import unused upstream migration helpers. ResourceIO / Knowledge / History owners unchanged. |
 | `server/routes/desk.ts` | semantic integration | Keep HanaKDE `discloseNativeDetails` on file-action errors; accept upstream `SAFE_CRON_STORE_ERRORS` / `cronStoreRouteFailure`. |
-| `scripts/compute-cli-closure.mjs` | upstream accepted | Take the non-volatile justification text (no source line numbers). |
+| `scripts/compute-cli-closure.mjs` | semantic integration | Keep the upstream no-line-number justification style; drop the restored `core/migrate-providers.ts` citation (that module is retired on HanaKDE). Regenerated closure receipt in `9e76e2ce`. |
 | `export-manifest.json` | semantic integration | Rename `lib/public-ishiki-templates` → `lib/agents-public-templates`; keep HanaKDE `lib/knowledge-workspace/**` export entries. |
 | `build/cli-runtime-closure.json` | generated | Regenerated: 9688 files (source-graph=703, runtime-asset=13, nft-runtime-trace=8972). |
 | `build/persistence-schema-fingerprint.json` | generated | Regenerated compatible pin `sha256:375db568da7c8d05b377a818e203725045a78304f2681d06eeceeae528c46905`. |
@@ -187,9 +188,9 @@ named sync branch.
 
 | Classification | Paths or behavior | Decision |
 |---|---|---|
-| upstream accepted | AGENTS.md persona rename, template directory rename, cron-store recovery, Windows stale-seed cleanup, closure justification rewrite, locales/settings copy | Accept as the owning upstream increment. |
+| upstream accepted | AGENTS.md persona rename, template directory rename, cron-store recovery, Windows stale-seed cleanup, locales/settings copy | Accept as the owning upstream increment. |
 | HanaKDE kept | ResourceIO / Knowledge / History / restore owners; engine assembly; native path disclosure on Desk file actions; knowledge-workspace export entries | Preserve local contracts. `core/engine.ts` overlap is a 12-line startup rename, not an owner change. |
-| semantic integration | The four source conflict paths above | Combine accepted upstream behavior with HanaKDE helpers and export surface. |
+| semantic integration | `core/engine.ts`, `server/routes/desk.ts`, `export-manifest.json`, and `scripts/compute-cli-closure.mjs` (HanaKDE-owned justification text with upstream no-line-number style) | Combine accepted upstream behavior with HanaKDE helpers, export surface, and retired-module receipts. |
 | generated | closure, persistence fingerprint, persistence inventory | Rebuild from final merged source; do not hand-edit. |
 | deleted duplicate | none | Template rename is upstream accepted, not a second-owner deletion. |
 
@@ -208,3 +209,67 @@ the recent Git Graph diamond is the named-tag merge `7fffcc71`. Future syncs
 must freeze the next tag, merge that tag with `--no-ff` on a kept named
 branch, and re-run this overlap/classify/scan/test/record loop. Do not reuse
 this SHA as evidence for a later upstream tip.
+
+### 2026-08-20 review, residual fixes, and full verification
+
+Ancestry after the named-tag absorb is intact:
+
+- `git merge-base --is-ancestor v0.447.4 hanakde` → 0
+- `git merge-base --is-ancestor v0.447.4 feature/todo-plugin` → 0
+- `git rev-list --left-right --count hanakde...upstream/main` → `447  0`
+- Relative to pre-merge `532bb876`, no HanaKDE files were deleted.
+- Of the 101 upstream-touched files, 98 kept their pre-merge HanaKDE
+  deviation unchanged. The remaining three were generated closure, the
+  intended `runBestEffortStartupStep` engine adapter, and the closure
+  justification text corrected below.
+
+| Follow-up | SHA | Classification | Decision |
+|---|---|---|---|
+| Restore `default-models.json` justification | `9e76e2ce` | semantic integration + generated | Drop the retired `core/migrate-providers.ts` citation; keep upstream no-line-number style; regenerate `build/cli-runtime-closure.json` (9688 files). |
+| Docs persona rename | `8e45771e` | HanaKDE kept | `docs/index.md` is HanaKDE-only; rename `ishiki-templates/` / `public-ishiki-templates/` / `ishiki.example.md`. Legacy `/api/agents/:id/ishiki` aliases remain in `server/routes/agents.ts`. |
+| Preflight package identity | `a07c22f4` | HanaKDE kept | Pin `tests/knowledge-preflight.test.ts` and the docs index header to `0.447.4`. |
+| Todolist persistence registration | `83bc8acc` on `feature/todo-plugin` | HanaKDE kept + generated | Dedicated `todolist-plugin-store` for `plugin-data/todolist`; carve-out from `plugin-runtime-data`; exemptions for `build.ts` and `scripts/verify-package.mjs`; receipts regenerated to 64 stores / 780 sites, fingerprint `sha256:d60e21c69d5daaf38a57b1bab98d71293dac4c06890107283df95786262717fe`. |
+| Todolist JsonValue narrowing | `a73fde9b` on `feature/todo-plugin` | HanaKDE kept | Split null/boolean guards so `tsconfig.node.json` typechecks `plugins/**`. |
+
+#### hanakde (`a07c22f4`)
+
+- Typecheck: `tsc --noEmit` + `tsconfig.node.json` + `tsconfig.test.json` passed.
+- Renderer production build: `npm run build:renderer` passed.
+- Changed-file ESLint (`scripts/compute-cli-closure.mjs`, `tests/knowledge-preflight.test.ts`): 0 errors.
+- Full-tree `eslint .`: 522 errors / 16145 warnings, unchanged from the pre-merge
+  baseline character (no-undef / pre-existing `any`); not treated as a merge defect.
+- Full vitest excluding leftover `specdev-worktree/` / `speculo/` / `.cursor/`:
+  **1204 files / 12299 tests passed**, 1 skipped file / 8 skipped tests.
+  Failures compared with `532bb876`:
+  - **New, fixed:** `tests/knowledge-preflight.test.ts` still expected `0.446.6` (`a07c22f4`).
+  - **Same as `532bb876`, environment:** `tests/knowledge-malicious-workspace.test.ts` (2) and
+    `tests/knowledge-query-api.test.ts` (1) return 500/503. Same as the 2026-08-12
+    ledger note: Node process vs `better-sqlite3` ABI. Not a merge defect.
+  - **Same as `532bb876`, flake:** `FileHistoryModal` deleted-file restore timed out
+    under the full suite and passed in isolation.
+
+#### feature/todo-plugin (`a73fde9b`)
+
+- Merged the hanakde follow-ups with `--no-ff`.
+- Typecheck (three configs) passed after `a73fde9b`.
+- Renderer production build passed.
+- `node plugins/todolist/scripts/verify-package.mjs` passed.
+- Plugin `node:test` suite: **27/27 passed**.
+- Full vitest: **1205 files / 12300 tests passed** (one extra file vs hanakde is
+  the persistence tripwire coverage of the new store). Same 3 environment
+  Knowledge failures and the FileHistoryModal flake. Four plugin `*.test.ts` /
+  `*.spec.ts` files are `node:test` / Playwright, so Vitest reports "No test
+  suite found"; they are not Vitest suites.
+
+#### Refs retained for the next sync
+
+- Tag `v0.447.4` (upstream freeze)
+- Tag `hanakde-includes-v0.447.4`
+- Tag `todo-plugin-includes-v0.447.4` on `feature/todo-plugin`
+- Branch `speculo/upstream-sync/v0.447.4`
+- Remote `upstream` → `https://github.com/liliMozi/openhanako.git`
+
+Do not delete the named sync branch. The next absorb must freeze the next
+named tag, merge it with `--no-ff` onto `hanakde`, classify overlap with this
+vocabulary, regenerate receipts from source, and rerun the full verification
+loop.
