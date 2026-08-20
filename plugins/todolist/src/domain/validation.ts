@@ -55,7 +55,8 @@ function normalizeResourceValue(
   if (depth > RESOURCE_REF_MAX_DEPTH) {
     throw new TodoError("validation", `${field} exceeds the maximum nesting depth`, { field });
   }
-  if (value === null || typeof value === "boolean") return value;
+  if (value === null) return null;
+  if (typeof value === "boolean") return value;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new TodoError("validation", `${field} must contain finite JSON numbers`, { field });
     return value;
