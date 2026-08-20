@@ -5,7 +5,9 @@
     {
       "change": "2026-08-12-openhanako-v0-446-6-platform-gates",
       "current_work": null,
-      "works_run": [],
+      "works_run": [
+        "specdev/implement"
+      ],
       "claimed_investigations": []
     },
     {

@@ -2,16 +2,15 @@
   "schema_version": 3,
   "artifact": "change-status",
   "change": "2026-08-12-openhanako-v0-446-6-platform-gates",
-  "change_status": "active",
+  "change_status": "blocked",
   "current_work": null,
   "created_at": "2026-08-12T00:00:00+08:00",
-  "updated_at": "2026-08-20T14:58:00+08:00",
+  "updated_at": "2026-08-21T00:24:01+08:00",
   "completed_at": null,
   "archived": false,
   "archive_path": null,
   "blockers": [
-    "真实 Windows runner 尚未可用",
-    "macOS x64、物理 sleep/wake 与 literal descriptor 证据尚未完成"
+    "T-23 仍缺真实 macOS x64、物理 sleep/wake、literal descriptor 及共享启动路径变更后的 package/startup/repair 新鲜证据；T-25 因 G2 未关闭而 blocked"
   ],
   "deviations": [],
   "worktrees": []

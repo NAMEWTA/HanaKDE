@@ -3459,12 +3459,18 @@
       "serverExitedWithCode": "Server 已結束，code: {code}",
       "serverFilesNotReady": "自動更新剛完成，新版本檔案仍在寫入磁碟（缺少 {missing}），已等待 {waited} 秒仍未就緒。請稍後重新啟動 HanaAgent。",
       "serverModuleMissing": "Server 啟動失敗：找不到模組 {module}。\n通常是自動更新剛完成、新版本檔案仍在寫入磁碟所致。\n建議：等待 1-2 分鐘後重新啟動 HanaAgent；若反覆出現，請至 GitHub 回報。",
+      "devDependencyIncomplete": "開發依賴不完整（{module}）。請執行 `volta run npm ci`，然後重新啟動 HanaAgent。",
+      "packagedComponentIncomplete": "已安裝的應用程式元件不完整（{module}）。HanaAgent 可以重設應用程式元件並重新啟動。",
+      "packagedComponentRepairBody": "HanaAgent 因應用程式元件 {module} 不完整而無法啟動。修復只會重設已安裝的應用程式元件並重新啟動 HanaAgent，不會影響助手、對話和設定。",
       "installFailedTitle": "HanaAgent 更新",
       "installFailedBody": "更新安裝失敗：\n{error}\n\n請重新啟動 HanaAgent 後重試，或前往設定頁面手動檢查更新。",
       "repairArtifactsTitle": "修復元件",
       "repairArtifactsBody": "此操作會將 HanaAgent 的應用元件重設為安裝包內建的版本，並重新啟動應用程式。你的資料（助手、對話、設定）不受影響。",
       "repairArtifactsConfirm": "修復並重新啟動",
       "repairArtifactsCancel": "取消",
+      "repairArtifactsExit": "退出",
+      "repairArtifactsFailedTitle": "元件修復失敗",
+      "repairArtifactsFailedBody": "部分應用程式元件無法重設。HanaAgent 將結束且不會自動重新啟動。",
       "trainUpdateApplyFailedBody": "HanaAgent v{version}\n\n更新套用失敗：\n{error}\n\n請重新啟動應用程式。"
     },
     "notification": {

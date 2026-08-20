@@ -16,3 +16,19 @@
 - 该提交不在 `hanakde` 历史上；正式同类实现为 `35cb5e7a`，T-22 集成点为 `e06a5230`。
 - 仓库级 stash 仍保留：`stash@{0}` = `50c189617cc5a2fe6403faa112117ea3cb1c4163`（parents `1693a9d8` / `7efff42a` / `725d27ed`），不纳入本次分支治理。
 - 清理后不再注册 `specdev-worktree/T-22-audit`。未来真实 Windows rerun 必须按标准路径重建 `specdev-worktree/T-22`。
+
+## LOG-004 — 2026-08-20 — 采用完整启动完整性修复
+
+不写 typebox 特例。当前 change 增加 T-27，覆盖 production dependency runtime
+exports、Pi AI import、launcher/postinstall 门禁、Desktop source/package 错误分类和
+optional JSON ENOENT 降噪。
+
+## LOG-005 — 2026-08-20 — 开发态快速失败
+
+开发依赖残缺时不由产品进程自动修改依赖；立即失败并指导开发者执行
+`volta run npm ci`，避免隐藏损坏的工作树状态。
+
+## LOG-006 — 2026-08-20 — 打包态确认后修复
+
+打包组件缺失只允许一次短退避。持续失败后显示“修复并重启/退出”；仅在用户确认
+后复用 artifact 白名单修复，且用户数据区不在删除范围内。

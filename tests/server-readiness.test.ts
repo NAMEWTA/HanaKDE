@@ -12,6 +12,9 @@ import path from "path";
 import {
   ensureServerFilesReady,
   isModuleResolutionError,
+  classifyModuleResolutionError,
+  shouldRetryModuleResolutionFailure,
+  runArtifactRepairRecovery,
   CRITICAL_BUNDLED_EXTERNALS,
   CRITICAL_BUNDLED_FILES,
   SERVER_INFO_FIRST_WAIT_MS,
@@ -127,6 +130,23 @@ describe("ensureServerFilesReady", () => {
     expect(result.ok).toBe(false);
     expect(result.missing).toEqual(["bootstrap.js"]);
   });
+
+  it("package.json 存在但根运行时入口缺失时仍判定组件不完整", async () => {
+    for (const pkg of CRITICAL_BUNDLED_EXTERNALS) writePkg(pkg);
+    writeAllCriticalFiles();
+    const wsManifest = path.join(tmp, "node_modules", "ws", "package.json");
+    fs.writeFileSync(wsManifest, JSON.stringify({ name: "ws", main: "./index.js" }));
+
+    const result = await ensureServerFilesReady(tmp, {
+      backoffMs: [],
+      sleep: async () => {},
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      missing: ["node_modules/ws/index.js"],
+    });
+  });
 });
 
 describe("isModuleResolutionError", () => {
@@ -166,6 +186,99 @@ describe("isModuleResolutionError", () => {
       "[stderr] Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ws' imported from D:\\1\\openHanako\\resources\\server\\bundle\\index.js\n",
     ];
     expect(isModuleResolutionError(real)).toBe("ws");
+  });
+});
+
+describe("module resolution failure classification", () => {
+  const windowsFailure = [
+    "Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'C:\\Data\\HanaKDE\\node_modules\\typebox\\build\\index.mjs' imported from C:\\Data\\HanaKDE\\node_modules\\@earendil-works\\pi-ai\\dist\\index.js\n",
+  ];
+
+  it("classifies source startup failures without leaking an absolute path", () => {
+    const failure = classifyModuleResolutionError(windowsFailure, { packaged: false });
+    expect(failure).toEqual({
+      code: "DEV_DEPENDENCY_INCOMPLETE",
+      packageName: "typebox",
+      target: "./build/index.mjs",
+      module: "typebox/build/index.mjs",
+    });
+    expect(JSON.stringify(failure)).not.toContain("C:\\Data");
+  });
+
+  it("classifies the same failure as a packaged component problem in artifact context", () => {
+    expect(classifyModuleResolutionError(windowsFailure, { packaged: true })).toMatchObject({
+      code: "PACKAGED_COMPONENT_INCOMPLETE",
+      module: "typebox/build/index.mjs",
+    });
+  });
+
+  it("allows one retry only for the first packaged attempt", () => {
+    const devFailure = classifyModuleResolutionError(windowsFailure, { packaged: false });
+    const packagedFailure = classifyModuleResolutionError(windowsFailure, { packaged: true });
+
+    expect(shouldRetryModuleResolutionFailure(devFailure, 0)).toBe(false);
+    expect(shouldRetryModuleResolutionFailure(packagedFailure, 0)).toBe(true);
+    expect(shouldRetryModuleResolutionFailure(packagedFailure, 1)).toBe(false);
+  });
+});
+
+describe("packaged artifact repair recovery", () => {
+  it("quits without repairing when startup recovery is cancelled", async () => {
+    const calls: string[] = [];
+    const result = await runArtifactRepairRecovery({
+      confirmed: false,
+      quitOnCancel: true,
+      repair: async () => { calls.push("repair"); return { removed: [], failed: [] }; },
+      relaunch: () => calls.push("relaunch"),
+      quit: () => calls.push("quit"),
+    });
+
+    expect(result).toEqual({ status: "cancelled" });
+    expect(calls).toEqual(["quit"]);
+  });
+
+  it("relaunches only after a complete repair and then quits the current process", async () => {
+    const calls: string[] = [];
+    const repairResult = { removed: ["server"], failed: [] };
+    const result = await runArtifactRepairRecovery({
+      confirmed: true,
+      repair: async () => { calls.push("repair"); return repairResult; },
+      relaunch: () => calls.push("relaunch"),
+      quit: () => calls.push("quit"),
+    });
+
+    expect(result).toEqual({ status: "relaunching", repairResult });
+    expect(calls).toEqual(["repair", "relaunch", "quit"]);
+  });
+
+  it("reports a partial repair, quits, and never relaunches", async () => {
+    const calls: string[] = [];
+    const repairResult = { removed: ["server"], failed: [{ target: "renderer" }] };
+    const result = await runArtifactRepairRecovery({
+      confirmed: true,
+      repair: async () => { calls.push("repair"); return repairResult; },
+      onFailure: () => calls.push("failure"),
+      relaunch: () => calls.push("relaunch"),
+      quit: () => calls.push("quit"),
+    });
+
+    expect(result).toEqual({ status: "failed", repairResult });
+    expect(calls).toEqual(["repair", "failure", "quit"]);
+  });
+
+  it("turns repair exceptions into a failed result without a relaunch loop", async () => {
+    const calls: string[] = [];
+    const result = await runArtifactRepairRecovery({
+      confirmed: true,
+      repair: async () => { throw new Error("locked"); },
+      onFailure: () => calls.push("failure"),
+      relaunch: () => calls.push("relaunch"),
+      quit: () => calls.push("quit"),
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.repairResult.failed[0].error.message).toBe("locked");
+    expect(calls).toEqual(["failure", "quit"]);
   });
 });
 

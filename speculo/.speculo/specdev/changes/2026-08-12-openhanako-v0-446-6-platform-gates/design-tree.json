@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "artifact": "design-tree",
+  "change": "2026-08-12-openhanako-v0-446-6-platform-gates",
+  "status": "consensus",
+  "round": 2,
+  "nodes": [
+    {
+      "id": "D-001",
+      "title": "缺陷归属",
+      "question": "Windows 平台门运行时发现的依赖完整性缺陷应进入新 change，还是留在当前 platform-gates change？",
+      "depends_on": [],
+      "recommendation": "留在当前 change，并新增独立产品修复 Ticket，避免让只读平台验收 Ticket 越权修改产品代码。",
+      "status": "answered",
+      "round": 1,
+      "answer": "缺陷属于当前 2026-08-12-openhanako-v0-446-6-platform-gates change；上游 merge 时该 Ticket 尚未跑完。",
+      "log_ref": "LOG-003"
+    },
+    {
+      "id": "D-002",
+      "title": "修复广度",
+      "question": "只修复 typebox 当前缺文件，还是完整加固安装完整性、启动错误分类和首次启动日志？",
+      "depends_on": ["D-001"],
+      "recommendation": "完整启动加固，以通用依赖入口合同解决同类残缺包，而不是写 typebox 特例。",
+      "status": "answered",
+      "round": 1,
+      "answer": "采用完整启动加固：完整性门禁、开发/打包分类和 ENOENT 日志降噪全部纳入。",
+      "log_ref": "LOG-004"
+    },
+    {
+      "id": "D-003",
+      "title": "开发态恢复策略",
+      "question": "开发依赖残缺时由应用自动修改依赖，还是快速失败并给出人工恢复命令？",
+      "depends_on": ["D-002"],
+      "recommendation": "快速失败并指导执行 volta run npm ci，不从产品进程自动修改开发者依赖。",
+      "status": "answered",
+      "round": 1,
+      "answer": "开发态快速失败并指导 npm ci，禁止自动依赖修复。",
+      "log_ref": "LOG-005"
+    },
+    {
+      "id": "D-004",
+      "title": "打包态恢复策略",
+      "question": "打包组件持续缺模块时仅提示、自动修复，还是由用户确认后修复并重启？",
+      "depends_on": ["D-002"],
+      "recommendation": "保留一次短退避，仍失败时提供修复并重启；用户确认后复用现有白名单 artifact repair。",
+      "status": "answered",
+      "round": 2,
+      "answer": "采用确认后修复重启；不自动修复，不触碰用户数据。",
+      "log_ref": "LOG-006"
+    }
+  ]
+}

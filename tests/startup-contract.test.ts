@@ -10,6 +10,31 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
 
 describe("local startup contract", () => {
+  it("runs dependency integrity before every source startup build and direct launcher spawn", () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
+    for (const scriptName of ["start", "start:dev", "start:vite"]) {
+      expect(pkg.scripts[scriptName].split("&&")[0].trim()).toBe("npm run verify:runtime-deps");
+    }
+    expect(pkg.scripts.postinstall).toContain("patch-pi-sdk.cjs");
+    expect(pkg.scripts.postinstall).toContain("verify-runtime-dependencies.mjs");
+
+    const launchSource = fs.readFileSync(path.join(ROOT, "scripts", "launch.js"), "utf-8");
+    expect(launchSource).toContain('from "./verify-runtime-dependencies.mjs"');
+    expect(launchSource.indexOf("verifyRootRuntimeDependencies")).toBeLessThan(launchSource.indexOf("spawn(bin"));
+  });
+
+  it("keeps optional preference absence silent and separates dev from packaged module failures", () => {
+    const mainSource = fs.readFileSync(path.join(ROOT, "desktop", "main.cjs"), "utf-8");
+    const readinessSource = fs.readFileSync(path.join(ROOT, "desktop", "src", "shared", "server-readiness.cjs"), "utf-8");
+    expect(mainSource).toContain('require("./src/shared/optional-json.cjs")');
+    expect(mainSource).toContain("readOptionalJSON(filePath, fallback");
+    expect(readinessSource).toContain("DEV_DEPENDENCY_INCOMPLETE");
+    expect(mainSource).toContain("PACKAGED_COMPONENT_INCOMPLETE");
+    expect(mainSource).toContain("shouldRetryModuleResolutionFailure");
+    expect(mainSource).toContain("backoffMs: [2000]");
+    expect(mainSource).not.toContain("疑似自动更新落地竞态");
+  });
+
   it("start scripts build theme bundle before launching Electron", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
     expect(pkg.scripts.start).toContain("build:theme");

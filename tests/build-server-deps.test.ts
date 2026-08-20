@@ -429,3 +429,26 @@ describe("verifyExternalEntrypoints EMFILE contract", () => {
       .toThrow(/entrypoint verification failed/);
   });
 });
+
+describe("verifyExternalEntrypoints shared verifier contract", () => {
+  it("keeps packaged dependency checks root-only after NFT pruning", () => {
+    const outDir = makeTempDir();
+    const packageDir = path.join(outDir, "node_modules", "pruned-pkg");
+    fs.mkdirSync(path.join(packageDir, "dist"), { recursive: true });
+    fs.writeFileSync(path.join(packageDir, "package.json"), JSON.stringify({
+      exports: {
+        ".": "./dist/index.js",
+        "./unused": "./dist/unused.js",
+      },
+    }));
+    fs.writeFileSync(path.join(packageDir, "dist", "index.js"), "module.exports = {};\n");
+
+    expect(() => verifyExternalEntrypoints(outDir, ["pruned-pkg"])).not.toThrow();
+  });
+
+  it("delegates export parsing to the shared runtime dependency verifier", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "scripts", "build-server-deps.mjs"), "utf8");
+    expect(source).toContain("verifyRuntimeDependencyEntrypoints");
+    expect(source).toContain('scope: "root-only"');
+  });
+});

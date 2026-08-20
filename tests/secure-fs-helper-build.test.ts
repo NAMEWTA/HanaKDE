@@ -39,6 +39,7 @@ describe("HanaSecureFsHelper build and native boundary", () => {
     expect(windowsSection).toContain("GetFileInformationByHandle");
     expect(windowsSection).toContain("GetFinalPathNameByHandleW");
     expect(windowsSection).toContain("_setmode(_fileno(stdin), _O_BINARY)");
+    expect(windowsSection).toContain("ERROR_BROKEN_PIPE");
     expect(windowsSection).not.toContain("int main() {\n  return 1;");
 
     const command = buildSecureFsCompileCommand({

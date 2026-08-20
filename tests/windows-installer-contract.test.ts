@@ -232,4 +232,16 @@ describe("Windows NSIS installer contract", () => {
     expect(macro).not.toContain("Quit");
     expect(install).toContain("hanakoGrantSandboxAce");
   });
+
+  it("keeps the sandbox ACE hook stack-balanced after nsExec returns", () => {
+    const source = fs.readFileSync(path.join(root, "build", "installer.nsh"), "utf-8");
+    const macro = extractMacro(source, "hanakoGrantSandboxAce");
+    const popsOfSavedRegister = macro
+      .split("\n")
+      .filter((line) => line.trim() === "Pop $0");
+
+    // nsExec contributes one result. The hook must consume it once and leave
+    // the caller's NSIS stack unchanged.
+    expect(popsOfSavedRegister).toHaveLength(1);
+  });
 });

@@ -101,3 +101,4 @@ teach/
 temp/
 tests/knowledge-workspace-e2e/artifacts/
 specdev-worktree/
+dist-*/

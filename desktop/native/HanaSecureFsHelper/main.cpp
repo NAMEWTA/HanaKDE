@@ -315,7 +315,12 @@ bool readAll(std::vector<std::uint8_t>& output) {
   std::uint8_t buffer[16 * 1024];
   for (;;) {
     DWORD count = 0;
-    if (!ReadFile(input, buffer, sizeof(buffer), &count, nullptr)) return false;
+    if (!ReadFile(input, buffer, sizeof(buffer), &count, nullptr)) {
+      // Node closes the child stdin pipe after writing the request. On
+      // Windows that EOF is reported as ERROR_BROKEN_PIPE rather than a
+      // successful zero-byte read.
+      return GetLastError() == ERROR_BROKEN_PIPE;
+    }
     if (count == 0) return true;
     output.insert(output.end(), buffer, buffer + count);
     if (output.size() > kMaxFrame + 4u) return false;

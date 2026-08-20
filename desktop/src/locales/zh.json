@@ -3459,12 +3459,18 @@
       "serverExitedWithCode": "Server 退出，code: {code}",
       "serverFilesNotReady": "自动更新刚完成，新版本文件还在落地（缺少 {missing}），已等待 {waited}s 仍未就绪。请稍后重新启动 HanaAgent。",
       "serverModuleMissing": "Server 启动时找不到模块 {module}。\n通常是自动更新刚完成、新版本文件还在写入磁盘导致的。\n建议：等待 1-2 分钟后重新启动 HanaAgent；若反复出现，请前往 GitHub 反馈。",
+      "devDependencyIncomplete": "开发依赖不完整（{module}）。请运行 `volta run npm ci`，然后重新启动 HanaAgent。",
+      "packagedComponentIncomplete": "已安装的应用组件不完整（{module}）。HanaAgent 可以重置应用组件并重新启动。",
+      "packagedComponentRepairBody": "HanaAgent 因应用组件 {module} 不完整而无法启动。修复只会重置已安装的应用组件并重启 HanaAgent，不会影响助手、会话和设置。",
       "installFailedTitle": "HanaAgent 更新",
       "installFailedBody": "更新安装失败：\n{error}\n\n请重启 HanaAgent 后重试，或前往设置页面手动检查更新。",
       "repairArtifactsTitle": "修复组件",
       "repairArtifactsBody": "此操作会把 HanaAgent 的应用组件重置为安装包自带的版本，并重启应用。你的数据（助手、会话、设置）不受影响。",
       "repairArtifactsConfirm": "修复并重启",
       "repairArtifactsCancel": "取消",
+      "repairArtifactsExit": "退出",
+      "repairArtifactsFailedTitle": "组件修复失败",
+      "repairArtifactsFailedBody": "部分应用组件无法重置。HanaAgent 将退出且不会自动重启。",
       "trainUpdateApplyFailedBody": "HanaAgent v{version}\n\n更新应用失败：\n{error}\n\n请重新启动应用。"
     },
     "notification": {

@@ -1,5 +1,9 @@
 import fs from "fs";
 import path from "path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { verifyRuntimeDependencyEntrypoints } = require("../shared/runtime-dependency-integrity.cjs");
 
 /**
  * Read and JSON-parse a file, retrying on EMFILE/ENFILE (file handle exhaustion).
@@ -197,89 +201,22 @@ export function buildAnydocRuntimeSmokeScript() {
   ].join("\n");
 }
 
-function collectRuntimeExportTargets(exportValue, targets = []) {
-  if (typeof exportValue === "string") {
-    targets.push(exportValue);
-    return targets;
-  }
-
-  if (!exportValue || typeof exportValue !== "object") {
-    return targets;
-  }
-
-  for (const [condition, value] of Object.entries(exportValue)) {
-    if (condition === "types") continue;
-    collectRuntimeExportTargets(value, targets);
-  }
-
-  return targets;
-}
-
-function getRootExport(exportsField) {
-  if (!exportsField || typeof exportsField !== "object" || Array.isArray(exportsField)) {
-    return exportsField;
-  }
-
-  if (Object.hasOwn(exportsField, ".")) {
-    return exportsField["."];
-  }
-
-  const keys = Object.keys(exportsField);
-  const isSubpathMap = keys.some((key) => key.startsWith("."));
-  return isSubpathMap ? undefined : exportsField;
-}
-
 export function verifyExternalEntrypoints(outDir, packageNames, { readRetries, readBaseDelayMs } = {}) {
-  const failures = [];
   const retryOpts = {};
   if (readRetries !== undefined) retryOpts.maxRetries = readRetries;
   if (readBaseDelayMs !== undefined) retryOpts.baseDelayMs = readBaseDelayMs;
-
-  for (const packageName of packageNames) {
-    const packageDir = path.join(outDir, "node_modules", packageName);
-    const packageJsonPath = path.join(packageDir, "package.json");
-
-    let pkg;
-    try {
-      // readPackageJsonWithRetry retries on EMFILE/ENFILE (transient handle exhaustion).
-      // It only throws ENOENT or parse errors after retries — those are genuine failures.
-      pkg = readPackageJsonWithRetry(packageJsonPath, retryOpts);
-    } catch (err) {
-      const code = err && err.code;
-      // EMFILE/ENFILE after all retries: the file exists but we couldn't open it.
-      // This is an I/O resource failure, NOT a missing package. Don't count it as
-      // a missing entrypoint — doing so is the contract bug that caused #1307.
-      // Re-throw so the caller (build-server.mjs) sees a hard I/O error and can
-      // decide to abort with an accurate message rather than a misleading "missing" report.
-      if (code === "EMFILE" || code === "ENFILE") {
-        throw err;
-      }
-      // ENOENT: package.json truly absent — the package was not installed.
-      // JSON SyntaxError: package.json is corrupt.
-      // Both are genuine product-integrity failures.
-      const msg = err instanceof Error ? err.message : String(err);
-      failures.push(`${packageName}: ${msg}`);
-      continue;
-    }
-
-    const rootExport = getRootExport(pkg.exports);
-    const targets = rootExport === undefined
-      ? [pkg.main, pkg.module].filter(Boolean)
-      : collectRuntimeExportTargets(rootExport);
-
-    for (const target of targets) {
-      if (typeof target !== "string" || !target.startsWith("./") || target.includes("*")) {
-        continue;
-      }
-
-      const targetPath = path.join(packageDir, target);
-      if (!fs.existsSync(targetPath)) {
-        failures.push(`${packageName}: ${target} resolves to missing file ${targetPath}`);
-      }
-    }
-  }
-
-  if (failures.length > 0) {
+  try {
+    verifyRuntimeDependencyEntrypoints(outDir, packageNames, {
+      scope: "root-only",
+      readPackageJson: (packageJsonPath) => readPackageJsonWithRetry(packageJsonPath, retryOpts),
+    });
+  } catch (error) {
+    if (error?.code === "EMFILE" || error?.code === "ENFILE") throw error;
+    const failures = Array.isArray(error?.failures)
+      ? error.failures.map((failure) => failure.reason === "entrypoint-missing"
+        ? `${failure.packageName}: ${failure.target} resolves to missing file ${failure.resolvedPath}`
+        : `${failure.packageName}: ${failure.cause?.message || failure.errorCode}`)
+      : [error?.message || String(error)];
     throw new Error([
       "[build-server] external package entrypoint verification failed:",
       ...failures.map((failure) => `  - ${failure}`),

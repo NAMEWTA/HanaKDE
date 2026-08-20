@@ -148,7 +148,6 @@ CRCCheck off
   ${If} $0 != 0
     DetailPrint "Sandbox ACE grant failed (code $0); the app applies the same grant at startup."
   ${EndIf}
-  Pop $0
   !insertmacro hanakoInstallTimingMark "grantSandboxAce" "end"
 !macroend
 

@@ -6,12 +6,20 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { applyDevEnvironment } from "./dev-env.js";
+import { verifyRootRuntimeDependencies } from "./verify-runtime-dependencies.mjs";
 
 const require = createRequire(import.meta.url);
 applyDevEnvironment(process.env);
 
 const mode = process.argv[2];
 const extra = process.argv.slice(3);
+
+try {
+  await verifyRootRuntimeDependencies();
+} catch (error) {
+  console.error(`[launcher] ${error.message}`);
+  process.exit(1);
+}
 
 let bin, args;
 switch (mode) {

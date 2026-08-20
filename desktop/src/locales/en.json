@@ -3464,12 +3464,18 @@
       "serverExitedWithCode": "Server exited with code {code}",
       "serverFilesNotReady": "Auto-update just completed; new version files still landing on disk (missing {missing}). Waited {waited}s without success. Please restart HanaAgent shortly.",
       "serverModuleMissing": "Server startup failed: cannot find module {module}.\nThis typically happens right after an auto-update, while new files are still being written to disk.\nRecommendation: wait 1-2 minutes and restart HanaAgent. Report on GitHub if it persists.",
+      "devDependencyIncomplete": "Development dependencies are incomplete ({module}). Run `volta run npm ci`, then start HanaAgent again.",
+      "packagedComponentIncomplete": "An installed app component is incomplete ({module}). HanaAgent can reset its app components and restart.",
+      "packagedComponentRepairBody": "HanaAgent cannot start because app component {module} is incomplete. Repair resets only installed app components and restarts HanaAgent. Your agents, sessions, and settings are not affected.",
       "installFailedTitle": "HanaAgent Update",
       "installFailedBody": "Update installation failed:\n{error}\n\nPlease restart HanaAgent and try again, or check for updates manually in Settings.",
       "repairArtifactsTitle": "Repair Components",
       "repairArtifactsBody": "This resets HanaAgent's app components to the originally installed version and restarts the app. Your data (agents, sessions, settings) is not affected.",
       "repairArtifactsConfirm": "Repair and Restart",
       "repairArtifactsCancel": "Cancel",
+      "repairArtifactsExit": "Exit",
+      "repairArtifactsFailedTitle": "Component Repair Failed",
+      "repairArtifactsFailedBody": "Some app components could not be reset. HanaAgent will exit without restarting.",
       "trainUpdateApplyFailedBody": "HanaAgent v{version}\n\nUpdate failed to apply:\n{error}\n\nPlease restart the app."
     },
     "notification": {

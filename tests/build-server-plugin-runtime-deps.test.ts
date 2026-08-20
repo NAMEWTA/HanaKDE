@@ -129,6 +129,33 @@ describe("bundled plugin runtime dependencies", () => {
       .resolves.toContain("js-yaml");
   });
 
+  it("excludes plugin build entrypoints from packaged runtime dependencies", async () => {
+    fs.mkdirSync(path.join(rootDir, "plugins", "compiled-plugin", "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(rootDir, "plugins", "compiled-plugin", "index.ts"),
+      "export default class CompiledPlugin {}\n",
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(rootDir, "plugins", "compiled-plugin", "build.ts"),
+      'await import("build-only-package");\n',
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(rootDir, "plugins", "compiled-plugin", "src", "build.ts"),
+      'export { runtimeBuild } from "runtime-build-package";\n',
+      "utf-8",
+    );
+
+    const packages = await collectBundledPluginPackageDependencies({ rootDir });
+    expect(packages).not.toContain("build-only-package");
+    expect(packages).toContain("runtime-build-package");
+    await expect(collectBundledPluginNftRoots({ rootDir }))
+      .resolves.not.toContain("plugins/compiled-plugin/build.ts");
+    await expect(collectBundledPluginNftRoots({ rootDir }))
+      .resolves.toContain("plugins/compiled-plugin/src/build.ts");
+  });
+
   it("collects the Office PDF reader package import for packaged server installs", async () => {
     fs.mkdirSync(path.join(rootDir, "plugins", "office", "lib"), { recursive: true });
     fs.mkdirSync(path.join(rootDir, "plugins", "office", "tools"), { recursive: true });

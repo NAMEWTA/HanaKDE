@@ -3459,12 +3459,18 @@
       "serverExitedWithCode": "Server が終了しました。コード: {code}",
       "serverFilesNotReady": "自動アップデートが完了したばかりで、新バージョンのファイルがまだディスクに書き込まれていません（{missing} が見つかりません）。{waited} 秒待機しましたが完了しませんでした。しばらくしてから HanaAgent を再起動してください。",
       "serverModuleMissing": "Server 起動失敗：モジュール {module} が見つかりません。\n通常、自動アップデート完了直後にファイルがまだディスクに書き込み中の場合に発生します。\n推奨：1〜2 分待ってから HanaAgent を再起動してください。問題が続く場合は GitHub で報告してください。",
+      "devDependencyIncomplete": "開発用の依存関係が不完全です（{module}）。`volta run npm ci` を実行してから HanaAgent を再起動してください。",
+      "packagedComponentIncomplete": "インストール済みのアプリコンポーネントが不完全です（{module}）。HanaAgent はコンポーネントをリセットして再起動できます。",
+      "packagedComponentRepairBody": "アプリコンポーネント {module} が不完全なため HanaAgent を起動できません。修復ではインストール済みのアプリコンポーネントだけをリセットして再起動します。エージェント、セッション、設定には影響しません。",
       "installFailedTitle": "HanaAgent アップデート",
       "installFailedBody": "アップデートのインストールに失敗しました：\n{error}\n\nHanaAgent を再起動してからもう一度お試しください。または設定ページで手動でアップデートを確認してください。",
       "repairArtifactsTitle": "コンポーネントの修復",
       "repairArtifactsBody": "この操作は HanaAgent のアプリコンポーネントをインストール時のバージョンにリセットし、アプリを再起動します。データ（エージェント、セッション、設定）は影響を受けません。",
       "repairArtifactsConfirm": "修復して再起動",
       "repairArtifactsCancel": "キャンセル",
+      "repairArtifactsExit": "終了",
+      "repairArtifactsFailedTitle": "コンポーネントの修復に失敗しました",
+      "repairArtifactsFailedBody": "一部のアプリコンポーネントをリセットできませんでした。HanaAgent は再起動せず終了します。",
       "trainUpdateApplyFailedBody": "HanaAgent v{version}\n\n更新の適用に失敗しました：\n{error}\n\nアプリを再起動してください。"
     },
     "notification": {

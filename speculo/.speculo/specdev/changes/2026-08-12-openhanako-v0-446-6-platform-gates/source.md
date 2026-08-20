@@ -18,7 +18,7 @@ close_capability: not-applicable
 - **Author:** user
 - **Created / updated:** 2026-08-12
 - **Labels or classification supplied by source:** continuation of an existing integration change
-- **Attachments:** `<Path>{roots.state}/specdev/changes/2026-08-09-openhanako-v0-446-6-integration/</Path>`
+- **Attachments:** `<Path>{roots.state}/specdev/archive/2026-08/2026-08-09-openhanako-v0-446-6-integration/</Path>`
 - **Redactions:** none
 
 ## Original Content

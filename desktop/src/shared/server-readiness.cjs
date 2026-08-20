@@ -15,6 +15,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { findMissingRuntimeEntrypoints } = require("../../../shared/runtime-dependency-integrity.cjs");
 
 const CRITICAL_BUNDLED_EXTERNALS = [
   "ws",              // WebSocket，server 启动期立刻 import
@@ -66,14 +67,25 @@ async function ensureServerFilesReady(serverRoot, opts = {}) {
       }
     }
     for (const pkg of CRITICAL_BUNDLED_EXTERNALS) {
-      const pkgJson = path.join(serverRoot, "node_modules", pkg, "package.json");
-      try {
-        fs.accessSync(pkgJson, fs.constants.R_OK);
-      } catch {
-        missing.push(`node_modules/${pkg}/package.json`);
+      const failures = findMissingRuntimeEntrypoints(serverRoot, [pkg], {
+        scope: "root-only",
+        exists: (target) => {
+          try {
+            fs.accessSync(target, fs.constants.R_OK);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      });
+      for (const failure of failures) {
+        const relative = failure.reason === "entrypoint-missing"
+          ? path.posix.join("node_modules", pkg, failure.target.replace(/^\.\//, ""))
+          : path.posix.join("node_modules", pkg, "package.json");
+        missing.push(relative);
       }
     }
-    return missing;
+    return [...new Set(missing)];
   };
 
   let missing = checkOnce();
@@ -105,6 +117,70 @@ function isModuleResolutionError(stderrLogs) {
   if (match) return match[1];
   if (joined.includes("ERR_MODULE_NOT_FOUND")) return "unknown-module";
   return null;
+}
+
+function normalizeMissingModule(value) {
+  const normalized = String(value || "").replace(/^file:\/\//, "").replace(/\\/g, "/");
+  const marker = "/node_modules/";
+  const markerIndex = normalized.lastIndexOf(marker);
+  const relative = markerIndex >= 0 ? normalized.slice(markerIndex + marker.length) : normalized;
+  if (!relative || (markerIndex < 0 && (relative.includes(":/") || relative.startsWith("/")))) {
+    return { packageName: "unknown-module", target: null, module: "unknown-module" };
+  }
+
+  const parts = relative.split("/").filter(Boolean);
+  const packagePartCount = parts[0]?.startsWith("@") ? 2 : 1;
+  const packageName = parts.slice(0, packagePartCount).join("/") || "unknown-module";
+  const targetParts = parts.slice(packagePartCount);
+  const target = targetParts.length > 0 ? `./${targetParts.join("/")}` : null;
+  return {
+    packageName,
+    target,
+    module: target ? `${packageName}/${target.slice(2)}` : packageName,
+  };
+}
+
+function classifyModuleResolutionError(stderrLogs, { packaged = false } = {}) {
+  const missingModule = isModuleResolutionError(stderrLogs);
+  if (!missingModule) return null;
+  return {
+    code: packaged ? "PACKAGED_COMPONENT_INCOMPLETE" : "DEV_DEPENDENCY_INCOMPLETE",
+    ...normalizeMissingModule(missingModule),
+  };
+}
+
+function shouldRetryModuleResolutionFailure(failure, attempt) {
+  return failure?.code === "PACKAGED_COMPONENT_INCOMPLETE" && attempt === 0;
+}
+
+async function runArtifactRepairRecovery({
+  confirmed,
+  quitOnCancel = false,
+  repair,
+  onFailure = () => {},
+  relaunch,
+  quit,
+}) {
+  if (!confirmed) {
+    if (quitOnCancel) quit();
+    return { status: "cancelled" };
+  }
+
+  let repairResult;
+  try {
+    repairResult = await repair();
+  } catch (error) {
+    repairResult = { removed: [], failed: [{ error }] };
+  }
+  if (!Array.isArray(repairResult?.failed) || repairResult.failed.length > 0) {
+    onFailure(repairResult);
+    quit();
+    return { status: "failed", repairResult };
+  }
+
+  relaunch();
+  quit();
+  return { status: "relaunching", repairResult };
 }
 
 function parsePortInUseStartupError(stderrLogs) {
@@ -230,6 +306,9 @@ module.exports = {
   SERVER_INFO_MAX_WAIT_MS,
   ensureServerFilesReady,
   isModuleResolutionError,
+  classifyModuleResolutionError,
+  shouldRetryModuleResolutionFailure,
+  runArtifactRepairRecovery,
   parsePortInUseStartupError,
   extractRootServerStartupError,
   shouldKeepWaitingForServerInfo,

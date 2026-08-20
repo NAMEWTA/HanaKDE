@@ -108,3 +108,13 @@ describe("artifact-repair: repairArtifacts (impure, fs-touching)", () => {
     expect(result.failed).toEqual([]);
   });
 });
+
+describe("artifact-repair: desktop relaunch contract", () => {
+  it("routes desktop repair through the tested recovery orchestrator", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "desktop", "main.cjs"), "utf8");
+    expect(source).toContain("runArtifactRepairRecovery({");
+    expect(source).toContain("repair: () => artifactRepair.repairArtifacts");
+    expect(source).toContain("relaunch: () =>");
+    expect(source).toContain("quit: () => app.quit()");
+  });
+});

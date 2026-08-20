@@ -26,9 +26,9 @@
     "node": ">=24.12.0 <25"
   },
   "scripts": {
-    "start": "node scripts/ensure-windows-sandbox-helper.mjs && npm run build:preload && npm run build:renderer && npm run build:splash && npm run build:theme && node scripts/launch.js electron",
-    "start:dev": "node scripts/ensure-windows-sandbox-helper.mjs && npm run build:preload && npm run build:renderer && npm run build:splash && npm run build:theme && node scripts/launch.js electron-dev",
-    "start:vite": "node scripts/ensure-windows-sandbox-helper.mjs && npm run build:preload && node scripts/launch.js electron-vite",
+    "start": "npm run verify:runtime-deps && node scripts/ensure-windows-sandbox-helper.mjs && npm run build:preload && npm run build:renderer && npm run build:splash && npm run build:theme && node scripts/launch.js electron",
+    "start:dev": "npm run verify:runtime-deps && node scripts/ensure-windows-sandbox-helper.mjs && npm run build:preload && npm run build:renderer && npm run build:splash && npm run build:theme && node scripts/launch.js electron-dev",
+    "start:vite": "npm run verify:runtime-deps && node scripts/ensure-windows-sandbox-helper.mjs && npm run build:preload && node scripts/launch.js electron-vite",
     "dev:web": "node scripts/dev-web.js",
     "dev:renderer": "vite --config vite.config.ts",
     "build:renderer": "vite build --config vite.config.ts",
@@ -52,6 +52,7 @@
     "dist:win": "npm run build:computer-use-helper && npm run build:windows-sandbox-helper && npm run generate:windows-icon && npm run build:client && npm run build:server && npm run verify:seed-kit && npm run pack:server:standalone && npm run verify:standalone:server && electron-builder --win nsis",
     "dist:linux": "npm run build:client && npm run build:server && npm run verify:seed-kit && electron-builder --linux AppImage deb",
     "verify:seed-kit": "node scripts/verify-seed-kit.mjs",
+    "verify:runtime-deps": "node scripts/verify-runtime-dependencies.mjs",
     "pack:server:standalone": "node scripts/build-standalone-server-artifact.mjs x64",
     "verify:standalone:server": "node scripts/verify-standalone-server-artifact.mjs x64 --smoke",
     "test": "vitest run --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**'",
@@ -68,7 +69,7 @@
     "lint": "eslint .",
     "lint:boundary": "node scripts/lint-open-boundary.mjs",
     "test:watch": "vitest --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**'",
-    "postinstall": "node scripts/patch-pi-sdk.cjs"
+    "postinstall": "node scripts/patch-pi-sdk.cjs && node scripts/verify-runtime-dependencies.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.1",

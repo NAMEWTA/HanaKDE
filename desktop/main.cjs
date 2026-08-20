@@ -14,6 +14,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
 const fs = require("fs");
+const { readOptionalJSON } = require("./src/shared/optional-json.cjs");
 const { pathToFileURL, fileURLToPath } = require("url");
 const { PNG } = require("pngjs");
 const { initAutoUpdater, checkForUpdatesAuto, setMainWindow: setUpdaterMainWindow, setUpdateChannel, installDownloadedUpdate, normalizeReleaseDigest } = require("./auto-updater.cjs");
@@ -149,11 +150,11 @@ function resolveLoginShellPath() {
 }
 
 function safeReadJSON(filePath, fallback = null) {
-  try { return JSON.parse(fs.readFileSync(filePath, 'utf-8')); }
-  catch (err) {
-    console.error(`[safeReadJSON] ${redactLogText(filePath)}: ${redactLogText(err.message)}`);
-    return fallback;
-  }
+  return readOptionalJSON(filePath, fallback, {
+    log: (err, target) => {
+      console.error(`[safeReadJSON] ${redactLogText(target)}: ${redactLogText(err.message)}`);
+    },
+  });
 }
 
 const hanakoHome = resolveHanakoHome(process.env.HANA_HOME);
@@ -937,7 +938,9 @@ async function requestServerShutdown(port, token, timeoutMs = 5000) {
 // Server 启动前的就绪性校验：处理自动更新文件落地竞态
 const {
   ensureServerFilesReady,
-  isModuleResolutionError,
+  classifyModuleResolutionError,
+  shouldRetryModuleResolutionFailure,
+  runArtifactRepairRecovery,
   parsePortInUseStartupError,
   extractRootServerStartupError,
   SERVER_INFO_FIRST_WAIT_MS,
@@ -1285,30 +1288,30 @@ async function startServer() {
   // 维持默认值不变。
   const artifactBootContext = await resolvePackagedArtifactBoot();
   if (artifactBootContext) {
-    // 解压产物的完整性由 .verified receipt 保证；这层退避检查沿用旧语义，
-    // 兜住"更新落地竞态/树被外部工具部分删除"这类文件级异常。
-    const ready = await ensureServerFilesReady(artifactBootContext.serverRoot);
+    // Receipt 验证后的文件仍可能被外部工具移除；启动边界只允许一次短重试。
+    const ready = await ensureServerFilesReady(artifactBootContext.serverRoot, { backoffMs: [2000] });
     if (!ready.ok) {
-      // 文案（dialog.serverFilesNotReady）在 artifact 时代语境已经不准确
-      // （"自动更新还在落地"不是唯一成因，GC 误删也会走到这里），本次不改
-      // 文案 key/locale（渲染层禁区），只在日志里补上真实上下文，下次排障
-      // 不用再考古 serverRoot 到底指向哪个通道/哪个版本目录。
       console.error(
-        `[desktop] server files not ready after backoff: serverRoot=${artifactBootContext.serverRoot} `
+        redactMainLogText(`[desktop] server files not ready after backoff: serverRoot=${artifactBootContext.serverRoot} `
           + `channel=${artifactBootContext.channel} train=${artifactBootContext.train} `
-          + `missing=[${ready.missing.join(", ")}] waitedMs=${ready.waitedMs}`,
+          + `missing=[${ready.missing.join(", ")}] waitedMs=${ready.waitedMs}`),
       );
-      throw new Error(mt("dialog.serverFilesNotReady", {
+      const failure = new Error(mt("dialog.packagedComponentIncomplete", {
         missing: ready.missing.join(", "),
-        waited: Math.round(ready.waitedMs / 1000),
+        module: ready.missing.join(", "),
       }));
+      failure.code = "PACKAGED_COMPONENT_INCOMPLETE";
+      failure.startupError = {
+        code: failure.code,
+        packageName: null,
+        target: null,
+        module: ready.missing.join(", "),
+      };
+      throw failure;
     }
   }
 
-  // ── 3. spawn server，对模块解析错误做一次智能重试 ──
-  // 重试条件：stderr 含 ERR_MODULE_NOT_FOUND 或 "Cannot find package/module"。
-  // 文件已通过完整性检查仍报模块缺失，说明 transitive 依赖在更新落地中尚未完成；
-  // 再退避一次，给 NSIS/AV 更多收尾时间。
+  // ── 3. spawn server；仅 packaged 模式对模块解析错误做一次短重试 ──
   let lastErr;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -1324,21 +1327,27 @@ async function startServer() {
         friendly.cause = err;
         throw friendly;
       }
-      const missingModule = isModuleResolutionError(_serverLogs);
-      const canRetry = missingModule && attempt === 0;
+      const moduleFailure = classifyModuleResolutionError(_serverLogs, {
+        packaged: Boolean(artifactBootContext),
+      });
+      const canRetry = shouldRetryModuleResolutionFailure(moduleFailure, attempt);
       if (!canRetry) {
-        if (missingModule) {
-          // 已经重试过仍然报模块缺失：替换为更友好的错误消息
-          const friendly = new Error(mt("dialog.serverModuleMissing", { module: missingModule }));
+        if (moduleFailure) {
+          const messageKey = moduleFailure.code === "PACKAGED_COMPONENT_INCOMPLETE"
+            ? "dialog.packagedComponentIncomplete"
+            : "dialog.devDependencyIncomplete";
+          const friendly = new Error(mt(messageKey, { module: moduleFailure.module }));
+          friendly.code = moduleFailure.code;
+          friendly.startupError = moduleFailure;
           friendly.cause = err;
           throw friendly;
         }
         throw err;
       }
-      console.warn(`[desktop] Server 启动报 ERR_MODULE_NOT_FOUND (${missingModule})，疑似自动更新落地竞态，2s 后重试`);
+      console.warn(`[desktop] packaged component incomplete (${moduleFailure.module}); retrying once in 2s`);
       // 再扫一遍文件：很可能这次能补齐
       if (artifactBootContext) {
-        await ensureServerFilesReady(artifactBootContext.serverRoot).catch(() => {});
+        await ensureServerFilesReady(artifactBootContext.serverRoot, { backoffMs: [] }).catch(() => {});
       }
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -1648,34 +1657,52 @@ function attachRendererArtifactCrashSentinel(win, pageName, opts) {
  * 晾成孤儿）。下次启动 `resolvePackagedArtifactBoot` 会因为 pointers/ 已清
  * 空自然重新解压 seed，一条代码路径，没有特例。
  */
-async function triggerArtifactRepairFlow() {
+async function triggerArtifactRepairFlow({ startupFailure = null } = {}) {
   const result = await dialog.showMessageBox({
     type: "warning",
     buttons: [
       mt("dialog.repairArtifactsConfirm", null, "Repair and Restart"),
-      mt("dialog.repairArtifactsCancel", null, "Cancel"),
+      startupFailure
+        ? mt("dialog.repairArtifactsExit", null, "Exit")
+        : mt("dialog.repairArtifactsCancel", null, "Cancel"),
     ],
     defaultId: 1,
     cancelId: 1,
     title: mt("dialog.repairArtifactsTitle", null, "Repair Components"),
     message: mt("dialog.repairArtifactsTitle", null, "Repair Components"),
-    detail: mt(
-      "dialog.repairArtifactsBody",
-      null,
-      "This resets HanaAgent's app components to the originally installed version and restarts the app. Your data (agents, sessions, settings) is not affected.",
-    ),
+    detail: startupFailure
+      ? mt("dialog.packagedComponentRepairBody", { module: startupFailure.module || "unknown-module" })
+      : mt(
+        "dialog.repairArtifactsBody",
+        null,
+        "This resets HanaAgent's app components to the originally installed version and restarts the app. Your data (agents, sessions, settings) is not affected.",
+      ),
   });
-  if (result.response !== 0) return; // 取消
-
-  await artifactRepair.repairArtifacts({
-    homeDir: hanakoHome,
-    log: (msg) => console.log(redactMainLogText(msg)),
+  return runArtifactRepairRecovery({
+    confirmed: result.response === 0,
+    quitOnCancel: Boolean(startupFailure),
+    repair: () => artifactRepair.repairArtifacts({
+      homeDir: hanakoHome,
+      log: (msg) => console.log(redactMainLogText(msg)),
+    }),
+    onFailure: (repairResult) => {
+      const failureList = repairResult.failed
+        .map((item) => redactMainLogText(item?.path || item?.target || item?.error?.message || String(item)))
+        .join(", ");
+      console.error(`[desktop] artifact repair incomplete: ${failureList}`);
+      dialog.showErrorBox(
+        mt("dialog.repairArtifactsFailedTitle", null, "Component Repair Failed"),
+        mt("dialog.repairArtifactsFailedBody", null, "Some app components could not be reset. HanaAgent will exit without restarting."),
+      );
+      forceQuitApp = true;
+    },
+    relaunch: () => {
+      isExitingServer = true;
+      isQuitting = true;
+      app.relaunch();
+    },
+    quit: () => app.quit(),
   });
-
-  isExitingServer = true;
-  isQuitting = true;
-  app.relaunch();
-  app.quit();
 }
 
 /**
@@ -6320,6 +6347,19 @@ app.whenReady().then(async () => {
     }
     // 写入 crash.log 并获取详细日志
     const crashInfo = writeCrashLog(err.message);
+    if (err?.code === "PACKAGED_COMPONENT_INCOMPLETE") {
+      let recovery;
+      try {
+        recovery = await triggerArtifactRepairFlow({ startupFailure: err.startupError || {} });
+      } catch (repairError) {
+        console.error(`[desktop] artifact repair flow failed: ${redactMainLogText(repairError?.message || String(repairError))}`);
+      }
+      if (recovery?.status !== "relaunching") {
+        forceQuitApp = true;
+        app.quit();
+      }
+      return;
+    }
     const detail = buildLaunchFailureDialogDetail(err, crashInfo);
     // 壳身份用途：启动失败对话框，见 getCurrentContentVersion() 声明处的
     // 例外说明——这里问的是"哪个壳进程启动失败"。
