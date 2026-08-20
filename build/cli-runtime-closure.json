@@ -5336,7 +5336,7 @@
           "kind": "file"
         }
       ],
-      "reason": "core/migrate-providers.ts and core/provider-registry.ts both read fromRoot(\"lib\", \"default-models.json\") via fs.readFileSync at module load, into their _defaultModels constant."
+      "reason": "core/provider-registry.ts reads fromRoot(\"lib\", \"default-models.json\") via fs.readFileSync at module load, into its _defaultModels constant."
     },
     {
       "path": "lib/deferred-result-coordinator.ts",
