@@ -119,16 +119,16 @@ AutomationRun 成功不默认完成 Todo；Todo 完成或删除时必须通过�
 Core 已有 NotificationService，但插件 EventBus 能力目录没有稳定的通知 handler。参考实现只能探测 `notification:notify`/`notification:send` 等不存在的别名。
 
 ### Decision
-在系统本体增加最小、通用、受权限约束的插件通知 EventBus capability，定义稳定输入、幂等键、notification route 和逐渠道回执。Todo 插件只消费该契约，并持久化 reminder×channel delivery。
+本 change 不修改系统本体，也不新增通知 capability。Todo 插件只复用当前已存在的全局 `notification` event 做 desktop best-effort handoff，并持久化 reminder/occurrence 的 handoff identity 与 `handoff_claimed`、`handed_off`、`handoff_failed`、`handoff_unknown` 状态。notification receipt、Bridge、逐渠道路由和 OS delivery 属于待 HanaKDE 基础能力对外提供后的独立升级，不在本 change 实现。
 
 ### Trade-off
-系统本体贡献面增加一个正式契约和测试成本，但任何插件都可安全复用。允许插件直接调用内部 NotificationService 或猜事件别名更快，却绕过权限和能力发现。
+当前版本不提供逐渠道送达回执和 Bridge，但保持产品 diff 只在插件目录，避免在宿主未提供稳定 capability 时私造协议。允许插件直接调用内部 NotificationService 或猜事件别名会绕过权限和能力发现，因此禁止。
 
 ### Consequences
-契约不得包含 Todo 专用字段；桌面与 Bridge 等渠道由宿主路由表示；每渠道失败和重试必须独立可观察。
+`handed_off` 只表示事件已交给宿主事件流，不表示操作系统已显示；failed/unknown 只能由用户显式重试。若未来需要通知 capability/receipt，必须新建系统 change 和插件升级，不得在本 change 内越界。
 
 ### Verification / Migration
-覆盖能力目录、权限拒绝、幂等重复发送、部分渠道失败、逐渠道回执和真实 NotificationService handler 集成测试。
+插件内覆盖现有 notification event handoff、claim 崩溃、重复唤醒、failed/unknown 和显式 retry；扫描不得出现 `notification:send`、NotificationService 私有调用、Bridge 或逐渠道 delivery 假设。
 
 ## ADR-007: Hana Session 是自动化对话的唯一权威
 

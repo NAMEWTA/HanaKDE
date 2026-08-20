@@ -541,6 +541,28 @@
       "sourceFile": "core/server-identity.ts"
     },
     {
+      "expiresOn": "2027-08-31",
+      "id": "todolist-plugin-asset-build",
+      "kinds": [
+        "mkdir",
+        "write-file"
+      ],
+      "ownerModule": "plugins/todolist/build.ts",
+      "reason": "Writes packaged plugin page.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
+      "sourceFile": "plugins/todolist/build.ts"
+    },
+    {
+      "expiresOn": "2027-08-31",
+      "id": "todolist-plugin-package-verify",
+      "kinds": [
+        "copy-file",
+        "remove-path"
+      ],
+      "ownerModule": "plugins/todolist/scripts/verify-package.mjs",
+      "reason": "Copies the plugin into an operating-system temporary directory to import and then deletes that directory; it is not a HANA_HOME persistence owner.",
+      "sourceFile": "plugins/todolist/scripts/verify-package.mjs"
+    },
+    {
       "expiresOn": "2027-01-31",
       "id": "url-provider-download-temp",
       "kinds": [
@@ -630,7 +652,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:375db568da7c8d05b377a818e203725045a78304f2681d06eeceeae528c46905",
+  "payloadFingerprint": "sha256:d60e21c69d5daaf38a57b1bab98d71293dac4c06890107283df95786262717fe",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -2127,7 +2149,8 @@
       "ownerModule": "core/plugin-config.ts",
       "pathExclusions": [
         "plugin-data/office/jobs",
-        "plugin-data/office/generated"
+        "plugin-data/office/generated",
+        "plugin-data/todolist"
       ],
       "pathKind": "tree",
       "pathPattern": "plugin-data/{pluginId}",
@@ -2933,6 +2956,44 @@
     {
       "affectedByEpochMigration": true,
       "bootstrapSafety": null,
+      "checkpointPolicy": "Checkpoint the plugin-data/todolist tree; restore only with a compatible STORE_SCHEMA_VERSION reader.",
+      "epochPolicy": "epoch-managed",
+      "exemption": null,
+      "firstPossibleOpenPhase": "runtime_ready",
+      "firstPossibleWritePhase": "runtime_ready",
+      "format": "json",
+      "id": "todolist-plugin-store",
+      "identityContract": "The builtin todolist pluginId owns exactly plugin-data/todolist; revision is a generation, not a second identity.",
+      "migrationEntry": [
+        "TodoStore.initialize migrateV1"
+      ],
+      "openEntry": [
+        "new TodoStore"
+      ],
+      "ownerModule": "plugins/todolist/src/infrastructure/store.ts",
+      "pathExclusions": [],
+      "pathKind": "tree",
+      "pathPattern": "plugin-data/todolist",
+      "pathPatterns": [
+        "plugin-data/todolist"
+      ],
+      "preCoordinatorReadProjection": null,
+      "protocolModules": [],
+      "restorePolicy": "Restore store.v2.json through TodoStore; use store.v2.json.bak or store.v1.json.pre-v2.bak only via the owning reader.",
+      "schemaContract": {
+        "compatibility": "The named runtime reader is canonical; this inventory does not imply stricter validation than runtime currently performs.",
+        "kind": "protocol",
+        "source": "plugins/todolist/src/infrastructure/store.ts"
+      },
+      "schemaSource": {
+        "contract": "store.v2.json atomic JSON contract plus backup, v1 pre-migration copy, and bounded exports/*.json fallbacks",
+        "kind": "directory-contract",
+        "module": "plugins/todolist/src/infrastructure/store.ts"
+      }
+    },
+    {
+      "affectedByEpochMigration": true,
+      "bootstrapSafety": null,
       "checkpointPolicy": "Included in a future epoch checkpoint unless the coordinator explicitly classifies it otherwise.",
       "epochPolicy": "epoch-managed",
       "exemption": null,
@@ -3139,8 +3200,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Repins deterministic source receipts after absorbing OpenHanako v0.447.4 (AGENTS.md persona rename and automation store recovery writes) onto the existing HanaKDE persistence owners; runtime-introspected schemas, DATA_EPOCH, migration, checkpoint and restore contracts are unchanged.",
-    "payloadFingerprint": "sha256:375db568da7c8d05b377a818e203725045a78304f2681d06eeceeae528c46905"
+    "compatibilityReason": "Register the builtin todolist plugin's plugin-data/todolist JSON store as a dedicated owner. Existing store schemas, DATA_EPOCH, and previously inventoried records are unchanged.",
+    "payloadFingerprint": "sha256:d60e21c69d5daaf38a57b1bab98d71293dac4c06890107283df95786262717fe"
   },
   "schemas": [
     {
@@ -3756,6 +3817,13 @@
       "module": "lib/terminal/terminal-session-manager.ts",
       "sourceHash": "sha256:5e7c4faac6ad1ad030c410192d0d2b96c8bb2f566228c7dcb0a36e5970fd1e9e",
       "storeId": "terminal-session-state"
+    },
+    {
+      "contract": "store.v2.json atomic JSON contract plus backup, v1 pre-migration copy, and bounded exports/*.json fallbacks",
+      "kind": "directory-contract",
+      "module": "plugins/todolist/src/infrastructure/store.ts",
+      "sourceHash": "sha256:d68343223f91bd226c6ef58aee6af24fb2ca47a8400bd6bf6e7af6d212b5aeae",
+      "storeId": "todolist-plugin-store"
     },
     {
       "contract": "UsageLedger reader and atomic serializer",
@@ -8809,6 +8877,126 @@
       "reason": "Writes an office render job input, receipt, or generated output.",
       "sourceFile": "plugins/office/lib/html-to-pdf.ts",
       "storeId": "office-render-jobs"
+    },
+    {
+      "exemptionId": "todolist-plugin-asset-build",
+      "kind": "mkdir",
+      "ordinal": 0,
+      "reason": "Writes packaged plugin page.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
+      "sourceFile": "plugins/todolist/build.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "todolist-plugin-asset-build",
+      "kind": "write-file",
+      "ordinal": 0,
+      "reason": "Writes packaged plugin page.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
+      "sourceFile": "plugins/todolist/build.ts",
+      "storeId": null
+    },
+    {
+      "exemptionId": "todolist-plugin-package-verify",
+      "kind": "copy-file",
+      "ordinal": 0,
+      "reason": "Copies the plugin into an operating-system temporary directory to import and then deletes that directory; it is not a HANA_HOME persistence owner.",
+      "sourceFile": "plugins/todolist/scripts/verify-package.mjs",
+      "storeId": null
+    },
+    {
+      "exemptionId": "todolist-plugin-package-verify",
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Copies the plugin into an operating-system temporary directory to import and then deletes that directory; it is not a HANA_HOME persistence owner.",
+      "sourceFile": "plugins/todolist/scripts/verify-package.mjs",
+      "storeId": null
+    },
+    {
+      "exemptionId": null,
+      "kind": "copy-file",
+      "ordinal": 0,
+      "reason": "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+      "sourceFile": "plugins/todolist/src/infrastructure/store.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "copy-file",
+      "ordinal": 0,
+      "reason": "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+      "sourceFile": "plugins/todolist/src/infrastructure/store.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "ordinal": 0,
+      "reason": "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+      "sourceFile": "plugins/todolist/src/infrastructure/store.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+      "sourceFile": "plugins/todolist/src/infrastructure/store.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "ordinal": 0,
+      "reason": "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+      "sourceFile": "plugins/todolist/src/infrastructure/store.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "write-file",
+      "ordinal": 0,
+      "reason": "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+      "sourceFile": "plugins/todolist/src/infrastructure/store.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "write-file",
+      "ordinal": 0,
+      "reason": "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+      "sourceFile": "plugins/todolist/src/infrastructure/store.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "ordinal": 0,
+      "reason": "Writes bounded JSON export fallbacks under plugin-data/todolist/exports.",
+      "sourceFile": "plugins/todolist/src/interfaces/tool.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Writes bounded JSON export fallbacks under plugin-data/todolist/exports.",
+      "sourceFile": "plugins/todolist/src/interfaces/tool.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Writes bounded JSON export fallbacks under plugin-data/todolist/exports.",
+      "sourceFile": "plugins/todolist/src/interfaces/tool.ts",
+      "storeId": "todolist-plugin-store"
+    },
+    {
+      "exemptionId": null,
+      "kind": "write-file",
+      "ordinal": 0,
+      "reason": "Writes bounded JSON export fallbacks under plugin-data/todolist/exports.",
+      "sourceFile": "plugins/todolist/src/interfaces/tool.ts",
+      "storeId": "todolist-plugin-store"
     },
     {
       "exemptionId": null,

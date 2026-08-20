@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-internalize-todolist-plugin
 id: T-05
 title: 交付周期任务与历史不变量
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: 新增 RecurrenceRule/version/occurrence/override/suppression schema，涉及幂等物化、历史不可变与危险系列事务。
 ready: true
@@ -109,7 +109,7 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-015：calendar 有界幂等，after-completion 只在完成后产生一个活动下一项。
-- [ ] AC-016：override/version/suppression 正确，历史和完成 occurrence 不变，危险系列变更原子确认。
-- [ ] AC-014、AC-029：确认失败、冲突和事务失败无部分写入。
-- [ ] Evidence 完整且产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。
+- [x] AC-015：calendar 有界幂等，after-completion 只在完成后产生一个活动下一项。
+- [x] AC-016：override/version/suppression 正确，历史和完成 occurrence 不变，危险系列变更原子确认。
+- [x] AC-014、AC-029：确认失败、冲突和事务失败无部分写入。
+- [x] Evidence 完整且产品 diff 仅位于 `<Path>plugins/todolist/</Path>`。

@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "artifact": "design-tree",
+  "change": "2026-08-13-markdown-wechat-plugin",
+  "status": "consensus",
+  "round": 7,
+  "nodes": [
+    {
+      "id": "D-001",
+      "title": "插件落点",
+      "question": "该 Markdown 公众号排版能力是否作为可整块删除、随 HanaKDE 分发的内置插件实现？",
+      "depends_on": [],
+      "recommendation": "是。使用 `<Path>plugins/markdown-wechat/</Path>`，消费现有插件与资源契约，不修改系统本体。",
+      "status": "answered",
+      "round": 1,
+      "answer": "用户明确要求将功能作为内置插件形式实现；功能落点判定逐条通过插件盒子判据。",
+      "log_ref": "LOG-001"
+    },
+    {
+      "id": "D-002",
+      "title": "v1 功能对齐范围",
+      "question": "v1 是以参考项目的完整可用能力为目标，还是只交付核心排版闭环？请在以下范围中选择：\n\nA. 完整对齐：编辑器、实时预览、主题/字号/字体、自定义 CSS、代码/表格/引用/图片/视频、富文本复制、多文档/回收站/自动保存、导入/导出与可配置图床。\nB. 核心闭环：编辑器、实时预览、主题/字号/字体、代码/表格/引用、富文本复制、Markdown 导入/导出；图片/视频高级处理、多文档回收站和图床另行迭代。\nC. 轻量首版：单文档编辑、预览、少量主题和复制富文本。",
+      "depends_on": [],
+      "recommendation": "B。先保证 Hana 宿主接缝、复制结果和核心 Markdown 语义稳定，再把高风险媒体/图床与复杂本地数据库能力拆成后续切片。",
+      "status": "answered",
+      "round": 1,
+      "answer": "B：v1 先交付核心闭环，包含 Markdown 编辑器、实时公众号预览、主题/字号/字体、核心 Markdown 语法、富文本复制和 Markdown 导入/导出；图片/视频高级处理、多文档回收站和图床不进入本 change 的首版范围。",
+      "log_ref": "LOG-003"
+    },
+    {
+      "id": "D-003",
+      "title": "主 UI 贡献面",
+      "question": "排版工具的宿主入口采用哪种 UI 贡献面？\n\nA. 仅 Page：作为独立全页面工作台。\nB. Page + Widget：全页面工作台加侧栏快速入口/最近文档。\nC. 仅 Widget：嵌入现有工作区侧栏。",
+      "depends_on": ["D-002"],
+      "recommendation": "A。编辑器与预览需要稳定的宽屏和窄屏布局，Page 能承载参考项目的双栏工作面；需要快速入口时再由 Page 内部提供。",
+      "status": "answered",
+      "round": 2,
+      "answer": "B：提供 Page + Widget。Page 承载完整编辑器与预览工作台，Widget 提供快速入口或轻量最近文档入口。",
+      "log_ref": "LOG-004"
+    },
+    {
+      "id": "D-004",
+      "title": "Agent 工具边界",
+      "question": "是否需要同时提供 Agent 可调用的 Markdown 公众号排版工具？\n\nA. 不提供 Agent tool，首版只做用户 Page。\nB. 提供只读/纯产出工具：输入 Markdown 或 ResourceRef，返回渲染 HTML/SessionFile，不直接改工作区。\nC. 提供可写工具：除渲染外还可直接创建/覆盖用户工作区文件。",
+      "depends_on": ["D-002"],
+      "recommendation": "B。它能复用渲染核心并服务 Agent 工作流，同时通过 `stageFile()` 交付产物；工作区写入保留给 UI 中的显式 ResourceIO 操作。",
+      "status": "answered",
+      "round": 2,
+      "answer": "B：提供只读/纯产出 Agent tool。输入 Markdown 或 ResourceRef，返回渲染 HTML/SessionFile；不直接修改用户工作区。",
+      "log_ref": "LOG-005"
+    },
+    {
+      "id": "D-005",
+      "title": "文档与设置持久化",
+      "question": "文档、主题和编辑器设置的默认持久化边界是什么？\n\nA. 插件私有数据：由插件 routes/lifecycle 管理文档与设置；显式导入/导出再访问用户资源。\nB. 浏览器本地状态：沿用参考项目的 localStorage/IndexedDB，宿主文件只通过导入/导出访问。\nC. 用户资源优先：每篇文档必须绑定一个工作区 Markdown 文件，插件只保存临时 UI 状态。",
+      "depends_on": ["D-002", "D-003"],
+      "recommendation": "A。它让多文档/最近文档在 Hana 重启后可恢复且不依赖 iframe 存储策略；用户工作区仍由 ResourceIO 显式读写，避免把插件私有数据和用户资源混为一谈。",
+      "status": "answered",
+      "round": 3,
+      "answer": "A：文档、主题和编辑器设置存放在插件私有数据中，由插件 routes/lifecycle 管理；显式导入/导出时再访问用户资源。",
+      "log_ref": "LOG-006"
+    },
+    {
+      "id": "D-006",
+      "title": "导入导出与文件写回",
+      "question": "导入 Markdown、导出 Markdown/HTML 以及复制富文本的交付语义是什么？\n\nA. 导入使用 `resource.pick` + route/ResourceIO 读取；导出默认生成 SessionFile，用户另行选择工作区路径写回。\nB. 导入/导出都直接操作当前工作区路径。\nC. 只支持剪贴板，不做文件导入/导出。",
+      "depends_on": ["D-004", "D-005"],
+      "recommendation": "A。它符合 ResourceIO 与 SessionFile 边界，不把隐式写文件或绝对路径带入插件；复制富文本通过 `hana.clipboard.writeText` 的文本合同或明确的富文本桥接能力验证。",
+      "status": "answered",
+      "round": 4,
+      "answer": "A：导入通过 `resource.pick` 与 ResourceIO 读取；Markdown/HTML 导出默认生成 SessionFile；用户如需写入工作区，必须另行选择路径并显式执行。富文本复制通过宿主剪贴板能力交付。",
+      "log_ref": "LOG-007"
+    },
+    {
+      "id": "D-007",
+      "title": "媒体与第三方网络",
+      "question": "图片/视频与图床能力是否进入 v1？\n\nA. 保留本地图片/视频预览与公众号复制所需占位，但不接第三方图床。\nB. 同时支持 SM.MS、GitHub、自定义图床等可配置网络上传。\nC. v1 不做媒体增强，只保留远程 Markdown 图片链接。",
+      "depends_on": ["D-002", "D-005", "D-006"],
+      "recommendation": "A。先证明资源引用、复制和安全边界；第三方图床需要网络 capability、allowedHosts、secret config 和更高的外部副作用审查，适合独立后续 change。",
+      "status": "answered",
+      "round": 5,
+      "answer": "A：v1 保留本地图片/视频预览与公众号复制所需的占位语义，但不接入 SM.MS、GitHub 或自定义第三方图床。",
+      "log_ref": "LOG-008"
+    },
+    {
+      "id": "D-008",
+      "title": "旧项目数据迁移",
+      "question": "是否需要把参考项目或现有 md-wechat 数据迁入 Hana 插件？\n\nA. 不做自动迁移；新插件使用自己的版本化数据，未来如有真实用户数据再设计 JSON importer。\nB. 首版提供参考项目 localStorage/IndexedDB/SQLite 的迁移。\nC. 只支持显式 Markdown 文件导入，不迁移设置和媒体缓存。",
+      "depends_on": ["D-005", "D-006"],
+      "recommendation": "C。用户文章通过 Markdown 导入即可恢复主要内容；不读取另一套浏览器数据库，避免不可验证的跨实现存储契约。",
+      "status": "answered",
+      "round": 5,
+      "answer": "A：不做参考项目 localStorage/IndexedDB/SQLite 的自动迁移；未来若存在真实用户数据，再单独设计版本化 JSON importer。",
+      "log_ref": "LOG-009"
+    },
+    {
+      "id": "D-009",
+      "title": "兼容与验收重点",
+      "question": "首版发布验收优先级如何排序？\n\nA. 先保证 Hana 内置插件加载/删除、Page 可用、资源权限与核心渲染/复制行为；主题数量和视觉细节可逐步补齐。\nB. 先做到与参考项目的视觉和 26 主题像素级一致，再验证宿主边界。\nC. 两者同等为阻塞验收，任何一项不完整都不发布。",
+      "depends_on": ["D-002", "D-003", "D-004", "D-006", "D-007", "D-008"],
+      "recommendation": "A。宿主接缝和数据/权限正确性是内置插件的发布硬门；视觉对齐以行为快照和关键主题覆盖验证，不要求复制参考项目的内部实现。",
+      "status": "answered",
+      "round": 6,
+      "answer": "A：首版发布阻塞验收优先保证 Hana 内置插件加载/删除、Page/Widget 可用、资源权限与核心渲染/复制行为；主题数量和视觉细节使用关键覆盖验证，可逐步补齐。",
+      "log_ref": "LOG-010"
+    }
+  ]
+}

@@ -101,6 +101,7 @@ describe("persistent store registry", () => {
       "character-card-staging",
       "desk-cover-upload-staging",
       "office-render-jobs",
+      "todolist-plugin-store",
       "plugin-download-cache",
       "skill-state",
       "usage-ledger",
@@ -185,6 +186,7 @@ describe("persistent store registry", () => {
     expect(pluginData.pathExclusions).toEqual([
       "plugin-data/office/jobs",
       "plugin-data/office/generated",
+      "plugin-data/todolist",
     ]);
     // MCP config is owned by the core module in its dedicated runtime directory.
     const mcp = PERSISTENT_STORES.find((store) => store.id === "mcp-config")!;
@@ -204,6 +206,9 @@ describe("persistent store registry", () => {
       "plugin-data/office/jobs",
       "plugin-data/office/generated",
     ]);
+    const todolist = PERSISTENT_STORES.find((store) => store.id === "todolist-plugin-store")!;
+    expect(todolist.ownerModule).toBe("plugins/todolist/src/infrastructure/store.ts");
+    expect(todolist.pathPatterns).toEqual(["plugin-data/todolist"]);
   });
 
   // The plugin store owns both the directory name and the file shape. The

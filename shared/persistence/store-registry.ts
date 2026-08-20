@@ -1007,7 +1007,7 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     id: "plugin-runtime-data",
     ownerModule: "core/plugin-config.ts",
     pathPatterns: ["plugin-data/{pluginId}"],
-    pathExclusions: ["plugin-data/office/jobs", "plugin-data/office/generated"],
+    pathExclusions: ["plugin-data/office/jobs", "plugin-data/office/generated", "plugin-data/todolist"],
     pathKind: "tree",
     format: "mixed-directory",
     schemaSource: {
@@ -1379,6 +1379,36 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
     siteRules: rules(["plugins/office/lib/html-to-pdf.ts"], "Writes an office render job input, receipt, or generated output."),
   }),
   defineStore({
+    id: "todolist-plugin-store",
+    ownerModule: "plugins/todolist/src/infrastructure/store.ts",
+    pathPatterns: ["plugin-data/todolist"],
+    pathKind: "tree",
+    format: "json",
+    schemaSource: directorySource(
+      "plugins/todolist/src/infrastructure/store.ts",
+      "store.v2.json atomic JSON contract plus backup, v1 pre-migration copy, and bounded exports/*.json fallbacks",
+    ),
+    openEntry: ["new TodoStore"],
+    migrationEntry: ["TodoStore.initialize migrateV1"],
+    firstPossibleOpenPhase: "runtime_ready",
+    firstPossibleWritePhase: "runtime_ready",
+    checkpointPolicy: "Checkpoint the plugin-data/todolist tree; restore only with a compatible STORE_SCHEMA_VERSION reader.",
+    restorePolicy: "Restore store.v2.json through TodoStore; use store.v2.json.bak or store.v1.json.pre-v2.bak only via the owning reader.",
+    identityContract: "The builtin todolist pluginId owns exactly plugin-data/todolist; revision is a generation, not a second identity.",
+    siteRules: [
+      ...rules(
+        ["plugins/todolist/src/infrastructure/store.ts"],
+        "Atomically writes the todolist JSON store, its backup, and the v1 pre-migration copy.",
+        ["mkdir", "write-file", "copy-file", "rename", "remove-path"],
+      ),
+      ...rules(
+        ["plugins/todolist/src/interfaces/tool.ts"],
+        "Writes bounded JSON export fallbacks under plugin-data/todolist/exports.",
+        ["mkdir", "write-file", "remove-path"],
+      ),
+    ],
+  }),
+  defineStore({
     id: "plugin-download-cache",
     ownerModule: "server/routes/plugins.ts",
     pathPatterns: ["plugin-install-sources/{pluginId}/{version}"],
@@ -1570,6 +1600,22 @@ export const PERSISTENCE_EXEMPTIONS: readonly PersistenceExemption[] = Object.fr
     "2026-10-31",
     ["mkdir", "copy-file"],
     "(?:path[.]dirname\\(dst\\)|sourcePath, dst)",
+  ),
+  exemption(
+    "todolist-plugin-asset-build",
+    "plugins/todolist/build.ts",
+    "plugins/todolist/build.ts",
+    "Writes packaged plugin page.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
+    "2027-08-31",
+    ["mkdir", "write-file"],
+  ),
+  exemption(
+    "todolist-plugin-package-verify",
+    "plugins/todolist/scripts/verify-package.mjs",
+    "plugins/todolist/scripts/verify-package.mjs",
+    "Copies the plugin into an operating-system temporary directory to import and then deletes that directory; it is not a HANA_HOME persistence owner.",
+    "2027-08-31",
+    ["copy-file", "remove-path"],
   ),
   exemption(
     "external-beautify-markdown-output",

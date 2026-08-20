@@ -1,0 +1,24 @@
+{
+  "name": "@hana/builtin-todolist",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "build": "node --experimental-strip-types build.ts",
+    "verify": "npm run typecheck && npm test && npm run build && node --check assets/page.js && node --experimental-strip-types scripts/verify-package.mjs",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts"
+  },
+  "engines": {
+    "node": ">=24.12.0 <25"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^5.9.3",
+    "@playwright/test": "1.62.0"
+  }
+}

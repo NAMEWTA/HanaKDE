@@ -2,7 +2,7 @@
 schema_version: 3
 artifact: tickets-map
 change: 2026-08-09-internalize-todolist-plugin
-status: ready
+status: completed
 ---
 
 # Tickets Map: Hana Todo 内置插件
@@ -19,22 +19,22 @@ status: ready
 
 严格执行 ADR-014 与 USER-DECISION：所有产品实现、测试、fixture、Playwright 配置、构建资产和依赖声明只可写 `<Path>plugins/todolist/</Path>`。宿主、根构建脚本、公共测试与其它插件只读。十张票都会演进同一私有 store/application/Page/runtime；依赖边同时代表真实数据/接口前置，因此采用串行 DAG，不用 shared path 或“最后合并冲突”表达所有权。
 
-没有独立 host prefactor，也没有 expand-contract：当前 PluginManager/EventBus/TaskRegistry/Session/Agent/ResourceIO 接缝足以被内置插件消费。旧 0.0.5 SQLite 不进入兼容窗口；只有版本化 JSON preview/commit，且没有真实脱敏样本时不声称旧数据兼容。
+没有独立 host prefactor，也没有 expand-contract：当前 PluginManager/EventBus/TaskRegistry/Session/Agent/ResourceIO 接缝足以支持已批准的插件能力；notification receipt/Bridge/逐渠道路由、`session.open`、rich native card、workspace write 等未提供能力明确 deferred，不能在 Ticket 中私造。旧 0.0.5 SQLite 不进入兼容窗口；只有版本化 JSON preview/commit，且没有真实脱敏样本时不声称旧数据兼容。
 
 ## 2. 执行清单
 
 | ID | Ticket | 可观察产出 | Blocked By | Depth | Risk | Ready | Owner | Contract IDs | Wave/Gate | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T-01 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/01-establish-builtin-persistent-crud.md</Path>` | builtin Page 与 `todo_*` tools 同源持久 CRUD | — | deep | high | yes | implementation-owner | AC-001～004、029、033 | W1 / G1 根契约 | ready |
-| T-02 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/02-deliver-safe-deletion-lifecycle.md</Path>` | soft delete、Undo、Trash 与安全 confirm | T-01 | deep | high | yes | implementation-owner | AC-013、014、029 | W2 / G1 数据安全 | ready |
-| T-03 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/03-deliver-capture-and-organization.md</Path>` | Inbox/Project/tags 与可见继承 chip | T-02 | deep | medium | yes | implementation-owner | AC-006、007、029、031 | W3 / G2 日常任务 | ready |
-| T-04 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/04-deliver-typed-time-and-focus-views.md</Path>` | typed time、DST、Today/Upcoming/Calendar | T-03 | deep | high | yes | implementation-owner | AC-005、008、009、030、031 | W4 / G2 时间意图 | ready |
-| T-05 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/05-deliver-recurrence-history.md</Path>` | 两类周期、系列编辑与历史不可变 | T-04 | deep | high | yes | implementation-owner | AC-014～016、029 | W5 / G2 周期 | ready |
-| T-06 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/06-deliver-scheduler-readiness-and-reminders.md</Path>` | 有界 readiness、唯一 schedule 与提醒 handoff | T-05 | deep | high | yes | implementation-owner | AC-009～012、023、024、029 | W6 / G3 后台就绪 | ready |
-| T-07 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/07-deliver-isolated-agent-runs.md</Path>` | 每 Todo×occurrence 隔离 Run/Session/Attempt 与安全取消 | T-06 | deep | high | yes | implementation-owner | AC-009、012、017～020、022、026、029、033 | W7 / G3 自动化协议 | ready |
-| T-08 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/08-deliver-automation-operations-surface.md</Path>` | 可筛选、可诊断、可行动的 Automation Page | T-07 | standard | medium | yes | implementation-owner | AC-020～022、029、031 | W8 / G3 运营面 | ready |
-| T-09 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/09-deliver-import-export-review.md</Path>` | JSON preview/commit、显式导出与 Review | T-08 | deep | high | yes | implementation-owner | AC-022、027～031 | W9 / G4 数据交换 | ready |
-| T-10 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/10-release-complete-builtin-todo.md</Path>` | 构建/seed/视觉/a11y/路径/可移除发布证据 | T-09 | standard | high | yes | release-owner | AC-001、003、023、025、029、031～033 | W10 / G5 发布 | ready |
+| T-01 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/01-establish-builtin-persistent-crud.md</Path>` | builtin Page 与 `todo_*` tools 同源持久 CRUD | — | deep | high | yes | implementation-owner | AC-001～004、029、033 | W1 / G1 根契约 | done |
+| T-02 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/02-deliver-safe-deletion-lifecycle.md</Path>` | soft delete、Undo、Trash 与安全 confirm | T-01 | deep | high | yes | implementation-owner | AC-013、014、029 | W2 / G1 数据安全 | done |
+| T-03 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/03-deliver-capture-and-organization.md</Path>` | Inbox/Project/tags 与可见继承 chip | T-02 | deep | medium | yes | implementation-owner | AC-006、007、029、031 | W3 / G2 日常任务 | done |
+| T-04 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/04-deliver-typed-time-and-focus-views.md</Path>` | typed time、DST、Today/Upcoming/Calendar | T-03 | deep | high | yes | implementation-owner | AC-005、008、009、030、031 | W4 / G2 时间意图 | done |
+| T-05 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/05-deliver-recurrence-history.md</Path>` | 两类周期、系列编辑与历史不可变 | T-04 | deep | high | yes | implementation-owner | AC-014～016、029 | W5 / G2 周期 | done |
+| T-06 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/06-deliver-scheduler-readiness-and-reminders.md</Path>` | 有界 readiness、唯一 schedule 与提醒 handoff | T-05 | deep | high | yes | implementation-owner | AC-009～012、023、024、029 | W6 / G3 后台就绪 | done |
+| T-07 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/07-deliver-isolated-agent-runs.md</Path>` | 每 Todo×occurrence 隔离 Run/Session/Attempt 与安全取消 | T-06 | deep | high | yes | implementation-owner | AC-009、012、017～020、022、026、029、033 | W7 / G3 自动化协议 | done |
+| T-08 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/08-deliver-automation-operations-surface.md</Path>` | 可筛选、可诊断、可行动的 Automation Page | T-07 | standard | medium | yes | implementation-owner | AC-020～022、029、031 | W8 / G3 运营面 | done |
+| T-09 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/09-deliver-import-export-review.md</Path>` | JSON preview/commit、显式导出与 Review | T-08 | deep | high | yes | implementation-owner | AC-022、027～031 | W9 / G4 数据交换 | done |
+| T-10 | `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/ticket/10-release-complete-builtin-todo.md</Path>` | 构建/seed/视觉/a11y/路径/可移除发布证据 | T-09 | standard | high | yes | release-owner | AC-001、003、023、025、029、031～033 | W10 / G5 发布 | done |
 
 Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；本表是同步投影，不得独立修改出另一套真相。W1～W10 是顺序候选 Wave，不表示并行；正式 Gate、owner 和发布编排由 Goal Plan 决定。
 
@@ -63,9 +63,9 @@ T-01 [READY, root CRUD contract]
 | AC-002 | T-01 | route/tool/store 集成 | covered | Page 与 tools 同源 |
 | AC-003 | T-01、T-10 | tool catalog + TodoWrite 回归 | covered | 不覆盖 `todo_write` |
 | AC-004 | T-01 | CRUD application/route/tool | covered | id/version/status/pagination |
-| AC-005 | T-04 | time query/domain/UI | covered | attentionDate 与聚焦成员 |
-| AC-006 | T-03 | capture component/E2E | covered | 可见继承 chips |
-| AC-007 | T-03 | organization store/service | covered | Project/List/tags 与回 Inbox |
+| AC-005 | T-04 | time query/domain/UI | covered | `attentionDate=min(plannedFor,deadline)`、同日双理由与聚焦成员 |
+| AC-006 | T-03 | capture component/E2E | covered | 逐项创建、IME/多行粘贴拒绝、可见继承 chips、无 NLP |
+| AC-007 | T-03 | organization store/service | covered | Project/List/tags；Project 进 Trash、不级联，未完成 Todo 投影到 Inbox 并保留历史引用 |
 | AC-008 | T-04 | 多时区/DST fixture | covered | date/exact 与 gap/overlap |
 | AC-009 | T-04、T-06、T-07 | domain + scheduler + automation | covered | 默认 manual、无隐式副作用 |
 | AC-010 | T-06 | EventBus/handoff store | covered | 先 claim 后 notification handoff |
@@ -79,13 +79,13 @@ T-01 [READY, root CRUD contract]
 | AC-018 | T-07 | retry/Attempt 集成 | covered | 同 Run 增 Attempt |
 | AC-019 | T-07 | result protocol/store | covered | 最小结果且不自动完成 Todo |
 | AC-020 | T-07、T-08 | cancel fault + UI action | covered | cancel_requested 到宿主确认 |
-| AC-021 | T-08 | route/component/Playwright | covered | Automation 筛选、动作、跳转 |
+| AC-021 | T-08 | route/component/Playwright | covered | Automation 筛选、动作、SessionRef 查看/复制；仅在宿主提供能力时导航 |
 | AC-022 | T-07、T-08、T-09 | store/Session/export 扫描 | covered | Session 对话权威、无消息副本 |
 | AC-023 | T-06、T-10 | 启动时序 harness + release | covered | 晚就绪有限 retry、无 due timer |
 | AC-024 | T-06 | TaskRegistry 假时钟/重启 | covered | 补偿、重复收敛、取消有效 |
 | AC-025 | T-10 | Git path allowlist | covered | 产品 diff 仅插件根 |
 | AC-026 | T-07 | ResourceIO/Session 安全集成 | covered | ResourceRef、不扩大 workspace |
-| AC-027 | T-09 | migration dry-run/rollback | covered | JSON preview/commit、SQLite 拒绝 |
+| AC-027 | T-09 | migration dry-run/rollback | covered | JSON preview/默认追加 commit、SQLite 拒绝、导入不触发后台副作用 |
 | AC-028 | T-09 | export/download 集成 | covered | 显式 JSON/Markdown、无工作区写入 |
 | AC-029 | T-01～T-10 | schema/故障注入/发布回归 | covered | 稳定错误、无 fallback/隐藏部分成功 |
 | AC-030 | T-04、T-09 | projection/UI | covered | Calendar/Completed/Review 同源 |
@@ -121,12 +121,13 @@ T-01 [READY, root CRUD contract]
 ## 7. 横切契约与风险
 
 - **唯一写入边界：** 产品文件只能在 `<Path>plugins/todolist/</Path>`；SpecDev planning/evidence 工件不属于产品实现。
+- **实现语言边界：** 插件生产源代码、运行时、React 页面和测试统一 TypeScript；JSON/YAML 仅作 manifest/package/配置和测试元数据，Python 不进入插件产品目录或运行依赖。
 - **数据与错误：** 全部 mutation versioned/transactional；失败使用稳定、脱敏类别，不吞错、不 fallback、不隐藏部分成功。
 - **副作用：** 默认 manual；reminder/agent_execute 显式授权且开关独立；TaskRegistry 唯一 due authority。
 - **通知语义：** `handed_off` 不是 delivered；无 Bridge、无新 notification capability、无自动外部重发。
-- **Session/资源隐私：** Session 是 transcript 权威；store/export 无完整 messages、secret 或绝对路径；ResourceRef 不扩大 workspace。
+- **Session/资源隐私：** Session 是 transcript 权威；store/export 无完整 messages、secret 或绝对路径；ResourceRef 不扩大 workspace；没有 `session.open` 时只提供稳定 ref/复制和最小结果，不渲染假导航。
 - **UI 质量：** 每个 UI Ticket 同时实现五语言、键盘、焦点、ARIA、主题和窄布局；T-10 只做整体验证/插件内修复，不延后质量债。
-- **迁移与恢复：** 私有 schema 逐 Ticket 事务演进；旧 SQLite fail closed；导入 preview 后 commit；已有副作用或历史 occurrence 使用前向恢复，不伪造回滚。
+- **迁移与恢复：** 私有 schema 逐 Ticket 事务演进；旧 SQLite fail closed；导入 preview 后默认追加 commit 且不触发 schedule/Run/Session；已有副作用或历史 occurrence 使用前向恢复，不伪造回滚。
 - **发布：** 复用既有通配 build/seed；不得修改根命令；在临时隔离环境做整块删除 smoke，保护当前工作区和用户改动。
 
 ## 8. 同步规则

@@ -4,7 +4,7 @@ artifact: ticket
 change: 2026-08-09-internalize-todolist-plugin
 id: T-02
 title: 交付安全删除、Trash 与确认协议
-status: ready
+status: done
 planning_depth: deep
 planning_depth_reason: 涉及可恢复与永久删除、事务原子性、session/version 绑定授权以及私有 schema 迁移。
 ready: true
@@ -30,6 +30,7 @@ shared_path_owners: []
 
 - **目标：** 在 T-01 的 versioned mutation 上提供普通删除可恢复、危险删除显式确认的完整生命周期。
 - **可观察产出：** 删除后 Todo 立即离开活动视图，用户可撤销或从 Trash 恢复；永久、批量或 Agent 删除只有 prepare/confirm 成功才执行。
+- **边界澄清：** 这里的“批量”仅指用户显式选择后的危险删除确认，不包含批量创建；Todo 创建始终由 T-03 逐项完成。
 - **来源：** US-001、US-005，AC-013、AC-014、AC-029，ADR-013，Spec DEC-013。
 - **当前事实：** T-01 只提供主状态 CRUD，没有 Trash、undo 窗口或危险操作确认；参考插件的删除行为不得直接成为授权先例。
 - **Planning Depth 原因：** 删除影响数据完整性且包含不可逆操作与授权令牌，需要迁移、回滚和批准点。
@@ -108,8 +109,8 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-013：普通删除立即隐藏且可撤销/Trash 恢复，业务字段与审计保持。
-- [ ] AC-014：stale、session mismatch、过期和重放均拒绝，有效 confirm 才原子执行。
-- [ ] AC-029：失败类别稳定、脱敏且无未声明部分成功。
-- [ ] 验证矩阵记录于 `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-02.md</Path>`。
-- [ ] 产品修改仅位于 `<Path>plugins/todolist/</Path>`，Ticket/Map/Evidence 状态一致。
+- [x] AC-013：普通删除立即隐藏且可撤销/Trash 恢复，业务字段与审计保持。
+- [x] AC-014：stale、session mismatch、过期和重放均拒绝，有效 confirm 才原子执行。
+- [x] AC-029：失败类别稳定、脱敏且无未声明部分成功。
+- [x] 验证矩阵记录于 `<Path>{roots.state}/specdev/changes/2026-08-09-internalize-todolist-plugin/evidence/T-02.md</Path>`。
+- [x] 产品修改仅位于 `<Path>plugins/todolist/</Path>`，Ticket/Map/Evidence 状态一致。
