@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- Legacy DOM application is bundled as JavaScript by esbuild.
 const I18N = {
   "zh-CN": {
     app: "Todo", today: "今天", inbox: "收集箱", upcoming: "即将到来", all: "全部", calendar: "日历",

@@ -5,6 +5,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { createDeviceCredential } from '../../../core/device-registry.ts';
 import { saveServerNetworkConfig } from '../../../core/server-network-config.ts';
+import { KNOWLEDGE_INDEX_ROOT } from '../../../lib/knowledge-workspace/knowledge-index-store.ts';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures/app-fixture.ts';
 import { createKnowledgeWorkspaceSandbox } from '../fixtures/workspace-fixture.ts';
@@ -151,7 +152,7 @@ test('E2E-KW-014 detects schema drift and corruption, serves the ready generatio
   expect(JSON.stringify(search)).toContain('Indexed.md');
 
   const firstGeneration = (status.health as { generationId: string }).generationId;
-  const indexRoot = path.join(workspaceSandbox.hanaHome, 'kw', 'i', 'v1');
+  const indexRoot = path.join(workspaceSandbox.hanaHome, KNOWLEDGE_INDEX_ROOT);
   const currentPath = await findFile(indexRoot, 'current.json');
   let current = JSON.parse(await fs.readFile(currentPath, 'utf8')) as { generationId: string };
   let generationPath = path.join(path.dirname(currentPath), `generation-${current.generationId}.sqlite`);
@@ -207,6 +208,16 @@ test('E2E-KW-014 detects schema drift and corruption, serves the ready generatio
   expect((concurrentRecovered.health as { generationId: string }).generationId)
     .not.toBe(oldReadyGeneration);
 
+  // The watcher may queue one final convergence build while the explicit
+  // rebuild is running. Corrupt the active generation only after that
+  // provider-owned work has settled, otherwise status correctly remains
+  // `building` and serves the previous ready generation.
+  await expect.poll(async () => {
+    const settled = await ok(await knowledgeApp.apiFetch(
+      '/api/knowledge-workspace/index/status?sourceKey=main',
+    ));
+    return (settled.health as { state?: string }).state;
+  }, { timeout: 60_000, intervals: [50, 100, 250, 500] }).toBe('ready');
   current = JSON.parse(await fs.readFile(currentPath, 'utf8')) as { generationId: string };
   generationPath = path.join(path.dirname(currentPath), `generation-${current.generationId}.sqlite`);
   await fs.writeFile(generationPath, Buffer.from('not a sqlite database'));
@@ -333,10 +344,11 @@ test('E2E-KW-017 imports through the native picker, opens with the default app a
   const importButton = workspace.getByRole('button', { name: /Import/i });
   await expect(importButton).toBeVisible();
   if (knowledgeApp.runtime === 'web-open') {
-    await importButton.click();
+    await expect(importButton).toBeDisabled();
     await expect(knowledgeApp.page.getByRole('dialog')).toHaveCount(0);
     return;
   }
+  await expect(importButton).toBeEnabled();
   const externalFile = path.join(workspaceSandbox.rootDir, 'Picker-import.txt');
   await fs.writeFile(externalFile, 'picker-import-token\n', 'utf8');
   await installDialogStub(knowledgeApp.electronApplication!, { openPaths: [externalFile] });

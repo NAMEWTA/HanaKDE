@@ -17,6 +17,9 @@ export default [
       // dist-splash; both contain bundled JavaScript that must not be linted.
       'desktop/dist-*/**',
       'desktop/native/**/.build/**',
+      // The todolist build emits this bundled browser artifact from
+      // plugins/todolist/src/ui/browser-app.ts.
+      'plugins/todolist/assets/page.js',
       '.claude/**',
       '.cache/**',
       // .docs/ 不入版本控制、CI 不可见；lint 覆盖它会造成本地/CI 语义不对称
@@ -60,7 +63,7 @@ export default [
       'hub/**/*.{js,ts}',
       'index.js',
       'lib/**/*.{js,ts}',
-      'plugins/**/*.{js,ts}',
+      'plugins/**/*.{js,mjs,ts}',
       'scripts/**/*.{js,mjs,ts}',
       'server/**/*.{js,ts}',
       'shared/**/*.{js,ts}',
@@ -84,6 +87,18 @@ export default [
         ...globals.node,
         ...globals.browser,
       },
+    },
+  },
+
+  // This legacy DOM application is valid JavaScript kept in a .ts entry so
+  // esbuild can bundle it. Keep its type suppression explicit and documented.
+  {
+    files: ['plugins/todolist/src/ui/browser-app.ts'],
+    rules: {
+      '@typescript-eslint/ban-ts-comment': ['error', {
+        'ts-nocheck': 'allow-with-description',
+        minimumDescriptionLength: 10,
+      }],
     },
   },
 

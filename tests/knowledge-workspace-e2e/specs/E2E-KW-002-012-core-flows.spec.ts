@@ -36,8 +36,30 @@ async function openSourceTreeFile(workspace: Locator, sourceKey: string, name: s
   await expandSource(workspace, sourceKey);
   const row = workspace.locator(`[role="treeitem"][data-source-key="${sourceKey}"]`)
     .filter({ hasText: name }).last();
-  await expect(row).toBeVisible();
-  await row.dblclick();
+  const loadedOnFirstExpansion = await row.waitFor({
+    state: 'visible',
+    timeout: 15_000,
+  }).then(() => true, () => false);
+  if (!loadedOnFirstExpansion) {
+    // These stories create their files after the application fixture starts.
+    // Re-open the real tree root only after the first load window expires;
+    // collapsing clears the directory cache before the one explicit retry.
+    const root = workspace.locator(
+      `[role="treeitem"][data-source-key="${sourceKey}"]`,
+    ).first();
+    const disclosure = root.getByRole('button').first();
+    if (await root.getAttribute('aria-expanded') === 'true') {
+      await disclosure.click();
+      await expect(root).toHaveAttribute('aria-expanded', 'false');
+    }
+    await disclosure.click();
+    await expect(root).toHaveAttribute('aria-expanded', 'true');
+    await expect(row).toBeVisible({ timeout: 15_000 });
+  }
+  // Enter opens the selected file directly as a pinned editor. A mouse
+  // double-click deliberately opens preview on each click before pinning and
+  // is covered separately by E2E-KW-004.
+  await row.press('Enter');
 }
 
 async function json(response: Response): Promise<Record<string, unknown>> {
@@ -61,6 +83,7 @@ test('E2E-KW-002 keeps Open and Full on the same public DTO and capability shape
     fileClipboard: knowledgeApp.runtime === 'desktop-full',
     openDefault: knowledgeApp.runtime === 'desktop-full',
     reveal: knowledgeApp.runtime === 'desktop-full',
+    copyPath: knowledgeApp.runtime === 'desktop-full',
     systemTrash: knowledgeApp.runtime === 'desktop-full',
   });
 });
@@ -113,10 +136,13 @@ test('E2E-KW-005 edits manually, stays dirty without autosave and saves with exp
   test.skip(knowledgeApp.runtime === 'web-full', 'manual save is required for desktop-full and web-open');
   const file = path.join(workspaceSandbox.mainSource, 'Manual.md');
   await fs.writeFile(file, '# Baseline\n', 'utf8');
-  await json(await knowledgeApp.apiFetch('/api/resource-io/list', {
+  const listed = await json(await knowledgeApp.apiFetch('/api/resource-io/list', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ address: { sourceKey: 'main', relativePath: '' } }),
   }));
+  expect(listed).toMatchObject({
+    items: expect.arrayContaining([expect.objectContaining({ name: 'Manual.md' })]),
+  });
   const workspace = await openKnowledge(knowledgeApp.page);
   await openTreeFile(workspace, 'Manual.md');
   const editor = knowledgeApp.page.locator('[aria-label="Edit Manual.md"] .cm-content');
@@ -288,15 +314,18 @@ test('E2E-KW-010 drags cross-source pages/assets through copy-before-link and le
   // Complete the provider-owned root enumeration before the renderer opens
   // its tree. This is a real ResourceIO request (not a test-only route) and
   // makes the first Windows tree expansion observe the files written above.
-  await json(await knowledgeApp.apiFetch('/api/resource-io/list', {
+  const listed = await json(await knowledgeApp.apiFetch('/api/resource-io/list', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ address: { sourceKey: 'main', relativePath: '' } }),
   }));
+  expect(listed).toMatchObject({
+    items: expect.arrayContaining([expect.objectContaining({ name: 'Notes' })]),
+  });
   const workspace = await openKnowledge(knowledgeApp.page);
   await expandMain(workspace);
   const notes = workspace.locator('[data-source-key="main"][data-resource-path="Notes"]');
   await notes.getByRole('button').first().click();
-  await workspace.locator('[data-source-key="main"][data-resource-path="Notes/Host.md"]').dblclick();
+  await workspace.locator('[data-source-key="main"][data-resource-path="Notes/Host.md"]').press('Enter');
   const research = workspace.locator('[role="treeitem"][data-source-key="research"]').first();
   if (await research.getAttribute('aria-expanded') !== 'true') await research.getByRole('button').first().click();
   const hostRegion = knowledgeApp.page.locator('[aria-label="Edit Host.md"]');
@@ -325,7 +354,7 @@ test('E2E-KW-010 drags cross-source pages/assets through copy-before-link and le
     .toEqual(Buffer.from([0, 1, 2, 255, 13, 10]));
 
   await workspace.locator('[data-source-key="main"][data-resource-path="Blocked"]').getByRole('button').first().click();
-  await workspace.locator('[data-source-key="main"][data-resource-path="Blocked/Host.md"]').dblclick();
+  await workspace.locator('[data-source-key="main"][data-resource-path="Blocked/Host.md"]').press('Enter');
   const blockedRegion = knowledgeApp.page.locator('[aria-label="Edit Host.md"]').last();
   await blockedRegion.getByRole('button', { name: 'Source' }).click();
   const blockedEditor = blockedRegion.locator('.cm-content');
