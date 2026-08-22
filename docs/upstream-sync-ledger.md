@@ -10,9 +10,9 @@
 - **Previous absorbed ancestor:** `v0.447.4` / `c6d0405294be67cb134c2758f6472748ee73e2be`
 - **Initial freeze:** T-01 `fabe31dd`
 - **Current documentation baseline:** T-24 dispatch `de0eb983`
-- **Current sync branch:** `sync/upstream-v0.449.0`
+- **Completed sync branch:** `sync/upstream-v0.449.0` (safe to delete after the proof tag)
 - **Historical integration branch (deleted after v0.446.6):** `speculo/2026-08-09-openhanako-v0-446-6-integration/integration`
-- **Proof tag:** pending `hanakde-includes-v0.449.0` after integration into `hanakde`
+- **Proof tag:** `hanakde-includes-v0.449.0`
 - **Branch model:** [docs/maintenance/git-branch-model.md](maintenance/git-branch-model.md)
 - **Rule:** final target must remain an ancestor of the final HEAD; patch equivalence is insufficient. Merge the **named tag**, not a raw SHA. Keep the sync branch only until Git Graph shows the diamond, the ledger records the merge SHA, and `hanakde-includes-vX.Y.Z` exists; then delete the sync branch. Long-term evidence is ancestry, this ledger, and the proof tag.
 
@@ -303,6 +303,10 @@ the upstream line remains visible as a real parent in Git Graph.
 - **Upstream merge:** `e66aa746e918f0e711217cbc38cf60cf6a8113db`
   (`merge(upstream): absorb OpenHanako v0.449.0`), parents
   `ce39ecc0` + `b348cf1b`.
+- **Final `hanakde` merge:**
+  `75faaf431d956facd5bcd42406cc739a013289af`
+  (`merge(hanakde): include OpenHanako v0.449.0 sync`), parents
+  `ce39ecc0` + `a1255327`.
 - **Pre-merge divergence:** `git rev-list --left-right --count
   ce39ecc0...v0.449.0` returned `461  10`.
 - **Upstream slice:** 10 commits, 33 files, 728 insertions and 173 deletions.
@@ -364,6 +368,6 @@ stores and 780 discovered sites. Its payload fingerprint is
   reports them as invalid Vitest suites; their owning `node:test` suite passes.
 
 **Compatibility conclusion:** both `v0.447.4` and `v0.449.0` are ancestors of
-the sync HEAD. HanaKDE's second-development owners remain present, while the
+`hanakde`. HanaKDE's second-development owners remain present, while the
 four upstream release increments are represented by their original commits
 and a two-parent named-tag merge.
