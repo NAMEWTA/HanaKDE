@@ -6,13 +6,13 @@
 
 ## Frozen target
 
-- **Repository target:** `openhanako v0.447.4` / package version `0.447.4`
-- **Previous absorbed ancestor:** `v0.446.6` / `5f08a4f30203abb61dafac7dbb7ab92d11c23efa`
+- **Repository target:** `openhanako v0.449.0` / package version `0.449.0`
+- **Previous absorbed ancestor:** `v0.447.4` / `c6d0405294be67cb134c2758f6472748ee73e2be`
 - **Initial freeze:** T-01 `fabe31dd`
 - **Current documentation baseline:** T-24 dispatch `de0eb983`
-- **Completed sync branch (deleted after diamond + ledger):** `speculo/upstream-sync/v0.447.4`
+- **Current sync branch:** `sync/upstream-v0.449.0`
 - **Historical integration branch (deleted after v0.446.6):** `speculo/2026-08-09-openhanako-v0-446-6-integration/integration`
-- **Proof tag:** `hanakde-includes-v0.447.4`
+- **Proof tag:** pending `hanakde-includes-v0.449.0` after integration into `hanakde`
 - **Branch model:** [docs/maintenance/git-branch-model.md](maintenance/git-branch-model.md)
 - **Rule:** final target must remain an ancestor of the final HEAD; patch equivalence is insufficient. Merge the **named tag**, not a raw SHA. Keep the sync branch only until Git Graph shows the diamond, the ledger records the merge SHA, and `hanakde-includes-vX.Y.Z` exists; then delete the sync branch. Long-term evidence is ancestry, this ledger, and the proof tag.
 
@@ -41,6 +41,8 @@
 | T-24 | `de0eb983` | documentation work baseline | this ledger is candidate documentation, not final completion | docs/link/terminology review |
 | 2026-08-19 v0.447.4 | `7fffcc71` | upstream accepted + semantic integration | absorb frozen `v0.447.4`; keep HanaKDE ResourceIO/Knowledge/History owners | named-tag `--no-ff` merge |
 | 2026-08-20 v0.447.4 closure | `a07c22f4` | semantic integration + generated | restore HanaKDE closure justification; rename AGENTS.md docs; pin preflight to `0.447.4` | full vitest + typecheck + renderer; see review subsection |
+| 2026-08-22 v0.449.0 | `e66aa746` | upstream accepted + semantic integration + generated | absorb frozen `v0.449.0`; keep HanaKDE ResourceIO/Knowledge/History/Todo owners; regenerate persistence fingerprint | named-tag `--no-ff` merge + merge audit + focused/full gates |
+| 2026-08-22 v0.449.0 preflight | `d11ef656` | HanaKDE kept | pin Knowledge preflight and docs index to package `0.449.0` | isolated preflight 7/7 + changed-file lint |
 
 ## Five-way decision vocabulary
 
@@ -282,3 +284,86 @@ absorb must freeze the next named tag, create `sync/upstream-vX.Y.Z` from
 `hanakde`, merge that tag with `--no-ff`, classify overlap with this
 vocabulary, regenerate receipts from source, PR into `hanakde`, then delete
 the sync branch.
+
+## 2026-08-22 Absorb OpenHanako v0.449.0
+
+This checkpoint advances the frozen upstream release from `v0.447.4` to
+`v0.449.0`. The source is the named tag, merged with `git merge --no-ff`, so
+the upstream line remains visible as a real parent in Git Graph.
+
+### Frozen inputs and topology
+
+- **Frozen upstream tag:** `v0.449.0` =
+  `b348cf1b994fefe75dc94065bfbae78be15d25de`.
+- **Previous absorbed ancestor:** `v0.447.4` =
+  `c6d0405294be67cb134c2758f6472748ee73e2be`.
+- **Local baseline:** `hanakde` =
+  `ce39ecc056df7a5eff487ee8095423899e0d6ad5`.
+- **Sync branch:** `sync/upstream-v0.449.0`.
+- **Upstream merge:** `e66aa746e918f0e711217cbc38cf60cf6a8113db`
+  (`merge(upstream): absorb OpenHanako v0.449.0`), parents
+  `ce39ecc0` + `b348cf1b`.
+- **Pre-merge divergence:** `git rev-list --left-right --count
+  ce39ecc0...v0.449.0` returned `461  10`.
+- **Upstream slice:** 10 commits, 33 files, 728 insertions and 173 deletions.
+- **Remote observation:** local `upstream/main` and `origin/main` both pointed
+  to `b348cf1b`; the `upstream/main` reflog records a fast-forward fetch at
+  2026-08-21 23:23 +08:00. Live GitHub fetch/API verification was unavailable
+  during this run because the local network path failed its TLS handshake.
+
+### Upstream behavior accepted
+
+- `v0.448.1`: invite-code entry and the one-way beta update-channel switch.
+- `v0.448.2`: immediate update check after invite activation and graceful
+  already-current OTA apply behavior.
+- `v0.448.3`: manual platform update check and beta-channel copy cleanup.
+- `v0.449.0`: experimental DeepSeek V4 Flash Vision catalog entry and direct
+  image delivery for DeepSeek models that explicitly declare image support.
+- Early-access `hanaagent` and `openhanako` npm package source stubs and their
+  ESLint coverage.
+
+### Overlap and five-way classification
+
+The upstream slice overlapped 12 paths changed by HanaKDE since `v0.447.4`.
+Git combined 11 without a textual conflict. The only conflict was generated
+state.
+
+| Path or behavior | Classification | Decision |
+|---|---|---|
+| Updater, model capability, known-model catalog, About UI/locales, release digests, npm early-access tools | upstream accepted | Keep the owning upstream behavior and tests. |
+| Knowledge Workspace, ResourceIO, main-only History, Todo plugin ownership, platform hardening | HanaKDE kept | No local owner or product path was deleted or replaced. |
+| `desktop/main.cjs`, package metadata, session/model tests | semantic integration | Keep HanaKDE host composition and accept the upstream already-current OTA branch, package `0.449.0`, and corrected text-only auxiliary-vision fixture. |
+| `build/persistence-schema-fingerprint.json` | generated | Regenerate from final source with one combined compatible review; do not choose either conflicted parent wholesale. |
+| Duplicate owners | deleted duplicate | None introduced and none required removal. |
+
+The regenerated persistence result remains at `DATA_EPOCH=1`, 64 registered
+stores and 780 discovered sites. Its payload fingerprint is
+`sha256:e0709201eed9bd3bef24abc1995a6a3ac14ed858bd579a1b73b5a502a63f749a`.
+
+### Verification and residuals
+
+- Merge audit for `e66aa746`: 0 real loss, 0 unresolved conflict, 0 expected
+  noise. No path was deleted relative to `ce39ecc0`.
+- Focused upstream/persistence suite: 11 files / 342 tests passed.
+- Typecheck: all three repository TypeScript configurations passed on Node
+  24.18.1.
+- Client production build: main, preload, renderer, splash and theme passed.
+- Changed-file ESLint: 0 errors; existing warnings only.
+- Knowledge preflight after the package pin: 7/7 passed.
+- Todo plugin `node:test` suite from its package root: 27/27 passed.
+- Full Vitest observation before the preflight pin: 1210 files / 12338 tests
+  passed, 1 file / 8 tests skipped. The package-version assertion was the one
+  new deterministic failure and was fixed by `d11ef656`.
+- Two `FileHistoryModal` restore cases timed out under the full concurrent run
+  and passed 9/9 in isolation, matching the established suite flake class.
+- The same three previously recorded Knowledge environment cases remain:
+  `knowledge-malicious-workspace` (2) returns 500 and `knowledge-query-api`
+  (1) returns 503, including in isolation. No upstream file in this slice
+  changes those routes or the Knowledge owners.
+- Vitest still discovers four Todo files owned by `node:test` or Playwright and
+  reports them as invalid Vitest suites; their owning `node:test` suite passes.
+
+**Compatibility conclusion:** both `v0.447.4` and `v0.449.0` are ancestors of
+the sync HEAD. HanaKDE's second-development owners remain present, while the
+four upstream release increments are represented by their original commits
+and a two-parent named-tag merge.
