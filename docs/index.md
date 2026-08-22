@@ -1,7 +1,7 @@
 # HanaKDE (HanaAgent) — 项目目录结构完整索引
 
 > **项目名称**: HanaAgent（npm 包名 `hanako`）
-> **版本**: v0.447.4
+> **版本**: v0.449.0
 > **描述**: 带有记忆和灵魂的个人 AI 助理
 > **作者**: liliMozi
 > **许可证**: Apache-2.0
