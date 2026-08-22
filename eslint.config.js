@@ -65,6 +65,7 @@ export default [
       'lib/**/*.{js,ts}',
       'plugins/**/*.{js,mjs,ts}',
       'scripts/**/*.{js,mjs,ts}',
+      'tools/npm-ea/**/*.mjs',
       'server/**/*.{js,ts}',
       'shared/**/*.{js,ts}',
       'speculo/**/*.{js,mjs,ts}',

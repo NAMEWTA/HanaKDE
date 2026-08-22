@@ -652,7 +652,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:d60e21c69d5daaf38a57b1bab98d71293dac4c06890107283df95786262717fe",
+  "payloadFingerprint": "sha256:e0709201eed9bd3bef24abc1995a6a3ac14ed858bd579a1b73b5a502a63f749a",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3200,8 +3200,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Register the builtin todolist plugin's plugin-data/todolist JSON store as a dedicated owner. Existing store schemas, DATA_EPOCH, and previously inventoried records are unchanged.",
-    "payloadFingerprint": "sha256:d60e21c69d5daaf38a57b1bab98d71293dac4c06890107283df95786262717fe"
+    "compatibilityReason": "Combine HanaKDE's dedicated builtin todolist plugin store registration with upstream v0.449.0 updater executable-source changes. Existing store schemas, DATA_EPOCH, paths, ownership, and previously inventoried records remain unchanged; updater changes only trigger an immediate invite-channel check and treat an already-current OTA apply as success.",
+    "payloadFingerprint": "sha256:e0709201eed9bd3bef24abc1995a6a3ac14ed858bd579a1b73b5a502a63f749a"
   },
   "schemas": [
     {
@@ -3384,7 +3384,7 @@
       "contract": "update channel record version, device identifier, activation flag, update feed address, activation time, and held invite codes",
       "kind": "runtime-contract",
       "module": "desktop/auto-updater.cjs",
-      "sourceHash": "sha256:739190e68c9f0a66775c72424e335f3182abec97c91dc932179be8aabf46a591",
+      "sourceHash": "sha256:c55d64f0b00c7ea454b2f7adaba35633703702b3625985f3994fd8501271151f",
       "storeId": "desktop-update-channel"
     },
     {
@@ -3398,7 +3398,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:5e486a4074e2a9c2d3d6e30e94a06d5353d256340818a855c602e1c5ab31a7ed",
+      "sourceHash": "sha256:d040a6f3a4b94c6383e547357ef17c90706b3a0c11d877954e3d6c83d27aee9e",
       "storeId": "desktop-window-version-state"
     },
     {
