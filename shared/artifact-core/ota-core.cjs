@@ -210,7 +210,7 @@ const ORIGIN_MANIFEST_RACE_TIMEOUT_MS = MANIFEST_REQUEST_TIMEOUT_MS;
 
 // ── channel pointer URLs: clients poll ONLY these static asset
 //    URLs, never the GitHub API ───────────────────────────────────────────
-const GITHUB_CHANNEL_BASE = "https://github.com/liliMozi/openhanako/releases/download/channels";
+const GITHUB_CHANNEL_BASE = "https://github.com/NAMEWTA/HanaKDE/releases/download/channels";
 
 /**
  * One-element array retained for compatibility with existing callers.

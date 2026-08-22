@@ -15,6 +15,8 @@ import type {
 import type {
   ProviderRootIdentity,
 } from "../lib/resource-io/types.ts";
+import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
+import { ResourceIO } from "../lib/resource-io/resource-io.ts";
 import {
   createKnowledgeWorkspaceRoute,
 } from "../server/routes/knowledge-workspace.ts";
@@ -205,6 +207,9 @@ describe("knowledge query API", () => {
       defaultDeskCwd: fixture.workspace,
       homeCwd: fixture.workspace,
       deskCwd: fixture.workspace,
+      resourceIO: fixture.resourceIO,
+      knowledgeResourceIO: fixture.resourceIO,
+      getKnowledgeResourceIO: () => fixture.resourceIO,
       knowledgeIndexCoordinator: fixture.index,
       getRuntimeContext: () => ({
         serverId: "server_1",
@@ -394,6 +399,7 @@ describe("knowledge query API", () => {
 async function createFixture(): Promise<{
   hanakoHome: string;
   index: KnowledgeIndexCoordinator;
+  resourceIO: ResourceIO;
   workspace: string;
 }> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-query-api-"));
@@ -402,6 +408,14 @@ async function createFixture(): Promise<{
   const workspace = path.join(root, "workspace");
   fs.mkdirSync(hanakoHome, { recursive: true });
   fs.mkdirSync(workspace, { recursive: true });
+  const resourceIO = new ResourceIO({
+    providers: {
+      local_fs: new LocalFsProvider({
+        cwd: workspace,
+        trashRoot: path.join(hanakoHome, "trash"),
+      }),
+    },
+  });
   const identities = new Map<string, ProviderRootIdentity>([
     ["main", identity("main-root")],
     ["research", identity("research-root")],
@@ -489,7 +503,7 @@ async function createFixture(): Promise<{
     }],
   }));
   await research.publish({ lastCompleteSequence: 3 });
-  return { hanakoHome, index, workspace };
+  return { hanakoHome, index, resourceIO, workspace };
 }
 
 function identity(opaqueRootId: string): ProviderRootIdentity {

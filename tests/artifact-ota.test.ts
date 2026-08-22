@@ -411,7 +411,7 @@ describe("artifact-ota: downloadToFile stall/deadline guards (trickle-attack mit
 describe("artifact-ota: channelManifestUrls", () => {
   it.each(["stable", "beta"])("returns only the GitHub %s channel pointer", (channel) => {
     expect(channelManifestUrls(channel)).toEqual([
-      `https://github.com/liliMozi/openhanako/releases/download/channels/${channel}.json`,
+      `https://github.com/NAMEWTA/HanaKDE/releases/download/channels/${channel}.json`,
     ]);
   });
 

@@ -80,6 +80,15 @@ export default [
     },
   },
 
+  // Speculo ships this standalone Node utility as CommonJS in a .js file.
+  // Keep its runtime contract explicit without relaxing imports elsewhere.
+  {
+    files: ['speculo/skills/source-code-zip/scripts/zip_source_code.js'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
   // Vitest files mix Node helpers with jsdom/browser primitives.
   {
     files: ['tests/**/*.{js,ts,tsx}'],

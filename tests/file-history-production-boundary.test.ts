@@ -81,7 +81,7 @@ describe("file-history production boundary", () => {
     expect(scanner).toContain('"FileHistoryStore"');
   });
 
-  it("does not advertise the dormant input through packaged release digests", () => {
+  it("advertises the activated File History flow exactly once in packaged release digests", () => {
     const digestPaths = ["release-digest.v1.json", "release-digest.v2.json"];
 
     for (const digestPath of digestPaths) {
@@ -98,8 +98,8 @@ describe("file-history production boundary", () => {
         ));
       });
 
-      expect(itemIds).not.toContain("workspace-file-history");
-      expect(JSON.stringify(digest)).not.toMatch(/file history/i);
+      expect(itemIds.filter(id => id === "file-history")).toHaveLength(1);
+      expect(JSON.stringify(digest)).toMatch(/file history/i);
     }
   });
 });

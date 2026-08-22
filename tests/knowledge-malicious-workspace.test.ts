@@ -325,7 +325,10 @@ describe("knowledge malicious workspace gate", () => {
     const filePath = path.join(main, "large.md");
     fs.writeFileSync(filePath, "x");
     fs.truncateSync(filePath, KNOWLEDGE_MARKDOWN_MAX_BYTES + 1);
-    const provider = new LocalFsProvider({ cwd: main });
+    const provider = new LocalFsProvider({
+      cwd: main,
+      trashRoot: path.join(tempRoot, "hana", "trash"),
+    });
     const stat = vi.spyOn(provider, "stat");
     const openRead = vi.spyOn(provider, "openRead");
     const read = vi.spyOn(provider, "read");
@@ -377,7 +380,10 @@ describe("knowledge malicious workspace gate", () => {
     fs.mkdirSync(main);
     const filePath = path.join(main, "safe.md");
     fs.writeFileSync(filePath, "safe");
-    const provider = new LocalFsProvider({ cwd: main });
+    const provider = new LocalFsProvider({
+      cwd: main,
+      trashRoot: path.join(tempRoot, "hana", "trash"),
+    });
     const stat = vi.spyOn(provider, "stat");
     const openRead = vi.spyOn(provider, "openRead");
     const read = vi.spyOn(provider, "read");

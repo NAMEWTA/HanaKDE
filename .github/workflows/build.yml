@@ -622,18 +622,36 @@ jobs:
       contents: read
 
     steps:
+      - name: Check AtomGit mirror configuration
+        id: mirror_config
+        shell: bash
+        env:
+          ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
+          ATOMGIT_OWNER: ${{ vars.ATOMGIT_OWNER }}
+          ATOMGIT_REPO: ${{ vars.ATOMGIT_REPO }}
+        run: |
+          if [ -n "$ATOMGIT_TOKEN" ] && [ -n "$ATOMGIT_OWNER" ] && [ -n "$ATOMGIT_REPO" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "AtomGit mirror skipped: configure ATOMGIT_TOKEN plus ATOMGIT_OWNER/ATOMGIT_REPO to enable it." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.mirror_config.outputs.enabled == 'true'
 
       - name: Setup Node.js
+        if: steps.mirror_config.outputs.enabled == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "24.15.0"
 
       - name: Mirror published release to AtomGit
+        if: steps.mirror_config.outputs.enabled == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
-          ATOMGIT_OWNER: liliMozi
-          ATOMGIT_REPO: OpenHanako-Releases
+          ATOMGIT_OWNER: ${{ vars.ATOMGIT_OWNER }}
+          ATOMGIT_REPO: ${{ vars.ATOMGIT_REPO }}
         run: |
           node scripts/mirror-release-to-atomgit.mjs --tag "${{ github.ref_name }}"

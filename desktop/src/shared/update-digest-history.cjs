@@ -6,8 +6,8 @@
  * releases published after they were built.
  */
 
-const DEFAULT_RELEASES_API = "https://api.github.com/repos/liliMozi/openhanako/releases?per_page=20&page=1";
-const DEFAULT_RELEASE_ASSET_BASE = "https://github.com/liliMozi/openhanako/releases/download";
+const DEFAULT_RELEASES_API = "https://api.github.com/repos/NAMEWTA/HanaKDE/releases?per_page=20&page=1";
+const DEFAULT_RELEASE_ASSET_BASE = "https://github.com/NAMEWTA/HanaKDE/releases/download";
 const DIGEST_ASSET_NAME = "release-digest.v1.json";
 const HISTORY_LIMIT = 5;
 const RELEASE_SCAN_LIMIT = 10;

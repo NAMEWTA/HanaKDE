@@ -20,8 +20,8 @@ const UPDATE_CHANNEL_VERSION = 1;
 // 非秘密——邀请码才是凭证，端点按 IP 限速。留空即"通道未配置"、设置页
 // 不渲染邀请入口；HANA_INVITE_API_URL 可临时覆盖。
 const DEFAULT_INVITE_API_URL = "https://alpha-invite-gate.hanaagent.workers.dev";
-const DEFAULT_GITHUB_OWNER = "liliMozi";
-const DEFAULT_GITHUB_REPO = "openhanako";
+const DEFAULT_GITHUB_OWNER = "NAMEWTA";
+const DEFAULT_GITHUB_REPO = "HanaKDE";
 
 let _mainWindow = null;
 let _setIsUpdating = null;  // 由 main.cjs 注入

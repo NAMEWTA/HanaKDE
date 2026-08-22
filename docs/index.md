@@ -1,11 +1,11 @@
 # HanaKDE (HanaAgent) — 项目目录结构完整索引
 
 > **项目名称**: HanaAgent（npm 包名 `hanako`）
-> **版本**: v0.449.0
+> **版本**: v0.0.1
 > **描述**: 带有记忆和灵魂的个人 AI 助理
 > **作者**: liliMozi
 > **许可证**: Apache-2.0
-> **仓库**: GitHub `liliMozi/openhanako`
+> **仓库**: GitHub `NAMEWTA/HanaKDE`
 > **文档生成日期**: 2026-08-11
 
 ---
@@ -684,10 +684,10 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 
 | 文件 | 说明 |
 |------|------|
-| `build.yml` (29KB) | **主构建流水线** — 跨 4 并行 job 构建所有平台安装程序（macOS arm64/x64、Windows x64、Linux x64），发布到 GitHub Releases、发布更新列车清单、镜像到 AtomGit |
+| `build.yml` (29KB) | **主构建流水线** — 跨 4 并行 job 构建所有平台安装程序（macOS arm64/x64、Windows x64、Linux x64），发布到 GitHub Releases、发布更新列车清单，并在配置凭据后镜像到 AtomGit |
 | `ci.yml` | **持续集成** — PR/推送到 `hanakde`：类型检查、lint、测试、Windows 独立包构建、开放组合冒烟测试 |
 | `close-prs.yml` | 自动关闭非仓库 owner 的 PR；owner 的 PR 仍可合入 `hanakde` |
-| `mirror-release-to-atomgit.yml` | 镜像发布到 AtomGit（加速中国区访问） |
+| `mirror-release-to-atomgit.yml` | 配置 AtomGit 目标与凭据后镜像发布（未配置时明确跳过） |
 | `publish-train.yml` | 发布训练流水线（手动触发，用于发布/重试更新列车） |
 | `sync-upstream-mirror.yml` | 将 `origin/main` fast-forward 到 `upstream/main`；不推送 tags |
 

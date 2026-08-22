@@ -1,56 +1,106 @@
 {
   "schemaVersion": 1,
-  "tag": "v0.449.0",
-  "version": "0.449.0",
-  "previousTag": "v0.448.3",
-  "generatedAt": "2026-08-21T14:34:56.000Z",
+  "tag": "v0.0.1",
+  "version": "0.0.1",
+  "previousTag": "none (first HanaKDE release)",
+  "generatedAt": "2026-08-22T08:50:35.000Z",
   "noUserFacingChanges": false,
   "summary": {
-    "zh": "DeepSeek 图像能力正式接入：新增实验性的 DeepSeek V4 Flash Vision 模型，并让明确声明支持图片的 DeepSeek 模型直接接收图像，不再被静默转交给辅助视觉模型。",
-    "en": "DeepSeek vision support is now available: this release adds the experimental DeepSeek V4 Flash Vision model and lets DeepSeek models that explicitly declare image support receive images directly instead of silently rerouting them through the auxiliary vision model."
+    "zh": "HanaKDE 首个公开版本带来完整的知识工作区、文件历史与内置待办工作台，并在保留这些二次开发能力的同时吸收 OpenHanako v0.449.0 的增强和修复。",
+    "en": "The first public HanaKDE release delivers the complete Knowledge Workspace, file history, and built-in Todo workbench while retaining these downstream capabilities alongside the enhancements and fixes from OpenHanako v0.449.0."
   },
-  "counts": {
-    "feature": 1,
-    "fix": 0,
-    "improvement": 0,
-    "migration": 0
-  },
+  "counts": { "feature": 3, "fix": 1, "improvement": 1, "migration": 0 },
   "source": {
-    "owner": "liliMozi",
-    "repo": "openhanako",
-    "commitRange": "v0.448.3..v0.449.0",
-    "releaseUrl": "https://github.com/liliMozi/openhanako/releases/tag/v0.449.0",
+    "owner": "NAMEWTA",
+    "repo": "HanaKDE",
+    "commitRange": "first HanaKDE release through 2914ddf2",
+    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.1",
     "releaseNotes": ""
   },
   "items": [
     {
-      "id": "deepseek-direct-image-input",
+      "id": "knowledge-workspace",
       "kind": "feature",
       "importance": "high",
-      "title": {
-        "zh": "DeepSeek 模型可以直接接收图片",
-        "en": "DeepSeek models can receive images directly"
-      },
+      "title": { "zh": "完整的知识工作区", "en": "Complete Knowledge Workspace" },
       "summary": {
-        "zh": "新增 DeepSeek V4 Flash Vision（实验版），并移除官方 DeepSeek 端点上旧的图片拦截。只要模型明确声明支持图片，Hana 就会按模型协议直接发送图像；未声明图片能力的文本模型保持原有行为。",
-        "en": "DeepSeek V4 Flash Vision (Experimental) is now available, and the previous image block on official DeepSeek endpoints has been removed. When a model explicitly declares image support, Hana sends images directly using that model's protocol; text-only models keep their existing behavior."
+        "zh": "在统一工作区中浏览和编辑多来源资料，使用分组搜索、标签、引用、预览和安全的文件操作来组织知识。",
+        "en": "Browse and edit material from multiple sources in one workspace, with grouped search, tags, citations, previews, and guarded file operations."
       },
       "details": [
         {
-          "zh": "内置模型词典加入 DeepSeek V4 Flash Vision（实验版），提供 100 万 token 上下文、最高 38.4 万 token 输出、推理与图片输入能力。",
-          "en": "The built-in model catalog now includes DeepSeek V4 Flash Vision (Experimental), with a 1-million-token context window, up to 384,000 output tokens, reasoning, and image input."
+          "zh": "支持 Markdown 编辑、实时预览、表格、代码块、数学公式和 Mermaid 图表。",
+          "en": "Includes Markdown editing, live preview, tables, code blocks, math, and Mermaid diagrams."
         },
         {
-          "zh": "此前即使模型声明支持图片，官方 DeepSeek 端点上的图像也会被静默转交给辅助视觉模型或替换成占位文字；现在会直接发送，错误声明则由 API 返回明确错误。",
-          "en": "Previously, images on official DeepSeek endpoints could be silently rerouted to the auxiliary vision model or replaced with placeholder text even when the model declared image support. Images are now sent directly, while an incorrect capability declaration produces a visible API error."
+          "zh": "索引、搜索与资源树在桌面端、Web Open 和 Web Full 入口保持一致。",
+          "en": "Indexing, search, and the resource tree remain consistent across desktop, Web Open, and Web Full entry points."
         }
       ],
       "sources": [
+        { "type": "commit", "ref": "a0674bfa", "title": "feat(knowledge): complete workspace release implementation" },
+        { "type": "commit", "ref": "60a9047b", "title": "feat(knowledge): deliver source-grouped super search" }
+      ]
+    },
+    {
+      "id": "file-history",
+      "kind": "feature",
+      "importance": "high",
+      "title": { "zh": "文件历史、差异与恢复", "en": "File history, diffs, and restore" },
+      "summary": {
+        "zh": "从主工作区和文件树查看历史版本、比较差异并执行受保护的恢复操作。",
+        "en": "Inspect historical versions, compare changes, and perform guarded restores from the main workspace and file tree."
+      },
+      "details": [],
+      "sources": [
+        { "type": "commit", "ref": "2421bfed", "title": "feat(T-16): expose Workbench History flow" }
+      ]
+    },
+    {
+      "id": "builtin-todo-workbench",
+      "kind": "feature",
+      "importance": "high",
+      "title": { "zh": "内置待办工作台", "en": "Built-in Todo workbench" },
+      "summary": {
+        "zh": "持久化待办插件覆盖创建、组织、重复任务、提醒、自动化运行以及导入导出，并提供完整工作台界面。",
+        "en": "The persistent Todo plugin covers capture, organization, recurrence, reminders, automation runs, import and export, with a complete workbench UI."
+      },
+      "details": [],
+      "sources": [
+        { "type": "commit", "ref": "b56eb326", "title": "Add the built-in todolist plugin and complete workbench" }
+      ]
+    },
+    {
+      "id": "packaged-runtime-hardening",
+      "kind": "fix",
+      "importance": "high",
+      "title": { "zh": "打包启动与 Windows 运行链加固", "en": "Hardened packaged startup and Windows runtime" },
+      "summary": {
+        "zh": "补齐运行依赖完整性检查、服务就绪诊断和 Windows 安装包直连门禁，减少安装后启动失败和残缺运行时。",
+        "en": "Runtime dependency integrity checks, server readiness diagnostics, and direct Windows installer gates reduce post-install startup failures and incomplete runtimes."
+      },
+      "details": [],
+      "sources": [
+        { "type": "commit", "ref": "f444b0e5", "title": "fix(platform): harden packaged startup and Windows gates" }
+      ]
+    },
+    {
+      "id": "openhanako-v0-449-sync",
+      "kind": "improvement",
+      "importance": "medium",
+      "title": { "zh": "吸收 OpenHanako v0.449.0", "en": "Integrated OpenHanako v0.449.0" },
+      "summary": {
+        "zh": "通过保留合并拓扑的上游同步引入最新模型、更新器和稳定性改进，同时保留 HanaKDE 的 Knowledge、History、ResourceIO 与 Todo 所有权边界。",
+        "en": "A topology-preserving upstream merge brings in current model, updater, and stability improvements while retaining HanaKDE ownership boundaries for Knowledge, History, ResourceIO, and Todo."
+      },
+      "details": [
         {
-          "type": "commit",
-          "ref": "b289c311b",
-          "title": "feat(models): support DeepSeek's vision model by removing the provider-level image gate"
+          "zh": "包含 DeepSeek V4 Flash Vision 实验模型与声明图片能力模型的直接图像输入支持。",
+          "en": "Includes the experimental DeepSeek V4 Flash Vision model and direct image input for models that declare image capability."
         }
+      ],
+      "sources": [
+        { "type": "commit", "ref": "e66aa746", "title": "merge(upstream): absorb OpenHanako v0.449.0" }
       ]
     }
   ]

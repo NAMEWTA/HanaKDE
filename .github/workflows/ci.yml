@@ -103,18 +103,26 @@ jobs:
         # filesystem gate below. The closure census also has its own real,
         # single-worker gate: each assertion performs multiple esbuild + nft
         # scans of the repository. DeskSection and the real 1.6 MiB external
-        # upload stream are likewise independent filesystem regressions with
-        # deterministic single-worker gates below. Keeping these
+        # upload stream and File History modal are likewise independent
+        # regressions with deterministic single-worker gates below. Keeping these
         # CPU/metadata-heavy suites out of this four-worker step prevents
         # Windows I/O contention; no suite is skipped.
         env:
           UV_THREADPOOL_SIZE: 16
-        run: npm test -- --maxWorkers=4 --exclude tests/knowledge-performance-fixtures.test.ts --exclude tests/cli-closure-census.test.ts --exclude tests/knowledge-copy-service.test.ts --exclude desktop/src/react/__tests__/components/DeskSection.test.tsx
+        run: npm test -- --maxWorkers=4 --exclude tests/knowledge-performance-fixtures.test.ts --exclude tests/cli-closure-census.test.ts --exclude tests/knowledge-copy-service.test.ts --exclude desktop/src/react/__tests__/components/DeskSection.test.tsx --exclude desktop/src/react/__tests__/components/FileHistoryModal.test.tsx
 
       - name: Run isolated workspace panel regression
         env:
           UV_THREADPOOL_SIZE: 16
         run: npx vitest run desktop/src/react/__tests__/components/DeskSection.test.tsx --maxWorkers=1
+
+      - name: Run isolated File History modal regression
+        env:
+          UV_THREADPOOL_SIZE: 16
+        run: npx vitest run desktop/src/react/__tests__/components/FileHistoryModal.test.tsx --maxWorkers=1
+
+      - name: Run built-in Todo unit and contract tests
+        run: npm test --prefix plugins/todolist
 
       - name: Run isolated Knowledge fixture filesystem gate
         env:

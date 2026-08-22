@@ -129,8 +129,8 @@ describe("auto-updater", () => {
     initWithMockWindow();
     expect(mockAutoUpdater.setFeedURL).toHaveBeenCalledWith({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
     expect(mockAutoUpdater.autoDownload).toBe(false);
     expect(mockAutoUpdater.autoInstallOnAppQuit).toBe(false);
@@ -140,8 +140,8 @@ describe("auto-updater", () => {
     const config = mod.resolveUpdateFeedConfig({});
     expect(config.feedURL).toEqual({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
     expect(config).not.toHaveProperty("fallbackConfigs");
   });
@@ -150,11 +150,11 @@ describe("auto-updater", () => {
     const config = mod.resolveUpdateFeedConfig({ HANA_UPDATE_SOURCE: source });
     expect(config.feedURL).toEqual({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
     expect(mod.buildReleaseDigestUrl("0.425.4", config)).toBe(
-      "https://github.com/liliMozi/openhanako/releases/download/v0.425.4/release-digest.v1.json",
+      "https://github.com/NAMEWTA/HanaKDE/releases/download/v0.425.4/release-digest.v1.json",
     );
   });
 
@@ -162,8 +162,8 @@ describe("auto-updater", () => {
     const config = mod.resolveUpdateFeedConfig({ HANA_UPDATE_SOURCE: "github" });
     expect(config.feedURL).toEqual({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
     expect(config).not.toHaveProperty("fallbackConfigs");
   });
@@ -236,13 +236,13 @@ describe("auto-updater", () => {
     }));
     expect(mockAutoUpdater.setFeedURL).toHaveBeenLastCalledWith({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
     expect(mod.getState().updateSource).toEqual({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
   });
 
@@ -266,15 +266,15 @@ describe("auto-updater", () => {
     expect(mockAutoUpdater.allowPrerelease).toBe(true);
     expect(mockAutoUpdater.setFeedURL).toHaveBeenLastCalledWith({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
     mod.setUpdateChannel("stable");
     expect(mockAutoUpdater.allowPrerelease).toBe(false);
     expect(mockAutoUpdater.setFeedURL).toHaveBeenLastCalledWith({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
   });
 
@@ -504,8 +504,8 @@ describe("auto-updater", () => {
     const config = mod.resolveUpdateFeedConfig({});
     expect(config.feedURL).toEqual({
       provider: "github",
-      owner: "liliMozi",
-      repo: "openhanako",
+      owner: "NAMEWTA",
+      repo: "HanaKDE",
     });
     expect(config.channel).toBe("default");
     expect(config.channelError).toBeNull();

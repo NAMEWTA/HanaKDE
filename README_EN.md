@@ -13,7 +13,7 @@
 <p align="center"><a href="README.md">中文版</a></p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/liliMozi/openhanako/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/NAMEWTA/HanaKDE/releases)
 
 ---
 
@@ -66,15 +66,15 @@ As a tool, it is powerful: it remembers everything you've said, operates your co
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/liliMozi/openhanako/releases).
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 
 The app is signed and notarized with an Apple Developer ID. macOS should allow it to launch directly.
 
-**Windows:** download the latest `.exe` installer from [Releases](https://github.com/liliMozi/openhanako/releases).
+**Windows:** download the latest `.exe` installer from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 
 > **Windows SmartScreen notice:** The installer is not yet code-signed. Windows Defender SmartScreen may show a warning on first run. Click **More info** → **Run anyway**. This is expected for unsigned builds.
 
-**Linux:** download the latest `.AppImage` or `.deb` from [Releases](https://github.com/liliMozi/openhanako/releases).
+**Linux:** download the latest `.AppImage` or `.deb` from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 
 ### First Run
 
@@ -162,11 +162,11 @@ npm run typecheck
 
 ## Links
 
-> The repository and release URLs intentionally remain under the legacy `openhanako` path during the current migration. The repository rename is a separate later step.
+> HanaKDE installers and update channels are published from `NAMEWTA/HanaKDE`; see the maintenance documentation for upstream provenance and synchronization.
 
 - [Homepage](https://openhanako.com)
-- [Report an Issue](https://github.com/liliMozi/openhanako/issues)
-- [Security](https://github.com/liliMozi/openhanako/security)
+- [Report an Issue](https://github.com/NAMEWTA/HanaKDE/issues)
+- [Security](https://github.com/NAMEWTA/HanaKDE/security)
 - [Security Policy](SECURITY.md)
 - [Plugin Development](PLUGINS.md)
 - [Contributing](CONTRIBUTING.md)
