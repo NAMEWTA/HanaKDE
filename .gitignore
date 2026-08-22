@@ -102,3 +102,4 @@ temp/
 tests/knowledge-workspace-e2e/artifacts/
 specdev-worktree/
 dist-*/
+speculo/.speculo/back/

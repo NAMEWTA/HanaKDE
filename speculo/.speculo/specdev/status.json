@@ -1,47 +1,22 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "workflow": "specdev",
   "active": [
     {
-      "change": "2026-08-12-openhanako-v0-446-6-platform-gates",
-      "current_work": null,
-      "works_run": [
-        "specdev/implement"
-      ],
-      "claimed_investigations": []
+      "change": "2026-08-13-personal-quant-finance-workbench"
     },
     {
-      "change": "2026-08-13-personal-quant-finance-workbench",
-      "current_work": null,
-      "works_run": [
-        "specdev/wayfinder",
-        "specdev/grill-with-docs",
-        "specdev/spec",
-        "specdev/tickets",
-        "specdev/goal-plan"
-      ],
-      "claimed_investigations": []
+      "change": "2026-08-13-markdown-wechat-plugin"
     },
     {
-      "change": "2026-08-13-markdown-wechat-plugin",
-      "current_work": "specdev/tickets",
-      "works_run": [
-        "specdev/grill-with-docs",
-        "specdev/spec"
-      ],
-      "claimed_investigations": []
-    },
-    {
-      "change": "2026-08-13-hanakde-engineering-cognitive-mentor",
-      "current_work": "specdev/engineering-cognitive-mentor",
-      "works_run": [],
-      "claimed_investigations": []
+      "change": "2026-08-13-hanakde-engineering-cognitive-mentor"
     }
   ],
   "archived": [
     "2026-07-24-openhanako-knowledge-workspace",
     "2026-08-09-openhanako-v0-446-6-integration",
     "2026-08-09-internalize-todolist-plugin",
-    "2026-08-12-knowledge-workspace-resource-convergence"
+    "2026-08-12-knowledge-workspace-resource-convergence",
+    "2026-08-12-openhanako-v0-446-6-platform-gates"
   ]
 }

@@ -70,6 +70,8 @@ Archive          归档历史并将经验证知识提升为当前长期知识
 - 活跃 change：`<Path>{roots.state}/specdev/changes/</Path>`
 - 历史归档：`<Path>{roots.state}/specdev/archive/</Path>`
 
+刷新时 CLI 在 `<Path>{roots.state}/back/</Path>` 保留最近一次旧配置与完整 runtime state，并对 v0.7+ 状态执行兼容迁移。若 `<Path>{roots.state}/migration.json</Path>` 存在且为 pending，所有 SpecDev Works 必须在读取 workflow state 前停止；只有 `<Path>{roots.commands}/migrate-runtime-state.md</Path>` 可以读取备份并在用户确认后修复。`<Path>{roots.state}/back/</Path>`、`<Path>{roots.state}/install.json</Path>` 与 `<Path>{roots.state}/migration.json</Path>` 均不属于 SpecDev 写入 namespace。
+
 初始化设置 work 首次运行时生成配置并创建空的永久 namespace：
 
 - 全局配置：`<Path>{roots.state}/specdev/config.json</Path>`
@@ -120,6 +122,8 @@ Archive          归档历史并将经验证知识提升为当前长期知识
 10. **恢复依赖权威工件**：跨 Work 或 Agent 边界时同步 active change 的 `current_work`，成功完成后去重更新 `works_run`，返回下一 Work 和权威工件的完整路径。
 11. **本地执行权威**：远程 Issue/PR/URL 只作为来源或完成投影；Spec、Ticket、Map、Goal Plan、Evidence 和状态始终以本地工件为准。
 12. **完成与归档分离**：本地完成按 change completion 合同决定；远程 close 失败不回滚完成，但必须 reconcile 或 waive 后才归档。
+13. **Lead 与隔离正交**：Lead 固定拥有 SpecDev 状态、Evidence 与父分支；是否派遣 subagent 由 Lead 动态决定。Goal Plan 创建时询问 Ticket 是否开启 worktree，默认不开启；选择只作用于当前 Goal Plan。
+14. **策略化验收**：current 模式使用当前 workspace 严格串行、direct-parent 验证；required 模式使用 source worktree 与 parent-candidate。只有 required 模式创建独立 Ticket worktree。
 
 共享规则：
 
@@ -136,17 +140,18 @@ Archive          归档历史并将经验证知识提升为当前长期知识
 ## 启动协议
 
 1. 解析 workflow 和 state roots。
-2. 读取 `<Path>{roots.state}/specdev/config.json</Path>`；不存在时运行 `<Path>{roots.workflows}/specdev/I-init-setup/I-init-setup.md</Path>`。
-3. 读取 `<Path>{roots.state}/specdev/status.json</Path>`：用户指定 change 优先；唯一活跃 change 直接使用；无活跃时创建；多个候选时请求消歧。
-4. 若当前 change 已有非空 `current_work`，先恢复或显式结束该 Work；否则将 `current_work` 设置为本次 work id。
-5. 只加载当前步骤需要的 work 子文件和共享规则。
-6. 完成后写入产物、运行适用校验、更新状态和 `works_run`。
+2. 检查 `<Path>{roots.state}/migration.json</Path>`；存在且 `status: pending` 时停止，不读取或写入 SpecDev state，并路由到 `<Path>{roots.commands}/migrate-runtime-state.md</Path>`。
+3. 读取 `<Path>{roots.state}/specdev/config.json</Path>`；不存在时运行 `<Path>{roots.workflows}/specdev/I-init-setup/I-init-setup.md</Path>`。
+4. 读取 `<Path>{roots.state}/specdev/status.json</Path>`：用户指定 change 优先；唯一活跃 change 直接使用；无活跃时创建；多个候选时请求消歧。
+5. 若当前 change 已有非空 `current_work`，先恢复或显式结束该 Work；否则将 `current_work` 设置为本次 work id。
+6. 只加载当前步骤需要的 work 子文件和共享规则。
+7. 完成后写入产物、运行适用校验、更新状态和 `works_run`。
 
-Change 从 active/blocked 转为 completed 时加载 `<Path>{roots.workflows}/specdev/common/rules/change-completion.md</Path>`：Goal Plan 含完整委派附录时由 Lead 拥有转换；普通 Goal Plan 或无 Goal Plan 的实现由最后一个 I 拥有；非实现型终点由最终验收工件 owner 拥有。Archive 不补造 completed。
+Change 从 active/blocked 转为 completed 时加载 `<Path>{roots.workflows}/specdev/common/rules/change-completion.md</Path>`：有 Goal Plan 时由其中唯一 Lead 拥有转换；无 Goal Plan 的 Ticket/Direct Spec 由当前 I owner 拥有；非实现型终点由最终验收工件 owner 拥有。Archive 不补造 completed。
 
 ## 状态字段
 
-`<Path>{roots.state}/specdev/status.json</Path>` 使用全局 schema v4；Spec、Ticket 和 `<Path>{roots.state}/specdev/changes/{change}/.status.json</Path>` 等领域工件仍使用各自现有 schema：
+`<Path>{roots.state}/specdev/status.json</Path>` 使用全局 schema v5；Spec/Ticket/Tickets Map 继续使用各自 schema v3，config 使用 schema v5，Goal Plan 使用 schema v6，`<Path>{roots.state}/specdev/changes/{change}/.status.json</Path>` 使用 schema v6：
 
 - `schema_version`（数字）：全局状态 schema 版本，固定为 `4`。
 - `workflow`（字符串）：workflow 标识，固定为 `"specdev"`。
@@ -159,7 +164,9 @@ Change 从 active/blocked 转为 completed 时加载 `<Path>{roots.workflows}/sp
 
 `active[].change` 必须唯一，且不得同时出现在 `archived`。开始 Work 时设置 `current_work`；暂停或可恢复阻塞时保留；成功完成时加入 `works_run` 并清空；取消时清空但不加入。逐次时间、结果和审计证据由 change 自有状态、Work 主产物、Evidence 或 LOG 承载，不写入全局索引。
 
-`<Path>{roots.state}/specdev/changes/{change}/.status.json</Path>` 的 `worktrees` 保存 Ticket 级 `base_sha`、分支、可迁移 `workspace_ref` 和生命周期状态。
+`<Path>{roots.state}/specdev/config.json</Path>` 的 `execution.max_implementation_agents`、`max_integration_attempts` 和 planning 原型变体字段均为可配置正整数，初始化时写入默认值；仅 implementation subagent 受前者约束且不含 Lead，current workspace 仍保持单 writer 串行安全不变量；只读 review/research/test-observation agent 不设 SpecDev 数字上限。
+
+`<Path>{roots.state}/specdev/changes/{change}/.status.json</Path>` 的 `worktrees` 保存 Ticket 级 `base_sha`、父分支、workspace/implementation/integration owner、workspace locator、implementation/source checkpoint、适用 candidate/result SHA、验证、E2E disposition 与生命周期状态。current 记录使用 `workspace_ref=current` 和 direct-parent；required 记录使用 source/parent-candidate。每个实现 Ticket 都有一条记录；父分支只有在对应策略的验证通过后推进。`removed` 是 required 集成后来源 branch/worktree 完成清理的终态，必须保留全部集成与 E2E 证据。
 
 领域状态枚举：
 
@@ -168,7 +175,7 @@ Change 从 active/blocked 转为 completed 时加载 `<Path>{roots.workflows}/sp
 - Investigation status：`open | closed`
 - Investigation resolution：`answered | out-of-scope | superseded | cancelled | null`
 - Planning Depth：`lite | standard | deep`
-- Worktree：`planned | active | review | integrated | removed | blocked`
+- Worktree：`planned | active | review | integrating | integrated | removed | blocked`
 
 ## 路径分配
 
@@ -179,7 +186,7 @@ Change 从 active/blocked 转为 completed 时加载 `<Path>{roots.workflows}/sp
 
 ## 副作用边界
 
-未经用户明确授权不得提交、推送、合并、删除分支或 worktree、部署、发布、移动归档、写入/关闭远程 Issue 或执行不可逆迁移。只读探索、生成 change 工件和已授权验证可以进行。远程开发投影仅由 Triage reconcile 执行；Retro command 的 Speculo 反馈 Issue 是独立 command 边界。敏感值不得写入 `<Path>{roots.state}/specdev/</Path>`。
+未经用户明确授权不得提交、推送、合并、删除来源 branch/worktree、部署、发布、移动归档、写入/关闭远程 Issue 或执行不可逆迁移。Ready Goal Plan/Ticket 执行必须明确取得 implementation commit 与所选 direct-parent/candidate integration/父分支更新授权；required 模式该授权包含 transient candidate checkout/branch 生命周期，不扩展到来源 cleanup、远端或生产动作。只读探索、change 工件生成和已授权验证可以进行。远程开发投影仅由 Triage reconcile 执行；Retro command 的 Speculo 反馈 Issue 是独立 command 边界。敏感值不得写入 `<Path>{roots.state}/specdev/</Path>`。
 
 ## 场景路由
 
@@ -209,9 +216,9 @@ Change 从 active/blocked 转为 completed 时加载 `<Path>{roots.workflows}/sp
 - **D-diagnose-bugs** — 诊断 Bug：先建立会在精确症状上变红的紧凑反馈回路，再通过最小化、排名假设和单变量探针确认根因，输出修复契约而不实施生产修复。
 - **E-engineering-cognitive-mentor** — 工程认知导师：面向 Bug、项目源码、需求技术方案、架构设计与陌生技术领域的非执行型认知指导 Work；以证据、因果 Why、候选方案对比和逐轮澄清帮助用户形成可复述理解，并将完整问答轨迹持续持久化到当前 change。
 - **G-grill-with-docs** — 设计访谈（带文档）：以完整 frontier 逐轮推进设计树，直到每个决策分支都已关闭并获得用户共识，同时持续维护当前 change 的设计树、日志、领域上下文和架构决策。
-- **I-implement** — 实现：基于 Ready Ticket 或获批的小型 Spec 执行设计检查、TDD 红绿循环、持续验证、双轴审查、证据回写和提交。
+- **I-implement** — 实现：基于 Ready Ticket 或获批小型 Spec 执行设计检查、TDD、动态派单、双轴审查、Ticket worktree commit、候选合并验证和 Lead Evidence 回写。
 - **I-init-setup** — 初始化设置：初始化 SpecDev 的语言、配置、全局状态、本地 change 追踪、领域知识布局、验证命令和并发治理。
-- **P-goal-plan** — 目标规划：在协调复杂度需要时，将 Ready Spec、Tickets、架构决策与外部约束综合为决策完备的跨 Ticket 计划，并仅在用户选择时加入严格角色委派。
+- **P-goal-plan** — 目标规划：在跨 Ticket 协调复杂度需要时，以固定 Lead、动态派单、DAG/Gate 和候选合并门禁生成决策完备且可恢复的执行计划。
 - **P-prototype** — 原型：在获授权的临时 branch/worktree 中构建一次性 Logic 或 UI 原型，回答一个明确设计问题并持久化答案、资产定位和清理状态。
 - **R-review-architecture** — 架构审查：从用户指定范围或 Git 热点扫描代码库的深化机会，以持久化可视化 HTML 呈现候选，并对用户选择的一个方案运行设计树访谈。
 - **S-spec** — 编写 Spec：综合已知事实、设计决定、诊断与代码现状，产出以外部行为和验收合同为权威的 Ready Spec。
