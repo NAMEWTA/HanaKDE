@@ -51,7 +51,6 @@ export type ElectronChromiumConfiguration = {
 };
 
 type ElectronCdpLaunchArguments = ElectronCdpPortPair & {
-  loaderPath: string;
   bootstrapPath: string;
   launchToken: string;
   electronArgs: readonly string[];
@@ -98,7 +97,6 @@ export type WindowsElectronCdpLaunch = {
 export function buildWindowsElectronCdpArgs({
   nodeInspectorPort,
   chromiumPort,
-  loaderPath,
   bootstrapPath,
   launchToken,
   electronArgs,
@@ -115,10 +113,7 @@ export function buildWindowsElectronCdpArgs({
   const applicationArgs = electronArgs.filter((argument) => (
     !argument.startsWith("--user-data-dir=")
   ));
-  const userDataDirectory = userDataArgs[0].slice("--user-data-dir=".length);
   return [
-    "-r",
-    loaderPath,
     `--inspect=127.0.0.1:${nodeInspectorPort}`,
     `--remote-debugging-port=${chromiumPort}`,
     "--remote-debugging-address=127.0.0.1",
@@ -126,8 +121,6 @@ export function buildWindowsElectronCdpArgs({
     ...userDataArgs,
     bootstrapPath,
     `--hana-windows-cdp-token=${launchToken}`,
-    `--hana-windows-cdp-port=${chromiumPort}`,
-    `--hana-windows-cdp-user-data-dir=${userDataDirectory}`,
     ...applicationArgs,
   ];
 }
@@ -165,16 +158,24 @@ export async function launchWindowsElectronOverCdp(
     options.reserveLoopbackPort,
   );
   const launchToken = randomUUID();
-  const child = spawn(options.executablePath, buildWindowsElectronCdpArgs({
+  const launchArguments = buildWindowsElectronCdpArgs({
     nodeInspectorPort,
     chromiumPort,
-    loaderPath: options.loaderPath,
     bootstrapPath: options.bootstrapPath,
     launchToken,
     electronArgs: options.electronArgs,
-  }), {
+  });
+  const userDataDirectory = launchArguments
+    .find((argument) => argument.startsWith("--user-data-dir="))!
+    .slice("--user-data-dir=".length);
+  const child = spawn(options.executablePath, launchArguments, {
     cwd: options.cwd,
-    env: options.env,
+    env: {
+      ...options.env,
+      NODE_OPTIONS: windowsElectronLoaderNodeOption(options.loaderPath),
+      HANA_WINDOWS_CDP_PORT: String(chromiumPort),
+      HANA_WINDOWS_CDP_USER_DATA_DIR: userDataDirectory,
+    },
     stdio: "ignore",
     windowsHide: true,
   });
@@ -230,6 +231,14 @@ export async function launchWindowsElectronOverCdp(
     await terminateChild(child);
     throw error;
   }
+}
+
+export function windowsElectronLoaderNodeOption(loaderPath: string): string {
+  const normalized = loaderPath.replaceAll("\\", "/");
+  if (!/^(?:[A-Za-z]:\/|\/)/.test(normalized) || normalized.includes('"')) {
+    throw new Error("Windows Electron loader requires a safe absolute path");
+  }
+  return `--require=${JSON.stringify(normalized)}`;
 }
 
 function createElectronApplication(

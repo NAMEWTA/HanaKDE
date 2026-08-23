@@ -8,6 +8,7 @@ import {
   endpointFromPayload,
   rendererTargetIdFromInfo,
   reserveDistinctLoopbackPorts,
+  windowsElectronLoaderNodeOption,
 } from "./knowledge-workspace-e2e/fixtures/windows-electron-cdp.ts";
 
 describe("Windows Electron direct CDP fixture", () => {
@@ -15,13 +16,10 @@ describe("Windows Electron direct CDP fixture", () => {
     expect(buildWindowsElectronCdpArgs({
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
-      loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
       bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs: ["--fixture-argument", "--user-data-dir=/tmp/electron-data"],
     })).toEqual([
-      "-r",
-      "/repo/tests/windows-electron-cdp-loader.cjs",
       "--inspect=127.0.0.1:41001",
       "--remote-debugging-port=41002",
       "--remote-debugging-address=127.0.0.1",
@@ -31,17 +29,22 @@ describe("Windows Electron direct CDP fixture", () => {
       "--user-data-dir=/tmp/electron-data",
       "/repo/desktop/bootstrap.cjs",
       "--hana-windows-cdp-token=fixture-token",
-      "--hana-windows-cdp-port=41002",
-      "--hana-windows-cdp-user-data-dir=/tmp/electron-data",
       "--fixture-argument",
     ]);
+  });
+
+  it("builds an isolated NODE_OPTIONS preload from a safe absolute path", () => {
+    expect(windowsElectronLoaderNodeOption(
+      "C:\\repo\\tests\\windows-electron-cdp-loader.cjs",
+    )).toBe('--require="C:/repo/tests/windows-electron-cdp-loader.cjs"');
+    expect(() => windowsElectronLoaderNodeOption("relative-loader.cjs"))
+      .toThrow("safe absolute path");
   });
 
   it("rejects a missing or ambiguous Chromium user data directory", () => {
     const build = (electronArgs: string[]) => buildWindowsElectronCdpArgs({
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
-      loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
       bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs,
