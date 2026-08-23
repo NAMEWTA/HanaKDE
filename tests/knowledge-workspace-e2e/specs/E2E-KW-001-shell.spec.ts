@@ -41,6 +41,9 @@ test("E2E-KW-023 covers five locales, themes, narrow layout and accessibility", 
   );
   const { apiFetch, page } = knowledgeApp;
   await openKnowledge(page);
+  await expect(page.locator('.connection-status')).toHaveClass(/\bconnected\b/, {
+    timeout: 30_000,
+  });
 
   const localeTitles = [
     ["zh-CN", "打开一个资源"],

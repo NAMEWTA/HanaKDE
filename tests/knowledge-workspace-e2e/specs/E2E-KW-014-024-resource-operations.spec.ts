@@ -34,6 +34,28 @@ async function openTreeFile(workspace: Locator, name: string): Promise<void> {
   await row.dblclick();
 }
 
+async function openCreateDialog(
+  page: Page,
+  workspace: Locator,
+  triggerName: RegExp,
+): Promise<Locator> {
+  const trigger = workspace.getByRole('button', { name: triggerName });
+  const dialog = page.getByRole('dialog');
+  await expect(trigger).toBeEnabled({ timeout: 15_000 });
+  await trigger.click();
+  const openedOnClick = await dialog.waitFor({ state: 'visible', timeout: 15_000 })
+    .then(() => true, () => false);
+  if (!openedOnClick) {
+    // A cold Windows renderer can replace the toolbar between pointer down
+    // and React's click handler. Re-resolve the enabled command and exercise
+    // its keyboard path once; a second miss remains a hard failure.
+    await expect(trigger).toBeEnabled({ timeout: 15_000 });
+    await trigger.press('Enter');
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+  }
+  return dialog;
+}
+
 async function createNativeGrantFromRenderer(
   page: Page,
   relativePath: string,
@@ -318,10 +340,8 @@ test('E2E-KW-015 drives tree keyboard, range, context, sort, preview and explici
 
 test('E2E-KW-016 creates Page and folder and reports a name conflict without a partial target', async ({ knowledgeApp }) => {
   test.skip(knowledgeApp.runtime === 'web-full', 'create journey is required for desktop-full and web-open');
-  test.setTimeout(process.platform === 'win32' ? 240_000 : 120_000);
   const workspace = await openKnowledge(knowledgeApp.page);
-  await workspace.getByRole('button', { name: /New page/i }).click();
-  const dialog = knowledgeApp.page.getByRole('dialog');
+  const dialog = await openCreateDialog(knowledgeApp.page, workspace, /New page/i);
   await dialog.getByRole('textbox').fill('Created');
   await dialog.getByRole('button', { name: /Create/i }).click();
   await expect(workspace.getByRole('tab', { name: 'Created.md' })).toBeVisible();
@@ -331,9 +351,9 @@ test('E2E-KW-016 creates Page and folder and reports a name conflict without a p
   });
   expect(conflict.status).toBe(409);
   expect(await conflict.json()).toMatchObject({ code: 'knowledge_resource_conflict' });
-  await workspace.getByRole('button', { name: /New folder/i }).click();
-  await knowledgeApp.page.getByRole('dialog').getByRole('textbox').fill('Folder');
-  await knowledgeApp.page.getByRole('dialog').getByRole('button', { name: /Create/i }).click();
+  const folderDialog = await openCreateDialog(knowledgeApp.page, workspace, /New folder/i);
+  await folderDialog.getByRole('textbox').fill('Folder');
+  await folderDialog.getByRole('button', { name: /Create/i }).click();
   await expandMain(workspace);
   await expect(workspace.getByRole('treeitem', { name: /Folder/i })).toBeVisible();
 });
