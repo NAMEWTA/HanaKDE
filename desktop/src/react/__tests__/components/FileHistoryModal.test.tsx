@@ -210,6 +210,7 @@ describe('FileHistoryModal', { sequential: true }, () => {
 
     render(<FileHistoryModal />);
     await screen.findByTestId('fh-version-2');
+    await screen.findByText('new');
     fireEvent.click(screen.getByTestId('fh-restore'));
     await waitFor(() => expect(screen.getByText('refreshed.md')).toBeInTheDocument(), { timeout: 3_000 });
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path === '/api/file-history/versions?relPath=refreshed.md')).toBe(true));
@@ -230,6 +231,7 @@ describe('FileHistoryModal', { sequential: true }, () => {
 
     render(<FileHistoryModal />);
     await screen.findByTestId('fh-version-3');
+    await screen.findByText('old');
     fireEvent.click(screen.getByTestId('fh-restore'));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path === '/api/resource-io/write-expected-version')).toBe(true));
     const writeCall = fetchMock.mock.calls.find(([path]) => path === '/api/resource-io/write-expected-version');
