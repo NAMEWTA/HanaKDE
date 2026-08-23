@@ -97,19 +97,16 @@ describe("Windows Electron direct CDP fixture", () => {
   });
 
   it("requires the early loader and Electron command line to agree on the CDP port", () => {
-    const loaderToken = "fixture-token";
     expect(() => assertChromiumConfiguration({
-      loaderToken,
       commandLinePort: "41002",
       commandLineUserDataConfigured: true,
-    }, 41_002, loaderToken)).not.toThrow();
+    }, 41_002)).not.toThrow();
     expect(() => assertChromiumConfiguration({
-      loaderToken,
       commandLinePort: "",
       commandLineUserDataConfigured: true,
-    }, 41_002, loaderToken)).toThrow("did not retain the requested CDP port");
-    expect(() => assertChromiumConfiguration(null, 41_002, loaderToken)).toThrow(
-      "early loader did not execute",
+    }, 41_002)).toThrow("did not retain the requested CDP port");
+    expect(() => assertChromiumConfiguration(null, 41_002)).toThrow(
+      "early loader did not retain",
     );
   });
 

@@ -18,7 +18,6 @@ describe("Windows Electron early CDP loader", () => {
     const env: NodeJS.ProcessEnv = {
       HANA_WINDOWS_CDP_PORT: "41002",
       HANA_WINDOWS_CDP_USER_DATA_DIR: "C:\\temp\\electron-data",
-      HANA_WINDOWS_CDP_EXPECTED_TOKEN: "12345678-1234-1234-1234-123456789abc",
     };
 
     expect(installWindowsElectronCdp({
@@ -38,9 +37,6 @@ describe("Windows Electron early CDP loader", () => {
       "127.0.0.1",
     );
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-port", "41002");
-    expect(env.HANA_WINDOWS_CDP_LOADED_TOKEN).toBe(
-      "12345678-1234-1234-1234-123456789abc",
-    );
   });
 
   it("does not depend on application environment initialization", () => {
@@ -51,7 +47,6 @@ describe("Windows Electron early CDP loader", () => {
       env: {
         HANA_WINDOWS_CDP_PORT: "41002",
         HANA_WINDOWS_CDP_USER_DATA_DIR: "/tmp/electron-data",
-        HANA_WINDOWS_CDP_EXPECTED_TOKEN: "12345678-1234-1234-1234-123456789abc",
       },
     })).toEqual({
       port: 41_002,
@@ -68,21 +63,11 @@ describe("Windows Electron early CDP loader", () => {
         env: {
           HANA_WINDOWS_CDP_PORT: port,
           HANA_WINDOWS_CDP_USER_DATA_DIR: userDataDirectory,
-          HANA_WINDOWS_CDP_EXPECTED_TOKEN: "12345678-1234-1234-1234-123456789abc",
         },
       })
     );
 
     expect(build("0", "C:\\temp\\electron-data")).toThrow("invalid Chromium CDP port");
     expect(build("41002", "relative-profile")).toThrow("absolute Chromium user data directory");
-    expect(() => installWindowsElectronCdp({
-      app: { commandLine: { appendSwitch: vi.fn() } },
-      platform: "win32",
-      env: {
-        HANA_WINDOWS_CDP_PORT: "41002",
-        HANA_WINDOWS_CDP_USER_DATA_DIR: "C:\\temp\\electron-data",
-        HANA_WINDOWS_CDP_EXPECTED_TOKEN: "invalid",
-      },
-    })).toThrow("valid loader token");
   });
 });

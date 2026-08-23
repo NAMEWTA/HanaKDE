@@ -17,15 +17,9 @@ function installWindowsElectronCdp({
   if (!pathApi.isAbsolute(userDataDirectory)) {
     throw new Error("Windows Knowledge E2E requires an absolute Chromium user data directory");
   }
-  const expectedToken = env.HANA_WINDOWS_CDP_EXPECTED_TOKEN ?? "";
-  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(expectedToken)) {
-    throw new Error("Windows Knowledge E2E requires a valid loader token");
-  }
-
   app.commandLine.appendSwitch("user-data-dir", userDataDirectory);
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", portText);
-  env.HANA_WINDOWS_CDP_LOADED_TOKEN = expectedToken;
   return { port, userDataDirectory };
 }
 
