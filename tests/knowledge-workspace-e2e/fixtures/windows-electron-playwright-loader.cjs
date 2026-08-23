@@ -34,7 +34,14 @@ function installWindowsElectronPlaywrightLoader({
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     app.commandLine.appendSwitch("disable-features", "GpuSandbox");
   }
-  globalObject.__playwright_run = () => Promise.resolve();
+  let releasePlaywrightConnection;
+  globalObject.__hanaWindowsPlaywrightConnected = new Promise((resolve) => {
+    releasePlaywrightConnection = resolve;
+  });
+  globalObject.__playwright_run = () => {
+    releasePlaywrightConnection();
+    return Promise.resolve();
+  };
   return bridgePort;
 }
 

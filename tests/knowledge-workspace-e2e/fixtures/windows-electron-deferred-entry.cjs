@@ -4,7 +4,14 @@ const path = require("node:path");
 
 function runDeferredWindowsElectronEntry({
   env = process.env,
-  waitUntilReady = () => require("electron").app.whenReady(),
+  waitUntilReady = async () => {
+    await require("electron").app.whenReady();
+    const connected = globalThis.__hanaWindowsPlaywrightConnected;
+    if (!connected || typeof connected.then !== "function") {
+      throw new Error("Windows Knowledge E2E requires the Playwright connection gate");
+    }
+    await connected;
+  },
   loadBootstrap = require,
   onError = (error) => {
     console.error("[hana-windows-e2e] deferred bootstrap failed:", error?.stack || error);

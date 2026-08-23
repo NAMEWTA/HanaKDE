@@ -9,7 +9,10 @@ const { installWindowsElectronPlaywrightLoader } = require(
     argv: string[];
     app: { commandLine: { appendSwitch: ReturnType<typeof vi.fn> } };
     env?: NodeJS.ProcessEnv;
-    globalObject: { __playwright_run?: () => Promise<void> };
+    globalObject: {
+      __playwright_run?: () => Promise<void>;
+      __hanaWindowsPlaywrightConnected?: Promise<void>;
+    };
   }): number;
 };
 
@@ -23,7 +26,10 @@ describe("Windows Electron Playwright loader", () => {
       "desktop/bootstrap.cjs",
       "--user-data-dir=test-data",
     ];
-    const globalObject: { __playwright_run?: () => Promise<void> } = {};
+    const globalObject: {
+      __playwright_run?: () => Promise<void>;
+      __hanaWindowsPlaywrightConnected?: Promise<void>;
+    } = {};
     const appendSwitch = vi.fn();
 
     expect(installWindowsElectronPlaywrightLoader({
@@ -41,7 +47,13 @@ describe("Windows Electron Playwright loader", () => {
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-address", "127.0.0.1");
     expect(appendSwitch).toHaveBeenCalledWith("disable-gpu-sandbox");
     expect(appendSwitch).toHaveBeenCalledWith("disable-features", "GpuSandbox");
+    let connected = false;
+    globalObject.__hanaWindowsPlaywrightConnected?.then(() => { connected = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(connected).toBe(false);
     await expect(globalObject.__playwright_run?.()).resolves.toBeUndefined();
+    await globalObject.__hanaWindowsPlaywrightConnected;
+    expect(connected).toBe(true);
   });
 
   it("rejects a launch outside Playwright's remote-debugging contract", () => {
