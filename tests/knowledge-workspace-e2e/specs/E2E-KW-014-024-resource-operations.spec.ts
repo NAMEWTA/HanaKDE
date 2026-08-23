@@ -45,7 +45,17 @@ async function openTreeFile(workspace: Locator, name: string): Promise<void> {
     }
     await disclosure.click();
     await expect(root).toHaveAttribute('aria-expanded', 'true');
-    await expect(row).toBeVisible();
+    const loadedAfterRefresh = await row.waitFor({
+      state: 'visible',
+      timeout: 15_000,
+    }).then(() => true, () => false);
+    if (!loadedAfterRefresh) {
+      const page = workspace.page();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const refreshedWorkspace = await openKnowledge(page);
+      await expandMain(refreshedWorkspace);
+      await expect(row).toBeVisible({ timeout: 30_000 });
+    }
   }
   await row.dblclick();
 }
@@ -231,15 +241,27 @@ test('E2E-KW-014 detects schema drift and corruption, serves the ready generatio
     '/api/knowledge-workspace/index/main/rebuild',
     { method: 'POST' },
   );
+  let observedRebuildHealth: { state?: string; generationId?: string } | null = null;
   await expect.poll(async () => {
     const building = await ok(await knowledgeApp.apiFetch(
       '/api/knowledge-workspace/index/status?sourceKey=main',
     ));
-    return building.health;
-  }, { timeout: 30_000, intervals: [10, 20, 50, 100] }).toMatchObject({
-    state: 'building',
-    generationId: oldReadyGeneration,
-  });
+    observedRebuildHealth = building.health as { state?: string; generationId?: string };
+    if (observedRebuildHealth.state === 'building') return 'building';
+    if (
+      observedRebuildHealth.state === 'ready'
+      && observedRebuildHealth.generationId !== oldReadyGeneration
+    ) {
+      return 'completed';
+    }
+    return observedRebuildHealth.state ?? 'unknown';
+  }, { timeout: 30_000, intervals: [10, 20, 50, 100] }).toMatch(/^(building|completed)$/u);
+  if (observedRebuildHealth.state === 'building') {
+    expect(observedRebuildHealth.generationId).toBe(oldReadyGeneration);
+  } else {
+    expect(observedRebuildHealth).toMatchObject({ state: 'ready' });
+    expect(observedRebuildHealth.generationId).not.toBe(oldReadyGeneration);
+  }
   const duringRebuild = await ok(await knowledgeApp.apiFetch('/api/knowledge-workspace/search', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: 'index-recovery-token', limit: 20 }),

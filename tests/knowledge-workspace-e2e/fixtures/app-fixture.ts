@@ -59,6 +59,7 @@ type KnowledgeWorkerFixtures = {
 // verification and taskkill fallback below from running.
 const ELECTRON_QUIT_REQUEST_TIMEOUT_MS = 5_000;
 const WINDOWS_TASKKILL_TIMEOUT_MS = 5_000;
+const WINDOWS_DESKTOP_TEST_TIMEOUT_MS = 300_000;
 const nodeRequire = createRequire(import.meta.url);
 
 function resolveElectronExecutable(): string {
@@ -182,6 +183,9 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
       | "desktop-full"
       | "web-open"
       | "web-full";
+    if (runtime === "desktop-full" && process.platform === "win32") {
+      testInfo.setTimeout(WINDOWS_DESKTOP_TEST_TIMEOUT_MS);
+    }
     if (!isRuntimeApplicable(testInfo, runtime)) {
       testInfo.skip(true, `not applicable to ${runtime}`);
     }

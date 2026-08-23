@@ -25,7 +25,7 @@ test('T-18 selects an active workspace resource through @ search and closes it f
     return (url.pathname === '/api/desk/search-files' || url.pathname === '/api/workbench/search')
       && url.searchParams.get('q') === 'at-search-lifecycle-token';
   });
-  await page.keyboard.insertText('@at-search-lifecycle-token');
+  await input.pressSequentially('@at-search-lifecycle-token');
 
   const response = await searchResponse;
   if (!response.ok()) {
@@ -48,7 +48,7 @@ test('T-18 selects an active workspace resource through @ search and closes it f
   await expect(menu).toHaveCount(0);
   await expect(input).toContainText(fileName);
 
-  await page.keyboard.insertText('@at-search-lifecycle-token');
+  await input.pressSequentially('@at-search-lifecycle-token');
   await expect(option).toBeVisible();
   await expect(menu).toHaveAttribute('aria-busy', 'false');
   await expect(input).toBeFocused();
