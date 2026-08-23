@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { installWindowsElectronCdp } = require(
+const { installWindowsElectronCdp, runWindowsElectronEntry } = require(
   "./knowledge-workspace-e2e/fixtures/windows-electron-cdp-loader.cjs",
 ) as {
   installWindowsElectronCdp(options: {
@@ -10,6 +10,12 @@ const { installWindowsElectronCdp } = require(
     platform: NodeJS.Platform;
     env: NodeJS.ProcessEnv;
   }): { port: number; userDataDirectory: string } | null;
+  runWindowsElectronEntry(options: {
+    app: { commandLine: { appendSwitch: ReturnType<typeof vi.fn> } };
+    platform: NodeJS.Platform;
+    env: NodeJS.ProcessEnv;
+    loadBootstrap(path: string): unknown;
+  }): unknown;
 };
 
 describe("Windows Electron early CDP loader", () => {
@@ -53,6 +59,24 @@ describe("Windows Electron early CDP loader", () => {
       userDataDirectory: "/tmp/electron-data",
     });
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-port", "41002");
+  });
+
+  it("configures Chromium before loading the real desktop bootstrap", () => {
+    const appendSwitch = vi.fn();
+    const loadBootstrap = vi.fn(() => "bootstrap-result");
+    expect(runWindowsElectronEntry({
+      app: { commandLine: { appendSwitch } },
+      platform: "win32",
+      env: {
+        HANA_WINDOWS_CDP_PORT: "41002",
+        HANA_WINDOWS_CDP_USER_DATA_DIR: "C:\\temp\\electron-data",
+        HANA_WINDOWS_CDP_BOOTSTRAP_PATH: "D:\\repo\\desktop\\bootstrap.cjs",
+      },
+      loadBootstrap,
+    })).toBe("bootstrap-result");
+    expect(loadBootstrap).toHaveBeenCalledWith("D:\\repo\\desktop\\bootstrap.cjs");
+    expect(appendSwitch.mock.invocationCallOrder.at(-1))
+      .toBeLessThan(loadBootstrap.mock.invocationCallOrder[0]);
   });
 
   it("rejects invalid ports and non-absolute profiles", () => {

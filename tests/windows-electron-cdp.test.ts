@@ -5,7 +5,6 @@ import {
   assertDesktopLaunchAlive,
   assertInspectorIdentity,
   buildWindowsElectronCdpArgs,
-  buildWindowsElectronShellCommand,
   endpointFromPayload,
   rendererTargetIdFromInfo,
   reserveDistinctLoopbackPorts,
@@ -17,18 +16,15 @@ describe("Windows Electron direct CDP fixture", () => {
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
       loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
-      bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs: ["--fixture-argument", "--user-data-dir=/tmp/electron-data"],
     })).toEqual([
-      "-r",
-      "/repo/tests/windows-electron-cdp-loader.cjs",
       "--inspect=127.0.0.1:41001",
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",
       "--user-data-dir=/tmp/electron-data",
-      "/repo/desktop/bootstrap.cjs",
+      "/repo/tests/windows-electron-cdp-loader.cjs",
       "--hana-windows-cdp-token=fixture-token",
       "--fixture-argument",
     ]);
@@ -39,7 +35,6 @@ describe("Windows Electron direct CDP fixture", () => {
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
       loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
-      bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs,
     });
@@ -52,18 +47,6 @@ describe("Windows Electron direct CDP fixture", () => {
       "--user-data-dir=/tmp/one",
       "--user-data-dir=/tmp/two",
     ])).toThrow("exactly one non-empty user data directory");
-  });
-
-  it("quotes the complete Electron command for the Windows shell", () => {
-    expect(buildWindowsElectronShellCommand(
-      "C:\\Program Files\\Electron\\electron.exe",
-      ["-r", "D:\\repo with spaces\\loader.cjs", "--fixture=\"value\""],
-    )).toBe(
-      '"C:\\Program Files\\Electron\\electron.exe" "-r" '
-      + '"D:\\repo with spaces\\loader.cjs" "--fixture=\\"value\\""',
-    );
-    expect(() => buildWindowsElectronShellCommand("electron.exe", ["line\nbreak"]))
-      .toThrow("one command line");
   });
 
   it("retries a duplicate transient port rather than launching both CDP servers on it", async () => {
@@ -107,10 +90,6 @@ describe("Windows Electron direct CDP fixture", () => {
       { pid: 101, token: "foreign" },
       { pid: 101, token: "expected" },
     )).toThrow("did not belong to the spawned application");
-    expect(() => assertInspectorIdentity(
-      { pid: 102, token: "expected" },
-      { pid: null, token: "expected" },
-    )).not.toThrow();
   });
 
   it("requires the early loader and Electron command line to agree on the CDP port", () => {

@@ -23,9 +23,24 @@ function installWindowsElectronCdp({
   return { port, userDataDirectory };
 }
 
-if (process.versions.electron) {
-  const { app } = require("electron");
-  installWindowsElectronCdp({ app });
+function runWindowsElectronEntry({
+  app,
+  platform = process.platform,
+  env = process.env,
+  loadBootstrap = require,
+} = {}) {
+  installWindowsElectronCdp({ app, platform, env });
+  const bootstrapPath = env.HANA_WINDOWS_CDP_BOOTSTRAP_PATH ?? "";
+  const pathApi = platform === "win32" ? path.win32 : path;
+  if (!pathApi.isAbsolute(bootstrapPath)) {
+    throw new Error("Windows Knowledge E2E requires an absolute desktop bootstrap path");
+  }
+  return loadBootstrap(bootstrapPath);
 }
 
-module.exports = { installWindowsElectronCdp };
+if (process.versions.electron) {
+  const { app } = require("electron");
+  runWindowsElectronEntry({ app });
+}
+
+module.exports = { installWindowsElectronCdp, runWindowsElectronEntry };

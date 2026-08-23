@@ -34,7 +34,7 @@ type LaunchOptions = {
 };
 
 export type InspectorIdentity = {
-  pid: number | null;
+  pid: number;
   token: string;
 };
 
@@ -50,7 +50,6 @@ export type ElectronChromiumConfiguration = {
 
 type ElectronCdpLaunchArguments = ElectronCdpPortPair & {
   loaderPath: string;
-  bootstrapPath: string;
   launchToken: string;
   electronArgs: readonly string[];
 };
@@ -97,7 +96,6 @@ export function buildWindowsElectronCdpArgs({
   nodeInspectorPort,
   chromiumPort,
   loaderPath,
-  bootstrapPath,
   launchToken,
   electronArgs,
 }: ElectronCdpLaunchArguments): string[] {
@@ -114,12 +112,10 @@ export function buildWindowsElectronCdpArgs({
     !argument.startsWith("--user-data-dir=")
   ));
   return [
-    "-r",
-    loaderPath,
     `--inspect=127.0.0.1:${nodeInspectorPort}`,
     ...DIRECT_ELECTRON_CHROMIUM_SWITCHES,
     ...userDataArgs,
-    bootstrapPath,
+    loaderPath,
     `--hana-windows-cdp-token=${launchToken}`,
     ...applicationArgs,
   ];
@@ -162,31 +158,23 @@ export async function launchWindowsElectronOverCdp(
     nodeInspectorPort,
     chromiumPort,
     loaderPath: options.loaderPath,
-    bootstrapPath: options.bootstrapPath,
     launchToken,
     electronArgs: options.electronArgs,
   });
   const userDataDirectory = launchArguments
     .find((argument) => argument.startsWith("--user-data-dir="))!
     .slice("--user-data-dir=".length);
-  const useWindowsShell = process.platform === "win32";
-  const child = spawn(
-    useWindowsShell
-      ? buildWindowsElectronShellCommand(options.executablePath, launchArguments)
-      : options.executablePath,
-    useWindowsShell ? [] : launchArguments,
-    {
+  const child = spawn(options.executablePath, launchArguments, {
     cwd: options.cwd,
     env: {
       ...options.env,
       HANA_WINDOWS_CDP_PORT: String(chromiumPort),
       HANA_WINDOWS_CDP_USER_DATA_DIR: userDataDirectory,
+      HANA_WINDOWS_CDP_BOOTSTRAP_PATH: options.bootstrapPath,
     },
     stdio: "ignore",
     windowsHide: true,
-      shell: useWindowsShell,
-    },
-  );
+  });
   const childFailure = monitorChildFailure(child);
   if (!child.pid) {
     await terminateChild(child);
@@ -206,10 +194,7 @@ export async function launchWindowsElectronOverCdp(
     );
     const connectedInspector = await NodeInspectorClient.connect(nodeEndpoint);
     inspector = connectedInspector;
-    await connectedInspector.assertIdentity({
-      pid: useWindowsShell ? null : child.pid,
-      token: launchToken,
-    });
+    await connectedInspector.assertIdentity({ pid: child.pid, token: launchToken });
     await connectedInspector.assertChromiumConfiguration(chromiumPort);
     const chromiumEndpoint = await waitForEndpoint(
       chromiumPort,
@@ -242,20 +227,6 @@ export async function launchWindowsElectronOverCdp(
     await terminateChild(child);
     throw error;
   }
-}
-
-export function buildWindowsElectronShellCommand(
-  executablePath: string,
-  args: readonly string[],
-): string {
-  return [executablePath, ...args]
-    .map((argument) => {
-      if (argument.includes("\0") || /[\r\n]/.test(argument)) {
-        throw new Error("Windows Electron shell arguments must stay on one command line");
-      }
-      return `"${argument.replaceAll('"', '\\"')}"`;
-    })
-    .join(" ");
 }
 
 function createElectronApplication(
@@ -604,7 +575,7 @@ export function assertInspectorIdentity(
   if (
     !candidate
     || !Number.isInteger(candidate.pid)
-    || (expected.pid !== null && candidate.pid !== expected.pid)
+    || candidate.pid !== expected.pid
     || candidate.token !== expected.token
   ) {
     throw new Error("Windows Electron inspector endpoint did not belong to the spawned application");
