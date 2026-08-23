@@ -290,9 +290,9 @@ configureClientSingleInstance(app, {
   hanakoHome,
   defaultHome,
   onSecondInstance: () => showPrimaryWindow(),
-  // requestSingleInstanceLock() blocks Electron's first event-loop turn when
-  // Playwright preloads its Windows readiness bridge. Each E2E launch already
-  // owns an isolated HANA_HOME, so only the lock is unnecessary there.
+  // Electron's userData path APIs block the first event-loop turn when
+  // Playwright preloads its Windows readiness bridge. The E2E launch already
+  // supplies an isolated --user-data-dir, so this whole configuration is redundant.
   acquireLock: process.env.HANA_WINDOWS_PLAYWRIGHT_READY_GATE !== "1",
 });
 markWindowsPlaywrightStartupStage("single-instance-configured");

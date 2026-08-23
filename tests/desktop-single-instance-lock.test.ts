@@ -64,7 +64,7 @@ describe("desktop client single instance lock", () => {
     expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(1);
   });
 
-  it("can isolate userData without acquiring a lock for the Windows Playwright bridge", () => {
+  it("bypasses Electron path and lock APIs for the isolated Windows Playwright profile", () => {
     const { app } = makeApp();
     const defaultHome = path.join("C:", "Users", "me", ".hanako");
     const testHome = path.join("C:", "tmp", "hana-playwright");
@@ -77,10 +77,8 @@ describe("desktop client single instance lock", () => {
     });
 
     expect(configured).toBe(true);
-    expect(app.setPath).toHaveBeenCalledWith(
-      "userData",
-      path.join("C:", "Users", "me", "AppData", "Roaming", "Hana-playwright"),
-    );
+    expect(app.getPath).not.toHaveBeenCalled();
+    expect(app.setPath).not.toHaveBeenCalled();
     expect(app.requestSingleInstanceLock).not.toHaveBeenCalled();
     expect(app.on).not.toHaveBeenCalled();
   });

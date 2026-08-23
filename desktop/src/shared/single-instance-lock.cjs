@@ -51,6 +51,11 @@ function configureClientSingleInstance(app, opts) {
     onSecondInstance,
     acquireLock = true,
   } = opts;
+  if (!acquireLock) {
+    markWindowsPlaywrightStartupStage("single-instance-configuration-skipped");
+    return true;
+  }
+
   const appName = getUserDataAppName(hanakoHome, defaultHome);
   markWindowsPlaywrightStartupStage("single-instance-name-resolved");
   if (appName) {
@@ -58,11 +63,6 @@ function configureClientSingleInstance(app, opts) {
     markWindowsPlaywrightStartupStage("app-data-resolved");
     app.setPath("userData", path.join(appData, appName));
     markWindowsPlaywrightStartupStage("user-data-configured");
-  }
-
-  if (!acquireLock) {
-    markWindowsPlaywrightStartupStage("single-instance-lock-skipped");
-    return true;
   }
 
   const gotLock = app.requestSingleInstanceLock({ hanakoHome });
