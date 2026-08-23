@@ -182,11 +182,13 @@ test('E2E-KW-005 edits manually, stays dirty without autosave and saves with exp
   await knowledgeApp.page.keyboard.insertText('\nmanual-save-token');
   await expect(knowledgeApp.page.locator('[aria-label="Edit Manual.md"]')).toHaveAttribute('data-dirty', 'true');
   expect(await fs.readFile(file, 'utf8')).toBe('# Baseline\n');
-  const writeRequest = knowledgeApp.page.waitForRequest(request => (
-    request.method() === 'POST' && request.url().includes('/api/resource-io/write')
+  const writeResponse = knowledgeApp.page.waitForResponse(response => (
+    response.request().method() === 'POST' && response.url().includes('/api/resource-io/write')
   ));
   await editor.press(process.platform === 'darwin' ? 'Meta+s' : 'Control+s');
-  const saveRequest = await writeRequest;
+  const saveResponse = await writeResponse;
+  expect(saveResponse.ok()).toBe(true);
+  const saveRequest = saveResponse.request();
   expect(saveRequest.postDataJSON()).toMatchObject({
     address: { sourceKey: 'main', relativePath: 'Manual.md' },
     expectedVersion: expect.any(Object),

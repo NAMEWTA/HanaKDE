@@ -13,7 +13,6 @@ const INSPECTOR_CONNECT_TIMEOUT_MS = 5_000;
 const INSPECTOR_REQUEST_TIMEOUT_MS = 5_000;
 const INSPECTOR_EVALUATE_TIMEOUT_MS = 90_000;
 const CHILD_TERMINATION_TIMEOUT_MS = 5_000;
-const RENDERER_SENTINEL_KEY = "__hanaWindowsCdpRendererSentinel";
 
 // The direct-CDP path replaces Playwright's Electron loader. Keep the loader's
 // backgrounding guarantees so hidden/secondary Windows stay responsive during
@@ -141,7 +140,6 @@ export async function launchWindowsElectronOverCdp(
     options.reserveLoopbackPort,
   );
   const launchToken = randomUUID();
-  const rendererToken = randomUUID();
   const child = spawn(options.executablePath, buildWindowsElectronCdpArgs({
     nodeInspectorPort,
     chromiumPort,
@@ -174,7 +172,6 @@ export async function launchWindowsElectronOverCdp(
     const connectedInspector = await NodeInspectorClient.connect(nodeEndpoint);
     inspector = connectedInspector;
     await connectedInspector.assertIdentity({ pid: child.pid, token: launchToken });
-    await plantRendererSentinel(connectedInspector, child, rendererToken, deadline);
     const chromiumEndpoint = await waitForEndpoint(
       chromiumPort,
       child,
@@ -192,7 +189,6 @@ export async function launchWindowsElectronOverCdp(
       child,
       connectedBrowser,
       connectedInspector,
-      rendererToken,
       Math.min(deadline, Date.now() + INSPECTOR_CONNECT_TIMEOUT_MS),
     );
     return {
@@ -232,7 +228,6 @@ async function waitForDesktopPage(
   child: ChildProcess,
   browser: Browser,
   inspector: NodeInspectorClient,
-  rendererToken: string,
   deadline: number,
 ): Promise<Page> {
   while (Date.now() < deadline) {
@@ -242,15 +237,17 @@ async function waitForDesktopPage(
     ));
     if (page) {
       await page.waitForLoadState("domcontentloaded");
-      const sentinel = await page.evaluate((key) => (
-        (globalThis as typeof globalThis & Record<string, unknown>)[key]
-      ), RENDERER_SENTINEL_KEY).catch(() => undefined);
-      if (!rendererSentinelMatches(sentinel, rendererToken)) {
+      const session = await context.newCDPSession(page);
+      let targetInfo: unknown;
+      try {
+        targetInfo = (await session.send("Target.getTargetInfo")).targetInfo;
+      } finally {
+        await session.detach().catch(() => {});
+      }
+      const targetId = rendererTargetIdFromInfo(targetInfo);
+      if (!await inspector.ownsRendererTarget(targetId)) {
         throw new Error("Windows Electron Chromium CDP did not connect to the verified renderer");
       }
-      await page.evaluate((key) => {
-        delete (globalThis as typeof globalThis & Record<string, unknown>)[key];
-      }, RENDERER_SENTINEL_KEY).catch(() => {});
       return page;
     }
     await delay(100);
@@ -258,51 +255,23 @@ async function waitForDesktopPage(
   throw new Error("Windows Electron main window did not open");
 }
 
-async function plantRendererSentinel(
-  inspector: NodeInspectorClient,
-  child: ChildProcess,
-  rendererToken: string,
-  deadline: number,
-): Promise<void> {
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error("Windows Electron exited before its renderer sentinel was ready");
-    }
-    if (!inspector.isConnected()) {
-      throw new Error("Windows Electron node inspector disconnected before its renderer sentinel was ready");
-    }
-    const planted = await inspector.evaluate<boolean, { key: string; token: string }>(
-      async ({ BrowserWindow }, { key, token }) => {
-        const window = BrowserWindow.getAllWindows().find((candidate) => {
-          const contents = candidate.webContents;
-          return !contents.isDestroyed()
-            && !contents.isLoadingMainFrame()
-            && /(?:^|\/)index\.html(?:[?#]|$)/.test(contents.getURL());
-        });
-        if (!window) return false;
-        try {
-          await window.webContents.executeJavaScript(
-            `globalThis[${JSON.stringify(key)}] = ${JSON.stringify(token)};`,
-            true,
-          );
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      { key: RENDERER_SENTINEL_KEY, token: rendererToken },
-    );
-    if (planted) return;
-    await delay(100);
+export function rendererTargetIdFromInfo(value: unknown): string {
+  const target = value as {
+    targetId?: unknown;
+    type?: unknown;
+    url?: unknown;
+  } | null;
+  if (
+    !target
+    || typeof target.targetId !== "string"
+    || !target.targetId
+    || target.type !== "page"
+    || typeof target.url !== "string"
+    || !/(?:^|\/)index\.html(?:[?#]|$)/.test(target.url)
+  ) {
+    throw new Error("Windows Electron Chromium CDP did not expose the desktop renderer target");
   }
-  throw new Error("Windows Electron renderer sentinel did not become ready");
-}
-
-export function rendererSentinelMatches(
-  value: unknown,
-  expectedToken: string,
-): boolean {
-  return value === expectedToken;
+  return target.targetId;
 }
 
 export function assertDesktopLaunchAlive(
@@ -463,6 +432,19 @@ class NodeInspectorClient {
       throw new Error("Windows Electron could not verify its node inspector identity");
     }
     assertInspectorIdentity(response.result?.result?.value, expected);
+  }
+
+  async ownsRendererTarget(targetId: string): Promise<boolean> {
+    return this.evaluate<boolean, string>(
+      ({ BrowserWindow, webContents }, id) => {
+        const contents = webContents.fromDevToolsTargetId(id);
+        if (!contents || contents.isDestroyed()) return false;
+        const window = BrowserWindow.fromWebContents(contents);
+        return !!window
+          && /(?:^|\/)index\.html(?:[?#]|$)/.test(contents.getURL());
+      },
+      targetId,
+    );
   }
 
   isConnected(): boolean {

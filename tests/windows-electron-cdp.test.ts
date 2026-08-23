@@ -5,7 +5,7 @@ import {
   assertInspectorIdentity,
   buildWindowsElectronCdpArgs,
   endpointFromPayload,
-  rendererSentinelMatches,
+  rendererTargetIdFromInfo,
   reserveDistinctLoopbackPorts,
 } from "./knowledge-workspace-e2e/fixtures/windows-electron-cdp.ts";
 
@@ -70,10 +70,22 @@ describe("Windows Electron direct CDP fixture", () => {
     )).toThrow("did not belong to the spawned application");
   });
 
-  it("accepts a Chromium page only after it presents the verified renderer sentinel", () => {
-    expect(rendererSentinelMatches("renderer-token", "renderer-token")).toBe(true);
-    expect(rendererSentinelMatches("foreign-token", "renderer-token")).toBe(false);
-    expect(rendererSentinelMatches(undefined, "renderer-token")).toBe(false);
+  it("accepts only desktop page target metadata for renderer ownership checks", () => {
+    expect(rendererTargetIdFromInfo({
+      targetId: "renderer-target",
+      type: "page",
+      url: "file:///repo/desktop/dist-renderer/index.html",
+    })).toBe("renderer-target");
+    expect(() => rendererTargetIdFromInfo({
+      targetId: "worker-target",
+      type: "service_worker",
+      url: "file:///repo/desktop/dist-renderer/index.html",
+    })).toThrow("did not expose the desktop renderer target");
+    expect(() => rendererTargetIdFromInfo({
+      targetId: "foreign-page",
+      type: "page",
+      url: "https://example.com/",
+    })).toThrow("did not expose the desktop renderer target");
   });
 
   it("reports child and CDP loss immediately while waiting for the main window", () => {
