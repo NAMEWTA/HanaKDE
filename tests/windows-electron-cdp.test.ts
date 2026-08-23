@@ -8,7 +8,6 @@ import {
   endpointFromPayload,
   rendererTargetIdFromInfo,
   reserveDistinctLoopbackPorts,
-  windowsElectronLoaderNodeOption,
 } from "./knowledge-workspace-e2e/fixtures/windows-electron-cdp.ts";
 
 describe("Windows Electron direct CDP fixture", () => {
@@ -16,13 +15,14 @@ describe("Windows Electron direct CDP fixture", () => {
     expect(buildWindowsElectronCdpArgs({
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
+      loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
       bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs: ["--fixture-argument", "--user-data-dir=/tmp/electron-data"],
     })).toEqual([
+      "-r",
+      "/repo/tests/windows-electron-cdp-loader.cjs",
       "--inspect=127.0.0.1:41001",
-      "--remote-debugging-port=41002",
-      "--remote-debugging-address=127.0.0.1",
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",
@@ -33,18 +33,11 @@ describe("Windows Electron direct CDP fixture", () => {
     ]);
   });
 
-  it("builds an isolated NODE_OPTIONS preload from a safe absolute path", () => {
-    expect(windowsElectronLoaderNodeOption(
-      "C:\\repo\\tests\\windows-electron-cdp-loader.cjs",
-    )).toBe('--require="C:/repo/tests/windows-electron-cdp-loader.cjs"');
-    expect(() => windowsElectronLoaderNodeOption("relative-loader.cjs"))
-      .toThrow("safe absolute path");
-  });
-
   it("rejects a missing or ambiguous Chromium user data directory", () => {
     const build = (electronArgs: string[]) => buildWindowsElectronCdpArgs({
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
+      loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
       bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs,
@@ -104,19 +97,18 @@ describe("Windows Electron direct CDP fixture", () => {
   });
 
   it("requires the early loader and Electron command line to agree on the CDP port", () => {
+    const loaderToken = "fixture-token";
     expect(() => assertChromiumConfiguration({
-      loaderPort: 41_002,
+      loaderToken,
       commandLinePort: "41002",
-      userDataConfigured: true,
       commandLineUserDataConfigured: true,
-    }, 41_002)).not.toThrow();
+    }, 41_002, loaderToken)).not.toThrow();
     expect(() => assertChromiumConfiguration({
-      loaderPort: 41_002,
+      loaderToken,
       commandLinePort: "",
-      userDataConfigured: true,
       commandLineUserDataConfigured: true,
-    }, 41_002)).toThrow("did not retain the requested CDP port");
-    expect(() => assertChromiumConfiguration(null, 41_002)).toThrow(
+    }, 41_002, loaderToken)).toThrow("did not retain the requested CDP port");
+    expect(() => assertChromiumConfiguration(null, 41_002, loaderToken)).toThrow(
       "early loader did not execute",
     );
   });

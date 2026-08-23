@@ -1,7 +1,6 @@
 "use strict";
 
 const path = require("node:path");
-const Module = require("node:module");
 
 function installWindowsElectronCdp({
   app,
@@ -18,45 +17,21 @@ function installWindowsElectronCdp({
   if (!pathApi.isAbsolute(userDataDirectory)) {
     throw new Error("Windows Knowledge E2E requires an absolute Chromium user data directory");
   }
+  const expectedToken = env.HANA_WINDOWS_CDP_EXPECTED_TOKEN ?? "";
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(expectedToken)) {
+    throw new Error("Windows Knowledge E2E requires a valid loader token");
+  }
 
   app.commandLine.appendSwitch("user-data-dir", userDataDirectory);
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", portText);
-  globalThis.__hanaWindowsCdpLoaderState = {
-    port,
-    userDataConfigured: true,
-  };
+  env.HANA_WINDOWS_CDP_LOADED_TOKEN = expectedToken;
   return { port, userDataDirectory };
 }
 
-function installWhenElectronApiAvailable({
-  moduleApi = Module,
-  platform = process.platform,
-  env = process.env,
-} = {}) {
-  const originalLoad = moduleApi._load;
-  moduleApi._load = function loadWithElectronCdp(request, parent, isMain) {
-    const loaded = originalLoad.call(this, request, parent, isMain);
-    if (request !== "electron" || !loaded?.app) return loaded;
-    moduleApi._load = originalLoad;
-    installWindowsElectronCdp({
-      app: loaded.app,
-      platform,
-      env,
-    });
-    return loaded;
-  };
-  return () => {
-    if (moduleApi._load === originalLoad) return;
-    moduleApi._load = originalLoad;
-  };
-}
-
 if (process.versions.electron) {
-  installWhenElectronApiAvailable();
+  const { app } = require("electron");
+  installWindowsElectronCdp({ app });
 }
 
-module.exports = {
-  installWhenElectronApiAvailable,
-  installWindowsElectronCdp,
-};
+module.exports = { installWindowsElectronCdp };
