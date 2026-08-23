@@ -60,11 +60,11 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
       if (e.key === 'Escape') onClose();
     };
 
+    document.addEventListener('keydown', handleKeyDown);
     // 延迟注册，避免触发菜单的那次点击立即关闭它
     const timer = setTimeout(() => {
       document.addEventListener('click', handleClick, true);
       document.addEventListener('contextmenu', handleContextMenu, true);
-      document.addEventListener('keydown', handleKeyDown);
     });
 
     return () => {

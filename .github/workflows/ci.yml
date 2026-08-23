@@ -34,6 +34,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build secure filesystem helper
+        if: runner.os != 'Linux'
+        run: node scripts/build-secure-fs-helper.mjs
+
+      - name: Configure Linux secure filesystem test fixture
+        if: runner.os == 'Linux'
+        shell: bash
+        run: echo "HANA_SECURE_FS_HELPER_PATH=$GITHUB_WORKSPACE/tests/fixtures/secure-fs-helper/written.cjs" >> "$GITHUB_ENV"
+
       - name: Build Windows sandbox helper
         if: runner.os == 'Windows'
         run: node scripts/build-windows-sandbox-helper.mjs x64
@@ -78,10 +87,6 @@ jobs:
       - name: Download MinGit for Windows standalone smoke
         if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: node scripts/download-mingit.js
-
-      - name: Build secure filesystem helper for Windows server smoke
-        if: runner.os == 'Windows' && github.event_name != 'pull_request'
-        run: node scripts/build-secure-fs-helper.mjs x64
 
       - name: Build Windows server bundle for standalone smoke
         if: runner.os == 'Windows' && github.event_name != 'pull_request'
@@ -161,6 +166,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build secure filesystem helper
+        if: runner.os != 'Linux'
+        run: node scripts/build-secure-fs-helper.mjs
+
+      - name: Configure Linux secure filesystem test fixture
+        if: runner.os == 'Linux'
+        shell: bash
+        run: echo "HANA_SECURE_FS_HELPER_PATH=$GITHUB_WORKSPACE/tests/fixtures/secure-fs-helper/written.cjs" >> "$GITHUB_ENV"
+
       - name: Install Chromium and Linux runtime dependencies
         if: runner.os == 'Linux'
         run: npx playwright install --with-deps chromium
@@ -174,6 +188,8 @@ jobs:
 
       - name: Run Knowledge Workspace project/platform gate
         shell: bash
+        env:
+          NODE_ENV: test
         run: |
           run_project() {
             if [ "$RUNNER_OS" = "Linux" ] && [ "${{ matrix.project }}" = "desktop-full" ]; then

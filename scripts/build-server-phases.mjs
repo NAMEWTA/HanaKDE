@@ -33,6 +33,8 @@ import {
 } from "./build-server-deps.mjs";
 import { pruneRuntimeDeadFiles } from "./build-server-prune.mjs";
 
+const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+
 // ── Node.js runtime ──────────────────────────────────────────────────────
 
 export const DEFAULT_NODE_VERSION = "v24.15.0";
@@ -181,7 +183,7 @@ export function stageDocumentExtractionRuntimeAssets({ rootDir, bundleOutDir, lo
   const anydocTarget = path.join(bundleOutDir, "anydoc-child.cjs");
   fs.copyFileSync(anydocSource, anydocTarget);
   const htmlTarget = path.join(bundleOutDir, "html-child.ts");
-  execFileSync("npx", [
+  execFileSync(npxCommand, [
     "esbuild",
     htmlSource,
     "--bundle",
@@ -205,7 +207,7 @@ export function stageDocumentExtractionRuntimeAssets({ rootDir, bundleOutDir, lo
 export function buildViteServerBundle({ rootDir, viteBundleDir, bundleOutDir, entry, log = (msg) => console.log(msg) }) {
   log("[build-server] running Vite bundle...");
   const effectiveEntry = entry || "server/main-full.ts";
-  execFileSync("npx", ["vite", "build", "--config", "vite.config.server.js", "--ssr", effectiveEntry], {
+  execFileSync(npxCommand, ["vite", "build", "--config", "vite.config.server.js", "--ssr", effectiveEntry], {
     cwd: rootDir,
     stdio: "inherit",
     env: entry ? { ...process.env, HANA_SERVER_BUNDLE_ENTRY: entry } : process.env,

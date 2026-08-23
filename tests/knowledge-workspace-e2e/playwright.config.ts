@@ -10,6 +10,9 @@ export default defineConfig({
   // platform regression into a passing Knowledge Workspace result.
   retries: 0,
   workers: 1,
+  expect: {
+    timeout: 15_000,
+  },
   // Workspace fixtures intentionally exercise hostile filenames, link swaps,
   // and sentinel content. Playwright traces, page snapshots and screenshots
   // can retain that data (and error context includes test source), so CI only

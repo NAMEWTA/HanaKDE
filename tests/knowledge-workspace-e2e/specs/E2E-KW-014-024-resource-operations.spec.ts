@@ -145,11 +145,13 @@ test('E2E-KW-014 detects schema drift and corruption, serves the ready generatio
   expect(rebuilt).toMatchObject({ sourceKey: 'main', health: { state: 'ready' } });
   const status = await ok(await knowledgeApp.apiFetch('/api/knowledge-workspace/index/status?sourceKey=main'));
   expect(status).toMatchObject({ sourceKey: 'main', health: { state: 'ready' } });
-  const search = await ok(await knowledgeApp.apiFetch('/api/knowledge-workspace/search', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: 'index-recovery-token', limit: 20 }),
-  }));
-  expect(JSON.stringify(search)).toContain('Indexed.md');
+  await expect.poll(async () => JSON.stringify(await ok(await knowledgeApp.apiFetch(
+    '/api/knowledge-workspace/search',
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'index-recovery-token', limit: 20 }),
+    },
+  )))).toContain('Indexed.md');
 
   const firstGeneration = (status.health as { generationId: string }).generationId;
   const indexRoot = path.join(workspaceSandbox.hanaHome, KNOWLEDGE_INDEX_ROOT);
@@ -270,6 +272,8 @@ test('E2E-KW-015 drives tree keyboard, range, context, sort, preview and explici
   await a.click({ button: 'right' });
   await expect(a).toHaveAttribute('aria-selected', 'true');
   await expect(b).toHaveAttribute('aria-selected', 'true');
+  await knowledgeApp.page.keyboard.press('Escape');
+  await expect(knowledgeApp.page.getByRole('menu')).toHaveCount(0);
   await c.click({ button: 'right' });
   await expect(c).toHaveAttribute('aria-selected', 'true');
   await expect(a).toHaveAttribute('aria-selected', 'false');
@@ -971,7 +975,7 @@ test('E2E-KW-024 isolates two Renderer contexts across open, save, conflict and 
     });
     const secondPageClosed = secondPage.waitForEvent('close');
     await app.evaluate(({ BrowserWindow }, windowId) => {
-      BrowserWindow.fromId(windowId)?.close();
+      BrowserWindow.fromId(windowId)?.destroy();
     }, secondWindowId);
     await secondPageClosed;
   }

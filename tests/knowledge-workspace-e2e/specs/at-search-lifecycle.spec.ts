@@ -38,6 +38,7 @@ test('T-18 selects an active workspace resource through @ search and closes it f
   const option = page.locator('[role="dialog"] [role="option"]').filter({ hasText: fileName });
   await expect(option).toBeVisible();
 
+  await input.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('[role="dialog"]')).toHaveCount(0);
   await expect(input).toContainText(fileName);

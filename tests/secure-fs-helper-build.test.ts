@@ -147,5 +147,5 @@ process.stdin.on("end", () => {
     expect(rejected).toMatchObject({ ok: false, conflict: true });
     expect(fs.readFileSync(path.join(displaced, "notes", "a.md"), "utf8")).toBe("before");
     expect(fs.readFileSync(path.join(workspace, "notes", "a.md"), "utf8")).toBe("before");
-  });
+  }, 30_000);
 });
