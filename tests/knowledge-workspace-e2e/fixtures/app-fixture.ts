@@ -196,11 +196,6 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         ? await reserveLoopbackPort()
         : null;
       const desktopBootstrapPath = path.resolve("desktop/bootstrap.cjs");
-      const electronEntryPath = windowsPlaywrightLoader
-        ? path.resolve(
-            "tests/knowledge-workspace-e2e/fixtures/windows-electron-deferred-entry.cjs",
-          )
-        : desktopBootstrapPath;
       const desktopLaunch = useDirectElectronCdp
         ? await launchWindowsElectronOverCdp(playwright, {
             executablePath: resolveElectronExecutable(),
@@ -224,7 +219,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
             windowsPlaywrightLoader,
             `--hana-playwright-cdp-port=${windowsChromiumPort}`,
           ] : []),
-          electronEntryPath,
+          desktopBootstrapPath,
           ...launchConfig.electronArgs,
         ],
         cwd: process.cwd(),
@@ -232,9 +227,6 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
           ...launchConfig.env,
           HANA_DEV_NODE_BIN: process.execPath,
           ...(process.platform === "win32" ? { HANA_GPU_SANDBOX_COMPAT: "1" } : {}),
-          ...(windowsPlaywrightLoader
-            ? { HANA_WINDOWS_DEFERRED_BOOTSTRAP_PATH: desktopBootstrapPath }
-            : {}),
         },
         ...(windowsPlaywrightLoader
           ? { executablePath: resolveElectronExecutable() }

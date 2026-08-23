@@ -3,10 +3,10 @@
 const http = require("node:http");
 
 /**
- * Electron 42 on hosted Windows opens Chromium's CDP endpoint only after its
- * real ready event. Playwright's stock loader defers that event until after
- * connecting to CDP, which creates a startup cycle. Keep Playwright's process
- * ownership while allowing the real ready event to initialize Chromium.
+ * Electron 42 on hosted Windows does not reliably publish Playwright's dynamic
+ * Chromium endpoint. Use a fixed loopback endpoint while delaying only the
+ * application's whenReady promise until Playwright has connected. Electron's
+ * native ready event remains free to initialize Chromium and its CDP server.
  */
 function installWindowsElectronPlaywrightLoader({
   argv = process.argv,
@@ -34,23 +34,25 @@ function installWindowsElectronPlaywrightLoader({
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     app.commandLine.appendSwitch("disable-features", "GpuSandbox");
   }
-  globalObject.__hanaWindowsPlaywrightState = {
-    connected: false,
-    bootstrapRegistered: false,
-    bootstrapStarted: false,
-    bootstrapLoaded: false,
-    bootstrapError: null,
+  const nativeWhenReady = app.whenReady();
+  let applicationReady = false;
+  let releaseApplicationReady;
+  const applicationWhenReady = new Promise((resolve) => {
+    releaseApplicationReady = resolve;
+  });
+  const state = {
+    nativeReady: false,
+    playwrightReleased: false,
   };
-  globalObject.__playwright_run = () => {
-    const state = globalObject.__hanaWindowsPlaywrightState;
-    state.connected = true;
-    const bootstrap = globalObject.__hanaWindowsPlaywrightBootstrap;
-    if (typeof bootstrap !== "function") {
-      throw new Error("Windows Knowledge E2E bootstrap was not registered");
-    }
-    state.bootstrapStarted = true;
-    bootstrap();
-    return Promise.resolve();
+  globalObject.__hanaWindowsPlaywrightState = state;
+  nativeWhenReady.then(() => { state.nativeReady = true; });
+  app.isReady = () => applicationReady;
+  app.whenReady = () => applicationWhenReady;
+  globalObject.__playwright_run = async () => {
+    const event = await nativeWhenReady;
+    applicationReady = true;
+    releaseApplicationReady(event);
+    state.playwrightReleased = true;
   };
   return bridgePort;
 }
@@ -94,9 +96,6 @@ if (process.versions.electron) {
   console.error(`[hana-windows-e2e] configured Chromium CDP on 127.0.0.1:${port}`);
   setImmediate(() => {
     console.error(`[hana-windows-e2e] first event-loop turn; appReady=${app.isReady()}`);
-  });
-  app.whenReady().then(() => {
-    console.error("[hana-windows-e2e] native Electron ready");
   });
   reportChromiumEndpoint(port);
 }

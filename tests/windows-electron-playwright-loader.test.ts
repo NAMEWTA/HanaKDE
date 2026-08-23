@@ -7,24 +7,24 @@ const { installWindowsElectronPlaywrightLoader } = require(
 ) as {
   installWindowsElectronPlaywrightLoader(options: {
     argv: string[];
-    app: { commandLine: { appendSwitch: ReturnType<typeof vi.fn> } };
+    app: {
+      commandLine: { appendSwitch: ReturnType<typeof vi.fn> };
+      isReady(): boolean;
+      whenReady(): Promise<unknown>;
+    };
     env?: NodeJS.ProcessEnv;
     globalObject: {
       __playwright_run?: () => Promise<void>;
-      __hanaWindowsPlaywrightBootstrap?: () => void;
       __hanaWindowsPlaywrightState?: {
-        connected: boolean;
-        bootstrapRegistered: boolean;
-        bootstrapStarted: boolean;
-        bootstrapLoaded: boolean;
-        bootstrapError: string | null;
+        nativeReady: boolean;
+        playwrightReleased: boolean;
       };
     };
   }): number;
 };
 
 describe("Windows Electron Playwright loader", () => {
-  it("keeps the application entry while releasing Electron's real ready event", async () => {
+  it("keeps the application entry while deferring its ready promise until Playwright connects", async () => {
     const argv = [
       "electron.exe",
       "--inspect=0",
@@ -35,20 +35,23 @@ describe("Windows Electron Playwright loader", () => {
     ];
     const globalObject: {
       __playwright_run?: () => Promise<void>;
-      __hanaWindowsPlaywrightBootstrap?: () => void;
       __hanaWindowsPlaywrightState?: {
-        connected: boolean;
-        bootstrapRegistered: boolean;
-        bootstrapStarted: boolean;
-        bootstrapLoaded: boolean;
-        bootstrapError: string | null;
+        nativeReady: boolean;
+        playwrightReleased: boolean;
       };
     } = {};
     const appendSwitch = vi.fn();
+    let markNativeReady: ((event: unknown) => void) | undefined;
+    const nativeReady = new Promise((resolve) => { markNativeReady = resolve; });
+    const app = {
+      commandLine: { appendSwitch },
+      isReady: () => true,
+      whenReady: () => nativeReady,
+    };
 
     expect(installWindowsElectronPlaywrightLoader({
       argv,
-      app: { commandLine: { appendSwitch } },
+      app,
       env: { HANA_GPU_SANDBOX_COMPAT: "1" },
       globalObject,
     })).toBe(43_123);
@@ -61,24 +64,31 @@ describe("Windows Electron Playwright loader", () => {
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-address", "127.0.0.1");
     expect(appendSwitch).toHaveBeenCalledWith("disable-gpu-sandbox");
     expect(appendSwitch).toHaveBeenCalledWith("disable-features", "GpuSandbox");
-    const bootstrap = vi.fn();
-    globalObject.__hanaWindowsPlaywrightBootstrap = bootstrap;
-    if (globalObject.__hanaWindowsPlaywrightState) {
-      globalObject.__hanaWindowsPlaywrightState.bootstrapRegistered = true;
-    }
-    await expect(globalObject.__playwright_run?.()).resolves.toBeUndefined();
-    expect(bootstrap).toHaveBeenCalledOnce();
+    expect(app.isReady()).toBe(false);
+    let applicationReady = false;
+    app.whenReady().then(() => { applicationReady = true; });
+    const run = globalObject.__playwright_run?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(applicationReady).toBe(false);
+    markNativeReady?.({ ready: true });
+    await expect(run).resolves.toBeUndefined();
+    await app.whenReady();
+    expect(app.isReady()).toBe(true);
+    expect(applicationReady).toBe(true);
     expect(globalObject.__hanaWindowsPlaywrightState).toMatchObject({
-      connected: true,
-      bootstrapRegistered: true,
-      bootstrapStarted: true,
+      nativeReady: true,
+      playwrightReleased: true,
     });
   });
 
   it("rejects a launch outside Playwright's remote-debugging contract", () => {
     expect(() => installWindowsElectronPlaywrightLoader({
       argv: ["electron.exe", "desktop/bootstrap.cjs"],
-      app: { commandLine: { appendSwitch: vi.fn() } },
+      app: {
+        commandLine: { appendSwitch: vi.fn() },
+        isReady: () => false,
+        whenReady: () => Promise.resolve(),
+      },
       env: {},
       globalObject: {},
     })).toThrow("requires Playwright remote debugging");
