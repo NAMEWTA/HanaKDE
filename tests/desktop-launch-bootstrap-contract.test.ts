@@ -38,6 +38,17 @@ describe("desktop launch bootstrap contract", () => {
     expect(source).toContain("main.cjs");
   });
 
+  it("configures the isolated Windows E2E Chromium debugger before app readiness", () => {
+    const source = fs.readFileSync(bootstrapPath, "utf-8");
+
+    expect(source).toContain('process.env.HANA_KNOWLEDGE_E2E !== "1"');
+    expect(source).toContain('readSingleArgument("hana-windows-cdp-port")');
+    expect(source).toContain('readSingleArgument("hana-windows-cdp-user-data-dir")');
+    expect(source).toContain('app.commandLine.appendSwitch("user-data-dir"');
+    expect(source).toContain('app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1")');
+    expect(source).toContain('app.commandLine.appendSwitch("remote-debugging-port", portText)');
+  });
+
   it("enables Windows system CAs before loading Electron or the full desktop main", () => {
     const source = fs.readFileSync(bootstrapPath, "utf-8");
     const enableIndex = source.indexOf("enableWindowsSystemCaForCurrentProcess();");

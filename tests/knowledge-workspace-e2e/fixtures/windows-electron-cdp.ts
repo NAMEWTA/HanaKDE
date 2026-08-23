@@ -105,6 +105,7 @@ export function buildWindowsElectronCdpArgs({
   const applicationArgs = electronArgs.filter((argument) => (
     !argument.startsWith("--user-data-dir=")
   ));
+  const userDataDirectory = userDataArgs[0].slice("--user-data-dir=".length);
   return [
     `--inspect=127.0.0.1:${nodeInspectorPort}`,
     `--remote-debugging-port=${chromiumPort}`,
@@ -113,6 +114,8 @@ export function buildWindowsElectronCdpArgs({
     ...userDataArgs,
     bootstrapPath,
     `--hana-windows-cdp-token=${launchToken}`,
+    `--hana-windows-cdp-port=${chromiumPort}`,
+    `--hana-windows-cdp-user-data-dir=${userDataDirectory}`,
     ...applicationArgs,
   ];
 }

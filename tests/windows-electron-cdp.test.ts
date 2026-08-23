@@ -27,6 +27,8 @@ describe("Windows Electron direct CDP fixture", () => {
       "--user-data-dir=/tmp/electron-data",
       "/repo/desktop/bootstrap.cjs",
       "--hana-windows-cdp-token=fixture-token",
+      "--hana-windows-cdp-port=41002",
+      "--hana-windows-cdp-user-data-dir=/tmp/electron-data",
       "--fixture-argument",
     ]);
   });
