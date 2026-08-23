@@ -320,6 +320,7 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     try {
       const inheritedEnvironment = {
         PATH: "/test/bin",
+        HANA_SECURE_FS_HELPER_PATH: "/test/secure-fs-helper.cjs",
         HANA_TOKEN: "must-not-leak",
         HANA_HOME: "/real/home",
         HOME: "/real/user",
@@ -351,6 +352,8 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
         electronArgs: [`--user-data-dir=${first.electronUserData}`],
         env: {
           PATH: "/test/bin",
+          NODE_ENV: "test",
+          HANA_SECURE_FS_HELPER_PATH: "/test/secure-fs-helper.cjs",
           HOME: first.userHome,
           USERPROFILE: first.userHome,
           HOMEDRIVE: parsedUserHome.root,

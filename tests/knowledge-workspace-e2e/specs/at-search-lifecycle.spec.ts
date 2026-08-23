@@ -18,6 +18,7 @@ test('T-18 selects an active workspace resource through @ search and closes it f
   const { page } = knowledgeApp;
   const input = page.locator('#inputBox');
   await expect(input).toBeVisible({ timeout: 90_000 });
+  await expect(input).toHaveAttribute('contenteditable', 'true');
   await input.click();
   const searchResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
@@ -35,16 +36,22 @@ test('T-18 selects an active workspace resource through @ search and closes it f
     expect.objectContaining({ name: fileName }),
   ]));
 
-  const option = page.locator('[role="dialog"] [role="option"]').filter({ hasText: fileName });
+  const menu = page.locator('[role="dialog"]');
+  const option = menu.locator('[role="option"]').filter({ hasText: fileName });
   await expect(option).toBeVisible();
+  await expect(menu).toHaveAttribute('aria-busy', 'false');
+  await expect(option).toHaveAttribute('aria-selected', 'true');
+  await expect(input).toHaveAttribute('contenteditable', 'true');
+  await expect(input).toBeFocused();
 
-  await input.focus();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  await input.press('Enter');
+  await expect(menu).toHaveCount(0);
   await expect(input).toContainText(fileName);
 
   await page.keyboard.insertText('@at-search-lifecycle-token');
   await expect(option).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  await expect(menu).toHaveAttribute('aria-busy', 'false');
+  await expect(input).toBeFocused();
+  await input.press('Escape');
+  await expect(menu).toHaveCount(0);
 });

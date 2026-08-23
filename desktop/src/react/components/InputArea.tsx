@@ -5,7 +5,7 @@
  * 斜杠命令逻辑在 ./input/slash-commands.ts。
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type ChangeEvent } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import type { Editor, JSONContent } from '@tiptap/core';
 import { useStore } from '../stores';
@@ -2183,19 +2183,21 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
     slashSelected,
   ]);
 
-  keyDownHandlerRef.current = handleEditorKeyDown as (event: KeyboardEvent) => boolean;
-  beforeInputHandlerRef.current = (event: InputEvent): boolean => {
-    if (surface !== 'mobile') return false;
-    if (event.defaultPrevented) return false;
-    if (event.inputType !== 'insertParagraph') return false;
-    return handleEditorKeyDown({
-      key: 'Enter',
-      shiftKey: false,
-      defaultPrevented: event.defaultPrevented,
-      isComposing: event.isComposing,
-      preventDefault: () => event.preventDefault(),
-    });
-  };
+  useLayoutEffect(() => {
+    keyDownHandlerRef.current = handleEditorKeyDown as (event: KeyboardEvent) => boolean;
+    beforeInputHandlerRef.current = (event: InputEvent): boolean => {
+      if (surface !== 'mobile') return false;
+      if (event.defaultPrevented) return false;
+      if (event.inputType !== 'insertParagraph') return false;
+      return handleEditorKeyDown({
+        key: 'Enter',
+        shiftKey: false,
+        defaultPrevented: event.defaultPrevented,
+        isComposing: event.isComposing,
+        preventDefault: () => event.preventDefault(),
+      });
+    };
+  }, [handleEditorKeyDown, surface]);
 
   const handleSlashResultClick = useCallback(() => {
     if (slashResult?.filePath) {

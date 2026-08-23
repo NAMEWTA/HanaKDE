@@ -224,6 +224,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         );
         serverPid = serverInfo.pid;
         const apiFetch = createAuthenticatedApiFetch(serverInfo);
+        await waitForInitialKnowledgeIndex(apiFetch);
         if (engineToolHarness) {
           await selectEngineToolHarnessModel(apiFetch);
           await appPage.reload({ waitUntil: "domcontentloaded" });
@@ -281,6 +282,8 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         workspaceSandbox.hanaHome,
         server,
       );
+      const apiFetch = createAuthenticatedApiFetch(serverInfo);
+      await waitForInitialKnowledgeIndex(apiFetch);
       const clientPort = await reserveLoopbackPort();
       const vite = spawn(
         process.execPath,
@@ -325,7 +328,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         page,
         runtime,
         electronApplication: null,
-        apiFetch: createAuthenticatedApiFetch(serverInfo),
+        apiFetch,
       });
     } finally {
       await browserContext?.close();
@@ -347,6 +350,33 @@ function createAuthenticatedApiFetch(
       headers,
     });
   };
+}
+
+async function waitForInitialKnowledgeIndex(
+  apiFetch: (pathname: string, init?: RequestInit) => Promise<Response>,
+): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  let lastState = "unavailable";
+  while (Date.now() < deadline) {
+    try {
+      const response = await apiFetch(
+        "/api/knowledge-workspace/index/status?sourceKey=main",
+      );
+      if (response.ok) {
+        const body = await response.json() as { health?: { state?: unknown } };
+        lastState = typeof body.health?.state === "string"
+          ? body.health.state
+          : "invalid";
+        if (lastState === "ready" || lastState === "degraded") return;
+      } else {
+        lastState = `http-${response.status}`;
+      }
+    } catch {
+      lastState = "request-failed";
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Knowledge index did not reach startup readiness (${lastState})`);
 }
 
 async function selectEngineToolHarnessModel(

@@ -21,6 +21,7 @@ import { createHash } from "crypto";
 import { execFileSync, execSync } from "child_process";
 import { builtinModules } from "module";
 import { pathToFileURL } from "url";
+import { buildSync as buildWithEsbuild } from "esbuild";
 import ts from "typescript";
 import {
   buildAnydocRuntimeSmokeScript,
@@ -32,8 +33,6 @@ import {
   verifyExternalEntrypoints,
 } from "./build-server-deps.mjs";
 import { pruneRuntimeDeadFiles } from "./build-server-prune.mjs";
-
-const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 
 // ── Node.js runtime ──────────────────────────────────────────────────────
 
@@ -183,16 +182,15 @@ export function stageDocumentExtractionRuntimeAssets({ rootDir, bundleOutDir, lo
   const anydocTarget = path.join(bundleOutDir, "anydoc-child.cjs");
   fs.copyFileSync(anydocSource, anydocTarget);
   const htmlTarget = path.join(bundleOutDir, "html-child.ts");
-  execFileSync(npxCommand, [
-    "esbuild",
-    htmlSource,
-    "--bundle",
-    "--platform=node",
-    "--format=esm",
-    "--target=node24",
-    "--external:jsdom",
-    `--outfile=${htmlTarget}`,
-  ], { cwd: rootDir, stdio: "inherit" });
+  buildWithEsbuild({
+    entryPoints: [htmlSource],
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    external: ["jsdom"],
+    outfile: htmlTarget,
+  });
 
   if (!fs.existsSync(anydocTarget) || !fs.existsSync(htmlTarget)) {
     throw new Error("[build-server] document extraction child staging produced an incomplete bundle");
@@ -207,7 +205,11 @@ export function stageDocumentExtractionRuntimeAssets({ rootDir, bundleOutDir, lo
 export function buildViteServerBundle({ rootDir, viteBundleDir, bundleOutDir, entry, log = (msg) => console.log(msg) }) {
   log("[build-server] running Vite bundle...");
   const effectiveEntry = entry || "server/main-full.ts";
-  execFileSync(npxCommand, ["vite", "build", "--config", "vite.config.server.js", "--ssr", effectiveEntry], {
+  const viteCli = path.join(rootDir, "node_modules", "vite", "bin", "vite.js");
+  if (!fs.existsSync(viteCli)) {
+    throw new Error(`[build-server] Vite CLI is unavailable: ${viteCli}`);
+  }
+  execFileSync(process.execPath, [viteCli, "build", "--config", "vite.config.server.js", "--ssr", effectiveEntry], {
     cwd: rootDir,
     stdio: "inherit",
     env: entry ? { ...process.env, HANA_SERVER_BUNDLE_ENTRY: entry } : process.env,

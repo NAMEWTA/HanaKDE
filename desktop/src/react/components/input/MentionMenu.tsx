@@ -37,7 +37,12 @@ export const MentionMenu = memo(function MentionMenu({
   }, [selected]);
 
   return (
-    <div className={styles['mention-menu']} role="dialog" aria-label={t('input.mention.title')}>
+    <div
+      className={styles['mention-menu']}
+      role="dialog"
+      aria-label={t('input.mention.title')}
+      aria-busy={busy}
+    >
       <div className={styles['mention-tabs']} role="tablist">
         {(['files', 'sessions', 'agents'] as MentionTab[]).map(value => (
           <button

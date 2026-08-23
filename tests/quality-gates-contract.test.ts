@@ -107,7 +107,7 @@ describe("quality gates", () => {
 
     expect(packageJson.engines.node).toBe(">=24.12.0 <25");
     expect(buildServerPhases).toContain('DEFAULT_NODE_VERSION = "v24.15.0"');
-    expect(buildServerPhases).toContain("--target=node24");
+    expect(buildServerPhases).toContain('target: "node24"');
     expect(serverConfig).toContain('target: "node24"');
     expect(mainConfig).toContain('target: "node24"');
     expect(preloadConfig).toContain('target: "node24"');

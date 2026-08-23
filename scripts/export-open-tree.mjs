@@ -100,7 +100,7 @@ export const EXPORT_SKELETON = [
   },
   {
     path: "vite.config.server.js",
-    reason: "scripts/build-server-phases.mjs's buildViteServerBundle runs `npx vite build --config vite.config.server.js`; without this file the server bundle step has no entry/output/external config at all.",
+    reason: "scripts/build-server-phases.mjs's buildViteServerBundle invokes Vite with `--config vite.config.server.js`; without this file the server bundle step has no entry/output/external config at all.",
   },
   {
     path: "scripts/build-server-open.mjs",

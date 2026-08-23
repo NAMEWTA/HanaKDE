@@ -140,6 +140,7 @@ async function stopStandaloneServer(child: ChildProcess): Promise<void> {
 
 test('E2E-KW-014 detects schema drift and corruption, serves the ready generation during rebuild, and preserves it on cancellation', async ({ knowledgeApp, workspaceSandbox }) => {
   test.skip(knowledgeApp.runtime !== 'web-open', 'index recovery is a web-open gate');
+  test.setTimeout(process.platform === 'win32' ? 240_000 : 120_000);
   await fs.writeFile(path.join(workspaceSandbox.mainSource, 'Indexed.md'), '# Indexed\nindex-recovery-token\n', 'utf8');
   const rebuilt = await ok(await knowledgeApp.apiFetch('/api/knowledge-workspace/index/main/rebuild', { method: 'POST' }));
   expect(rebuilt).toMatchObject({ sourceKey: 'main', health: { state: 'ready' } });

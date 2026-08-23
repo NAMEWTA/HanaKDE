@@ -53,6 +53,10 @@ export function createKnowledgeLaunchConfig(
     ],
     env: {
       ...selectedProcessEnvironment(sourceEnv),
+      NODE_ENV: "test",
+      ...(sourceEnv.HANA_SECURE_FS_HELPER_PATH
+        ? { HANA_SECURE_FS_HELPER_PATH: sourceEnv.HANA_SECURE_FS_HELPER_PATH }
+        : {}),
       HOME: workspace.userHome,
       USERPROFILE: workspace.userHome,
       HOMEDRIVE: parsedHome.root,
