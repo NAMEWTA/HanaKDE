@@ -574,7 +574,11 @@ function mainRelativePath(
   if (resource?.kind !== "local-file" || typeof resource.path !== "string" || !path.isAbsolute(resource.path)) {
     return null;
   }
-  const candidatePath = path.resolve(resource.path);
+  // Compare physical identities on both sides. Windows can report the same
+  // file through an 8.3 alias while the root proof uses its long path, and
+  // symlinked roots have the equivalent mismatch on POSIX.
+  const candidatePath = canonicalPhysicalWatchPath(resource.path);
+  if (!candidatePath) return null;
   const comparisonRelative = path.relative(
     comparisonPath(rootPath, caseMode),
     comparisonPath(candidatePath, caseMode),

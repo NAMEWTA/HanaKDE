@@ -51,6 +51,68 @@ function createHistoryRuntime(
 }
 
 describe("production workspace runtime assembly", () => {
+  it("projects an Agent mutation addressed through a physical root alias", async () => {
+    const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "hana-workspace-alias-"));
+    const realRoot = path.join(sandbox, "real-main");
+    const aliasRoot = path.join(sandbox, "alias-main");
+    fs.mkdirSync(path.join(realRoot, "notes"), { recursive: true });
+    fs.writeFileSync(path.join(realRoot, "notes", "event.md"), "event");
+    fs.symlinkSync(realRoot, aliasRoot, process.platform === "win32" ? "junction" : "dir");
+
+    const proof = {
+      root: { kind: "local-file" as const, path: aliasRoot },
+      identity: {
+        providerId: "local_fs",
+        identityNamespace: "test",
+        opaqueRootId: "physical-alias",
+        scopeToken: "scope",
+        caseMode: process.platform === "win32" ? "insensitive" as const : "sensitive" as const,
+      },
+      watchTarget: {
+        ref: { kind: "local-file" as const, path: aliasRoot },
+        filePath: realRoot,
+        isDirectory: true,
+      },
+    };
+    const runtime = createProductionWorkspaceRuntime({
+      rootPath: aliasRoot,
+      rootAuthority: {
+        proveMain: async () => proof,
+        revalidateMain: async () => proof,
+      },
+      watchAdapter: {
+        open: () => ({ close: () => undefined }),
+        baseline: function* () {},
+      },
+      resourceEvents: new ResourceEventBus({ emit: () => undefined }),
+      legacyWatchRegistry: {
+        entries: new Map(),
+        release: () => undefined,
+      },
+      isolatedProof: () => undefined,
+      beforeCoordinatorStart: () => undefined,
+      historyResourceIO: {
+        stat: vi.fn<() => Promise<ResourceStat>>(),
+        openRead: vi.fn<() => Promise<ResourceOpenReadResult>>(),
+      },
+    });
+
+    try {
+      await runtime.cutover.start();
+      await expect(runtime.projectAgentFileChangeResource({
+        kind: "local-file",
+        provider: "local_fs",
+        path: path.join(aliasRoot, "notes", "event.md"),
+      })).resolves.toEqual({
+        sourceKey: "main",
+        relativePath: "notes/event.md",
+      });
+    } finally {
+      await runtime.cutover.stop();
+      fs.rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
   it("owns the legacy-to-coordinator handoff and bridges watched changes through the injected EventBus", async () => {
     const order: string[] = [];
     let listener: {
