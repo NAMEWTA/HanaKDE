@@ -11,6 +11,7 @@ const http = require("node:http");
 function installWindowsElectronPlaywrightLoader({
   argv = process.argv,
   app,
+  env = process.env,
   globalObject = globalThis,
 } = {}) {
   const remoteDebuggingIndex = argv.indexOf("--remote-debugging-port=0");
@@ -29,6 +30,10 @@ function installWindowsElectronPlaywrightLoader({
   argv.splice(argv.indexOf(`--hana-playwright-cdp-port=${bridgePort}`), 1);
   app.commandLine.appendSwitch("remote-debugging-port", String(bridgePort));
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+  if (env.HANA_GPU_SANDBOX_COMPAT === "1") {
+    app.commandLine.appendSwitch("disable-gpu-sandbox");
+    app.commandLine.appendSwitch("disable-features", "GpuSandbox");
+  }
   globalObject.__playwright_run = () => Promise.resolve();
   return bridgePort;
 }

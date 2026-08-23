@@ -231,7 +231,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         env: {
           ...launchConfig.env,
           HANA_DEV_NODE_BIN: process.execPath,
-          ...(process.platform === "win32" ? { HANA_GPU_SAFE_MODE: "1" } : {}),
+          ...(process.platform === "win32" ? { HANA_GPU_SANDBOX_COMPAT: "1" } : {}),
           ...(windowsPlaywrightLoader
             ? { HANA_WINDOWS_DEFERRED_BOOTSTRAP_PATH: desktopBootstrapPath }
             : {}),

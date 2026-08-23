@@ -8,6 +8,7 @@ const { installWindowsElectronPlaywrightLoader } = require(
   installWindowsElectronPlaywrightLoader(options: {
     argv: string[];
     app: { commandLine: { appendSwitch: ReturnType<typeof vi.fn> } };
+    env?: NodeJS.ProcessEnv;
     globalObject: { __playwright_run?: () => Promise<void> };
   }): number;
 };
@@ -28,6 +29,7 @@ describe("Windows Electron Playwright loader", () => {
     expect(installWindowsElectronPlaywrightLoader({
       argv,
       app: { commandLine: { appendSwitch } },
+      env: { HANA_GPU_SANDBOX_COMPAT: "1" },
       globalObject,
     })).toBe(43_123);
     expect(argv).toEqual([
@@ -37,6 +39,8 @@ describe("Windows Electron Playwright loader", () => {
     ]);
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-port", "43123");
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-address", "127.0.0.1");
+    expect(appendSwitch).toHaveBeenCalledWith("disable-gpu-sandbox");
+    expect(appendSwitch).toHaveBeenCalledWith("disable-features", "GpuSandbox");
     await expect(globalObject.__playwright_run?.()).resolves.toBeUndefined();
   });
 
@@ -44,6 +48,7 @@ describe("Windows Electron Playwright loader", () => {
     expect(() => installWindowsElectronPlaywrightLoader({
       argv: ["electron.exe", "desktop/bootstrap.cjs"],
       app: { commandLine: { appendSwitch: vi.fn() } },
+      env: {},
       globalObject: {},
     })).toThrow("requires Playwright remote debugging");
   });
