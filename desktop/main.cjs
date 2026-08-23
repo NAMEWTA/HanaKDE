@@ -116,6 +116,14 @@ const {
 
 const APP_USER_MODEL_ID = "com.hanako.app"; // Keep in sync with package.json build.appId.
 
+function markWindowsKnowledgeE2EStage(stage) {
+  if (process.env.HANA_WINDOWS_PLAYWRIGHT_REQUIRE_TRACE === "1") {
+    console.error(`[hana-windows-stage] ${stage}`);
+  }
+}
+
+markWindowsKnowledgeE2EStage("imports-loaded");
+
 // preload 缺失时 Electron 会静默忽略，renderer 拿不到 window.hana →
 // onboarding/主窗口白屏且无前端报错。此处硬崩，拒绝以不可用状态启动。
 {
@@ -280,10 +288,12 @@ configureClientSingleInstance(app, {
   defaultHome,
   onSecondInstance: () => showPrimaryWindow(),
 });
+markWindowsKnowledgeE2EStage("single-instance-configured");
 
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
+markWindowsKnowledgeE2EStage("app-user-model-configured");
 
 // 必须先于 resolveGpuStartupPolicy：ACL 自愈成功时会清掉 autoGpuMode / 陈旧
 // pending 标记，本次启动就能直接回到 hardware，而不是等下一次启动。
@@ -315,6 +325,7 @@ if (process.platform === "win32") {
     console.warn("[desktop] install ACL heal skipped due to an unexpected error:", err.message);
   }
 }
+markWindowsKnowledgeE2EStage("install-acl-checked");
 
 const gpuStartupPolicy = resolveGpuStartupPolicy({
   hanakoHome,
@@ -323,6 +334,7 @@ const gpuStartupPolicy = resolveGpuStartupPolicy({
   env: process.env,
 });
 applyGpuStartupPolicy(app, gpuStartupPolicy);
+markWindowsKnowledgeE2EStage("gpu-policy-applied");
 if (!gpuStartupPolicy.hardwareAccelerationEnabled) {
   console.warn(`[desktop] GPU safe mode enabled (${gpuStartupPolicy.reason}); hardware acceleration disabled for this launch`);
 }
@@ -361,6 +373,7 @@ if (process.platform === "win32") {
     policy: gpuStartupPolicy,
   });
 }
+markWindowsKnowledgeE2EStage("startup-diagnostics-ready");
 
 app.on("child-process-gone", (_event, details) => {
   if (process.platform !== "win32") return;
@@ -6210,6 +6223,7 @@ wrapIpcBestEffortHandler("app-ready", (event) => {
 });
 
 // ── App 生命周期 ──
+markWindowsKnowledgeE2EStage("ready-handler-registering");
 resolveDesktopApplicationReady({ app }).then(async () => {
   try {
     // 0. `--repair-artifacts` 命令行旗标：跟托盘

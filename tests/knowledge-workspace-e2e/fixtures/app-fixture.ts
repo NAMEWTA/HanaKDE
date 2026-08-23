@@ -229,6 +229,7 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
           ...(process.platform === "win32" ? {
             HANA_GPU_SANDBOX_COMPAT: "1",
             HANA_WINDOWS_PLAYWRIGHT_READY_GATE: "1",
+            HANA_WINDOWS_PLAYWRIGHT_REQUIRE_TRACE: "1",
           } : {}),
         },
         ...(windowsPlaywrightLoader

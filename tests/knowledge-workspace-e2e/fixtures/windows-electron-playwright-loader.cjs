@@ -1,6 +1,33 @@
 "use strict";
 
 const http = require("node:http");
+const path = require("node:path");
+const Module = require("node:module");
+
+function installWindowsRequireTrace({
+  env = process.env,
+  moduleApi = Module,
+  root = process.cwd(),
+  log = (message) => console.error(message),
+} = {}) {
+  if (env.HANA_WINDOWS_PLAYWRIGHT_REQUIRE_TRACE !== "1") return false;
+  const originalLoad = moduleApi._load;
+  moduleApi._load = function tracedLoad(request, parent, isMain) {
+    const parentFile = parent?.filename;
+    const localRequest = typeof request === "string"
+      && (request.startsWith(".") || path.isAbsolute(request));
+    const shouldTrace = localRequest
+      && typeof parentFile === "string"
+      && path.resolve(parentFile).startsWith(path.resolve(root) + path.sep);
+    if (!shouldTrace) return originalLoad.call(this, request, parent, isMain);
+    const parentLabel = path.relative(root, parentFile);
+    log(`[hana-windows-require] start ${request} <- ${parentLabel}`);
+    const result = originalLoad.call(this, request, parent, isMain);
+    log(`[hana-windows-require] complete ${request} <- ${parentLabel}`);
+    return result;
+  };
+  return true;
+}
 
 /**
  * Electron 42 on hosted Windows does not reliably publish Playwright's dynamic
@@ -89,6 +116,7 @@ function reportChromiumEndpoint(port) {
 
 if (process.versions.electron) {
   const { app } = require("electron");
+  installWindowsRequireTrace();
   const port = installWindowsElectronPlaywrightLoader({ app });
   console.error(`[hana-windows-e2e] configured Chromium CDP on 127.0.0.1:${port}`);
   setImmediate(() => {
@@ -99,5 +127,6 @@ if (process.versions.electron) {
 
 module.exports = {
   installWindowsElectronPlaywrightLoader,
+  installWindowsRequireTrace,
   reportChromiumEndpoint,
 };
