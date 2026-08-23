@@ -87,6 +87,22 @@ describe("ci.yml: Windows restricted-token helper is exercised before release bu
     expect(steps[smokeIndex]?.if).toBe("runner.os == 'Windows'");
   });
 
+  it("builds the native helper before Windows desktop E2E starts", () => {
+    const steps = doc.jobs["knowledge-workspace-e2e"]?.steps ?? [];
+    const helperIndex = steps.findIndex((step) => (
+      stepRun(step).includes("build-windows-sandbox-helper.mjs x64")
+    ));
+    const e2eIndex = steps.findIndex((step) => (
+      step.name === "Run Knowledge Workspace project/platform gate"
+    ));
+
+    expect(helperIndex).toBeGreaterThanOrEqual(0);
+    expect(e2eIndex).toBeGreaterThan(helperIndex);
+    expect(steps[helperIndex]?.if).toBe(
+      "runner.os == 'Windows' && matrix.project == 'desktop-full'",
+    );
+  });
+
   it("builds and smoke-verifies the extracted standalone package with an ephemeral CI keyset", () => {
     const steps = doc.jobs.test?.steps ?? [];
     const rendererIndex = steps.findIndex((step) => stepRun(step).includes("build:renderer"));

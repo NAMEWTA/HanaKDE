@@ -187,6 +187,10 @@ jobs:
         if: runner.os != 'Linux'
         run: node scripts/build-secure-fs-helper.mjs
 
+      - name: Build Windows sandbox helper for desktop E2E
+        if: runner.os == 'Windows' && matrix.project == 'desktop-full'
+        run: node scripts/build-windows-sandbox-helper.mjs x64
+
       - name: Configure Linux secure filesystem test fixture
         if: runner.os == 'Linux'
         shell: bash
