@@ -96,14 +96,24 @@ export function buildWindowsElectronCdpArgs({
   if (nodeInspectorPort === chromiumPort) {
     throw new Error("Windows Electron requires distinct node inspector and Chromium CDP ports");
   }
+  const userDataArgs = electronArgs.filter((argument) => (
+    argument.startsWith("--user-data-dir=")
+  ));
+  if (userDataArgs.length !== 1 || userDataArgs[0] === "--user-data-dir=") {
+    throw new Error("Windows Electron requires exactly one non-empty user data directory");
+  }
+  const applicationArgs = electronArgs.filter((argument) => (
+    !argument.startsWith("--user-data-dir=")
+  ));
   return [
     `--inspect=127.0.0.1:${nodeInspectorPort}`,
     `--remote-debugging-port=${chromiumPort}`,
     "--remote-debugging-address=127.0.0.1",
     ...DIRECT_ELECTRON_CHROMIUM_SWITCHES,
+    ...userDataArgs,
     bootstrapPath,
     `--hana-windows-cdp-token=${launchToken}`,
-    ...electronArgs,
+    ...applicationArgs,
   ];
 }
 

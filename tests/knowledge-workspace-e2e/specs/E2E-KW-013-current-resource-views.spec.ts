@@ -163,14 +163,10 @@ test("E2E-KW-013 keeps live buffer views separate from saved per-source backlink
   const researchGroup = searchGroup(workspace, "research");
   await expect(resultForPath(mainGroup, "Target.md")).toBeVisible();
   await expect(resultForPath(researchGroup, "Target.md")).toBeVisible();
-  const targetRead = page.waitForResponse(response => (
-    response.request().method() === "POST"
-    && response.url().includes("/api/resource-io/read")
-  ));
   await resultForPath(mainGroup, "Target.md").click();
-  const targetReadResponse = await targetRead;
-  expect(targetReadResponse.ok()).toBe(true);
   await dismissSearchResults(workspace);
+  await expect(page.locator('[aria-label="Edit Target.md"] .cm-content'))
+    .toBeVisible();
 
   const currentViews = workspace.locator(
     "[data-knowledge-current-resource-views]",

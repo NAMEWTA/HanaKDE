@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe('knowledge live preview modes', () => {
-  it('switches on the same EditorView without content changes, saving, or history loss', () => {
+  it('switches on the same EditorView without content changes, saving, or history loss', async () => {
     const updates: boolean[] = [];
     const save = vi.fn();
     const source = '# Title\n\n**bold**\n\nplain';
@@ -73,8 +73,10 @@ describe('knowledge live preview modes', () => {
     view.scrollDOM.scrollLeft = 11;
 
     expect(getKnowledgeMarkdownViewMode(view.state)).toBe('live-preview');
-    expect(lineText(parent, 1)).toBe('Title');
-    expect(lineText(parent, 3)).toBe('bold');
+    await vi.waitFor(() => {
+      expect(lineText(parent, 1)).toBe('Title');
+      expect(lineText(parent, 3)).toBe('bold');
+    });
 
     const sourceResult = reconfigureKnowledgeMarkdownMode(
       view,

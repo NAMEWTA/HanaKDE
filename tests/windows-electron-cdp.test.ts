@@ -16,7 +16,7 @@ describe("Windows Electron direct CDP fixture", () => {
       chromiumPort: 41_002,
       bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
-      electronArgs: ["--user-data-dir=/tmp/electron-data"],
+      electronArgs: ["--fixture-argument", "--user-data-dir=/tmp/electron-data"],
     })).toEqual([
       "--inspect=127.0.0.1:41001",
       "--remote-debugging-port=41002",
@@ -24,10 +24,30 @@ describe("Windows Electron direct CDP fixture", () => {
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",
+      "--user-data-dir=/tmp/electron-data",
       "/repo/desktop/bootstrap.cjs",
       "--hana-windows-cdp-token=fixture-token",
-      "--user-data-dir=/tmp/electron-data",
+      "--fixture-argument",
     ]);
+  });
+
+  it("rejects a missing or ambiguous Chromium user data directory", () => {
+    const build = (electronArgs: string[]) => buildWindowsElectronCdpArgs({
+      nodeInspectorPort: 41_001,
+      chromiumPort: 41_002,
+      bootstrapPath: "/repo/desktop/bootstrap.cjs",
+      launchToken: "fixture-token",
+      electronArgs,
+    });
+
+    expect(() => build([])).toThrow("exactly one non-empty user data directory");
+    expect(() => build(["--user-data-dir="])).toThrow(
+      "exactly one non-empty user data directory",
+    );
+    expect(() => build([
+      "--user-data-dir=/tmp/one",
+      "--user-data-dir=/tmp/two",
+    ])).toThrow("exactly one non-empty user data directory");
   });
 
   it("retries a duplicate transient port rather than launching both CDP servers on it", async () => {
