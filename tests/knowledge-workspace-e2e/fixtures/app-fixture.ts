@@ -186,8 +186,15 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
       testInfo.skip(true, `not applicable to ${runtime}`);
     }
     if (runtime === "desktop-full") {
-      const useDirectElectronCdp = process.platform === "win32"
-        || process.env.HANA_FORCE_WINDOWS_ELECTRON_CDP === "1";
+      const useDirectElectronCdp = process.env.HANA_FORCE_WINDOWS_ELECTRON_CDP === "1";
+      const windowsPlaywrightLoader = process.platform === "win32" && !useDirectElectronCdp
+        ? path.resolve(
+            "tests/knowledge-workspace-e2e/fixtures/windows-electron-playwright-loader.cjs",
+          )
+        : null;
+      const windowsChromiumPort = windowsPlaywrightLoader
+        ? await reserveLoopbackPort()
+        : null;
       const desktopLaunch = useDirectElectronCdp
         ? await launchWindowsElectronOverCdp(playwright, {
             executablePath: resolveElectronExecutable(),
@@ -206,6 +213,11 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         : null;
       const electronApplication = desktopLaunch?.application ?? await _electron.launch({
         args: [
+          ...(windowsPlaywrightLoader ? [
+            "-r",
+            windowsPlaywrightLoader,
+            `--hana-playwright-cdp-port=${windowsChromiumPort}`,
+          ] : []),
           path.resolve("desktop/bootstrap.cjs"),
           ...launchConfig.electronArgs,
         ],
@@ -214,6 +226,9 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
           ...launchConfig.env,
           HANA_DEV_NODE_BIN: process.execPath,
         },
+        ...(windowsPlaywrightLoader
+          ? { executablePath: resolveElectronExecutable() }
+          : {}),
         timeout: 90_000,
       });
       let serverPid: number | null = null;

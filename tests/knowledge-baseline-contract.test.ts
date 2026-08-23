@@ -291,6 +291,8 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
 
     expect(appFixture).toContain("HANA_FORCE_WINDOWS_ELECTRON_CDP");
     expect(appFixture).toContain("launchWindowsElectronOverCdp");
+    expect(appFixture).toContain("windows-electron-playwright-loader.cjs");
+    expect(appFixture).toContain("windowsChromiumPort");
     expect(cdpLoader).toContain('appendSwitch("remote-debugging-address", "127.0.0.1")');
     expect(cdpFixture).toContain('["127.0.0.1", "[::1]"]');
     expect(cdpFixture).toContain('http://${probeHost}:${port}${route}');
