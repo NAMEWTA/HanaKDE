@@ -296,6 +296,9 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(appFixture).toContain("HANA_WINDOWS_PLAYWRIGHT_READY_GATE");
     expect(appFixture).toContain("const WINDOWS_DESKTOP_TEST_TIMEOUT_MS = 300_000;");
     expect(appFixture).toContain("testInfo.setTimeout(WINDOWS_DESKTOP_TEST_TIMEOUT_MS)");
+    expect(appFixture).toContain(
+      "Desktop main window did not open (see hana-windows-startup trace)",
+    );
     expect(appFixture).toContain("windowsChromiumPort");
     expect(appFixture).toContain('HANA_GPU_SANDBOX_COMPAT: "1"');
     expect(cdpLoader).toContain('appendSwitch("remote-debugging-address", "127.0.0.1")');

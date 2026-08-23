@@ -443,6 +443,14 @@ async function waitForDesktopMainWindow(
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  if (process.platform === "win32") {
+    // If the Windows main thread is stalled, evaluate() cannot service this
+    // diagnostic request and leaves Playwright's worker waiting indefinitely.
+    // Startup stage tracing is already enabled for this CI-only launch path.
+    throw new Error(
+      "Desktop main window did not open (see hana-windows-startup trace)",
+    );
+  }
   const snapshot = await application.evaluate(({ app, BrowserWindow }) => {
     const state = (globalThis as typeof globalThis & {
       __hanaWindowsPlaywrightState?: unknown;
