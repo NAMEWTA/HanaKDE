@@ -330,6 +330,9 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(ci).toContain("run_project --grep 'E2E-KW-022'");
     expect(ci).toContain("run_project --grep-invert 'E2E-KW-022'");
     expect(ci).toContain("This is process isolation, not a retry");
+    expect(ci).toContain(
+      "DEBUG: ${{ runner.os == 'Windows' && matrix.project == 'desktop-full' && 'pw:browser' || '' }}",
+    );
   });
 
   it("builds isolated launch configs without inheriting user or Hana environment", async () => {

@@ -208,6 +208,7 @@ jobs:
         env:
           NODE_ENV: test
           PLAYWRIGHT_SHARD: ${{ matrix.shard || '' }}
+          DEBUG: ${{ runner.os == 'Windows' && matrix.project == 'desktop-full' && 'pw:browser' || '' }}
         run: |
           run_project() {
             shard_args=()
