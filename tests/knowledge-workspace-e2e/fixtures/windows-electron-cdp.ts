@@ -73,9 +73,9 @@ type NodeInspectorResponse = {
 type NodeInspectorEvent = {
   method?: string;
   params?: {
+    executionContextId?: unknown;
     context?: {
       id?: unknown;
-      auxData?: { isDefault?: unknown };
     };
   };
 };
@@ -417,22 +417,31 @@ class NodeInspectorClient {
     reject(error: Error): void;
     timer: ReturnType<typeof setTimeout>;
   }>();
-  private readonly defaultContext: Promise<number>;
-  private defaultContextId: number | null = null;
+  private readonly contexts = new Set<number>();
+  private readonly firstContext: Promise<void>;
+  private mainContextId: number | null = null;
   private nextId = 0;
-  private rejectDefaultContext!: (error: Error) => void;
-  private resolveDefaultContext!: (contextId: number) => void;
+  private rejectFirstContext!: (error: Error) => void;
+  private resolveFirstContext!: () => void;
 
   private constructor(private readonly socket: WebSocket) {
-    this.defaultContext = new Promise<number>((resolve, reject) => {
-      this.resolveDefaultContext = resolve;
-      this.rejectDefaultContext = reject;
+    this.firstContext = new Promise<void>((resolve, reject) => {
+      this.resolveFirstContext = resolve;
+      this.rejectFirstContext = reject;
     });
     socket.addEventListener("message", (event) => {
       const message = parseInspectorMessage(event.data);
       if (!message) return;
-      const contextId = defaultExecutionContextId(message);
-      if (contextId !== null) this.setDefaultContext(contextId);
+      const createdContextId = createdExecutionContextId(message);
+      if (createdContextId !== null) {
+        this.contexts.add(createdContextId);
+        this.resolveFirstContext();
+      }
+      const destroyedContextId = destroyedExecutionContextId(message);
+      if (destroyedContextId !== null) {
+        this.contexts.delete(destroyedContextId);
+        if (this.mainContextId === destroyedContextId) this.mainContextId = null;
+      }
       if (typeof message.id !== "number") return;
       const pending = this.pending.get(message.id);
       if (!pending) return;
@@ -451,9 +460,9 @@ class NodeInspectorClient {
     try {
       await client.send("Runtime.enable");
       await withTimeout(
-        client.defaultContext,
+        client.firstContext,
         INSPECTOR_CONNECT_TIMEOUT_MS,
-        "Windows Electron node inspector did not publish a default context",
+        "Windows Electron node inspector did not publish an execution context",
       );
       return client;
     } catch (error) {
@@ -464,7 +473,7 @@ class NodeInspectorClient {
 
   async evaluate<R, Arg>(pageFunction: unknown, arg?: Arg): Promise<R> {
     const argument = serializeEvaluationArgument(arg);
-    const contextId = await this.defaultContext;
+    const contextId = this.requireMainContext();
     const response = await this.send("Runtime.evaluate", {
       expression: `(async () => (${String(pageFunction)})(require('electron'), ${argument}))()`,
       awaitPromise: true,
@@ -480,22 +489,32 @@ class NodeInspectorClient {
   }
 
   async assertIdentity(expected: InspectorIdentity): Promise<void> {
-    const contextId = await this.defaultContext;
     const tokenArgument = `--hana-windows-cdp-token=${expected.token}`;
-    const response = await this.send("Runtime.evaluate", {
-      expression: `({ pid: process.pid, token: process.argv.includes(${JSON.stringify(tokenArgument)}) ? ${JSON.stringify(expected.token)} : null })`,
-      contextId,
-      includeCommandLineAPI: true,
-      returnByValue: true,
-    });
-    if (response.error || response.result?.exceptionDetails) {
-      throw new Error("Windows Electron could not verify its node inspector identity");
+    const deadline = Date.now() + INSPECTOR_CONNECT_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      for (const contextId of this.contexts) {
+        const response = await this.send("Runtime.evaluate", {
+          expression: `({ pid: process.pid, token: process.argv.includes(${JSON.stringify(tokenArgument)}) ? ${JSON.stringify(expected.token)} : null })`,
+          contextId,
+          includeCommandLineAPI: true,
+          returnByValue: true,
+        });
+        if (response.error || response.result?.exceptionDetails) continue;
+        try {
+          assertInspectorIdentity(response.result?.result?.value, expected);
+          this.mainContextId = contextId;
+          return;
+        } catch {
+          // A preload context can share the inspector but not the app argv.
+        }
+      }
+      await delay(Math.min(50, Math.max(1, deadline - Date.now())));
     }
-    assertInspectorIdentity(response.result?.result?.value, expected);
+    throw new Error("Windows Electron could not verify its node inspector identity");
   }
 
   async assertChromiumConfiguration(expectedPort: number): Promise<void> {
-    const contextId = await this.defaultContext;
+    const contextId = this.requireMainContext();
     const response = await this.send("Runtime.evaluate", {
       expression: `(() => {
         const { app } = require('electron');
@@ -564,15 +583,16 @@ class NodeInspectorClient {
       pending.reject(new Error("Windows Electron node inspector disconnected"));
     }
     this.pending.clear();
-    if (this.defaultContextId === null) {
-      this.rejectDefaultContext(new Error("Windows Electron node inspector disconnected"));
+    if (this.contexts.size === 0) {
+      this.rejectFirstContext(new Error("Windows Electron node inspector disconnected"));
     }
   }
 
-  private setDefaultContext(contextId: number): void {
-    if (this.defaultContextId !== null) return;
-    this.defaultContextId = contextId;
-    this.resolveDefaultContext(contextId);
+  private requireMainContext(): number {
+    if (this.mainContextId === null || !this.contexts.has(this.mainContextId)) {
+      throw new Error("Windows Electron node inspector lost its verified main context");
+    }
+    return this.mainContextId;
   }
 }
 
@@ -604,13 +624,20 @@ export function assertChromiumConfiguration(
   }
 }
 
-function defaultExecutionContextId(message: NodeInspectorMessage): number | null {
+function createdExecutionContextId(message: NodeInspectorMessage): number | null {
   const context = message.method === "Runtime.executionContextCreated"
     ? message.params?.context
     : undefined;
-  return Number.isInteger(context?.id) && context.auxData?.isDefault === true
+  return Number.isInteger(context?.id)
     ? Number(context.id)
     : null;
+}
+
+function destroyedExecutionContextId(message: NodeInspectorMessage): number | null {
+  const contextId = message.method === "Runtime.executionContextDestroyed"
+    ? message.params?.executionContextId
+    : undefined;
+  return Number.isInteger(contextId) ? Number(contextId) : null;
 }
 
 function serializeEvaluationArgument(arg: unknown): string {
