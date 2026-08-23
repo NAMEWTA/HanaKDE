@@ -13,6 +13,10 @@ const INSPECTOR_CONNECT_TIMEOUT_MS = 5_000;
 const INSPECTOR_REQUEST_TIMEOUT_MS = 5_000;
 const INSPECTOR_EVALUATE_TIMEOUT_MS = 90_000;
 const CHILD_TERMINATION_TIMEOUT_MS = 5_000;
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
+// eslint-disable-next-line no-control-regex
+const NON_PRINTING_CONTROL_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 
 // The direct-CDP path replaces Playwright's Electron loader. Keep the loader's
 // backgrounding guarantees so hidden/secondary Windows stay responsive during
@@ -83,6 +87,8 @@ type NodeInspectorMessage = NodeInspectorResponse & NodeInspectorEvent;
 
 type ChildFailureMonitor = {
   assertReady(kind: "node" | "chromium"): void;
+  endpoint(kind: "node" | "chromium", port: number): string | null;
+  diagnostics(): string;
 };
 
 export type WindowsElectronCdpLaunch = {
@@ -173,7 +179,7 @@ export async function launchWindowsElectronOverCdp(
       HANA_WINDOWS_CDP_USER_DATA_DIR: userDataDirectory,
       HANA_WINDOWS_CDP_BOOTSTRAP_PATH: options.bootstrapPath,
     },
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
   const childFailure = monitorChildFailure(child);
@@ -330,6 +336,8 @@ async function waitForEndpoint(
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`Windows Electron exited before ${kind} CDP was ready`);
     }
+    const bannerEndpoint = childFailure.endpoint(kind, port);
+    if (bannerEndpoint) return bannerEndpoint;
     for (const probeHost of probeHosts) {
       try {
         const remainingMs = deadline - Date.now();
@@ -349,7 +357,10 @@ async function waitForEndpoint(
     }
     await delay(Math.min(100, Math.max(1, deadline - Date.now())));
   }
-  throw new Error(`Windows Electron ${kind} CDP did not become ready`);
+  const diagnostics = childFailure.diagnostics();
+  throw new Error(
+    `Windows Electron ${kind} CDP did not become ready${diagnostics ? `: ${diagnostics}` : ""}`,
+  );
 }
 
 export function endpointFromPayload(
@@ -640,6 +651,12 @@ function parseInspectorMessage(data: unknown): NodeInspectorMessage | null {
 
 function monitorChildFailure(child: ChildProcess): ChildFailureMonitor {
   let failure = false;
+  let output = "";
+  const capture = (chunk: Buffer | string) => {
+    output = `${output}${chunk.toString()}`.slice(-4_000);
+  };
+  child.stdout?.on("data", capture);
+  child.stderr?.on("data", capture);
   child.once("error", () => {
     failure = true;
   });
@@ -648,6 +665,33 @@ function monitorChildFailure(child: ChildProcess): ChildFailureMonitor {
       if (failure) {
         throw new Error(`Windows Electron could not start its ${kind} CDP endpoint`);
       }
+    },
+    endpoint(kind, port) {
+      const pattern = kind === "node"
+        ? /Debugger listening on (ws:\/\/\S+)/g
+        : /DevTools listening on (ws:\/\/\S+)/g;
+      let latest: string | null = null;
+      for (const match of output.matchAll(pattern)) latest = match[1] ?? null;
+      if (!latest) return null;
+      try {
+        const advertisedHost = new URL(latest).hostname;
+        const probeHost = advertisedHost === "[::1]" ? "[::1]" : "127.0.0.1";
+        return endpointFromPayload(
+          { webSocketDebuggerUrl: latest },
+          kind,
+          port,
+          probeHost,
+        );
+      } catch {
+        return null;
+      }
+    },
+    diagnostics() {
+      return output
+        .replace(ANSI_ESCAPE_PATTERN, "")
+        .replace(NON_PRINTING_CONTROL_PATTERN, " ")
+        .trim()
+        .slice(-800);
     },
   };
 }
