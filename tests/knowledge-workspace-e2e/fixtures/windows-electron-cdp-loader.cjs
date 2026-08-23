@@ -23,6 +23,7 @@ function installWindowsElectronCdp({
   }
   app.commandLine.appendSwitch("user-data-dir", userDataDirectory);
   app.commandLine.appendSwitch("remote-debugging-port", portText);
+  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("enable-logging", "file");
   app.commandLine.appendSwitch("log-file", logPath);
   return { port, userDataDirectory, logPath };

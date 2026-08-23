@@ -281,11 +281,19 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
       ),
       "utf8",
     );
+    const cdpLoader = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        "tests/knowledge-workspace-e2e/fixtures/windows-electron-cdp-loader.cjs",
+      ),
+      "utf8",
+    );
 
     expect(appFixture).toContain("HANA_FORCE_WINDOWS_ELECTRON_CDP");
     expect(appFixture).toContain("launchWindowsElectronOverCdp");
-    expect(cdpFixture).toContain("--remote-debugging-address=127.0.0.1");
-    expect(cdpFixture).toContain('http://127.0.0.1:${port}${route}');
+    expect(cdpLoader).toContain('appendSwitch("remote-debugging-address", "127.0.0.1")');
+    expect(cdpFixture).toContain('["127.0.0.1", "[::1]"]');
+    expect(cdpFixture).toContain('http://${probeHost}:${port}${route}');
     expect(cdpFixture).toContain("includeCommandLineAPI: true");
     expect(cdpFixture).toContain("contextId,");
     expect(cdpFixture).toContain("response.result?.exceptionDetails");
