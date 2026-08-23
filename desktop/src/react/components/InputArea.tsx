@@ -2292,6 +2292,11 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
             onChange={handleBrowserFileInputChange}
           />
           <div
+            onKeyDownCapture={(event) => {
+              if ((fileMenuOpen || slashMenuOpen) && !event.defaultPrevented) {
+                handleEditorKeyDown(event);
+              }
+            }}
             onKeyDown={(event) => {
               if (!event.defaultPrevented) handleEditorKeyDown(event);
             }}
