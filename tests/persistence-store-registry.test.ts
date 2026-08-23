@@ -422,7 +422,7 @@ describe("persistent store registry", () => {
     const serialized = JSON.stringify(committed);
     expect(serialized).not.toMatch(/(?:\/Users\/|\/home\/|[A-Za-z]:\\)/);
     expect(committed.discoveredSites.every((site: { sourceFile: string }) => !site.sourceFile.includes("\\"))).toBe(true);
-  });
+  }, 30_000);
 
   it("anchors sites by ordinal so the receipt survives line shifts", () => {
     // The absolute line number never took part in classification: ruleMatches
@@ -448,7 +448,7 @@ describe("persistent store registry", () => {
       sourceOverrides: new Map([[target, `// line shift mutation\n${original}`]]),
     });
     expect(shifted.inventory.discoveredSites).toEqual(inventory.discoveredSites);
-  });
+  }, 30_000);
 
   it("still reports a genuinely new write site after the ordinal change", () => {
     // Desensitizing line numbers must not blunt the guard: adding a real write

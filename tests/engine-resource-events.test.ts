@@ -10,7 +10,10 @@ import {
 } from "../core/engine.ts";
 import { KnowledgeIndexRuntime } from "../core/knowledge-workspace/knowledge-index-runtime.ts";
 import { SourceRegistry } from "../core/knowledge-workspace/source-registry.ts";
-import { bridgeProductionWorkspaceObservation } from "../core/workspace-runtime/production-workspace-runtime.ts";
+import {
+  bridgeProductionWorkspaceObservation,
+  canonicalPhysicalWatchPath,
+} from "../core/workspace-runtime/production-workspace-runtime.ts";
 import type { MainWorkspaceRuntime } from "../core/workspace-runtime/main-workspace-runtime.ts";
 import {
   MAIN_WORKSPACE_SOURCE_KEY,
@@ -247,7 +250,10 @@ describe("HanaEngine ResourceEvent emission", () => {
 
     expect(events.deleted).toHaveBeenCalledWith(expect.objectContaining({
       source: "provider_watch",
-      resourceKey: "local_fs:/workspace/notes/deleted.md",
+      resourceKey: resourceKeyForRef({
+        kind: "local-file",
+        path: path.resolve("/workspace", "notes", "deleted.md"),
+      }),
     }));
     expect(events.changed).not.toHaveBeenCalled();
   });
@@ -1671,7 +1677,7 @@ describe("HanaEngine main resource watch partition", () => {
       diagnostics: () => ({ subscriptions: physicalSubscriptions.size, watches: [...physicalEntries.values()] }),
     };
     const engine = Object.create(HanaEngine.prototype);
-    engine._mainWorkspaceCanonicalRoot = fs.realpathSync(mainRoot);
+    engine._mainWorkspaceCanonicalRoot = canonicalPhysicalWatchPath(mainRoot);
     engine._mainWorkspaceRuntime = {
       snapshot: () => ({ observing: true, health: "HEALTHY" }),
     };
@@ -1687,7 +1693,8 @@ describe("HanaEngine main resource watch partition", () => {
             resourceKey: `mount:${resource.mountId}:${resource.path}`,
           };
         }
-        const filePath = fs.realpathSync(resource.path);
+        const filePath = canonicalPhysicalWatchPath(resource.path);
+        if (!filePath) throw new Error("test resource watch target is unavailable");
         return {
           ref: { kind: "local-file", path: filePath },
           filePath,

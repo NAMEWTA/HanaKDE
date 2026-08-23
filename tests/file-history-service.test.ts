@@ -68,9 +68,9 @@ function makeFixture({
     read: vi.fn(async (relativePath: string): Promise<FileHistoryRead | null> => contents.get(relativePath) ?? null),
   };
 
-  cleanups.push(() => service.close());
-  cleanups.push(() => fs.rmSync(workspace, { recursive: true, force: true }));
   cleanups.push(() => fs.rmSync(privateRoot, { recursive: true, force: true }));
+  cleanups.push(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  cleanups.push(() => service.close());
   return {
     workspace,
     privateRoot,

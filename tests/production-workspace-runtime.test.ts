@@ -16,6 +16,7 @@ import { MAX_SNAPSHOT_BYTES } from "../lib/file-history/text-file-policy.ts";
 import { ResourceEventBus } from "../lib/resource-io/resource-event-bus.ts";
 import { ResourceIO } from "../lib/resource-io/resource-io.ts";
 import { LocalFsProvider } from "../lib/resource-io/providers/local-fs-provider.ts";
+import { resourceKeyForRef } from "../lib/resource-io/resource-refs.ts";
 import type {
   ResourceOpenReadResult,
   ResourceStat,
@@ -168,7 +169,10 @@ describe("production workspace runtime assembly", () => {
     listener?.onChange({ relativePath: "notes/new.md", changeType: "created" });
     await vi.waitFor(() => {
       expect(changed).toHaveBeenCalledWith(expect.objectContaining({
-        resourceKey: "local_fs:/workspace/notes/new.md",
+        resourceKey: resourceKeyForRef({
+          kind: "local-file",
+          path: path.resolve("/workspace", "notes", "new.md"),
+        }),
         source: "provider_watch",
       }));
     });
@@ -357,7 +361,7 @@ describe("production workspace runtime assembly", () => {
       content: Buffer.from("abc"),
     });
     expect(openRead).toHaveBeenCalledWith(
-      { kind: "local-file", path: "/workspace/notes/a.md" },
+      { kind: "local-file", path: path.resolve("/workspace", "notes", "a.md") },
       expect.objectContaining({ end: 2, expectedVersion: { mtimeMs: 10, size: 3 } }),
       expect.objectContaining({ source: "provider_watch", reason: "file_history" }),
     );
@@ -378,7 +382,7 @@ describe("production workspace runtime assembly", () => {
     } satisfies ResourceOpenReadResult);
     await binding.read("notes/a.md", { maxBytes: MAX_SNAPSHOT_BYTES });
     expect(openRead).toHaveBeenLastCalledWith(
-      { kind: "local-file", path: "/workspace/notes/a.md" },
+      { kind: "local-file", path: path.resolve("/workspace", "notes", "a.md") },
       expect.objectContaining({ end: MAX_SNAPSHOT_BYTES - 1 }),
       expect.objectContaining({ source: "provider_watch", reason: "file_history" }),
     );

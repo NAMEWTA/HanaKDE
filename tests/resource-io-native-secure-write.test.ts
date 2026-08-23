@@ -266,7 +266,9 @@ describe("native secure conditional write", () => {
 
   it("uses one root snapshot across a former between-call replacement and rejects the replacement before helper invocation", async () => {
     const rawWorkspaceParent = fs.mkdtempSync(path.join(os.tmpdir(), "hana-root-snapshot-"));
-    const workspaceParent = fs.realpathSync(rawWorkspaceParent);
+    const workspaceParent = typeof fs.realpathSync.native === "function"
+      ? fs.realpathSync.native(rawWorkspaceParent)
+      : fs.realpathSync(rawWorkspaceParent);
     const root = path.join(workspaceParent, "main");
     const displacedRoot = path.join(workspaceParent, "main-before-replacement");
     const target = path.join(root, "notes", "a.md");

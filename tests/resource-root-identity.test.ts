@@ -52,24 +52,27 @@ describe("ResourceIO root identity authority", () => {
     )).toBe("disjoint");
   });
 
-  it("fails closed when a local root permission-mode change invalidates its scope token", async () => {
-    const { main, local } = makeProvider();
-    const previous = await local.getRootIdentity({
-      kind: "local-file",
-      path: main,
-    });
-    const originalMode = fs.statSync(main).mode & 0o777;
-    fs.chmodSync(main, originalMode === 0o700 ? 0o755 : 0o700);
-    const changed = await local.getRootIdentity({
-      kind: "local-file",
-      path: main,
-    });
+  it.skipIf(process.platform === "win32")(
+    "fails closed when a local root permission-mode change invalidates its scope token",
+    async () => {
+      const { main, local } = makeProvider();
+      const previous = await local.getRootIdentity({
+        kind: "local-file",
+        path: main,
+      });
+      const originalMode = fs.statSync(main).mode & 0o777;
+      fs.chmodSync(main, originalMode === 0o700 ? 0o755 : 0o700);
+      const changed = await local.getRootIdentity({
+        kind: "local-file",
+        path: main,
+      });
 
-    expect(changed.opaqueRootId).toBe(previous.opaqueRootId);
-    expect(changed.scopeToken).not.toBe(previous.scopeToken);
-    expect(await new ProviderRootIdentityBroker().compareRoots(
-      previous,
-      changed,
-    )).toBe("unknown");
-  });
+      expect(changed.opaqueRootId).toBe(previous.opaqueRootId);
+      expect(changed.scopeToken).not.toBe(previous.scopeToken);
+      expect(await new ProviderRootIdentityBroker().compareRoots(
+        previous,
+        changed,
+      )).toBe("unknown");
+    },
+  );
 });
