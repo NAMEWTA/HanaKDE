@@ -64,6 +64,27 @@ describe("desktop client single instance lock", () => {
     expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(1);
   });
 
+  it("can isolate userData without acquiring a lock for the Windows Playwright bridge", () => {
+    const { app } = makeApp();
+    const defaultHome = path.join("C:", "Users", "me", ".hanako");
+    const testHome = path.join("C:", "tmp", "hana-playwright");
+
+    const configured = configureClientSingleInstance(app, {
+      hanakoHome: testHome,
+      defaultHome,
+      onSecondInstance: vi.fn(),
+      acquireLock: false,
+    });
+
+    expect(configured).toBe(true);
+    expect(app.setPath).toHaveBeenCalledWith(
+      "userData",
+      path.join("C:", "Users", "me", "AppData", "Roaming", "Hana-playwright"),
+    );
+    expect(app.requestSingleInstanceLock).not.toHaveBeenCalled();
+    expect(app.on).not.toHaveBeenCalled();
+  });
+
   it("exits a duplicate client before registering second-instance handlers", () => {
     const { app } = makeApp({ gotLock: false });
 

@@ -39,11 +39,18 @@ function focusExistingWindow(win) {
 }
 
 function configureClientSingleInstance(app, opts) {
-  const { hanakoHome, defaultHome, onSecondInstance } = opts;
+  const {
+    hanakoHome,
+    defaultHome,
+    onSecondInstance,
+    acquireLock = true,
+  } = opts;
   const appName = getUserDataAppName(hanakoHome, defaultHome);
   if (appName) {
     app.setPath("userData", path.join(app.getPath("appData"), appName));
   }
+
+  if (!acquireLock) return true;
 
   const gotLock = app.requestSingleInstanceLock({ hanakoHome });
   if (!gotLock) {

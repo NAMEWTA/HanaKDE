@@ -91,8 +91,9 @@ describe("local startup contract", () => {
 
     expect(mainCjs).toContain("configureClientSingleInstance(app");
     expect(mainCjs).toContain("onSecondInstance: () => showPrimaryWindow()");
+    expect(mainCjs).toContain('acquireLock: process.env.HANA_WINDOWS_PLAYWRIGHT_READY_GATE !== "1"');
     expect(mainCjs.indexOf("configureClientSingleInstance(app")).toBeLessThan(
-      mainCjs.indexOf("app.whenReady()"),
+      mainCjs.indexOf("resolveDesktopApplicationReady({ app })"),
     );
   });
 

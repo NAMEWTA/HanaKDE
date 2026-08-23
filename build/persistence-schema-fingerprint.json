@@ -652,7 +652,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:242b8ae59e13e4cbb05e5e0e725c43452864e3419c682548863f0ca9f5033e5f",
+  "payloadFingerprint": "sha256:f9085ee3a809c08309773801acc4d7403eaa007ae87caabb39b1095f119cb2a7",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3200,8 +3200,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "HanaKDE v0.0.1 redirects installer, release-digest, desktop updater, and signed hot-update channel endpoints from the upstream repository to NAMEWTA/HanaKDE. Existing update-channel and OTA state record fields, DATA_EPOCH, store paths, ownership, and migration behavior remain unchanged; only remote repository constants and release metadata changed.",
-    "payloadFingerprint": "sha256:242b8ae59e13e4cbb05e5e0e725c43452864e3419c682548863f0ca9f5033e5f"
+    "compatibilityReason": "HanaKDE v0.0.1 replaces direct desktop readiness with an application-specific Windows Playwright gate and bypasses only the isolated test process single-instance lock. Persisted schemas, DATA_EPOCH, store paths, ownership, and migration behavior remain unchanged.",
+    "payloadFingerprint": "sha256:f9085ee3a809c08309773801acc4d7403eaa007ae87caabb39b1095f119cb2a7"
   },
   "schemas": [
     {
@@ -3398,7 +3398,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:d040a6f3a4b94c6383e547357ef17c90706b3a0c11d877954e3d6c83d27aee9e",
+      "sourceHash": "sha256:0d61086b1b2e02a937ecf8f1dfcb8dcfebafaa6c073b59a06a9fad37095ef65e",
       "storeId": "desktop-window-version-state"
     },
     {

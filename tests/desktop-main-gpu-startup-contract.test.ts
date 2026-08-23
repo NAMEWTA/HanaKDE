@@ -10,7 +10,7 @@ describe("desktop main GPU startup contract", () => {
 
     const applyIndex = source.indexOf("applyGpuStartupPolicy(app, gpuStartupPolicy");
     const pendingIndex = source.indexOf("markGpuStartupPending({");
-    const readyIndex = source.indexOf("app.whenReady()");
+    const readyIndex = source.indexOf("resolveDesktopApplicationReady({ app })");
 
     expect(applyIndex).toBeGreaterThan(-1);
     expect(pendingIndex).toBeGreaterThan(-1);
