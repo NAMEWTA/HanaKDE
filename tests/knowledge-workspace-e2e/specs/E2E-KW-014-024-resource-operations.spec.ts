@@ -318,6 +318,7 @@ test('E2E-KW-015 drives tree keyboard, range, context, sort, preview and explici
 
 test('E2E-KW-016 creates Page and folder and reports a name conflict without a partial target', async ({ knowledgeApp }) => {
   test.skip(knowledgeApp.runtime === 'web-full', 'create journey is required for desktop-full and web-open');
+  test.setTimeout(process.platform === 'win32' ? 240_000 : 120_000);
   const workspace = await openKnowledge(knowledgeApp.page);
   await workspace.getByRole('button', { name: /New page/i }).click();
   const dialog = knowledgeApp.page.getByRole('dialog');

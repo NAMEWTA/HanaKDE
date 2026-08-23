@@ -1743,7 +1743,7 @@ describe("HanaEngine main resource watch partition", () => {
     expect(events).toEqual([
       expect.objectContaining({
         type: "resource.changed",
-        resourceKey: `local_fs:${mainFile}`,
+        resourceKey: resourceKeyForRef({ kind: "local-file", path: mainFile }),
         source: "provider_watch",
       }),
     ]);
@@ -1840,7 +1840,7 @@ describe("HanaEngine main resource watch partition", () => {
       ],
     });
 
-    engine._mainWorkspaceCanonicalRoot = fs.realpathSync(nextMainRoot);
+    engine._mainWorkspaceCanonicalRoot = canonicalPhysicalWatchPath(nextMainRoot);
     engine._repartitionActiveResourceWatches();
 
     expect(registry.unsubscribe).toHaveBeenCalledWith("physical-1");

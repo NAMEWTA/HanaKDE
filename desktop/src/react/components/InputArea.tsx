@@ -264,6 +264,14 @@ interface InputKeyEvent {
   preventDefault: () => void;
 }
 
+function flushEditorDom(editor: Editor | null): void {
+  // Capture-phase menu keys run before ProseMirror's own DOM sync.
+  const view = editor?.view as (Editor['view'] & {
+    domObserver?: { flush: () => void };
+  }) | undefined;
+  view?.domObserver?.flush();
+}
+
 function findLatestInputSessionConfirmation(items: ChatListItem[] | undefined, confirmId?: string, pendingOnly?: boolean): SessionConfirmationBlock | null {
   if (!items) return null;
   for (let i = items.length - 1; i >= 0; i--) {
@@ -540,7 +548,6 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [mentionTab, setMentionTab] = useState<MentionTab>('files');
   const [fileSelected, setFileSelected] = useState(0);
-  const [fileMentionRange, setFileMentionRange] = useState<FileMentionRange | null>(null);
   const [fileMentionQuery, setFileMentionQuery] = useState('');
   const [fileMentionSearchResults, setFileMentionSearchResults] = useState<DeskSearchResult[]>([]);
   const [fileMentionBusy, setFileMentionBusy] = useState(false);
@@ -613,8 +620,8 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   const setDocContextAttached = useStore(s => s.setDocContextAttached);
   const setDraft = useStore(s => s.setDraft);
   const clearDraft = useStore(s => s.clearDraft);
-  // 草稿 key：session 内用 sessionPath（store 内解析为 sessionId）；首页 pending 态用保留键
-  const draftKey = currentSessionPath ?? (pendingNewSession ? HOME_DRAFT_KEY : null);
+  // 草稿 key：session 内用 sessionPath（store 内解析为 sessionId）；未进入 session 时归到首页草稿
+  const draftKey = currentSessionPath ?? HOME_DRAFT_KEY;
 
   const prevWelcomeVisibleRef = useRef(welcomeVisible);
   const prevLocaleRef = useRef(locale);
@@ -913,6 +920,11 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
       setFileMentionBusy(false);
       return;
     }
+    if ((!deskBasePath && !deskWorkspaceMountId) || !slashAgentId) {
+      setFileMentionSearchResults([]);
+      setFileMentionBusy(false);
+      return;
+    }
 
     const request = lifecycle.begin();
 
@@ -939,7 +951,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
       window.clearTimeout(timer);
       request.cancel();
     };
-  }, [deskBasePath, deskWorkspaceMountId, fileMentionQuery, fileMenuOpen, mentionTab, selectedAgentId]);
+  }, [deskBasePath, deskWorkspaceMountId, fileMentionQuery, fileMenuOpen, mentionTab, slashAgentId]);
 
   const sessionMentionItems = useMemo(() => buildSessionMentionItems({
     sessions,
@@ -1392,14 +1404,12 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
       const slashMatches = getSlashMatches(text, slashCommands);
       const fileMention = findFileMentionRange(editor);
       if (fileMention) {
-        setFileMentionRange(fileMention);
         setFileMentionQuery(fileMention.query);
         setFileMenuOpen(true);
         setFileSelected(0);
         setSlashMenuOpen(false);
       } else {
         setFileMenuOpen(false);
-        setFileMentionRange(null);
         setFileMentionQuery('');
       }
       if (!fileMention && slashMatches.length > 0 && slashDismissedTextRef.current !== text.trim()) {
@@ -1408,16 +1418,16 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
       } else {
         setSlashMenuOpen(false);
       }
-      // 保存草稿到 store（session 内 + 首页 pending 态）；setDraft 幂等，避免空转
-      if (draftKey) {
-        setDraft(draftKey, text, editorJson);
-      }
+      // 保存草稿到 store（session 内 + 首页）；setDraft 幂等，避免空转
+      const draftState = useStore.getState();
+      const activeDraftKey = draftState.currentSessionPath ?? HOME_DRAFT_KEY;
+      setDraft(activeDraftKey, text, editorJson);
       // 内容超出可见区域时，自动滚动到光标位置
       requestAnimationFrame(() => editor.commands.scrollIntoView());
     };
     editor.on('update', handler);
     return () => { editor.off('update', handler); };
-  }, [editor, draftKey, setDraft, slashCommands]);
+  }, [editor, setDraft, slashCommands]);
 
   // 切换 session / 回到首页 / 草稿 hydrate 完成时恢复草稿
   const draftsHydratedAt = useStore(s => s.draftsHydratedAt);
@@ -1649,10 +1659,10 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
 
   const handleFileMentionSelect = useCallback((item: FileMentionItem) => {
     if (inputLocked) return;
-    if (!editor || !fileMentionRange) return;
+    const range = findFileMentionRange(editor);
+    if (!editor || !range) return;
     editor.chain()
-      .focus()
-      .deleteRange({ from: fileMentionRange.from, to: fileMentionRange.to })
+      .deleteRange({ from: range.from, to: range.to })
       .insertContent({
         type: 'fileBadge',
         attrs: {
@@ -1665,44 +1675,43 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
       })
       .insertContent(' ')
       .run();
+    editor.commands.focus();
     setFileMenuOpen(false);
-    setFileMentionRange(null);
     setFileMentionQuery('');
-  }, [editor, fileMentionRange, inputLocked]);
+  }, [editor, inputLocked]);
 
   const handleMentionSelect = useCallback((item: MentionMenuItem) => {
+    const range = findFileMentionRange(editor);
     if ('kind' in item && item.kind === 'session') {
-      if (inputLocked || !editor || !fileMentionRange) return;
+      if (inputLocked || !editor || !range) return;
       editor.chain()
-        .focus()
-        .deleteRange({ from: fileMentionRange.from, to: fileMentionRange.to })
+        .deleteRange({ from: range.from, to: range.to })
         .insertContent({ type: 'sessionBadge', attrs: { sessionId: item.sessionId, label: item.name } })
         .insertContent(' ')
         .run();
+      editor.commands.focus();
       setFileMenuOpen(false);
-      setFileMentionRange(null);
       setFileMentionQuery('');
       return;
     }
     if ('kind' in item && item.kind === 'agent') {
-      if (inputLocked || !editor || !fileMentionRange) return;
+      if (inputLocked || !editor || !range) return;
       if (editorHasInlineNode(editor, 'agentBadge')) {
         addToast(t('input.mention.singleAgent'), 'warning', 5000);
         return;
       }
       editor.chain()
-        .focus()
-        .deleteRange({ from: fileMentionRange.from, to: fileMentionRange.to })
+        .deleteRange({ from: range.from, to: range.to })
         .insertContent({ type: 'agentBadge', attrs: { agentId: item.agentId, label: item.name } })
         .insertContent(' ')
         .run();
+      editor.commands.focus();
       setFileMenuOpen(false);
-      setFileMentionRange(null);
       setFileMentionQuery('');
       return;
     }
     handleFileMentionSelect(item as FileMentionItem);
-  }, [addToast, editor, fileMentionRange, handleFileMentionSelect, inputLocked, t]);
+  }, [addToast, editor, handleFileMentionSelect, inputLocked, t]);
 
   // ── Send / interject message ──
   const submitEditorMessage = useCallback(async (type: 'prompt' | 'interject') => {
@@ -2111,6 +2120,7 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
     }
     if (e.defaultPrevented) return false;
     if (fileMenuOpen) {
+      flushEditorDom(editor);
       if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
         e.preventDefault();
         const tabs: MentionTab[] = ['files', 'sessions', 'agents'];
@@ -2166,7 +2176,6 @@ function InputAreaInner({ surface }: Required<InputAreaProps>) {
   }, [
     dismissSlashMenu,
     editor,
-    fileMentionBusy,
     mentionItems,
     mentionTab,
     fileMenuOpen,

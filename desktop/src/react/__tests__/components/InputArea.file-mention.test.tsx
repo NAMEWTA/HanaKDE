@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import type { JSONContent } from '@tiptap/core';
 import { Schema, type Node as ProseMirrorNode } from '@tiptap/pm/model';
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   editorText: '',
   editorJson: undefined as undefined | JSONContent,
   editorState: undefined as undefined | EditorState,
+  pendingDomObserverState: undefined as undefined | EditorState,
   updateHandler: undefined as undefined | (() => void),
   searchDeskFiles: vi.fn(async (
     _query: string,
@@ -71,7 +72,12 @@ vi.mock('@tiptap/react', () => ({
   useEditor: (options: Record<string, unknown>) => {
     mocks.editorOptions = options;
     const chain = {
-      deleteRange: vi.fn(() => chain),
+      deleteRange: vi.fn((range: { from: number; to: number }) => {
+        if (range.from < 0 || range.to > (mocks.editorState?.doc.content.size ?? 0)) {
+          throw new RangeError(`Position ${range.to} out of range`);
+        }
+        return chain;
+      }),
       insertContent: vi.fn(() => chain),
       focus: vi.fn(() => chain),
       run: vi.fn(),
@@ -93,7 +99,16 @@ vi.mock('@tiptap/react', () => ({
       get state() {
         return mocks.editorState ?? { tr: { setMeta: vi.fn(() => ({})) } };
       },
-      view: { dispatch: vi.fn() },
+      view: {
+        dispatch: vi.fn(),
+        domObserver: {
+          flush: vi.fn(() => {
+            if (!mocks.pendingDomObserverState) return;
+            mocks.editorState = mocks.pendingDomObserverState;
+            mocks.pendingDomObserverState = undefined;
+          }),
+        },
+      },
       on: vi.fn((event: string, handler: () => void) => {
         if (event === 'update') mocks.updateHandler = handler;
       }),
@@ -273,6 +288,7 @@ describe('InputArea file mention workspace search', () => {
     mocks.editorText = '';
     mocks.editorJson = undefined;
     mocks.editorState = undefined;
+    mocks.pendingDomObserverState = undefined;
     mocks.updateHandler = undefined;
     mocks.mentionMenuProps = undefined;
     mocks.searchDeskFiles.mockResolvedValue([{
@@ -283,6 +299,86 @@ describe('InputArea file mention workspace search', () => {
     }]);
     seedInputState();
     window.platform = {} as typeof window.platform;
+  });
+
+  it('waits for an active desk scope before searching', async () => {
+    useStore.setState({ deskBasePath: '', deskWorkspaceMountId: null } as never);
+    const doc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@read')]),
+    ]);
+    setMockEditorDocument(doc, doc.content.size - 1);
+
+    render(React.createElement(InputArea));
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await act(async () => {
+      await new Promise(resolve => window.setTimeout(resolve, 180));
+    });
+    expect(mocks.searchDeskFiles).not.toHaveBeenCalled();
+
+    act(() => {
+      useStore.setState({ deskBasePath: '/workspace' } as never);
+    });
+    await waitFor(() => {
+      expectSearchQuery('read');
+    }, { timeout: 500 });
+  });
+
+  it('persists startup input in the home draft without an active session', async () => {
+    useStore.setState({
+      currentSessionPath: null,
+      currentSessionId: null,
+      pendingNewSession: false,
+      drafts: {},
+      draftDocs: {},
+    } as never);
+    render(React.createElement(InputArea));
+
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    const staleHandler = mocks.updateHandler!;
+    const doc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@read')]),
+    ]);
+    setMockEditorDocument(doc, doc.content.size - 1);
+    act(() => {
+      staleHandler();
+    });
+
+    expect(useStore.getState().drafts.__home__).toBe('@read');
+    expect(useStore.getState().draftDocs.__home__).toEqual(doc.toJSON());
+  });
+
+  it('waits for an active agent identity before searching', async () => {
+    useStore.setState({ currentAgentId: null, selectedAgentId: null } as never);
+    const doc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@read')]),
+    ]);
+    setMockEditorDocument(doc, doc.content.size - 1);
+
+    render(React.createElement(InputArea));
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await act(async () => {
+      await new Promise(resolve => window.setTimeout(resolve, 180));
+    });
+    expect(mocks.searchDeskFiles).not.toHaveBeenCalled();
+
+    act(() => {
+      useStore.setState({ currentAgentId: 'hana' } as never);
+    });
+    await waitFor(() => {
+      expectSearchQuery('read');
+    }, { timeout: 500 });
   });
 
   it('searches desk files when @ mention menu opens with a query and shows workspace results', async () => {
@@ -314,6 +410,36 @@ describe('InputArea file mention workspace search', () => {
     }, { timeout: 500 });
 
     expect(screen.getByTestId('mention-menu').getAttribute('data-busy')).toBe('false');
+  });
+
+  it('selects after the editor state catches up with the captured Enter event', async () => {
+    const mentionDoc = mentionSchema.node('doc', null, [
+      mentionSchema.node('paragraph', null, [mentionSchema.text('@read')]),
+    ]);
+    setMockEditorDocument(mentionDoc, mentionDoc.content.size - 1);
+    render(React.createElement(InputArea));
+
+    await waitFor(() => {
+      expect(mocks.updateHandler).toBeTypeOf('function');
+    });
+    act(() => {
+      mocks.updateHandler?.();
+    });
+    await waitFor(() => {
+      expect(mocks.mentionMenuProps?.items).toHaveLength(1);
+    }, { timeout: 500 });
+
+    const staleDoc = mentionSchema.node('doc', null, [mentionSchema.node('paragraph')]);
+    mocks.editorState = EditorState.create({ doc: staleDoc });
+    mocks.pendingDomObserverState = EditorState.create({
+      doc: mentionDoc,
+      selection: TextSelection.create(mentionDoc, mentionDoc.content.size - 1),
+    });
+    fireEvent.keyDown(screen.getByTestId('editor'), { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('mention-menu')).toBeNull();
+    });
   });
 
   it('invalidates an older workspace search when the active scope changes', async () => {
