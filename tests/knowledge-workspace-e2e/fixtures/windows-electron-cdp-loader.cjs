@@ -34,6 +34,10 @@ function installWindowsElectronCdp({
   app.commandLine.appendSwitch("user-data-dir", userDataDirectory);
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", portText);
+  globalThis.__hanaWindowsCdpLoaderState = {
+    port,
+    userDataConfigured: true,
+  };
   return { port, userDataDirectory };
 }
 

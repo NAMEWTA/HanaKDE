@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assertChromiumConfiguration,
   assertDesktopLaunchAlive,
   assertInspectorIdentity,
   buildWindowsElectronCdpArgs,
@@ -97,6 +98,21 @@ describe("Windows Electron direct CDP fixture", () => {
       { pid: 101, token: "foreign" },
       { pid: 101, token: "expected" },
     )).toThrow("did not belong to the spawned application");
+  });
+
+  it("requires the early loader and Electron command line to agree on the CDP port", () => {
+    expect(() => assertChromiumConfiguration({
+      loaderPort: 41_002,
+      commandLinePort: "41002",
+      userDataConfigured: true,
+      commandLineUserDataConfigured: true,
+    }, 41_002)).not.toThrow();
+    expect(() => assertChromiumConfiguration({
+      loaderPort: 41_002,
+      commandLinePort: "",
+      userDataConfigured: true,
+      commandLineUserDataConfigured: true,
+    }, 41_002)).toThrow("early loader did not apply");
   });
 
   it("accepts only desktop page target metadata for renderer ownership checks", () => {

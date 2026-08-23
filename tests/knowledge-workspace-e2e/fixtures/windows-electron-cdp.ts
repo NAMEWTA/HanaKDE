@@ -43,6 +43,13 @@ export type ElectronCdpPortPair = {
   chromiumPort: number;
 };
 
+export type ElectronChromiumConfiguration = {
+  loaderPort: number;
+  commandLinePort: string;
+  userDataConfigured: boolean;
+  commandLineUserDataConfigured: boolean;
+};
+
 type ElectronCdpLaunchArguments = ElectronCdpPortPair & {
   loaderPath: string;
   bootstrapPath: string;
@@ -191,6 +198,7 @@ export async function launchWindowsElectronOverCdp(
     const connectedInspector = await NodeInspectorClient.connect(nodeEndpoint);
     inspector = connectedInspector;
     await connectedInspector.assertIdentity({ pid: child.pid, token: launchToken });
+    await connectedInspector.assertChromiumConfiguration(chromiumPort);
     const chromiumEndpoint = await waitForEndpoint(
       chromiumPort,
       child,
@@ -460,6 +468,29 @@ class NodeInspectorClient {
     assertInspectorIdentity(response.result?.result?.value, expected);
   }
 
+  async assertChromiumConfiguration(expectedPort: number): Promise<void> {
+    const contextId = await this.defaultContext;
+    const response = await this.send("Runtime.evaluate", {
+      expression: `(() => {
+        const { app } = require('electron');
+        const state = globalThis.__hanaWindowsCdpLoaderState;
+        return {
+          loaderPort: state?.port,
+          commandLinePort: app.commandLine.getSwitchValue('remote-debugging-port'),
+          userDataConfigured: state?.userDataConfigured === true,
+          commandLineUserDataConfigured: app.commandLine.getSwitchValue('user-data-dir') !== '',
+        };
+      })()`,
+      contextId,
+      includeCommandLineAPI: true,
+      returnByValue: true,
+    });
+    if (response.error || response.result?.exceptionDetails) {
+      throw new Error("Windows Electron could not inspect its Chromium CDP configuration");
+    }
+    assertChromiumConfiguration(response.result?.result?.value, expectedPort);
+  }
+
   async ownsRendererTarget(targetId: string): Promise<boolean> {
     return this.evaluate<boolean, string>(
       ({ BrowserWindow, webContents }, id) => {
@@ -534,6 +565,22 @@ export function assertInspectorIdentity(
     || candidate.token !== expected.token
   ) {
     throw new Error("Windows Electron inspector endpoint did not belong to the spawned application");
+  }
+}
+
+export function assertChromiumConfiguration(
+  actual: unknown,
+  expectedPort: number,
+): void {
+  const candidate = actual as Partial<ElectronChromiumConfiguration> | null;
+  if (
+    !candidate
+    || candidate.loaderPort !== expectedPort
+    || candidate.commandLinePort !== String(expectedPort)
+    || candidate.userDataConfigured !== true
+    || candidate.commandLineUserDataConfigured !== true
+  ) {
+    throw new Error("Windows Electron early loader did not apply its Chromium CDP configuration");
   }
 }
 

@@ -40,6 +40,15 @@ describe("Windows Electron early CDP loader", () => {
       "127.0.0.1",
     );
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-port", "41002");
+    expect((globalThis as typeof globalThis & {
+      __hanaWindowsCdpLoaderState?: unknown;
+    }).__hanaWindowsCdpLoaderState).toEqual({
+      port: 41_002,
+      userDataConfigured: true,
+    });
+    delete (globalThis as typeof globalThis & {
+      __hanaWindowsCdpLoaderState?: unknown;
+    }).__hanaWindowsCdpLoaderState;
   });
 
   it("stays inactive outside the isolated Windows fixture", () => {
