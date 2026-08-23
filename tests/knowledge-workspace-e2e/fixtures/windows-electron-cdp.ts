@@ -337,13 +337,20 @@ export function endpointFromPayload(
       const parsed = new URL(endpoint);
       if (
         parsed.protocol !== "ws:"
-        || parsed.hostname !== "127.0.0.1"
+        || !["127.0.0.1", "localhost"].includes(parsed.hostname)
         || parsed.port !== String(port)
+        || parsed.username !== ""
+        || parsed.password !== ""
       ) {
         continue;
       }
       if (kind === "node" && parsed.pathname === "/") continue;
-      return endpoint;
+      // Windows Chromium advertises `localhost` even when its debugger was
+      // explicitly bound to 127.0.0.1. The metadata itself was fetched from
+      // that numeric loopback address; normalize the WebSocket connection to
+      // the same address so hosts-file or resolver state cannot widen trust.
+      parsed.hostname = "127.0.0.1";
+      return parsed.toString();
     } catch {
       // Only a well-formed loopback WebSocket URL may control Electron.
     }

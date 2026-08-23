@@ -49,6 +49,9 @@ describe("Windows Electron direct CDP fixture", () => {
     }, "node", 41_001)).toBe("ws://127.0.0.1:41001/uuid");
     expect(endpointFromPayload({
       webSocketDebuggerUrl: "ws://localhost:41001/uuid",
+    }, "node", 41_001)).toBe("ws://127.0.0.1:41001/uuid");
+    expect(endpointFromPayload({
+      webSocketDebuggerUrl: "ws://example.com:41001/uuid",
     }, "node", 41_001)).toBeNull();
     expect(endpointFromPayload({
       webSocketDebuggerUrl: "ws://127.0.0.1:41002/uuid",
