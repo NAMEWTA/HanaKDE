@@ -573,14 +573,17 @@ export function assertChromiumConfiguration(
   expectedPort: number,
 ): void {
   const candidate = actual as Partial<ElectronChromiumConfiguration> | null;
+  if (!candidate || candidate.loaderPort !== expectedPort) {
+    throw new Error("Windows Electron early loader did not execute for the requested CDP port");
+  }
+  if (candidate.commandLinePort !== String(expectedPort)) {
+    throw new Error("Windows Electron command line did not retain the requested CDP port");
+  }
   if (
-    !candidate
-    || candidate.loaderPort !== expectedPort
-    || candidate.commandLinePort !== String(expectedPort)
-    || candidate.userDataConfigured !== true
+    candidate.userDataConfigured !== true
     || candidate.commandLineUserDataConfigured !== true
   ) {
-    throw new Error("Windows Electron early loader did not apply its Chromium CDP configuration");
+    throw new Error("Windows Electron command line did not retain its isolated user data directory");
   }
 }
 

@@ -112,7 +112,10 @@ describe("Windows Electron direct CDP fixture", () => {
       commandLinePort: "",
       userDataConfigured: true,
       commandLineUserDataConfigured: true,
-    }, 41_002)).toThrow("early loader did not apply");
+    }, 41_002)).toThrow("did not retain the requested CDP port");
+    expect(() => assertChromiumConfiguration(null, 41_002)).toThrow(
+      "early loader did not execute",
+    );
   });
 
   it("accepts only desktop page target metadata for renderer ownership checks", () => {
