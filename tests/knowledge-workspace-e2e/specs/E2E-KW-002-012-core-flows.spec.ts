@@ -54,12 +54,30 @@ async function reloadSourceTree(workspace: Locator, sourceKey: string): Promise<
     `[role="treeitem"][data-source-key="${sourceKey}"]`,
   ).first();
   const disclosure = root.getByRole('button').first();
+  await expect(disclosure).toBeVisible({ timeout: 15_000 });
   if (await root.getAttribute('aria-expanded') === 'true') {
-    await disclosure.click();
-    await expect(root).toHaveAttribute('aria-expanded', 'false');
+    await disclosure.click({ timeout: 15_000 });
+    await expect(root).toHaveAttribute('aria-expanded', 'false', { timeout: 15_000 });
   }
-  await disclosure.click();
-  await expect(root).toHaveAttribute('aria-expanded', 'true');
+  await disclosure.click({ timeout: 15_000 });
+  await expect(root).toHaveAttribute('aria-expanded', 'true', { timeout: 15_000 });
+}
+
+async function refreshSourceTree(workspace: Locator, sourceKey: string): Promise<void> {
+  const page = workspace.page();
+  const hasNativeCloseGuard = await page.evaluate(() => (
+    typeof window.platform?.windowClose === 'function'
+  ));
+  if (hasNativeCloseGuard) {
+    await reloadSourceTree(workspace, sourceKey);
+    return;
+  }
+  // Browser runtimes can reload safely when an in-flight source refresh has
+  // replaced the disclosure control. Electron owns reload through its close
+  // guard, so desktop stories stay on the bounded tree-control path above.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await openKnowledge(page);
+  await expandSource(workspace, sourceKey);
 }
 
 async function openSourceTreeFile(workspace: Locator, sourceKey: string, name: string): Promise<void> {
@@ -74,7 +92,7 @@ async function openSourceTreeFile(workspace: Locator, sourceKey: string, name: s
     // These stories create their files after the application fixture starts.
     // Re-open the real tree root only after the first load window expires;
     // collapsing clears the directory cache before the one explicit retry.
-    await reloadSourceTree(workspace, sourceKey);
+    await refreshSourceTree(workspace, sourceKey);
     await expect(row).toBeVisible({ timeout: 15_000 });
   }
   // Enter opens the selected file directly as a pinned editor. A mouse
@@ -87,7 +105,7 @@ async function openSourceTreeFile(workspace: Locator, sourceKey: string, name: s
     // and the captured key event on a cold Windows runner. Reload once so the
     // key targets the current tree generation instead of waiting until the
     // enclosing test timeout.
-    await reloadSourceTree(workspace, sourceKey);
+    await refreshSourceTree(workspace, sourceKey);
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.press('Enter', { timeout: 15_000 });
   }
