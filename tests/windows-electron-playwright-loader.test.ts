@@ -15,6 +15,7 @@ const { installWindowsElectronPlaywrightLoader } = require(
     env?: NodeJS.ProcessEnv;
     globalObject: {
       __playwright_run?: () => Promise<void>;
+      __hanaWindowsPlaywrightReady?: Promise<unknown>;
       __hanaWindowsPlaywrightState?: {
         nativeReady: boolean;
         playwrightReleased: boolean;
@@ -35,6 +36,7 @@ describe("Windows Electron Playwright loader", () => {
     ];
     const globalObject: {
       __playwright_run?: () => Promise<void>;
+      __hanaWindowsPlaywrightReady?: Promise<unknown>;
       __hanaWindowsPlaywrightState?: {
         nativeReady: boolean;
         playwrightReleased: boolean;
@@ -43,11 +45,14 @@ describe("Windows Electron Playwright loader", () => {
     const appendSwitch = vi.fn();
     let markNativeReady: ((event: unknown) => void) | undefined;
     const nativeReady = new Promise((resolve) => { markNativeReady = resolve; });
+    let nativeIsReady = false;
     const app = {
       commandLine: { appendSwitch },
-      isReady: () => true,
+      isReady: () => nativeIsReady,
       whenReady: () => nativeReady,
     };
+    const originalIsReady = app.isReady;
+    const originalWhenReady = app.whenReady;
 
     expect(installWindowsElectronPlaywrightLoader({
       argv,
@@ -64,15 +69,17 @@ describe("Windows Electron Playwright loader", () => {
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-address", "127.0.0.1");
     expect(appendSwitch).toHaveBeenCalledWith("disable-gpu-sandbox");
     expect(appendSwitch).toHaveBeenCalledWith("disable-features", "GpuSandbox");
-    expect(app.isReady()).toBe(false);
+    expect(app.isReady).toBe(originalIsReady);
+    expect(app.whenReady).toBe(originalWhenReady);
     let applicationReady = false;
-    app.whenReady().then(() => { applicationReady = true; });
+    globalObject.__hanaWindowsPlaywrightReady?.then(() => { applicationReady = true; });
     const run = globalObject.__playwright_run?.();
     await new Promise((resolve) => setImmediate(resolve));
     expect(applicationReady).toBe(false);
+    nativeIsReady = true;
     markNativeReady?.({ ready: true });
     await expect(run).resolves.toBeUndefined();
-    await app.whenReady();
+    await globalObject.__hanaWindowsPlaywrightReady;
     expect(app.isReady()).toBe(true);
     expect(applicationReady).toBe(true);
     expect(globalObject.__hanaWindowsPlaywrightState).toMatchObject({

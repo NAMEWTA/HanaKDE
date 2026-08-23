@@ -226,7 +226,10 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
         env: {
           ...launchConfig.env,
           HANA_DEV_NODE_BIN: process.execPath,
-          ...(process.platform === "win32" ? { HANA_GPU_SANDBOX_COMPAT: "1" } : {}),
+          ...(process.platform === "win32" ? {
+            HANA_GPU_SANDBOX_COMPAT: "1",
+            HANA_WINDOWS_PLAYWRIGHT_READY_GATE: "1",
+          } : {}),
         },
         ...(windowsPlaywrightLoader
           ? { executablePath: resolveElectronExecutable() }

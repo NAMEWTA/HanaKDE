@@ -99,6 +99,9 @@ const {
   createDesktopLaunchDiagnostics,
 } = require("./src/shared/desktop-launch-diagnostics.cjs");
 const {
+  resolveDesktopApplicationReady,
+} = require("./src/shared/application-readiness.cjs");
+const {
   sanitizeWindowState,
 } = require("./src/shared/window-state.cjs");
 const {
@@ -6207,7 +6210,7 @@ wrapIpcBestEffortHandler("app-ready", (event) => {
 });
 
 // ── App 生命周期 ──
-app.whenReady().then(async () => {
+resolveDesktopApplicationReady({ app }).then(async () => {
   try {
     // 0. `--repair-artifacts` 命令行旗标：跟托盘
     // "修复组件…"走同一份清理实现，但不需要确认对话框——能敲这个旗标的人

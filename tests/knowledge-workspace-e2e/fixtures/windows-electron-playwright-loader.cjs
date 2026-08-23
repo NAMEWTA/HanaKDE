@@ -4,9 +4,9 @@ const http = require("node:http");
 
 /**
  * Electron 42 on hosted Windows does not reliably publish Playwright's dynamic
- * Chromium endpoint. Use a fixed loopback endpoint while delaying only the
- * application's whenReady promise until Playwright has connected. Electron's
- * native ready event remains free to initialize Chromium and its CDP server.
+ * Chromium endpoint. Use a fixed loopback endpoint and expose an application-
+ * specific ready gate without replacing Electron's public readiness methods.
+ * Electron 42 itself uses app.whenReady() during Windows startup.
  */
 function installWindowsElectronPlaywrightLoader({
   argv = process.argv,
@@ -35,7 +35,6 @@ function installWindowsElectronPlaywrightLoader({
     app.commandLine.appendSwitch("disable-features", "GpuSandbox");
   }
   const nativeWhenReady = app.whenReady();
-  let applicationReady = false;
   let releaseApplicationReady;
   const applicationWhenReady = new Promise((resolve) => {
     releaseApplicationReady = resolve;
@@ -45,12 +44,10 @@ function installWindowsElectronPlaywrightLoader({
     playwrightReleased: false,
   };
   globalObject.__hanaWindowsPlaywrightState = state;
+  globalObject.__hanaWindowsPlaywrightReady = applicationWhenReady;
   nativeWhenReady.then(() => { state.nativeReady = true; });
-  app.isReady = () => applicationReady;
-  app.whenReady = () => applicationWhenReady;
   globalObject.__playwright_run = async () => {
     const event = await nativeWhenReady;
-    applicationReady = true;
     releaseApplicationReady(event);
     state.playwrightReleased = true;
   };
