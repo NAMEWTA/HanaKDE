@@ -20,6 +20,8 @@ describe("Windows Electron direct CDP fixture", () => {
       launchToken: "fixture-token",
       electronArgs: ["--fixture-argument", "--user-data-dir=/tmp/electron-data"],
     })).toEqual([
+      "-r",
+      "/repo/tests/windows-electron-cdp-loader.cjs",
       "--inspect=127.0.0.1:41001",
       "--remote-debugging-port=41002",
       "--remote-debugging-address=127.0.0.1",
@@ -27,8 +29,6 @@ describe("Windows Electron direct CDP fixture", () => {
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",
       "--user-data-dir=/tmp/electron-data",
-      "-r",
-      "/repo/tests/windows-electron-cdp-loader.cjs",
       "/repo/desktop/bootstrap.cjs",
       "--hana-windows-cdp-token=fixture-token",
       "--hana-windows-cdp-port=41002",
