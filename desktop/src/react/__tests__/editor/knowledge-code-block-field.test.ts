@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe('knowledge fenced code Live Preview', () => {
-  it('hides inactive fences and renders a static highlighted body without controls', () => {
+  it('hides inactive fences and renders a static highlighted body without controls', async () => {
     const doc = [
       'Before',
       '',
@@ -89,9 +89,10 @@ describe('knowledge fenced code Live Preview', () => {
       '```',
     ].join('\n');
     const { parent, view } = createCodeView(doc);
-    const codeLines = parent.querySelectorAll('.cm-knowledge-code-line');
 
-    expect(codeLines).toHaveLength(3);
+    await vi.waitFor(() => {
+      expect(parent.querySelectorAll('.cm-knowledge-code-line')).toHaveLength(3);
+    });
     expect(parent.textContent).not.toContain('```js');
     expect(parent.textContent).not.toContain('```');
     expect(parent.textContent).toContain('const answer = "safe";');
