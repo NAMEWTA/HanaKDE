@@ -38,10 +38,6 @@ describe("Windows Electron early CDP loader", () => {
       "user-data-dir",
       "C:\\temp\\electron-data",
     );
-    expect(appendSwitch).toHaveBeenCalledWith(
-      "remote-debugging-address",
-      "127.0.0.1",
-    );
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-port", "41002");
   });
 

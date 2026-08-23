@@ -321,25 +321,30 @@ async function waitForEndpoint(
   deadline: number = Date.now() + STARTUP_TIMEOUT_MS,
 ): Promise<string> {
   const route = kind === "node" ? "/json/list" : "/json/version";
+  const probeHosts: readonly ("127.0.0.1" | "[::1]")[] = kind === "node"
+    ? ["127.0.0.1"]
+    : ["127.0.0.1", "[::1]"];
   while (Date.now() < deadline) {
     childFailure.assertReady(kind);
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`Windows Electron exited before ${kind} CDP was ready`);
     }
-    try {
-      const remainingMs = deadline - Date.now();
-      const response = await fetch(`http://127.0.0.1:${port}${route}`, {
-        signal: AbortSignal.timeout(Math.max(
-          1,
-          Math.min(ENDPOINT_REQUEST_TIMEOUT_MS, remainingMs),
-        )),
-      });
-      if (!response.ok) throw new Error("CDP endpoint did not return HTTP 200");
-      const payload = await response.json() as unknown;
-      const endpoint = endpointFromPayload(payload, kind, port);
-      if (endpoint) return endpoint;
-    } catch {
-      // Electron has not bound its loopback debugger yet.
+    for (const probeHost of probeHosts) {
+      try {
+        const remainingMs = deadline - Date.now();
+        const response = await fetch(`http://${probeHost}:${port}${route}`, {
+          signal: AbortSignal.timeout(Math.max(
+            1,
+            Math.min(ENDPOINT_REQUEST_TIMEOUT_MS, remainingMs),
+          )),
+        });
+        if (!response.ok) throw new Error("CDP endpoint did not return HTTP 200");
+        const payload = await response.json() as unknown;
+        const endpoint = endpointFromPayload(payload, kind, port, probeHost);
+        if (endpoint) return endpoint;
+      } catch {
+        // Electron has not bound this loopback family yet.
+      }
     }
     await delay(Math.min(100, Math.max(1, deadline - Date.now())));
   }
@@ -350,6 +355,7 @@ export function endpointFromPayload(
   payload: unknown,
   kind: "node" | "chromium",
   port: number,
+  probeHost: "127.0.0.1" | "[::1]" = "127.0.0.1",
 ): string | null {
   const candidates = Array.isArray(payload) ? payload : [payload];
   for (const candidate of candidates) {
@@ -360,7 +366,7 @@ export function endpointFromPayload(
       const parsed = new URL(endpoint);
       if (
         parsed.protocol !== "ws:"
-        || !["127.0.0.1", "localhost"].includes(parsed.hostname)
+        || !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)
         || parsed.port !== String(port)
         || parsed.username !== ""
         || parsed.password !== ""
@@ -368,11 +374,10 @@ export function endpointFromPayload(
         continue;
       }
       if (kind === "node" && parsed.pathname === "/") continue;
-      // Windows Chromium advertises `localhost` even when its debugger was
-      // explicitly bound to 127.0.0.1. The metadata itself was fetched from
-      // that numeric loopback address; normalize the WebSocket connection to
-      // the same address so hosts-file or resolver state cannot widen trust.
-      parsed.hostname = "127.0.0.1";
+      // Chromium can advertise `localhost` regardless of the loopback family
+      // that answered the metadata request. Reuse the verified numeric probe
+      // address so hosts-file or resolver state cannot widen trust.
+      parsed.hostname = probeHost;
       return parsed.toString();
     } catch {
       // Only a well-formed loopback WebSocket URL may control Electron.
