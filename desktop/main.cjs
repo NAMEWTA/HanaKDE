@@ -116,6 +116,14 @@ const {
 
 const APP_USER_MODEL_ID = "com.hanako.app"; // Keep in sync with package.json build.appId.
 
+function markWindowsPlaywrightStartupStage(stage) {
+  if (process.env.HANA_WINDOWS_PLAYWRIGHT_STARTUP_TRACE === "1") {
+    console.error(`[hana-windows-startup] ${stage}`);
+  }
+}
+
+markWindowsPlaywrightStartupStage("imports-loaded");
+
 // preload 缺失时 Electron 会静默忽略，renderer 拿不到 window.hana →
 // onboarding/主窗口白屏且无前端报错。此处硬崩，拒绝以不可用状态启动。
 {
@@ -127,6 +135,7 @@ const APP_USER_MODEL_ID = "com.hanako.app"; // Keep in sync with package.json bu
     process.exit(1);
   }
 }
+markWindowsPlaywrightStartupStage("preload-validated");
 
 // macOS/Linux: Electron 从 Dock/Finder 启动时 PATH 只有系统默认值，
 // Homebrew、npm global 等路径全部丢失。用登录 shell 解析完整 PATH。
@@ -162,8 +171,10 @@ function safeReadJSON(filePath, fallback = null) {
 
 const hanakoHome = resolveHanakoHome(process.env.HANA_HOME);
 process.env.HANA_HOME = hanakoHome;
+markWindowsPlaywrightStartupStage("home-resolved");
 
 const keepAwakeManager = createKeepAwakeManager({ powerSaveBlocker });
+markWindowsPlaywrightStartupStage("keep-awake-ready");
 
 function redactMainLogText(value) {
   return redactLogText(value, { homeDir: os.homedir(), extraPaths: [hanakoHome] });
@@ -284,10 +295,12 @@ configureClientSingleInstance(app, {
   // owns an isolated HANA_HOME, so only the lock is unnecessary there.
   acquireLock: process.env.HANA_WINDOWS_PLAYWRIGHT_READY_GATE !== "1",
 });
+markWindowsPlaywrightStartupStage("single-instance-configured");
 
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
+markWindowsPlaywrightStartupStage("app-user-model-configured");
 
 // 必须先于 resolveGpuStartupPolicy：ACL 自愈成功时会清掉 autoGpuMode / 陈旧
 // pending 标记，本次启动就能直接回到 hardware，而不是等下一次启动。
@@ -319,6 +332,7 @@ if (process.platform === "win32") {
     console.warn("[desktop] install ACL heal skipped due to an unexpected error:", err.message);
   }
 }
+markWindowsPlaywrightStartupStage("install-acl-checked");
 
 const gpuStartupPolicy = resolveGpuStartupPolicy({
   hanakoHome,
@@ -326,7 +340,9 @@ const gpuStartupPolicy = resolveGpuStartupPolicy({
   argv: process.argv,
   env: process.env,
 });
+markWindowsPlaywrightStartupStage("gpu-policy-resolved");
 applyGpuStartupPolicy(app, gpuStartupPolicy);
+markWindowsPlaywrightStartupStage("gpu-policy-applied");
 if (!gpuStartupPolicy.hardwareAccelerationEnabled) {
   console.warn(`[desktop] GPU safe mode enabled (${gpuStartupPolicy.reason}); hardware acceleration disabled for this launch`);
 }
@@ -342,6 +358,7 @@ const desktopLaunchDiagnostics = createDesktopLaunchDiagnostics({
   arch: process.arch,
   redactText: redactMainLogText,
 });
+markWindowsPlaywrightStartupStage("startup-diagnostics-created");
 try {
   desktopLaunchDiagnostics.reset({
     pid: process.pid,
@@ -365,6 +382,7 @@ if (process.platform === "win32") {
     policy: gpuStartupPolicy,
   });
 }
+markWindowsPlaywrightStartupStage("gpu-pending-recorded");
 
 app.on("child-process-gone", (_event, details) => {
   if (process.platform !== "win32") return;
@@ -6214,6 +6232,7 @@ wrapIpcBestEffortHandler("app-ready", (event) => {
 });
 
 // ── App 生命周期 ──
+markWindowsPlaywrightStartupStage("ready-handler-registering");
 resolveDesktopApplicationReady({ app }).then(async () => {
   try {
     // 0. `--repair-artifacts` 命令行旗标：跟托盘

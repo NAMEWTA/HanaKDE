@@ -8,6 +8,12 @@
  */
 const path = require("path");
 
+function markWindowsPlaywrightStartupStage(stage) {
+  if (process.env.HANA_WINDOWS_PLAYWRIGHT_STARTUP_TRACE === "1") {
+    console.error(`[hana-windows-startup] ${stage}`);
+  }
+}
+
 function normalizeForCompare(filePath) {
   const resolved = path.resolve(filePath);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
@@ -46,13 +52,21 @@ function configureClientSingleInstance(app, opts) {
     acquireLock = true,
   } = opts;
   const appName = getUserDataAppName(hanakoHome, defaultHome);
+  markWindowsPlaywrightStartupStage("single-instance-name-resolved");
   if (appName) {
-    app.setPath("userData", path.join(app.getPath("appData"), appName));
+    const appData = app.getPath("appData");
+    markWindowsPlaywrightStartupStage("app-data-resolved");
+    app.setPath("userData", path.join(appData, appName));
+    markWindowsPlaywrightStartupStage("user-data-configured");
   }
 
-  if (!acquireLock) return true;
+  if (!acquireLock) {
+    markWindowsPlaywrightStartupStage("single-instance-lock-skipped");
+    return true;
+  }
 
   const gotLock = app.requestSingleInstanceLock({ hanakoHome });
+  markWindowsPlaywrightStartupStage("single-instance-lock-returned");
   if (!gotLock) {
     exitDuplicateClient(app);
     return false;
