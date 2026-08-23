@@ -4,16 +4,33 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures/app-fixture.ts';
 
 async function openKnowledge(page: Page): Promise<Locator> {
-  await page.locator('[data-tab="knowledge"]').click();
+  const openWorkspace = async () => {
+    const entry = page.locator('[data-tab="knowledge"]');
+    await expect(entry).toBeVisible({ timeout: 90_000 });
+    await entry.click();
+  };
+  await openWorkspace();
   const workspace = page.locator('[data-knowledge-workspace]');
   await expect(workspace).toBeVisible({ timeout: 90_000 });
   // The shell renders before the async source capability request completes.
   // Wait for the real listable root rather than clicking its non-interactive
   // loading placeholder on a cold Windows Vite start.
-  await expect(
-    workspace.locator('[role="treeitem"][data-source-key="main"]').first()
-      .getByRole('button').first(),
-  ).toBeVisible({ timeout: 90_000 });
+  const rootDisclosure = workspace
+    .locator('[role="treeitem"][data-source-key="main"]').first()
+    .getByRole('button').first();
+  const loadedOnFirstPage = await rootDisclosure.waitFor({
+    state: 'visible',
+    timeout: process.platform === 'win32' ? 30_000 : 90_000,
+  }).then(() => true, () => false);
+  if (!loadedOnFirstPage) {
+    // A cold Windows Vite page can occasionally miss its first source
+    // capability response while the authenticated server is already ready.
+    // Reload the renderer once; a second miss remains a hard gate failure.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openWorkspace();
+    await expect(workspace).toBeVisible({ timeout: 60_000 });
+    await expect(rootDisclosure).toBeVisible({ timeout: 60_000 });
+  }
   return workspace;
 }
 

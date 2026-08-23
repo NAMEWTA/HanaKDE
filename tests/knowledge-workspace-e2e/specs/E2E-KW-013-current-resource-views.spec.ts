@@ -169,7 +169,7 @@ test("E2E-KW-013 keeps live buffer views separate from saved per-source backlink
   ));
   await resultForPath(mainGroup, "Target.md").click();
   const targetReadResponse = await targetRead;
-  expect(targetReadResponse.ok(), await targetReadResponse.text()).toBe(true);
+  expect(targetReadResponse.ok()).toBe(true);
   await dismissSearchResults(workspace);
 
   const currentViews = workspace.locator(
