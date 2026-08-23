@@ -30,7 +30,23 @@ async function expandMain(workspace: Locator): Promise<void> {
 async function openTreeFile(workspace: Locator, name: string): Promise<void> {
   await expandMain(workspace);
   const row = workspace.getByRole('treeitem', { name: new RegExp(name.replace('.', '\\.'), 'i') });
-  await expect(row).toBeVisible();
+  const loadedOnFirstExpansion = await row.waitFor({
+    state: 'visible',
+    timeout: 15_000,
+  }).then(() => true, () => false);
+  if (!loadedOnFirstExpansion) {
+    const root = workspace.locator(
+      '[role="treeitem"][data-source-key="main"]',
+    ).first();
+    const disclosure = root.getByRole('button').first();
+    if (await root.getAttribute('aria-expanded') === 'true') {
+      await disclosure.click();
+      await expect(root).toHaveAttribute('aria-expanded', 'false');
+    }
+    await disclosure.click();
+    await expect(root).toHaveAttribute('aria-expanded', 'true');
+    await expect(row).toBeVisible();
+  }
   await row.dblclick();
 }
 

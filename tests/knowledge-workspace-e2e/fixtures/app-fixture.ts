@@ -191,6 +191,9 @@ export const test = base.extend<KnowledgeFixtures, KnowledgeWorkerFixtures>({
       const desktopLaunch = useDirectElectronCdp
         ? await launchWindowsElectronOverCdp(playwright, {
             executablePath: resolveElectronExecutable(),
+            loaderPath: path.resolve(
+              "tests/knowledge-workspace-e2e/fixtures/windows-electron-cdp-loader.cjs",
+            ),
             bootstrapPath: path.resolve("desktop/bootstrap.cjs"),
             electronArgs: launchConfig.electronArgs,
             cwd: process.cwd(),

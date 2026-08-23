@@ -19,39 +19,6 @@ const os = require("os");
 const path = require("path");
 const { app, dialog } = require("electron");
 
-function configureWindowsKnowledgeE2EDebugging() {
-  if (process.platform !== "win32" || process.env.HANA_KNOWLEDGE_E2E !== "1") return;
-
-  const readSingleArgument = (name) => {
-    const prefix = `--${name}=`;
-    const values = process.argv
-      .filter((argument) => argument.startsWith(prefix))
-      .map((argument) => argument.slice(prefix.length));
-    if (values.length !== 1 || !values[0]) {
-      throw new Error(`Windows Knowledge E2E requires exactly one ${name} argument`);
-    }
-    return values[0];
-  };
-
-  const portText = readSingleArgument("hana-windows-cdp-port");
-  const port = Number(portText);
-  if (!/^\d+$/.test(portText) || !Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error("Windows Knowledge E2E received an invalid Chromium CDP port");
-  }
-  const userDataDirectory = readSingleArgument("hana-windows-cdp-user-data-dir");
-  if (!path.isAbsolute(userDataDirectory)) {
-    throw new Error("Windows Knowledge E2E requires an absolute Chromium user data directory");
-  }
-
-  // Register through Electron before app.ready so Chromium receives the
-  // loopback debugger and its required isolated profile on hosted Windows.
-  app.commandLine.appendSwitch("user-data-dir", userDataDirectory);
-  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
-  app.commandLine.appendSwitch("remote-debugging-port", portText);
-}
-
-configureWindowsKnowledgeE2EDebugging();
-
 let diagnosticsDir = path.join(os.tmpdir(), "hanako-desktop-launch");
 let launchIntegrity = null;
 

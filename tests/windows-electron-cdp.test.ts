@@ -14,6 +14,7 @@ describe("Windows Electron direct CDP fixture", () => {
     expect(buildWindowsElectronCdpArgs({
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
+      loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
       bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs: ["--fixture-argument", "--user-data-dir=/tmp/electron-data"],
@@ -25,6 +26,8 @@ describe("Windows Electron direct CDP fixture", () => {
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",
       "--user-data-dir=/tmp/electron-data",
+      "-r",
+      "/repo/tests/windows-electron-cdp-loader.cjs",
       "/repo/desktop/bootstrap.cjs",
       "--hana-windows-cdp-token=fixture-token",
       "--hana-windows-cdp-port=41002",
@@ -37,6 +40,7 @@ describe("Windows Electron direct CDP fixture", () => {
     const build = (electronArgs: string[]) => buildWindowsElectronCdpArgs({
       nodeInspectorPort: 41_001,
       chromiumPort: 41_002,
+      loaderPath: "/repo/tests/windows-electron-cdp-loader.cjs",
       bootstrapPath: "/repo/desktop/bootstrap.cjs",
       launchToken: "fixture-token",
       electronArgs,

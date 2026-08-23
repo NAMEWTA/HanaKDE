@@ -25,6 +25,7 @@ const DIRECT_ELECTRON_CHROMIUM_SWITCHES = [
 
 type LaunchOptions = {
   executablePath: string;
+  loaderPath: string;
   bootstrapPath: string;
   electronArgs: readonly string[];
   env: NodeJS.ProcessEnv;
@@ -43,6 +44,7 @@ export type ElectronCdpPortPair = {
 };
 
 type ElectronCdpLaunchArguments = ElectronCdpPortPair & {
+  loaderPath: string;
   bootstrapPath: string;
   launchToken: string;
   electronArgs: readonly string[];
@@ -89,6 +91,7 @@ export type WindowsElectronCdpLaunch = {
 export function buildWindowsElectronCdpArgs({
   nodeInspectorPort,
   chromiumPort,
+  loaderPath,
   bootstrapPath,
   launchToken,
   electronArgs,
@@ -112,6 +115,8 @@ export function buildWindowsElectronCdpArgs({
     "--remote-debugging-address=127.0.0.1",
     ...DIRECT_ELECTRON_CHROMIUM_SWITCHES,
     ...userDataArgs,
+    "-r",
+    loaderPath,
     bootstrapPath,
     `--hana-windows-cdp-token=${launchToken}`,
     `--hana-windows-cdp-port=${chromiumPort}`,
@@ -156,6 +161,7 @@ export async function launchWindowsElectronOverCdp(
   const child = spawn(options.executablePath, buildWindowsElectronCdpArgs({
     nodeInspectorPort,
     chromiumPort,
+    loaderPath: options.loaderPath,
     bootstrapPath: options.bootstrapPath,
     launchToken,
     electronArgs: options.electronArgs,
