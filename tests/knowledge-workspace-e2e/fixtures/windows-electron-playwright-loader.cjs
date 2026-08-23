@@ -78,6 +78,9 @@ if (process.versions.electron) {
   setImmediate(() => {
     console.error(`[hana-windows-e2e] first event-loop turn; appReady=${app.isReady()}`);
   });
+  app.whenReady().then(() => {
+    console.error("[hana-windows-e2e] native Electron ready");
+  });
   reportChromiumEndpoint(port);
 }
 

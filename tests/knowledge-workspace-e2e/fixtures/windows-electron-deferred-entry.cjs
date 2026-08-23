@@ -4,7 +4,7 @@ const path = require("node:path");
 
 function runDeferredWindowsElectronEntry({
   env = process.env,
-  schedule = setImmediate,
+  waitUntilReady = () => require("electron").app.whenReady(),
   loadBootstrap = require,
   onError = (error) => {
     console.error("[hana-windows-e2e] deferred bootstrap failed:", error?.stack || error);
@@ -16,13 +16,10 @@ function runDeferredWindowsElectronEntry({
   if (!path.win32.isAbsolute(bootstrapPath)) {
     throw new Error("Windows Knowledge E2E requires an absolute deferred bootstrap path");
   }
-  schedule(() => {
-    try {
-      loadBootstrap(bootstrapPath);
-    } catch (error) {
-      onError(error);
-    }
-  });
+  Promise.resolve()
+    .then(waitUntilReady)
+    .then(() => loadBootstrap(bootstrapPath))
+    .catch(onError);
   return bootstrapPath;
 }
 
