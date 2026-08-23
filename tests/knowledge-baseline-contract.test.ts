@@ -292,6 +292,8 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(appFixture).toContain("HANA_FORCE_WINDOWS_ELECTRON_CDP");
     expect(appFixture).toContain("launchWindowsElectronOverCdp");
     expect(appFixture).toContain("windows-electron-playwright-loader.cjs");
+    expect(appFixture).toContain("windows-electron-deferred-entry.cjs");
+    expect(appFixture).toContain("HANA_WINDOWS_DEFERRED_BOOTSTRAP_PATH");
     expect(appFixture).toContain("windowsChromiumPort");
     expect(appFixture).toContain('HANA_GPU_SAFE_MODE: "1"');
     expect(cdpLoader).toContain('appendSwitch("remote-debugging-address", "127.0.0.1")');

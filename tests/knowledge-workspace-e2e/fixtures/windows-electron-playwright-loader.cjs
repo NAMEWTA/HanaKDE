@@ -68,7 +68,12 @@ function reportChromiumEndpoint(port) {
 
 if (process.versions.electron) {
   const { app } = require("electron");
-  reportChromiumEndpoint(installWindowsElectronPlaywrightLoader({ app }));
+  const port = installWindowsElectronPlaywrightLoader({ app });
+  console.error(`[hana-windows-e2e] configured Chromium CDP on 127.0.0.1:${port}`);
+  setImmediate(() => {
+    console.error(`[hana-windows-e2e] first event-loop turn; appReady=${app.isReady()}`);
+  });
+  reportChromiumEndpoint(port);
 }
 
 module.exports = {
