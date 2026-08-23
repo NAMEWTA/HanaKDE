@@ -378,7 +378,7 @@ describe("artifact-boot: prepareArtifactServerBoot", () => {
     // what desktop/main.cjs surfaces to the user via the sidebar notice card.
     expect(fallback.fromVersion).toBe("2.0.0");
     expect(fallback.toVersion).toBe("1.0.0");
-  });
+  }, process.platform === "win32" ? 30_000 : 10_000);
 
   it("does not populate fromVersion/toVersion when no crash fallback occurred", async () => {
     const root = makeTempDir("hana-boot-");

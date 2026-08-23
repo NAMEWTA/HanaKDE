@@ -32,6 +32,19 @@ async function openTreeFile(workspace: Locator, name: string): Promise<void> {
   await openSourceTreeFile(workspace, 'main', name);
 }
 
+async function reloadSourceTree(workspace: Locator, sourceKey: string): Promise<void> {
+  const root = workspace.locator(
+    `[role="treeitem"][data-source-key="${sourceKey}"]`,
+  ).first();
+  const disclosure = root.getByRole('button').first();
+  if (await root.getAttribute('aria-expanded') === 'true') {
+    await disclosure.click();
+    await expect(root).toHaveAttribute('aria-expanded', 'false');
+  }
+  await disclosure.click();
+  await expect(root).toHaveAttribute('aria-expanded', 'true');
+}
+
 async function openSourceTreeFile(workspace: Locator, sourceKey: string, name: string): Promise<void> {
   await expandSource(workspace, sourceKey);
   const row = workspace.locator(`[role="treeitem"][data-source-key="${sourceKey}"]`)
@@ -44,22 +57,23 @@ async function openSourceTreeFile(workspace: Locator, sourceKey: string, name: s
     // These stories create their files after the application fixture starts.
     // Re-open the real tree root only after the first load window expires;
     // collapsing clears the directory cache before the one explicit retry.
-    const root = workspace.locator(
-      `[role="treeitem"][data-source-key="${sourceKey}"]`,
-    ).first();
-    const disclosure = root.getByRole('button').first();
-    if (await root.getAttribute('aria-expanded') === 'true') {
-      await disclosure.click();
-      await expect(root).toHaveAttribute('aria-expanded', 'false');
-    }
-    await disclosure.click();
-    await expect(root).toHaveAttribute('aria-expanded', 'true');
+    await reloadSourceTree(workspace, sourceKey);
     await expect(row).toBeVisible({ timeout: 15_000 });
   }
   // Enter opens the selected file directly as a pinned editor. A mouse
   // double-click deliberately opens preview on each click before pinning and
   // is covered separately by E2E-KW-004.
-  await row.press('Enter');
+  const openedBeforeRefresh = await row.press('Enter', { timeout: 15_000 })
+    .then(() => true, () => false);
+  if (!openedBeforeRefresh) {
+    // A root catch-up can replace a visible row between the visibility check
+    // and the captured key event on a cold Windows runner. Reload once so the
+    // key targets the current tree generation instead of waiting until the
+    // enclosing test timeout.
+    await reloadSourceTree(workspace, sourceKey);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.press('Enter', { timeout: 15_000 });
+  }
 }
 
 async function json(response: Response): Promise<Record<string, unknown>> {
