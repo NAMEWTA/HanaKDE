@@ -9,7 +9,6 @@ const { installWindowsElectronCdp } = require(
     argv: string[];
     app: { commandLine: { appendSwitch: ReturnType<typeof vi.fn> } };
     platform: NodeJS.Platform;
-    env: NodeJS.ProcessEnv;
   }): { port: number; userDataDirectory: string } | null;
 };
 
@@ -26,7 +25,6 @@ describe("Windows Electron early CDP loader", () => {
       ],
       app: { commandLine: { appendSwitch } },
       platform: "win32",
-      env: { HANA_KNOWLEDGE_E2E: "1" },
     })).toEqual({
       port: 41_002,
       userDataDirectory: "C:\\temp\\electron-data",
@@ -51,15 +49,24 @@ describe("Windows Electron early CDP loader", () => {
     }).__hanaWindowsCdpLoaderState;
   });
 
-  it("stays inactive outside the isolated Windows fixture", () => {
+  it("does not depend on application environment initialization", () => {
     const appendSwitch = vi.fn();
     expect(installWindowsElectronCdp({
-      argv: [],
+      argv: [
+        "electron",
+        "--hana-windows-cdp-port=41002",
+        "--hana-windows-cdp-user-data-dir=/tmp/electron-data",
+      ],
       app: { commandLine: { appendSwitch } },
       platform: "darwin",
-      env: { HANA_KNOWLEDGE_E2E: "1" },
-    })).toBeNull();
-    expect(appendSwitch).not.toHaveBeenCalled();
+    })).toEqual({
+      port: 41_002,
+      userDataDirectory: "/tmp/electron-data",
+    });
+    expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-port", "41002");
+    delete (globalThis as typeof globalThis & {
+      __hanaWindowsCdpLoaderState?: unknown;
+    }).__hanaWindowsCdpLoaderState;
   });
 
   it("rejects invalid ports and non-absolute profiles", () => {
@@ -72,7 +79,6 @@ describe("Windows Electron early CDP loader", () => {
         ],
         app: { commandLine: { appendSwitch: vi.fn() } },
         platform: "win32",
-        env: { HANA_KNOWLEDGE_E2E: "1" },
       })
     );
 

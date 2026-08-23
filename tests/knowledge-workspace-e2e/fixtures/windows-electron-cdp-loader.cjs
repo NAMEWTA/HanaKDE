@@ -6,10 +6,7 @@ function installWindowsElectronCdp({
   argv = process.argv,
   app,
   platform = process.platform,
-  env = process.env,
 } = {}) {
-  if (platform !== "win32" || env.HANA_KNOWLEDGE_E2E !== "1") return null;
-
   const readSingleArgument = (name) => {
     const prefix = `--${name}=`;
     const values = argv
@@ -27,7 +24,8 @@ function installWindowsElectronCdp({
     throw new Error("Windows Knowledge E2E received an invalid Chromium CDP port");
   }
   const userDataDirectory = readSingleArgument("hana-windows-cdp-user-data-dir");
-  if (!path.win32.isAbsolute(userDataDirectory)) {
+  const pathApi = platform === "win32" ? path.win32 : path;
+  if (!pathApi.isAbsolute(userDataDirectory)) {
     throw new Error("Windows Knowledge E2E requires an absolute Chromium user data directory");
   }
 
