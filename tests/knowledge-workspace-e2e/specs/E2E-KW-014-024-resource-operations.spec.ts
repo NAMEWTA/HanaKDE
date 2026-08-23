@@ -825,6 +825,10 @@ test('E2E-KW-022 rejects platform link escapes, URI traversal, active HTML and o
     path.join(workspaceSandbox.mainSource, 'TooLarge.md'),
     Buffer.alloc(10 * 1024 * 1024 + 1, 0x78),
   );
+  // This security story validates rendering policy, not file-watch delivery.
+  // Reload Web Open after staging the hostile files so the tree is populated
+  // from the stable source snapshot even when NTFS coalesces startup events.
+  await knowledgeApp.page.reload({ waitUntil: 'domcontentloaded' });
   const workspace = await openKnowledge(knowledgeApp.page);
   await openTreeFile(workspace, 'Unsafe.md');
   expect(await knowledgeApp.page.evaluate(() => (window as Window & { __knowledgeUnsafe?: number }).__knowledgeUnsafe)).toBeUndefined();
