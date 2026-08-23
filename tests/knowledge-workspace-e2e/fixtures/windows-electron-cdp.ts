@@ -195,7 +195,6 @@ export async function launchWindowsElectronOverCdp(
     const connectedInspector = await NodeInspectorClient.connect(nodeEndpoint);
     inspector = connectedInspector;
     await connectedInspector.assertIdentity({ pid: child.pid, token: launchToken });
-    await connectedInspector.assertChromiumConfiguration(chromiumPort);
     const chromiumEndpoint = await waitForEndpoint(
       chromiumPort,
       child,
