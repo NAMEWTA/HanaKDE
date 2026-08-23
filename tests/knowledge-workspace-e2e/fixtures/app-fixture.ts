@@ -427,7 +427,13 @@ async function waitForDesktopMainWindow(
   application: ElectronMainProcessApplication,
 ): Promise<Page> {
   const deadline = Date.now() + 90_000;
+  const child = application.process();
   while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(
+        `Desktop exited before its main window opened (${child.exitCode ?? child.signalCode})`,
+      );
+    }
     const mainWindow = application.windows().find((candidate) => (
       /(?:^|\/)index\.html(?:[?#]|$)/.test(candidate.url())
     ));
@@ -437,7 +443,19 @@ async function waitForDesktopMainWindow(
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error("Desktop main window did not open");
+  const snapshot = await application.evaluate(({ app, BrowserWindow }) => {
+    const state = (globalThis as typeof globalThis & {
+      __hanaWindowsPlaywrightState?: unknown;
+    }).__hanaWindowsPlaywrightState;
+    return {
+      appReady: app.isReady(),
+      windows: BrowserWindow.getAllWindows().map((window) => window.webContents.getURL()),
+      bootstrap: state ?? null,
+    };
+  }).catch((error) => ({
+    inspectionError: error instanceof Error ? error.message : String(error),
+  }));
+  throw new Error(`Desktop main window did not open (${JSON.stringify(snapshot)})`);
 }
 
 async function waitForServerInfo(

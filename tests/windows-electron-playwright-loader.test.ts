@@ -11,7 +11,14 @@ const { installWindowsElectronPlaywrightLoader } = require(
     env?: NodeJS.ProcessEnv;
     globalObject: {
       __playwright_run?: () => Promise<void>;
-      __hanaWindowsPlaywrightConnected?: Promise<void>;
+      __hanaWindowsPlaywrightBootstrap?: () => void;
+      __hanaWindowsPlaywrightState?: {
+        connected: boolean;
+        bootstrapRegistered: boolean;
+        bootstrapStarted: boolean;
+        bootstrapLoaded: boolean;
+        bootstrapError: string | null;
+      };
     };
   }): number;
 };
@@ -28,7 +35,14 @@ describe("Windows Electron Playwright loader", () => {
     ];
     const globalObject: {
       __playwright_run?: () => Promise<void>;
-      __hanaWindowsPlaywrightConnected?: Promise<void>;
+      __hanaWindowsPlaywrightBootstrap?: () => void;
+      __hanaWindowsPlaywrightState?: {
+        connected: boolean;
+        bootstrapRegistered: boolean;
+        bootstrapStarted: boolean;
+        bootstrapLoaded: boolean;
+        bootstrapError: string | null;
+      };
     } = {};
     const appendSwitch = vi.fn();
 
@@ -47,13 +61,18 @@ describe("Windows Electron Playwright loader", () => {
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-address", "127.0.0.1");
     expect(appendSwitch).toHaveBeenCalledWith("disable-gpu-sandbox");
     expect(appendSwitch).toHaveBeenCalledWith("disable-features", "GpuSandbox");
-    let connected = false;
-    globalObject.__hanaWindowsPlaywrightConnected?.then(() => { connected = true; });
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(connected).toBe(false);
+    const bootstrap = vi.fn();
+    globalObject.__hanaWindowsPlaywrightBootstrap = bootstrap;
+    if (globalObject.__hanaWindowsPlaywrightState) {
+      globalObject.__hanaWindowsPlaywrightState.bootstrapRegistered = true;
+    }
     await expect(globalObject.__playwright_run?.()).resolves.toBeUndefined();
-    await globalObject.__hanaWindowsPlaywrightConnected;
-    expect(connected).toBe(true);
+    expect(bootstrap).toHaveBeenCalledOnce();
+    expect(globalObject.__hanaWindowsPlaywrightState).toMatchObject({
+      connected: true,
+      bootstrapRegistered: true,
+      bootstrapStarted: true,
+    });
   });
 
   it("rejects a launch outside Playwright's remote-debugging contract", () => {

@@ -7,30 +7,29 @@ const { runDeferredWindowsElectronEntry } = require(
 ) as {
   runDeferredWindowsElectronEntry(options: {
     env: NodeJS.ProcessEnv;
-    waitUntilReady(): Promise<void>;
+    isReady(): boolean;
+    registerBootstrap(bootstrap: () => void): void;
     loadBootstrap(path: string): unknown;
     onError(error: unknown): void;
   }): string;
 };
 
 describe("Windows Electron deferred entry", () => {
-  it("loads the real bootstrap only after Electron's native ready promise", async () => {
-    let markReady: (() => void) | undefined;
-    const ready = new Promise<void>((resolve) => { markReady = resolve; });
+  it("registers the real bootstrap for Playwright to load after native readiness", () => {
+    let bootstrap: (() => void) | undefined;
     const loadBootstrap = vi.fn();
     const onError = vi.fn();
 
     expect(runDeferredWindowsElectronEntry({
       env: { HANA_WINDOWS_DEFERRED_BOOTSTRAP_PATH: "D:\\repo\\desktop\\bootstrap.cjs" },
-      waitUntilReady: () => ready,
+      isReady: () => true,
+      registerBootstrap: (callback) => { bootstrap = callback; },
       loadBootstrap,
       onError,
     })).toBe("D:\\repo\\desktop\\bootstrap.cjs");
     expect(loadBootstrap).not.toHaveBeenCalled();
 
-    markReady?.();
-    await ready;
-    await new Promise((resolve) => setImmediate(resolve));
+    bootstrap?.();
     expect(loadBootstrap).toHaveBeenCalledWith("D:\\repo\\desktop\\bootstrap.cjs");
     expect(onError).not.toHaveBeenCalled();
   });
@@ -38,7 +37,8 @@ describe("Windows Electron deferred entry", () => {
   it("rejects a relative bootstrap path before scheduling work", () => {
     expect(() => runDeferredWindowsElectronEntry({
       env: { HANA_WINDOWS_DEFERRED_BOOTSTRAP_PATH: "desktop/bootstrap.cjs" },
-      waitUntilReady: vi.fn(() => Promise.resolve()),
+      isReady: vi.fn(() => true),
+      registerBootstrap: vi.fn(),
       loadBootstrap: vi.fn(),
       onError: vi.fn(),
     })).toThrow("absolute deferred bootstrap path");

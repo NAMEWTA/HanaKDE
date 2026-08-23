@@ -34,12 +34,22 @@ function installWindowsElectronPlaywrightLoader({
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     app.commandLine.appendSwitch("disable-features", "GpuSandbox");
   }
-  let releasePlaywrightConnection;
-  globalObject.__hanaWindowsPlaywrightConnected = new Promise((resolve) => {
-    releasePlaywrightConnection = resolve;
-  });
+  globalObject.__hanaWindowsPlaywrightState = {
+    connected: false,
+    bootstrapRegistered: false,
+    bootstrapStarted: false,
+    bootstrapLoaded: false,
+    bootstrapError: null,
+  };
   globalObject.__playwright_run = () => {
-    releasePlaywrightConnection();
+    const state = globalObject.__hanaWindowsPlaywrightState;
+    state.connected = true;
+    const bootstrap = globalObject.__hanaWindowsPlaywrightBootstrap;
+    if (typeof bootstrap !== "function") {
+      throw new Error("Windows Knowledge E2E bootstrap was not registered");
+    }
+    state.bootstrapStarted = true;
+    bootstrap();
     return Promise.resolve();
   };
   return bridgePort;
