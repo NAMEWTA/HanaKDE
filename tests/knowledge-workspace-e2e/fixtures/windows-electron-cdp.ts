@@ -34,7 +34,7 @@ type LaunchOptions = {
 };
 
 export type InspectorIdentity = {
-  pid: number;
+  pid: number | null;
   token: string;
 };
 
@@ -169,7 +169,13 @@ export async function launchWindowsElectronOverCdp(
   const userDataDirectory = launchArguments
     .find((argument) => argument.startsWith("--user-data-dir="))!
     .slice("--user-data-dir=".length);
-  const child = spawn(options.executablePath, launchArguments, {
+  const useWindowsShell = process.platform === "win32";
+  const child = spawn(
+    useWindowsShell
+      ? buildWindowsElectronShellCommand(options.executablePath, launchArguments)
+      : options.executablePath,
+    useWindowsShell ? [] : launchArguments,
+    {
     cwd: options.cwd,
     env: {
       ...options.env,
@@ -178,7 +184,9 @@ export async function launchWindowsElectronOverCdp(
     },
     stdio: "ignore",
     windowsHide: true,
-  });
+      shell: useWindowsShell,
+    },
+  );
   const childFailure = monitorChildFailure(child);
   if (!child.pid) {
     await terminateChild(child);
@@ -198,7 +206,10 @@ export async function launchWindowsElectronOverCdp(
     );
     const connectedInspector = await NodeInspectorClient.connect(nodeEndpoint);
     inspector = connectedInspector;
-    await connectedInspector.assertIdentity({ pid: child.pid, token: launchToken });
+    await connectedInspector.assertIdentity({
+      pid: useWindowsShell ? null : child.pid,
+      token: launchToken,
+    });
     await connectedInspector.assertChromiumConfiguration(chromiumPort);
     const chromiumEndpoint = await waitForEndpoint(
       chromiumPort,
@@ -231,6 +242,20 @@ export async function launchWindowsElectronOverCdp(
     await terminateChild(child);
     throw error;
   }
+}
+
+export function buildWindowsElectronShellCommand(
+  executablePath: string,
+  args: readonly string[],
+): string {
+  return [executablePath, ...args]
+    .map((argument) => {
+      if (argument.includes("\0") || /[\r\n]/.test(argument)) {
+        throw new Error("Windows Electron shell arguments must stay on one command line");
+      }
+      return `"${argument.replaceAll('"', '\\"')}"`;
+    })
+    .join(" ");
 }
 
 function createElectronApplication(
@@ -559,7 +584,7 @@ export function assertInspectorIdentity(
   if (
     !candidate
     || !Number.isInteger(candidate.pid)
-    || candidate.pid !== expected.pid
+    || (expected.pid !== null && candidate.pid !== expected.pid)
     || candidate.token !== expected.token
   ) {
     throw new Error("Windows Electron inspector endpoint did not belong to the spawned application");

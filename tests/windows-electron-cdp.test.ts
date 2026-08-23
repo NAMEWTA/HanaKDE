@@ -5,6 +5,7 @@ import {
   assertDesktopLaunchAlive,
   assertInspectorIdentity,
   buildWindowsElectronCdpArgs,
+  buildWindowsElectronShellCommand,
   endpointFromPayload,
   rendererTargetIdFromInfo,
   reserveDistinctLoopbackPorts,
@@ -53,6 +54,18 @@ describe("Windows Electron direct CDP fixture", () => {
     ])).toThrow("exactly one non-empty user data directory");
   });
 
+  it("quotes the complete Electron command for the Windows shell", () => {
+    expect(buildWindowsElectronShellCommand(
+      "C:\\Program Files\\Electron\\electron.exe",
+      ["-r", "D:\\repo with spaces\\loader.cjs", "--fixture=\"value\""],
+    )).toBe(
+      '"C:\\Program Files\\Electron\\electron.exe" "-r" '
+      + '"D:\\repo with spaces\\loader.cjs" "--fixture=\\"value\\""',
+    );
+    expect(() => buildWindowsElectronShellCommand("electron.exe", ["line\nbreak"]))
+      .toThrow("one command line");
+  });
+
   it("retries a duplicate transient port rather than launching both CDP servers on it", async () => {
     const reserve = vi.fn()
       .mockResolvedValueOnce(41_001)
@@ -94,6 +107,10 @@ describe("Windows Electron direct CDP fixture", () => {
       { pid: 101, token: "foreign" },
       { pid: 101, token: "expected" },
     )).toThrow("did not belong to the spawned application");
+    expect(() => assertInspectorIdentity(
+      { pid: 102, token: "expected" },
+      { pid: null, token: "expected" },
+    )).not.toThrow();
   });
 
   it("requires the early loader and Electron command line to agree on the CDP port", () => {
