@@ -20,6 +20,7 @@ describe("Windows Electron direct CDP fixture", () => {
       electronArgs: ["--fixture-argument", "--user-data-dir=/tmp/electron-data"],
     })).toEqual([
       "--inspect=127.0.0.1:41001",
+      "--remote-debugging-port=41002",
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",

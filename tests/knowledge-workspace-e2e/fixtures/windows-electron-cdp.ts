@@ -113,6 +113,7 @@ export function buildWindowsElectronCdpArgs({
   ));
   return [
     `--inspect=127.0.0.1:${nodeInspectorPort}`,
+    `--remote-debugging-port=${chromiumPort}`,
     ...DIRECT_ELECTRON_CHROMIUM_SWITCHES,
     ...userDataArgs,
     loaderPath,
