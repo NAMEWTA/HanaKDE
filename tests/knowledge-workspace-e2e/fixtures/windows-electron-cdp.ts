@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import type {
   Browser,
   BrowserContext,
@@ -17,6 +19,7 @@ const CHILD_TERMINATION_TIMEOUT_MS = 5_000;
 const ANSI_ESCAPE_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
 // eslint-disable-next-line no-control-regex
 const NON_PRINTING_CONTROL_PATTERN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
+const DIAGNOSTIC_TAIL_LENGTH = 1_600;
 
 // The direct-CDP path replaces Playwright's Electron loader. Keep the loader's
 // backgrounding guarantees so hidden/secondary Windows stay responsive during
@@ -171,6 +174,11 @@ export async function launchWindowsElectronOverCdp(
   const userDataDirectory = launchArguments
     .find((argument) => argument.startsWith("--user-data-dir="))!
     .slice("--user-data-dir=".length);
+  const hanaHome = options.env.HANA_HOME;
+  if (!hanaHome || !path.isAbsolute(hanaHome)) {
+    throw new Error("Windows Electron requires an absolute HANA_HOME for startup diagnostics");
+  }
+  const chromiumLogPath = path.join(hanaHome, "windows-electron-cdp.log");
   const child = spawn(options.executablePath, launchArguments, {
     cwd: options.cwd,
     env: {
@@ -178,6 +186,7 @@ export async function launchWindowsElectronOverCdp(
       HANA_WINDOWS_CDP_PORT: String(chromiumPort),
       HANA_WINDOWS_CDP_USER_DATA_DIR: userDataDirectory,
       HANA_WINDOWS_CDP_BOOTSTRAP_PATH: options.bootstrapPath,
+      HANA_WINDOWS_CDP_LOG_PATH: chromiumLogPath,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -202,13 +211,30 @@ export async function launchWindowsElectronOverCdp(
     const connectedInspector = await NodeInspectorClient.connect(nodeEndpoint);
     inspector = connectedInspector;
     await connectedInspector.assertIdentity({ pid: child.pid, token: launchToken });
-    const chromiumEndpoint = await waitForEndpoint(
-      chromiumPort,
-      child,
-      childFailure,
-      "chromium",
-      deadline,
-    );
+    let chromiumEndpoint: string;
+    try {
+      chromiumEndpoint = await waitForEndpoint(
+        chromiumPort,
+        child,
+        childFailure,
+        "chromium",
+        deadline,
+      );
+    } catch (error) {
+      const [startup, chromiumLog] = await Promise.all([
+        connectedInspector.startupDiagnostics().catch((diagnosticError) => ({
+          inspectionError: diagnosticError instanceof Error
+            ? diagnosticError.message
+            : String(diagnosticError),
+        })),
+        readDiagnosticTail(chromiumLogPath),
+      ]);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${message}; main=${JSON.stringify(startup)}${chromiumLog ? `; chromium=${chromiumLog}` : ""}`,
+        { cause: error },
+      );
+    }
     const connectedBrowser = await playwright.chromium.connectOverCDP(chromiumEndpoint);
     browser = connectedBrowser;
     const context = connectedBrowser.contexts()[0];
@@ -520,6 +546,33 @@ class NodeInspectorClient {
     assertChromiumConfiguration(response.result?.result?.value, expectedPort);
   }
 
+  async startupDiagnostics(): Promise<unknown> {
+    const contextId = this.requireMainContext();
+    const response = await this.send("Runtime.evaluate", {
+      expression: `(() => {
+        const { app, BrowserWindow } = require('electron');
+        const bootstrap = globalThis.__hanaWindowsCdpBootstrap;
+        return {
+          appReady: app.isReady(),
+          readyListeners: app.listenerCount('ready'),
+          windowCount: BrowserWindow.getAllWindows().length,
+          commandLinePort: app.commandLine.getSwitchValue('remote-debugging-port'),
+          commandLineUserDataConfigured: app.commandLine.getSwitchValue('user-data-dir') !== '',
+          bootstrap: bootstrap && typeof bootstrap === 'object' ? bootstrap : null,
+          electron: process.versions.electron || null,
+          chrome: process.versions.chrome || null,
+        };
+      })()`,
+      contextId,
+      includeCommandLineAPI: true,
+      returnByValue: true,
+    });
+    if (response.error || response.result?.exceptionDetails) {
+      throw new Error("Windows Electron could not inspect its startup state");
+    }
+    return response.result?.result?.value;
+  }
+
   async ownsRendererTarget(targetId: string): Promise<boolean> {
     return this.evaluate<boolean, string>(
       ({ BrowserWindow, webContents }, id) => {
@@ -694,6 +747,19 @@ function monitorChildFailure(child: ChildProcess): ChildFailureMonitor {
         .slice(-800);
     },
   };
+}
+
+async function readDiagnosticTail(filePath: string): Promise<string> {
+  try {
+    const content = await fs.readFile(filePath, "utf8");
+    return content
+      .replace(ANSI_ESCAPE_PATTERN, "")
+      .replace(NON_PRINTING_CONTROL_PATTERN, " ")
+      .trim()
+      .slice(-DIAGNOSTIC_TAIL_LENGTH);
+  } catch {
+    return "";
+  }
 }
 
 async function waitForWebSocketOpen(socket: WebSocket): Promise<void> {

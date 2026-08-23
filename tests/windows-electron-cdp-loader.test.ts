@@ -9,7 +9,7 @@ const { installWindowsElectronCdp, runWindowsElectronEntry } = require(
     app: { commandLine: { appendSwitch: ReturnType<typeof vi.fn> } };
     platform: NodeJS.Platform;
     env: NodeJS.ProcessEnv;
-  }): { port: number; userDataDirectory: string } | null;
+  }): { port: number; userDataDirectory: string; logPath: string } | null;
   runWindowsElectronEntry(options: {
     app: { commandLine: { appendSwitch: ReturnType<typeof vi.fn> } };
     platform: NodeJS.Platform;
@@ -24,6 +24,7 @@ describe("Windows Electron early CDP loader", () => {
     const env: NodeJS.ProcessEnv = {
       HANA_WINDOWS_CDP_PORT: "41002",
       HANA_WINDOWS_CDP_USER_DATA_DIR: "C:\\temp\\electron-data",
+      HANA_WINDOWS_CDP_LOG_PATH: "C:\\temp\\electron-cdp.log",
     };
 
     expect(installWindowsElectronCdp({
@@ -33,6 +34,7 @@ describe("Windows Electron early CDP loader", () => {
     })).toEqual({
       port: 41_002,
       userDataDirectory: "C:\\temp\\electron-data",
+      logPath: "C:\\temp\\electron-cdp.log",
     });
     expect(appendSwitch).toHaveBeenCalledWith(
       "user-data-dir",
@@ -49,10 +51,12 @@ describe("Windows Electron early CDP loader", () => {
       env: {
         HANA_WINDOWS_CDP_PORT: "41002",
         HANA_WINDOWS_CDP_USER_DATA_DIR: "/tmp/electron-data",
+        HANA_WINDOWS_CDP_LOG_PATH: "/tmp/electron-cdp.log",
       },
     })).toEqual({
       port: 41_002,
       userDataDirectory: "/tmp/electron-data",
+      logPath: "/tmp/electron-cdp.log",
     });
     expect(appendSwitch).toHaveBeenCalledWith("remote-debugging-port", "41002");
   });
@@ -66,6 +70,7 @@ describe("Windows Electron early CDP loader", () => {
       env: {
         HANA_WINDOWS_CDP_PORT: "41002",
         HANA_WINDOWS_CDP_USER_DATA_DIR: "C:\\temp\\electron-data",
+        HANA_WINDOWS_CDP_LOG_PATH: "C:\\temp\\electron-cdp.log",
         HANA_WINDOWS_CDP_BOOTSTRAP_PATH: "D:\\repo\\desktop\\bootstrap.cjs",
       },
       loadBootstrap,
@@ -83,6 +88,7 @@ describe("Windows Electron early CDP loader", () => {
         env: {
           HANA_WINDOWS_CDP_PORT: port,
           HANA_WINDOWS_CDP_USER_DATA_DIR: userDataDirectory,
+          HANA_WINDOWS_CDP_LOG_PATH: "C:\\temp\\electron-cdp.log",
         },
       })
     );

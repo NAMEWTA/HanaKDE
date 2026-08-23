@@ -17,9 +17,15 @@ function installWindowsElectronCdp({
   if (!pathApi.isAbsolute(userDataDirectory)) {
     throw new Error("Windows Knowledge E2E requires an absolute Chromium user data directory");
   }
+  const logPath = env.HANA_WINDOWS_CDP_LOG_PATH ?? "";
+  if (!pathApi.isAbsolute(logPath)) {
+    throw new Error("Windows Knowledge E2E requires an absolute Chromium diagnostic log path");
+  }
   app.commandLine.appendSwitch("user-data-dir", userDataDirectory);
   app.commandLine.appendSwitch("remote-debugging-port", portText);
-  return { port, userDataDirectory };
+  app.commandLine.appendSwitch("enable-logging", "file");
+  app.commandLine.appendSwitch("log-file", logPath);
+  return { port, userDataDirectory, logPath };
 }
 
 function runWindowsElectronEntry({
@@ -28,13 +34,23 @@ function runWindowsElectronEntry({
   env = process.env,
   loadBootstrap = require,
 } = {}) {
+  globalThis.__hanaWindowsCdpBootstrap = {
+    entryStarted: true,
+    bootstrapLoaded: false,
+    eventLoopReached: false,
+  };
+  setImmediate(() => {
+    globalThis.__hanaWindowsCdpBootstrap.eventLoopReached = true;
+  });
   installWindowsElectronCdp({ app, platform, env });
   const bootstrapPath = env.HANA_WINDOWS_CDP_BOOTSTRAP_PATH ?? "";
   const pathApi = platform === "win32" ? path.win32 : path;
   if (!pathApi.isAbsolute(bootstrapPath)) {
     throw new Error("Windows Knowledge E2E requires an absolute desktop bootstrap path");
   }
-  return loadBootstrap(bootstrapPath);
+  const result = loadBootstrap(bootstrapPath);
+  globalThis.__hanaWindowsCdpBootstrap.bootstrapLoaded = true;
+  return result;
 }
 
 if (process.versions.electron) {
