@@ -17,15 +17,19 @@ test('T-18 selects an active workspace resource through @ search and closes it f
 
   const { page } = knowledgeApp;
   const input = page.locator('#inputBox');
+  const menu = page.locator('[role="dialog"]');
   await expect(input).toBeVisible({ timeout: 90_000 });
   await expect(input).toHaveAttribute('contenteditable', 'true');
   await input.click();
+  await expect(input).toBeFocused();
+  await input.pressSequentially('@');
+  await expect(menu).toBeVisible();
   const searchResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return (url.pathname === '/api/desk/search-files' || url.pathname === '/api/workbench/search')
       && url.searchParams.get('q') === 'at-search-lifecycle-token';
   });
-  await input.pressSequentially('@at-search-lifecycle-token');
+  await input.pressSequentially('at-search-lifecycle-token', { delay: 10 });
 
   const response = await searchResponse;
   if (!response.ok()) {
@@ -36,7 +40,6 @@ test('T-18 selects an active workspace resource through @ search and closes it f
     expect.objectContaining({ name: fileName }),
   ]));
 
-  const menu = page.locator('[role="dialog"]');
   const option = menu.locator('[role="option"]').filter({ hasText: fileName });
   await expect(option).toBeVisible();
   await expect(menu).toHaveAttribute('aria-busy', 'false');
@@ -48,7 +51,9 @@ test('T-18 selects an active workspace resource through @ search and closes it f
   await expect(menu).toHaveCount(0);
   await expect(input).toContainText(fileName);
 
-  await input.pressSequentially('@at-search-lifecycle-token');
+  await input.pressSequentially('@');
+  await expect(menu).toBeVisible();
+  await input.pressSequentially('at-search-lifecycle-token', { delay: 10 });
   await expect(option).toBeVisible();
   await expect(menu).toHaveAttribute('aria-busy', 'false');
   await expect(input).toBeFocused();

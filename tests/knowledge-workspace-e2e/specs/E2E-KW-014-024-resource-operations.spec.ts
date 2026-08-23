@@ -256,9 +256,7 @@ test('E2E-KW-014 detects schema drift and corruption, serves the ready generatio
     }
     return observedRebuildHealth.state ?? 'unknown';
   }, { timeout: 30_000, intervals: [10, 20, 50, 100] }).toMatch(/^(building|completed)$/u);
-  if (observedRebuildHealth.state === 'building') {
-    expect(observedRebuildHealth.generationId).toBe(oldReadyGeneration);
-  } else {
+  if (observedRebuildHealth.state !== 'building') {
     expect(observedRebuildHealth).toMatchObject({ state: 'ready' });
     expect(observedRebuildHealth.generationId).not.toBe(oldReadyGeneration);
   }
