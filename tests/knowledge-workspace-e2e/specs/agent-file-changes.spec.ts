@@ -16,6 +16,9 @@ test('E2E-KW-025 T-17 projects a real Agent write into shared History after relo
   test.setTimeout(180_000);
   const { page } = knowledgeApp;
   await page.locator('[data-tab="chat"]').click();
+  await expect(page.locator('.connection-status')).toHaveClass(/\bconnected\b/, {
+    timeout: 30_000,
+  });
   const editor = page.locator('.ProseMirror[contenteditable="true"]:visible').last();
   await expect(editor).toBeVisible();
   await editor.fill('Create the deterministic Agent History fixture.');
