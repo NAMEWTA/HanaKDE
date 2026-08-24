@@ -1,106 +1,77 @@
 {
   "schemaVersion": 1,
-  "tag": "v0.0.1",
-  "version": "0.0.1",
-  "previousTag": "none (first HanaKDE release)",
-  "generatedAt": "2026-08-22T08:50:35.000Z",
+  "tag": "v0.0.2",
+  "version": "0.0.2",
+  "previousTag": "v0.0.1",
+  "generatedAt": "2026-08-24T04:35:04.000Z",
   "noUserFacingChanges": false,
   "summary": {
-    "zh": "HanaKDE 首个公开版本带来完整的知识工作区、文件历史与内置待办工作台，并在保留这些二次开发能力的同时吸收 OpenHanako v0.449.0 的增强和修复。",
-    "en": "The first public HanaKDE release delivers the complete Knowledge Workspace, file history, and built-in Todo workbench while retaining these downstream capabilities alongside the enhancements and fixes from OpenHanako v0.449.0."
+    "zh": "Knowledge 工作区现在像 VS Code workspace 一样，在同一棵资源树中并列展示主目录和额外挂载目录，并与聊天工作台共享一致的文件树视觉。",
+    "en": "The Knowledge workspace now presents the main directory and additional mounts as sibling roots in one VS Code-style explorer, using the same file-tree presentation as the chat workbench."
   },
-  "counts": { "feature": 3, "fix": 1, "improvement": 1, "migration": 0 },
+  "counts": {
+    "feature": 1,
+    "fix": 1,
+    "improvement": 0,
+    "migration": 0
+  },
   "source": {
     "owner": "NAMEWTA",
     "repo": "HanaKDE",
-    "commitRange": "first HanaKDE release through 2914ddf2",
-    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.1",
+    "commitRange": "v0.0.1..18310e5e",
+    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.2",
     "releaseNotes": ""
   },
   "items": [
     {
-      "id": "knowledge-workspace",
-      "kind": "feature",
+      "id": "knowledge-multi-root-explorer",
+      "kind": "fix",
       "importance": "high",
-      "title": { "zh": "完整的知识工作区", "en": "Complete Knowledge Workspace" },
+      "title": {
+        "zh": "Knowledge 多根资源树",
+        "en": "Multi-root Knowledge explorer"
+      },
       "summary": {
-        "zh": "在统一工作区中浏览和编辑多来源资料，使用分组搜索、标签、引用、预览和安全的文件操作来组织知识。",
-        "en": "Browse and edit material from multiple sources in one workspace, with grouped search, tags, citations, previews, and guarded file operations."
+        "zh": "移除重复的来源栏，把主目录与额外挂载目录作为同一 Explorer 的一级兄弟根，并显示真实目录名称。",
+        "en": "The duplicate Sources panel is removed, and the main directory and additional mounts now appear as sibling roots in one Explorer with their real directory names."
       },
       "details": [
         {
-          "zh": "支持 Markdown 编辑、实时预览、表格、代码块、数学公式和 Mermaid 图表。",
-          "en": "Includes Markdown editing, live preview, tables, code blocks, math, and Mermaid diagrams."
+          "zh": "Knowledge 与聊天工作台复用同一个树行 Renderer 和 HanaKDE 既有文件图标，统一行高、缩进、展开控件与长名称截断。",
+          "en": "Knowledge and the chat workbench now share one tree-row renderer and HanaKDE's existing file icons, aligning row height, indentation, disclosure controls, and long-name truncation."
         },
         {
-          "zh": "索引、搜索与资源树在桌面端、Web Open 和 Web Full 入口保持一致。",
-          "en": "Indexing, search, and the resource tree remain consistent across desktop, Web Open, and Web Full entry points."
+          "zh": "桌面与窄窗口布局均收敛为单一 Explorer，并保留选择、键盘导航、懒加载、拖拽和打开行为。",
+          "en": "Desktop and narrow layouts both use a single Explorer while preserving selection, keyboard navigation, lazy loading, drag and drop, and open behavior."
         }
       ],
       "sources": [
-        { "type": "commit", "ref": "a0674bfa", "title": "feat(knowledge): complete workspace release implementation" },
-        { "type": "commit", "ref": "60a9047b", "title": "feat(knowledge): deliver source-grouped super search" }
+        {
+          "type": "commit",
+          "ref": "18310e5e",
+          "title": "feat(knowledge): unify mounted roots in explorer"
+        }
       ]
     },
     {
       "id": "file-history",
       "kind": "feature",
       "importance": "high",
-      "title": { "zh": "文件历史、差异与恢复", "en": "File history, diffs, and restore" },
+      "title": {
+        "zh": "文件历史、差异与恢复",
+        "en": "File history, diffs, and restore"
+      },
       "summary": {
         "zh": "从主工作区和文件树查看历史版本、比较差异并执行受保护的恢复操作。",
         "en": "Inspect historical versions, compare changes, and perform guarded restores from the main workspace and file tree."
       },
       "details": [],
       "sources": [
-        { "type": "commit", "ref": "2421bfed", "title": "feat(T-16): expose Workbench History flow" }
-      ]
-    },
-    {
-      "id": "builtin-todo-workbench",
-      "kind": "feature",
-      "importance": "high",
-      "title": { "zh": "内置待办工作台", "en": "Built-in Todo workbench" },
-      "summary": {
-        "zh": "持久化待办插件覆盖创建、组织、重复任务、提醒、自动化运行以及导入导出，并提供完整工作台界面。",
-        "en": "The persistent Todo plugin covers capture, organization, recurrence, reminders, automation runs, import and export, with a complete workbench UI."
-      },
-      "details": [],
-      "sources": [
-        { "type": "commit", "ref": "b56eb326", "title": "Add the built-in todolist plugin and complete workbench" }
-      ]
-    },
-    {
-      "id": "packaged-runtime-hardening",
-      "kind": "fix",
-      "importance": "high",
-      "title": { "zh": "打包启动与 Windows 运行链加固", "en": "Hardened packaged startup and Windows runtime" },
-      "summary": {
-        "zh": "补齐运行依赖完整性检查、服务就绪诊断和 Windows 安装包直连门禁，减少安装后启动失败和残缺运行时。",
-        "en": "Runtime dependency integrity checks, server readiness diagnostics, and direct Windows installer gates reduce post-install startup failures and incomplete runtimes."
-      },
-      "details": [],
-      "sources": [
-        { "type": "commit", "ref": "f444b0e5", "title": "fix(platform): harden packaged startup and Windows gates" }
-      ]
-    },
-    {
-      "id": "openhanako-v0-449-sync",
-      "kind": "improvement",
-      "importance": "medium",
-      "title": { "zh": "吸收 OpenHanako v0.449.0", "en": "Integrated OpenHanako v0.449.0" },
-      "summary": {
-        "zh": "通过保留合并拓扑的上游同步引入最新模型、更新器和稳定性改进，同时保留 HanaKDE 的 Knowledge、History、ResourceIO 与 Todo 所有权边界。",
-        "en": "A topology-preserving upstream merge brings in current model, updater, and stability improvements while retaining HanaKDE ownership boundaries for Knowledge, History, ResourceIO, and Todo."
-      },
-      "details": [
         {
-          "zh": "包含 DeepSeek V4 Flash Vision 实验模型与声明图片能力模型的直接图像输入支持。",
-          "en": "Includes the experimental DeepSeek V4 Flash Vision model and direct image input for models that declare image capability."
+          "type": "commit",
+          "ref": "2421bfed",
+          "title": "feat(T-16): expose Workbench History flow"
         }
-      ],
-      "sources": [
-        { "type": "commit", "ref": "e66aa746", "title": "merge(upstream): absorb OpenHanako v0.449.0" }
       ]
     }
   ]

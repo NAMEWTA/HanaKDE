@@ -7,8 +7,8 @@
 - **Lead：** `root`
 - **Workspace/branch：** current workspace `/Users/wta/Documents/01-Code/myCode/HanaKDE` / `hanakde`
 - **实施前基线：** `b59ab7496379ab1de5c92d6a5dde353ef01f119b`
-- **最终 checkpoint：** 同一 HEAD 上的未提交 current-workspace diff；12 个产品/测试文件的组合 SHA-256 为 `785413c55f2c02cd3a3ae59262a36ffb535b6a3feff303cb7d24cc33370146e4`
-- **状态：** review；实施提交、远端 Node 24 Knowledge E2E 与 validator pending
+- **最终 checkpoint：** implementation commit `18310e5e7afef6a392b4786a8ab2269cb298d059`
+- **状态：** review；远端 Node 24 Knowledge E2E 与 validator pending
 
 ## 1. 实现摘要
 
@@ -19,7 +19,7 @@ Knowledge 删除独立 Sources 栏，把 `main` 与 mounted sources 作为同一
 - **Implementation owner：** Lead
 - **Dispatch Packet/checkpoint：** Lead direct；实施前基线 `b59ab7496379ab1de5c92d6a5dde353ef01f119b`
 - **允许动作：** current workspace 内受影响 Desktop Renderer、Knowledge E2E 和本 change Speculo 工件写入；用户已授权 commit、push 和 `v0.0.2` release；不重建本地依赖或清理原型 worktree
-- **返回：** current workspace 保持未提交；产品修改、测试、视觉证据与未验证项见第 3、5、9 节
+- **返回：** 产品实现已提交为 `18310e5e7afef6a392b4786a8ab2269cb298d059`；工作区仍保留不属于本 change 的用户改动；测试、视觉证据与未验证项见第 3、5、9 节
 - **Lead 独立核对：** pass-local；重读产品 diff、组件测试、响应式样式、截图指标和 Spec 合同
 - **只读 Agent findings：** 无；Direct Spec 未派遣 subagent
 
@@ -76,7 +76,7 @@ Knowledge 删除独立 Sources 栏，把 `main` 与 mounted sources 作为同一
 
 ### 标准轴
 
-- **固定输入：** `b59ab7496379ab1de5c92d6a5dde353ef01f119b` 与产品 checkpoint `785413c55f2c02cd3a3ae59262a36ffb535b6a3feff303cb7d24cc33370146e4`
+- **固定输入：** `b59ab7496379ab1de5c92d6a5dde353ef01f119b..18310e5e7afef6a392b4786a8ab2269cb298d059`
 - **结果：** pass-local
 - **Findings 与修正：** Desk 原树行 CSS 在适配共享 Renderer 后成为重复死样式，已删除；共享样式字面量触发 ratchet，已 token 化并重跑验证。共享 Module 无 effect/store/client，图标 markup 仅来自既有受控常量。
 
@@ -91,13 +91,13 @@ Knowledge 删除独立 Sources 栏，把 `main` 与 mounted sources 作为同一
 | 项目 | 结果 |
 |---|---|
 | Parent before SHA | `b59ab7496379ab1de5c92d6a5dde353ef01f119b` |
-| Implementation/source SHA | `not-applicable`；未获 implementation commit 授权，使用 current-workspace checkpoint |
+| Implementation/source SHA | `18310e5e7afef6a392b4786a8ab2269cb298d059` |
 | Candidate branch/workspace | current |
 | Method/conflicts | Direct Spec current workspace；无 integration merge |
 | Integration checks | 定向 Vitest、style discipline、typecheck、目标 ESLint、boundary、renderer build、视觉检查均通过 |
 | E2E disposition | required |
 | E2E result | environment-blocked；健康检查前因 Node/native ABI 失败 |
-| Parent result/re-read | HEAD 仍为 `b59ab7496379ab1de5c92d6a5dde353ef01f119b`；产品 diff 未提交 |
+| Parent result/re-read | `hanakde` HEAD 包含 implementation commit `18310e5e7afef6a392b4786a8ab2269cb298d059` |
 
 ## 8. 偏差与决策
 
@@ -109,9 +109,9 @@ Knowledge 删除独立 Sources 栏，把 `main` 与 mounted sources 作为同一
 
 - **残余风险/已知限制：** 真实 server-backed Knowledge shell E2E 尚未执行；当前证据覆盖组件行为、生产构建和路由隔离视觉，但不替代 native/server 集成。
 - **后续 Ticket：** 无；恢复 Node 24.12+ 与匹配依赖后在同一 Direct Spec 完成 E2E。
-- **监控或回滚触发：** E2E 若出现来源顺序、ResourceIO payload、键盘/拖拽或打开行为回归，则保持未提交状态并在本 change 修复；不推进 HEAD。
+- **监控或回滚触发：** 远端 E2E 若出现来源顺序、ResourceIO payload、键盘/拖拽或打开行为回归，则不创建 release tag，并在本 change 追加修复提交。
 - **Prototype source：** `speculo/2026-08-24-knowledge-multi-root-explorer-redesign/prototype-PROTO-001` / `<Path>specdev-worktree/prototype-knowledge-multi-root-explorer</Path>`，按未授权 cleanup 状态保留
-- **Source commit：** `not-applicable`
-- **Parent result：** `b59ab7496379ab1de5c92d6a5dde353ef01f119b` + current workspace diff
+- **Source commit：** `18310e5e7afef6a392b4786a8ab2269cb298d059`
+- **Parent result：** `18310e5e7afef6a392b4786a8ab2269cb298d059`
 - **Source workspace：** `/Users/wta/Documents/01-Code/myCode/HanaKDE`
 - **Evidence：** `<Path>speculo/.speculo/specdev/changes/2026-08-24-knowledge-multi-root-explorer-redesign/evidence/direct-spec.md</Path>`
