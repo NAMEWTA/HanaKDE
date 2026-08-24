@@ -167,6 +167,54 @@ describe("build.yml: seed kit verification precedes every electron-builder invoc
   });
 });
 
+describe("build.yml: early releases require no operator-managed secrets", () => {
+  const doc = loadWorkflow(BUILD_YAML_PATH);
+  const source = fs.readFileSync(BUILD_YAML_PATH, "utf8");
+
+  it("generates a per-platform integrity identity before building the packaged shell", () => {
+    const steps = doc.jobs.build?.steps ?? [];
+    const keyIndex = steps.findIndex((step) => step.name === "Prepare ephemeral artifact signing identity");
+    const clientIndex = steps.findIndex((step) => step.name === "Build client bundles (main + preload + renderer)");
+
+    expect(keyIndex).toBeGreaterThanOrEqual(0);
+    expect(keyIndex).toBeLessThan(clientIndex);
+    expect(stepRun(steps[keyIndex])).toContain("scripts/artifact-keygen.mjs");
+    expect(stepRun(steps[keyIndex])).toContain("HANA_SIGN_KEY=$RUNNER_TEMP/hana-release-sign-key.pem");
+    expect(stepRun(steps[keyIndex])).toContain("HANA_SIGN_KEYSET=$RUNNER_TEMP/hana-release-keyset.json");
+    expect(doc.jobs["renderer-box"]?.steps?.some((step) => (
+      step.name === "Prepare ephemeral artifact signing identity"
+    ))).toBe(false);
+  });
+
+  it("disables platform signing, notarization, automatic OTA, and secret-backed mirrors", () => {
+    const forbiddenSecrets = [
+      "HANA_SIGN_KEY",
+      "CSC_LINK",
+      "CSC_KEY_PASSWORD",
+      "APPLE_ID",
+      "APPLE_ID_PASSWORD",
+      "APPLE_TEAM_ID",
+      "WIN_CSC_LINK",
+      "WIN_CSC_KEY_PASSWORD",
+      "ATOMGIT_TOKEN",
+    ];
+    for (const secret of forbiddenSecrets) {
+      expect(source).not.toContain(`secrets.${secret}`);
+    }
+
+    const steps = doc.jobs.build?.steps ?? [];
+    const mac = steps.find((step) => step.name === "Build macOS (DMG + ZIP)");
+    const windows = steps.find((step) => step.name === "Build Windows installer");
+    expect(mac?.env).toMatchObject({
+      CSC_IDENTITY_AUTO_DISCOVERY: "false",
+      SKIP_NOTARIZE: "true",
+    });
+    expect(windows?.env).toMatchObject({ CSC_IDENTITY_AUTO_DISCOVERY: "false" });
+    expect(doc.jobs).not.toHaveProperty("publish-train");
+    expect(doc.jobs).not.toHaveProperty("mirror-atomgit");
+  });
+});
+
 describe("build.yml: Windows standalone server stays outside the seed/OTA boundary", () => {
   const doc = loadWorkflow(BUILD_YAML_PATH);
 
@@ -213,10 +261,11 @@ describe("build.yml: Windows standalone server stays outside the seed/OTA bounda
     );
   });
 
-  it("does not expose the standalone namespace to publish-train", () => {
-    const publishTrainText = JSON.stringify(doc.jobs["publish-train"]);
-    expect(publishTrainText).not.toContain("dist-standalone");
-    expect(publishTrainText).not.toContain("HanaCore-");
-    expect(publishTrainText).toContain("publish-train.mjs");
+  it("keeps the standalone namespace in the installer release with automatic trains disabled", () => {
+    expect(doc.jobs).not.toHaveProperty("publish-train");
+    const releaseText = JSON.stringify(doc.jobs.release);
+    expect(releaseText).toContain("dist-standalone");
+    expect(releaseText).toContain("HanaCore-");
+    expect(releaseText).not.toContain("publish-train.mjs");
   });
 });

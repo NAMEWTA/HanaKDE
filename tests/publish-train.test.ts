@@ -120,18 +120,13 @@ describe("publish-train: parseArgs", () => {
   });
 });
 
-describe("publish-train: automatic workflow channel policy", () => {
-  it("gates the automatic stable step on a non-prerelease source while beta remains available", () => {
+describe("publish-train: early release workflow policy", () => {
+  it("does not publish an automatic train from ephemeral installer identities", () => {
     const workflow = fs.readFileSync(path.join(process.cwd(), ".github", "workflows", "build.yml"), "utf8");
-    const stableStart = workflow.indexOf("- name: Publish stable train");
-    const betaStart = workflow.indexOf("- name: Publish beta train");
 
-    expect(workflow).toContain("id: source_release");
-    expect(stableStart).toBeGreaterThan(-1);
-    expect(betaStart).toBeGreaterThan(stableStart);
-    expect(workflow.slice(stableStart, betaStart)).toContain(
-      "if: steps.source_release.outputs.is_prerelease == 'false'",
-    );
+    expect(workflow).not.toContain("publish-train:");
+    expect(workflow).not.toContain("Materialize train signing key");
+    expect(workflow).not.toContain("node scripts/publish-train.mjs");
   });
 
   it("requires an explicit, default-off confirmation before the manual workflow passes the stable override", () => {

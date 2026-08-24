@@ -9,17 +9,12 @@ function readWorkflow(name: string) {
 }
 
 describe("release mirror workflows", () => {
-  it("mirrors the published tag to AtomGit after the release job succeeds", () => {
+  it("does not automatically mirror an early unsigned installer release", () => {
     const workflow = readWorkflow("build.yml");
 
-    expect(workflow).toContain("mirror-atomgit:");
-    expect(workflow).toContain("needs: release");
-    expect(workflow).toContain("ATOMGIT_REPO: ${{ vars.ATOMGIT_REPO }}");
-    expect(workflow).toContain("ATOMGIT_OWNER: ${{ vars.ATOMGIT_OWNER }}");
-    expect(workflow).toContain("steps.mirror_config.outputs.enabled == 'true'");
-    expect(workflow).toContain("node scripts/mirror-release-to-atomgit.mjs --tag \"${{ github.ref_name }}\"");
-    expect(workflow).not.toContain("node scripts/mirror-release-to-atomgit.mjs --newest");
-    expect(workflow).not.toContain("node scripts/mirror-release-to-atomgit.mjs --latest");
+    expect(workflow).not.toContain("mirror-atomgit:");
+    expect(workflow).not.toContain("ATOMGIT_TOKEN");
+    expect(workflow).not.toContain("node scripts/mirror-release-to-atomgit.mjs");
   });
 
   it("keeps manual selection explicit and routes GitHub release edits by exact tag", () => {
