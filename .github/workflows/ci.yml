@@ -230,14 +230,16 @@ jobs:
             fi
           }
 
-          # E2E-KW-022 keeps a child process continuously replacing a parent
-          # directory with a junction on Windows. Run that real security gate
-          # in its own one-shot Playwright worker, then run every other Web
-          # Open story once. This is process isolation, not a retry: both
-          # commands are mandatory and retries stay disabled in the config.
+          # E2E-KW-006 exercises native PDF/media preview processes, while
+          # E2E-KW-022 continuously replaces a parent directory with a Windows
+          # junction. Give both native-process boundaries a fresh one-shot
+          # Playwright worker, then run every other Web Open story once.
+          # This is process isolation, not a retry: all commands are mandatory and
+          # retries stay disabled in the config.
           if [ "$RUNNER_OS" = "Windows" ] && [ "${{ matrix.project }}" = "web-open" ]; then
+            run_project --grep 'E2E-KW-006'
             run_project --grep 'E2E-KW-022'
-            run_project --grep-invert 'E2E-KW-022'
+            run_project --grep-invert 'E2E-KW-006|E2E-KW-022'
           else
             run_project
           fi
