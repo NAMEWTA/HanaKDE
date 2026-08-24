@@ -92,11 +92,11 @@ describe('knowledge fenced code Live Preview', () => {
 
     await vi.waitFor(() => {
       expect(parent.querySelectorAll('.cm-knowledge-code-line')).toHaveLength(3);
+      expect(parent.querySelector('.tok-keyword')).not.toBeNull();
     });
     expect(parent.textContent).not.toContain('```js');
     expect(parent.textContent).not.toContain('```');
     expect(parent.textContent).toContain('const answer = "safe";');
-    expect(parent.querySelector('.tok-keyword')).not.toBeNull();
     expect(parent.querySelectorAll('button, [role="button"], .cm-codeblock-toolbar')).toHaveLength(0);
     expect(view.state.doc.toString()).toBe(doc);
     expect(undoDepth(view.state)).toBe(0);
