@@ -234,7 +234,7 @@ describe("KW-RULE-PREFLIGHT executable repository contract", () => {
 
     expect(packageContract).toMatchObject({
       name: "hanako",
-      version: "0.0.1",
+      version: "0.0.2",
       scripts: {
         typecheck:
           "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
