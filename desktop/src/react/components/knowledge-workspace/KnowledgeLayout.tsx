@@ -556,6 +556,7 @@ export function KnowledgeLayout({
         activeTarget={activeStatusTarget}
       />
       <CreateResourceDialog
+        key={`${createKind ?? 'closed'}:${selection.sourceKey ?? 'main'}:${selection.targetDirectoryPath ?? ''}`}
         client={treeClient}
         kind={createKind}
         sourceKey={selection.sourceKey ?? 'main'}

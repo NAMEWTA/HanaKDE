@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { KnowledgeWorkspaceClient } from '../../services/knowledge-workspace-client';
 import type { KnowledgeResourceAddress } from '../../../../../shared/knowledge-workspace-contract';
 import styles from './KnowledgeWorkspace.module.css';
@@ -25,12 +25,6 @@ export function CreateResourceDialog({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submitGateRef = useRef(false);
-  useEffect(() => {
-    submitGateRef.current = false;
-    setName('');
-    setError(null);
-    setSubmitting(false);
-  }, [kind, sourceKey, directoryPath]);
   if (!kind || !sourceKey) return null;
   const title = tr(kind === 'page' ? 'knowledge.create.pageTitle' : 'knowledge.create.folderTitle');
   return (

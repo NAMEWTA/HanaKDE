@@ -72,4 +72,25 @@ describe('CreateResourceDialog', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
     expect(createResource).toHaveBeenCalledTimes(2);
   });
+
+  it('accepts immediate input after reopening for a different resource kind', () => {
+    window.t = (key) => key;
+    const props = {
+      client: { createResource: vi.fn() } as never,
+      sourceKey: 'main',
+      directoryPath: '',
+      onClose: vi.fn(),
+      onCreated: vi.fn(),
+    };
+    const view = render(<CreateResourceDialog key="page" {...props} kind="page" />);
+    view.rerender(<CreateResourceDialog key="closed" {...props} kind={null} />);
+    view.rerender(<CreateResourceDialog key="folder" {...props} kind="folder" />);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Folder' } });
+
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('Folder');
+    expect((screen.getByRole('button', {
+      name: 'knowledge.action.create',
+    }) as HTMLButtonElement).disabled).toBe(false);
+  });
 });
