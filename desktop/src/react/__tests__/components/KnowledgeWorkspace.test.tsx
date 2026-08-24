@@ -104,8 +104,14 @@ describe('KnowledgeWorkspace', () => {
     expect(localStorage.getItem('hana-tab')).toBe('knowledge');
   });
 
-  it('opens a fresh main-only shell with source, tree and one empty editor group', async () => {
-    const listSources = vi.fn(async () => [mainSource]);
+  it('opens one Explorer with the main and mounted sources as sibling roots', async () => {
+    const mountedSource: KnowledgeSourceDto = {
+      ...mainSource,
+      sourceKey: 'reference-notes',
+      displayName: 'Reference notes',
+      role: 'mounted',
+    };
+    const listSources = vi.fn(async () => [mountedSource, mainSource]);
     render(
       <KnowledgeWorkspace
         client={clientWithListSources(listSources)}
@@ -117,9 +123,7 @@ describe('KnowledgeWorkspace', () => {
     expect(
       screen.getByRole('main', { name: 'Knowledge workspace' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('region', { name: 'Sources' }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Sources' })).not.toBeInTheDocument();
     expect(
       screen.getByRole('tree', { name: 'Resource tree' }),
     ).toBeInTheDocument();
@@ -130,7 +134,17 @@ describe('KnowledgeWorkspace', () => {
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
 
     await waitFor(() => expect(listSources).toHaveBeenCalledTimes(1));
-    expect(screen.getAllByText('Working directory')).toHaveLength(2);
+    await waitFor(() => {
+      expect(screen.queryByText('Working directory')).not.toBeInTheDocument();
+    });
+    const sourceRoots = screen.getAllByRole('treeitem').filter(
+      item => item.getAttribute('aria-level') === '1',
+    );
+    expect(sourceRoots).toHaveLength(2);
+    expect(sourceRoots.map(item => item.textContent)).toEqual([
+      expect.stringContaining('Main workspace'),
+      expect.stringContaining('Reference notes'),
+    ]);
     expect(screen.queryByText('Restored mount must disappear')).not.toBeInTheDocument();
     expect(useStore.getState()).toMatchObject({
       knowledgeWorkspaceKey: 'workspace-session-15',
@@ -196,7 +210,7 @@ describe('KnowledgeWorkspace', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sources unavailable');
-    expect(screen.getAllByText('Working directory')).toHaveLength(2);
+    expect(screen.getAllByText('Working directory')).toHaveLength(1);
     expect(screen.getByRole('group', { name: 'Editor group' })).toBeInTheDocument();
 
     await act(async () => {
@@ -205,7 +219,7 @@ describe('KnowledgeWorkspace', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(screen.getAllByText('Working directory')).toHaveLength(2);
+      expect(screen.getAllByText('Main workspace')).toHaveLength(1);
     });
     expect(listSources).toHaveBeenCalledTimes(2);
   });

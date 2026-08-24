@@ -132,6 +132,7 @@ describe('KnowledgeResourceTree', () => {
     renderTree({ client: treeClient(list), sources: [mainSource], onContextMenu });
     fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
     const paper = await screen.findByRole('treeitem', { name: /paper\.pdf/u });
+    expect(paper).toHaveAttribute('data-workspace-tree-row');
 
     fireEvent.contextMenu(paper, { clientX: 120, clientY: 240 });
 

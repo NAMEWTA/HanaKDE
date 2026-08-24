@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useStore } from '../../stores';
 import {
   deskCreateFileInSubdir,
@@ -36,6 +36,7 @@ import {
 import type { DeskFile } from '../../types';
 import type { CtxMenuState, FileTypeFilter, SortMode } from './desk-types';
 import { ICONS, fileMatchesTypeFilters, getFileIcon, sortDeskFiles } from './desk-types';
+import { WorkspaceTreeRow } from '../shared/WorkspaceTreeRow';
 import s from './Desk.module.css';
 
 function childSubdir(parent: string, name: string): string {
@@ -268,29 +269,25 @@ function PendingCreateNode({
 }) {
   const isFolder = edit.kind === 'folder';
   return (
-    <div
-      className={`${s.treeItem} ${s.treeItemSelected}`}
+    <WorkspaceTreeRow
+      depth={depth}
+      iconMarkup={isFolder ? ICONS.folder : getFileIcon(edit.draftName)}
+      label={(
+        <RenameInput
+          initialValue={edit.draftName}
+          disabled={edit.phase === 'saving'}
+          onCommit={(value) => void onCommit(edit, value)}
+          onCancel={onCancel}
+        />
+      )}
+      name={edit.draftName}
+      selected
       role="treeitem"
-      aria-label={edit.draftName}
       data-desk-item=""
       data-desk-pending-create=""
       data-selected="true"
-      style={{ '--tree-depth': depth } as CSSProperties}
       tabIndex={0}
-    >
-      <span className={s.treeIndent} aria-hidden="true" />
-      <span className={s.treeDisclosure} aria-hidden="true" />
-      <span
-        className={s.itemIcon}
-        dangerouslySetInnerHTML={{ __html: isFolder ? ICONS.folder : getFileIcon(edit.draftName) }}
-      />
-      <RenameInput
-        initialValue={edit.draftName}
-        disabled={edit.phase === 'saving'}
-        onCommit={(value) => void onCommit(edit, value)}
-        onCancel={onCancel}
-      />
-    </div>
+    />
   );
 }
 
@@ -586,16 +583,27 @@ function TreeNode({
 
   return (
     <>
-      <div
-        className={`${s.treeItem}${selected ? ` ${s.treeItemSelected}` : ''}${dropTarget ? ` ${s.treeItemDropTarget}` : ''}`}
+      <WorkspaceTreeRow
+        depth={depth}
+        disclosure={file.isDir ? <TreeDisclosureIcon expanded={expanded} /> : undefined}
+        dropTarget={dropTarget}
+        iconMarkup={file.isDir
+          ? (expanded ? ICONS.folderOpen : ICONS.folder)
+          : getFileIcon(file.name)}
+        label={isRenaming ? (
+          <RenameInput
+            initialValue={file.name}
+            onCommit={(newName) => void onCommitRename({ file, parent, subdir, depth }, newName)}
+            onCancel={onCancelRename}
+          />
+        ) : undefined}
+        name={file.name}
+        selected={selected}
         role="treeitem"
-        aria-label={file.name}
-        title={file.name}
         aria-expanded={file.isDir ? expanded : undefined}
         data-desk-item=""
         data-desk-path={subdir}
         data-selected={selected ? 'true' : 'false'}
-        style={{ '--tree-depth': depth } as CSSProperties}
         onClick={handleClick}
         onDoubleClick={openFile}
         onContextMenu={handleContextMenu}
@@ -606,29 +614,7 @@ function TreeNode({
         onDragOver={file.isDir ? handleDragOver : undefined}
         onDragLeave={file.isDir ? handleDragLeave : undefined}
         onDrop={file.isDir ? handleDrop : undefined}
-      >
-        <span className={s.treeIndent} aria-hidden="true" />
-        <span className={s.treeDisclosure} aria-hidden="true">
-          {file.isDir ? <TreeDisclosureIcon expanded={expanded} /> : null}
-        </span>
-        <span
-          className={s.itemIcon}
-          dangerouslySetInnerHTML={{
-            __html: file.isDir
-              ? (expanded ? ICONS.folderOpen : ICONS.folder)
-              : getFileIcon(file.name),
-          }}
-        />
-        {isRenaming ? (
-          <RenameInput
-            initialValue={file.name}
-            onCommit={(newName) => void onCommitRename({ file, parent, subdir, depth }, newName)}
-            onCancel={onCancelRename}
-          />
-        ) : (
-          <span className={s.itemName} title={file.name}>{file.name}</span>
-        )}
-      </div>
+      />
       {expanded && (children.length > 0 || pendingChild) && (
         <div role="group" className={s.treeGroup}>
           {pendingChild && (

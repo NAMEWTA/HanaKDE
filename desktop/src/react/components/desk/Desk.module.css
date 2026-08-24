@@ -218,68 +218,6 @@
     display: flex;
 }
 
-.treeItem {
-    --tree-leading-inset: 0px;
-    --tree-indent-step: 16px;
-    box-sizing: border-box;
-    width: calc(100% - 4px);
-    display: grid;
-    grid-template-columns:
-        calc(var(--tree-leading-inset) + (var(--tree-depth, 0) * var(--tree-indent-step)))
-        14px
-        22px
-        minmax(0, 1fr);
-    align-items: center;
-    column-gap: 0;
-    min-width: 0;
-    height: 28px;
-    padding: 0 8px 0 2px;
-    margin: 0 2px;
-    border-radius: 4px;
-    color: var(--text);
-    font-size: var(--fs-caption);
-    line-height: 1.4;
-    cursor: default;
-    user-select: none;
-    transition: background var(--duration-instant) var(--ease-out), color var(--duration-instant) var(--ease-out);
-}
-
-.treeItem:hover {
-    background: var(--overlay-subtle);
-}
-
-.treeItemSelected {
-    background: rgba(var(--accent-rgb), 0.10);
-}
-
-.treeItemDropTarget {
-    background: rgba(var(--accent-rgb), 0.12);
-}
-
-.treeDisclosure {
-    width: 14px;
-    min-width: 14px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    line-height: 1;
-}
-
-.treeDisclosure svg {
-    display: block;
-    width: 12px;
-    height: 12px;
-}
-
-.treeIndent {
-    display: block;
-    width: calc(var(--tree-leading-inset) + (var(--tree-depth, 0) * var(--tree-indent-step)));
-    min-width: 0;
-    height: 100%;
-    pointer-events: none;
-}
-
 /* 文件条目 */
 .item {
     display: flex;

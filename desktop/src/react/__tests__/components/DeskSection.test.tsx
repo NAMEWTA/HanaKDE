@@ -462,6 +462,7 @@ describe('DeskSection workspace watching', () => {
     render(<DeskSection />);
 
     const rootFile = screen.getByRole('treeitem', { name: /root.md/ });
+    expect(rootFile.hasAttribute('data-workspace-tree-row')).toBe(true);
     fireEvent.dragStart(rootFile);
 
     expect(window.platform?.startDrag).toHaveBeenCalledWith('/tmp/hana-desk/root.md');

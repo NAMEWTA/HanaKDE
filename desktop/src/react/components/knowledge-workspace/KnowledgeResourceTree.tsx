@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { CSSProperties, DragEvent, KeyboardEvent } from 'react';
+import type { DragEvent, KeyboardEvent } from 'react';
 import type {
   KnowledgeResourceAddress,
   KnowledgeSourceDto,
@@ -33,6 +33,7 @@ import { KnowledgeDragController } from './knowledge-drag-controller';
 import { invokeKnowledgeNative } from '../../services/knowledge-native-client';
 import { KNOWLEDGE_ATTACHMENT_RESOURCE_MIME } from '../../editor/knowledge-attachment-policy';
 import { ICONS, getFileIcon } from '../desk/desk-types';
+import { WorkspaceTreeRow } from '../shared/WorkspaceTreeRow';
 import { isMarkdownFileName } from '../../utils/file-kind';
 import type { KnowledgeBreadcrumbTarget } from './KnowledgeTabBar';
 import {
@@ -189,15 +190,10 @@ function DisclosureIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
-function ResourceIcon({ directory, expanded = false, name = '' }: {
-  directory: boolean;
-  expanded?: boolean;
-  name?: string;
-}) {
-  const markup = directory
+function resourceIconMarkup(directory: boolean, expanded = false, name = ''): string {
+  return directory
     ? (expanded ? ICONS.folderOpen : ICONS.folder)
     : getFileIcon(name);
-  return <span dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 
 export const KnowledgeResourceTree = forwardRef<
@@ -913,12 +909,48 @@ function SourceNode({
     || (!interact.selection.focusKey && interact.selection.visibleNodes[0]?.key === key);
   return (
     <li className={styles.knowledgeTreeListItem} role="none">
-      <div
+      <WorkspaceTreeRow
         aria-disabled={!listable || undefined}
         aria-expanded={listable ? expanded : undefined}
         aria-level={1}
         aria-selected={selected}
-        className={styles.knowledgeTreeItem}
+        depth={0}
+        disclosure={listable ? (
+          <button
+            aria-label={tr(
+              expanded ? 'knowledge.tree.collapse' : 'knowledge.tree.expand',
+              { name: source.displayName },
+            )}
+            className={styles.treeDisclosureButton}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle('');
+            }}
+            type="button"
+          >
+            <DisclosureIcon expanded={expanded} />
+          </button>
+        ) : undefined}
+        iconMarkup={resourceIconMarkup(true, expanded, source.displayName)}
+        name={source.displayName}
+        selected={selected}
+        trailing={(
+          <select
+            aria-label={tr('knowledge.tree.sort', { name: source.displayName })}
+            className={styles.knowledgeTreeSort}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => onSort(parseTreeSort(event.target.value))}
+            value={`${sort.field}:${sort.direction}`}
+          >
+            <option value="name:ascending">{tr('knowledge.tree.sortNameAscending')}</option>
+            <option value="name:descending">{tr('knowledge.tree.sortNameDescending')}</option>
+            <option value="modified:ascending">{tr('knowledge.tree.sortModifiedAscending')}</option>
+            <option value="modified:descending">{tr('knowledge.tree.sortModifiedDescending')}</option>
+            <option value="extension:ascending">{tr('knowledge.tree.sortExtensionAscending')}</option>
+            <option value="extension:descending">{tr('knowledge.tree.sortExtensionDescending')}</option>
+          </select>
+        )}
+        data-availability={source.availability}
         data-source-key={source.sourceKey}
         onDragOver={(event) => interact.dragOver(event, key)}
         onDrop={(event) => void interact.drop(event, key)}
@@ -935,44 +967,7 @@ function SourceNode({
         ref={(element) => interact.registerRow(key, element)}
         role="treeitem"
         tabIndex={focused ? 0 : -1}
-      >
-        {listable ? (
-          <button
-            aria-label={tr(
-              expanded ? 'knowledge.tree.collapse' : 'knowledge.tree.expand',
-              { name: source.displayName },
-            )}
-            className={styles.treeDisclosureButton}
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggle('');
-            }}
-            type="button"
-          >
-            <DisclosureIcon expanded={expanded} />
-          </button>
-        ) : (
-          <span className={styles.treeDisclosureSpacer} aria-hidden="true" />
-        )}
-        <span className={styles.treeSourceIcon} aria-hidden="true">
-          <ResourceIcon directory expanded={expanded} name={source.displayName} />
-        </span>
-        <span className={styles.knowledgeTreeName}>{source.displayName}</span>
-        <select
-          aria-label={tr('knowledge.tree.sort', { name: source.displayName })}
-          className={styles.knowledgeTreeSort}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(event) => onSort(parseTreeSort(event.target.value))}
-          value={`${sort.field}:${sort.direction}`}
-        >
-          <option value="name:ascending">{tr('knowledge.tree.sortNameAscending')}</option>
-          <option value="name:descending">{tr('knowledge.tree.sortNameDescending')}</option>
-          <option value="modified:ascending">{tr('knowledge.tree.sortModifiedAscending')}</option>
-          <option value="modified:descending">{tr('knowledge.tree.sortModifiedDescending')}</option>
-          <option value="extension:ascending">{tr('knowledge.tree.sortExtensionAscending')}</option>
-          <option value="extension:descending">{tr('knowledge.tree.sortExtensionDescending')}</option>
-        </select>
-      </div>
+      />
       {!listable && (
         <p className={styles.treeInlineStatus} role="status">
           {tr('knowledge.tree.unavailable', { name: source.displayName })}
@@ -1038,13 +1033,32 @@ function DirectoryGroup({
         const focused = interact.selection.focusKey === key;
         return (
           <li className={styles.knowledgeTreeListItem} key={relativePath} role="none">
-            <div
+            <WorkspaceTreeRow
               aria-expanded={item.isDirectory ? expanded : undefined}
               aria-level={level}
               aria-posinset={items.indexOf(item) + 1}
               aria-selected={selected}
               aria-setsize={items.length}
-              className={styles.knowledgeTreeItem}
+              depth={level - 1}
+              disclosure={item.isDirectory ? (
+                <button
+                  aria-label={tr(
+                    expanded ? 'knowledge.tree.collapse' : 'knowledge.tree.expand',
+                    { name: item.name },
+                  )}
+                  className={styles.treeDisclosureButton}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggle(relativePath);
+                  }}
+                  type="button"
+                >
+                  <DisclosureIcon expanded={expanded} />
+                </button>
+              ) : undefined}
+              iconMarkup={resourceIconMarkup(item.isDirectory, expanded, item.name)}
+              name={item.name}
+              selected={selected}
               data-resource-name={item.name}
               data-resource-path={relativePath}
               data-source-key={source.sourceKey}
@@ -1071,37 +1085,8 @@ function DirectoryGroup({
               onKeyDown={(event) => interact.keyDown(event, key)}
               ref={(element) => interact.registerRow(key, element)}
               role="treeitem"
-              style={{ '--knowledge-tree-level': level } as CSSProperties}
               tabIndex={focused ? 0 : -1}
-              title={item.name}
-            >
-              {item.isDirectory ? (
-                <button
-                  aria-label={tr(
-                    expanded ? 'knowledge.tree.collapse' : 'knowledge.tree.expand',
-                    { name: item.name },
-                  )}
-                  className={styles.treeDisclosureButton}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onToggle(relativePath);
-                  }}
-                  type="button"
-                >
-                  <DisclosureIcon expanded={expanded} />
-                </button>
-              ) : (
-                <span className={styles.treeDisclosureSpacer} aria-hidden="true" />
-              )}
-              <span className={styles.treeResourceIcon} aria-hidden="true">
-                <ResourceIcon
-                  directory={item.isDirectory}
-                  expanded={expanded}
-                  name={item.name}
-                />
-              </span>
-              <span className={styles.knowledgeTreeName}>{item.name}</span>
-            </div>
+            />
             {expanded && (
               <DirectoryGroup
                 directoryName={item.name}

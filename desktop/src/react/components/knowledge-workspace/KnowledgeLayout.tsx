@@ -93,7 +93,7 @@ function visibleSources(sources: KnowledgeSourceDto[]): KnowledgeSourceDto[] {
   const main = sources.find((source) => source.sourceKey === 'main');
   const mounted = sources.filter((source) => source.sourceKey !== 'main');
   return [
-    main ? { ...main, displayName: tr('knowledge.source.main') } : {
+    main ?? {
       sourceKey: 'main',
       displayName: tr('knowledge.source.main'),
       role: 'main',
@@ -114,7 +114,6 @@ export function KnowledgeLayout({
   onRetry,
 }: KnowledgeLayoutProps) {
   const renderedSources = useMemo(() => visibleSources(sources), [sources]);
-  const sourcesHeadingId = 'knowledge-sources-heading';
   const [activeStatusTarget, setActiveStatusTarget] =
     useState<KnowledgeCurrentResourceTarget | null>(null);
   const editorGroupsRef = useRef<KnowledgeEditorGroupsHandle>(null);
@@ -340,42 +339,6 @@ export function KnowledgeLayout({
       aria-label={tr('knowledge.workspaceLabel')}
       data-knowledge-workspace=""
     >
-      <section
-        className={styles.sourcesPanel}
-        role="region"
-        aria-labelledby={sourcesHeadingId}
-      >
-        <h2 className={styles.panelHeading} id={sourcesHeadingId}>
-          {tr('knowledge.sources.heading')}
-        </h2>
-        <ul className={styles.sourceList}>
-          {renderedSources.map((source) => (
-            <li
-              className={styles.sourceItem}
-              data-availability={source.availability}
-              data-source-key={source.sourceKey}
-              key={source.sourceKey}
-            >
-              <span className={styles.sourceIndicator} aria-hidden="true" />
-              <span className={styles.sourceName}>{source.displayName}</span>
-            </li>
-          ))}
-        </ul>
-        {sourcesStatus === 'loading' && (
-          <p className={styles.status} role="status">
-            {tr('knowledge.sources.loading')}
-          </p>
-        )}
-        {sourcesStatus === 'error' && (
-          <div className={styles.sourceError} role="alert">
-            <span>{tr('knowledge.sources.error')}</span>
-            <button className={styles.retryButton} type="button" onClick={onRetry}>
-              {tr('knowledge.retry')}
-            </button>
-          </div>
-        )}
-      </section>
-
       <KnowledgeSearch
         client={treeClient}
         sources={renderedSources}
@@ -446,6 +409,19 @@ export function KnowledgeLayout({
           }}>{toolbarIcon(ICONS.trash)}</button>
           <button aria-label={tr('knowledge.trash.title')} title={tr('knowledge.trash.title')} type="button" onClick={() => setTrashOpen(true)}>{toolbarIcon(ICONS.folder)}</button>
         </div>
+        {sourcesStatus === 'loading' && (
+          <p className={styles.status} role="status">
+            {tr('knowledge.sources.loading')}
+          </p>
+        )}
+        {sourcesStatus === 'error' && (
+          <div className={styles.sourceError} role="alert">
+            <span>{tr('knowledge.sources.error')}</span>
+            <button className={styles.retryButton} type="button" onClick={onRetry}>
+              {tr('knowledge.retry')}
+            </button>
+          </div>
+        )}
         <div
           className={styles.tree}
           role="tree"

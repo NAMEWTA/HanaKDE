@@ -1,0 +1,95 @@
+.row {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns:
+    calc(var(--workspace-tree-depth, 0) * 16px)
+    14px
+    22px
+    minmax(0, 1fr)
+    auto;
+  align-items: center;
+  width: calc(100% - var(--space-4));
+  min-width: 0;
+  height: 28px;
+  margin: 0 var(--space-2);
+  padding: 0 var(--space-8) 0 var(--space-2);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  cursor: default;
+  user-select: none;
+  transition:
+    background var(--duration-instant) var(--ease-out),
+    color var(--duration-instant) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--overlay-subtle);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.dropTarget {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.indent {
+  display: block;
+  width: calc(var(--workspace-tree-depth, 0) * 16px);
+  min-width: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  min-width: 14px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.disclosure svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+.icon svg {
+  display: block;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trailing {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+}

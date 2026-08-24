@@ -20,10 +20,15 @@ test("E2E-KW-001 opens a blank main Knowledge shell", async ({
   const { page } = knowledgeApp;
   const workspace = await openKnowledge(page);
 
-  await expect(workspace.locator('li[data-source-key="main"]')).toBeVisible();
-  await expect(
-    workspace.getByRole("tree", { name: /resource tree|资源树|資源樹|リソースツリー|리소스 트리/i }),
-  ).toBeVisible();
+  const resourceTree = workspace.getByRole("tree", {
+    name: /resource tree|资源树|資源樹|リソースツリー|리소스 트리/i,
+  });
+  await expect(resourceTree).toBeVisible();
+  await expect(resourceTree).toHaveCount(1);
+  await expect(resourceTree.locator('[role="treeitem"][aria-level="1"]')).toHaveCount(1);
+  await expect(workspace.getByRole("region", {
+    name: /sources|来源|來源|ソース|소스/i,
+  })).toHaveCount(0);
   await expect(
     workspace.getByRole("group", { name: /editor group|编辑组|編輯群組|エディターグループ|편집기 그룹/i }),
   ).toBeVisible();
@@ -94,13 +99,15 @@ test("E2E-KW-023 covers five locales, themes, narrow layout and accessibility", 
 
   await page.setViewportSize({ width: 600, height: 720 });
   const narrowWorkspace = page.locator('[data-knowledge-workspace]');
-  const sources = await narrowWorkspace.getByRole("region").boundingBox();
   const tree = await narrowWorkspace.getByRole("navigation").boundingBox();
   const editorGroup = narrowWorkspace.locator('[data-editor-group-id]');
   const editor = await editorGroup.boundingBox();
-  expect(sources && tree && editor).toBeTruthy();
-  expect(sources!.y).toBeLessThan(tree!.y);
+  expect(tree && editor).toBeTruthy();
   expect(tree!.y).toBeLessThan(editor!.y);
+  const hasHorizontalOverflow = await narrowWorkspace.evaluate(
+    element => element.scrollWidth > element.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
 
   await editorGroup.focus();
   await page.keyboard.press("Shift+Tab");
