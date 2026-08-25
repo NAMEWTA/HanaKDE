@@ -25,7 +25,11 @@ function capability(name: string) {
 
 describe('default plugin UI capabilities', () => {
   beforeEach(() => {
-    useStore.setState({ toasts: [] });
+    useStore.setState({
+      toasts: [],
+      currentTab: 'chat',
+      pluginPages: [{ pluginId: 'demo-plugin', routeUrl: '/api/plugins/demo-plugin/page', hostCapabilities: [] }],
+    });
     (window as any).platform = {
       openExternal: vi.fn(),
       openFile: vi.fn(),
@@ -91,6 +95,19 @@ describe('default plugin UI capabilities', () => {
     });
     await expect(cap.handle(context, { text: 'copy me' })).resolves.toEqual({ written: true });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('copy me');
+  });
+
+  it('opens the requesting plugin Page without accepting a target plugin id', async () => {
+    const cap = capability(PLUGIN_UI_CAPABILITY.PLUGIN_PAGE_OPEN);
+
+    expect(cap.requiresGrant).toBe(true);
+    expect(cap.allowedSlots).toEqual(['page', 'widget']);
+    expect(cap.validatePayload({ pluginId: 'another-plugin' })).toEqual({
+      ok: false,
+      error: 'plugin.page.open does not accept a target plugin id.',
+    });
+    await expect(cap.handle(context, {})).resolves.toEqual({ opened: true, pluginId: 'demo-plugin' });
+    expect(useStore.getState().currentTab).toBe('plugin:demo-plugin');
   });
 
   it('opens local-file resources through the platform bridge', async () => {

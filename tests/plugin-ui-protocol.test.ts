@@ -73,6 +73,7 @@ describe('plugin UI protocol', () => {
       RESOURCE_PICK: 'resource.pick',
       RESOURCE_REQUEST_ACCESS: 'resource.requestAccess',
       UI_RESIZE: 'ui.resize',
+      PLUGIN_PAGE_OPEN: 'plugin.page.open',
       CLIPBOARD_WRITE_TEXT: 'clipboard.writeText',
     });
   });

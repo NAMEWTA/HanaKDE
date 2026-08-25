@@ -64,6 +64,14 @@ function validateClipboardWriteTextPayload(payload: unknown): PluginUiPayloadVal
   return { ok: true, value: { text: payload.text } };
 }
 
+function validatePluginPageOpenPayload(payload: unknown): PluginUiPayloadValidationResult {
+  if (payload == null) return { ok: true, value: {} };
+  if (!isObject(payload) || Object.keys(payload).length > 0) {
+    return { ok: false, error: 'plugin.page.open does not accept a target plugin id.' };
+  }
+  return { ok: true, value: {} };
+}
+
 function validateResourceOpenPayload(payload: unknown): PluginUiPayloadValidationResult {
   if (!isObject(payload) || !isObject(payload.resource)) {
     return { ok: false, error: 'resource.open requires a resource object.' };
@@ -134,6 +142,16 @@ async function writeClipboardText(_ctx: PluginUiRequestContext, payload: unknown
   const { text } = payload as { text: string };
   await navigator.clipboard.writeText(text);
   return { written: true };
+}
+
+async function openOwnPluginPage(ctx: PluginUiRequestContext): Promise<unknown> {
+  const state = useStore.getState();
+  if (!state.pluginPages.some(page => page.pluginId === ctx.pluginId)) {
+    throw new Error('plugin.page.open requires a Page contribution from the requesting plugin.');
+  }
+  const { switchTab } = await import('../components/channels/ChannelTabBar');
+  switchTab(`plugin:${ctx.pluginId}`);
+  return { opened: true, pluginId: ctx.pluginId };
 }
 
 function pathName(filePath: string): string {
@@ -292,6 +310,13 @@ export const DEFAULT_PLUGIN_UI_CAPABILITIES: readonly PluginUiCapability[] = [
     requiresGrant: true,
     validatePayload: validateClipboardWriteTextPayload,
     handle: writeClipboardText,
+  },
+  {
+    name: PLUGIN_UI_CAPABILITY.PLUGIN_PAGE_OPEN,
+    allowedSlots: ['page', 'widget'],
+    requiresGrant: true,
+    validatePayload: validatePluginPageOpenPayload,
+    handle: openOwnPluginPage,
   },
   {
     name: PLUGIN_UI_CAPABILITY.RESOURCE_OPEN,

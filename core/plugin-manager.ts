@@ -52,6 +52,7 @@ const KNOWN_UI_HOST_CAPABILITIES = new Set([
   "resource.open",
   "resource.pick",
   "resource.requestAccess",
+  "plugin.page.open",
 ]);
 const DEFAULT_PLUGIN_LOAD_TIMEOUT_MS = 15_000;
 const PLUGIN_SOURCE_PRIORITY = Object.freeze({

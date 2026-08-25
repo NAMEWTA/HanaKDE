@@ -260,6 +260,42 @@ describe('plugin SDK', () => {
     await expect(pending).resolves.toEqual({ written: true });
   });
 
+  it('opens only the requesting plugin Page through a typed host request', async () => {
+    const parentWindow = makeParentWindow();
+    const sdk = createHanaPluginSdk({
+      parentWindow,
+      targetWindow: window,
+      targetOrigin: 'http://127.0.0.1:3210',
+      idFactory: () => 'page-open-1',
+      requestTimeoutMs: 1000,
+    });
+
+    const pending = sdk.ui.openPage();
+
+    expect(parentWindow.postMessage).toHaveBeenCalledWith({
+      protocol: PLUGIN_UI_PROTOCOL,
+      version: PLUGIN_UI_PROTOCOL_VERSION,
+      id: 'page-open-1',
+      kind: 'request',
+      type: PLUGIN_UI_CAPABILITY.PLUGIN_PAGE_OPEN,
+      payload: {},
+    }, 'http://127.0.0.1:3210');
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        protocol: PLUGIN_UI_PROTOCOL,
+        version: PLUGIN_UI_PROTOCOL_VERSION,
+        id: 'page-open-1',
+        kind: 'response',
+        type: PLUGIN_UI_CAPABILITY.PLUGIN_PAGE_OPEN,
+        payload: { opened: true, pluginId: 'markdown-wechat' },
+      },
+      origin: 'http://127.0.0.1:3210',
+      source: parentWindow,
+    }));
+
+    await expect(pending).resolves.toEqual({ opened: true, pluginId: 'markdown-wechat' });
+  });
+
   it('wraps resource helpers as browser-safe host requests', async () => {
     const parentWindow = makeParentWindow();
     const sdk = createHanaPluginSdk({
