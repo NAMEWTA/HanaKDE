@@ -15,6 +15,8 @@ assert.equal(manifest.contributes.page.route, "/page");
 assert.equal(manifest.contributes.widget.route, "/widget");
 assert.doesNotMatch(manifest.contributes.page.icon, /<svg/i);
 for (const file of ["index.js", "routes/api.js", "routes/ui.js", "assets/panel.js", "assets/panel.css"]) assert.ok(fs.existsSync(path.join(root, file)) && fs.statSync(path.join(root, file)).size > 0, `${file} must exist`);
+const browserBundle = fs.readFileSync(path.join(root, "assets/panel.js"), "utf8");
+assert.doesNotMatch(browserBundle, /process\.env/, "browser bundle must not depend on Node process.env");
 const toolFiles = fs.readdirSync(path.join(root, "tools")).filter((name) => name.endsWith(".js"));
 const toolNames = [];
 for (const file of toolFiles) toolNames.push((await import(path.join(root, "tools", file))).name);
