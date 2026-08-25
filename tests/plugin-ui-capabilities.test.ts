@@ -28,7 +28,7 @@ describe('default plugin UI capabilities', () => {
     useStore.setState({
       toasts: [],
       currentTab: 'chat',
-      pluginPages: [{ pluginId: 'demo-plugin', routeUrl: '/api/plugins/demo-plugin/page', hostCapabilities: [] }],
+      pluginPages: [{ pluginId: 'demo-plugin', title: 'Demo', icon: null, routeUrl: '/api/plugins/demo-plugin/page', hostCapabilities: [] }],
     });
     (window as any).platform = {
       openExternal: vi.fn(),
