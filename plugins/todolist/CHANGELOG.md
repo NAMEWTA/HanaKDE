@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-08-24
+
+### Page runtime
+
+- Use the official Hana plugin SDK for iframe readiness, resize, Resource Picker, and authenticated API requests.
+- Signal readiness as soon as the page shell renders, while keeping data-loading errors visible inside the plugin.
+- Fail the UI build when the SDK toolchain is unavailable instead of emitting an unauthenticated fallback bundle.
+
 ## 0.2.0 — 2026-08-14
 
 ### Architecture

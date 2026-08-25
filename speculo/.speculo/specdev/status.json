@@ -10,6 +10,14 @@
     },
     {
       "change": "2026-08-13-hanakde-engineering-cognitive-mentor"
+    },
+    {
+      "change": "2026-08-24-fix-todolist-plugin-loading",
+      "current_work": null,
+      "works_run": [
+        "specdev/diagnose-bugs",
+        "specdev/implement"
+      ]
     }
   ],
   "archived": [

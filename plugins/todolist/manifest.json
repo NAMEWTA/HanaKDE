@@ -1,7 +1,7 @@
 {
   "id": "todolist",
   "name": "Hana Todo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Persistent Todo, project, time intent, Reminder, recurrence, Agent automation, review, and strict exchange workflow.",
   "trust": "full-access",
   "hidden": true,

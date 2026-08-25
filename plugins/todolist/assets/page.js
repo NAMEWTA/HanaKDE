@@ -11022,14 +11022,14 @@ var require_react_dom_client_development = __commonJS({
         }
       }
       function commitHostSingletonAcquisition(finishedWork) {
-        var singleton = finishedWork.stateNode, props = finishedWork.memoizedProps;
+        var singleton2 = finishedWork.stateNode, props = finishedWork.memoizedProps;
         try {
           runWithFiberInDEV(
             finishedWork,
             acquireSingletonInstance,
             finishedWork.type,
             props,
-            singleton,
+            singleton2,
             finishedWork
           );
         } catch (error) {
@@ -21930,6 +21930,472 @@ function FieldShell({ label, hint, error, htmlFor, className, children }) {
 // ../../packages/plugin-components/dist/layout.js
 var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
 
+// ../../packages/plugin-protocol/dist/index.js
+var PLUGIN_UI_PROTOCOL = "hana.plugin.ui";
+var PLUGIN_UI_PROTOCOL_VERSION = 1;
+var PLUGIN_SURFACE_SESSION_HEADER = "X-Hana-Plugin-Surface-Session";
+var PLUGIN_SURFACE_SESSION_QUERY = "pluginSurfaceSession";
+var PLUGIN_UI_ERROR_CODE = {
+  BAD_MESSAGE: "BAD_MESSAGE",
+  UNSUPPORTED_VERSION: "UNSUPPORTED_VERSION",
+  UNKNOWN_TYPE: "UNKNOWN_TYPE",
+  CAPABILITY_DENIED: "CAPABILITY_DENIED",
+  SLOT_DENIED: "SLOT_DENIED",
+  TIMEOUT: "TIMEOUT",
+  HOST_ERROR: "HOST_ERROR"
+};
+var PLUGIN_UI_CAPABILITY = {
+  TOAST_SHOW: "toast.show",
+  EXTERNAL_OPEN: "external.open",
+  SESSION_FILE_OPEN: "sessionFile.open",
+  RESOURCE_OPEN: "resource.open",
+  RESOURCE_PICK: "resource.pick",
+  RESOURCE_REQUEST_ACCESS: "resource.requestAccess",
+  UI_RESIZE: "ui.resize",
+  CLIPBOARD_WRITE_TEXT: "clipboard.writeText"
+};
+var MESSAGE_KINDS = /* @__PURE__ */ new Set([
+  "event",
+  "request",
+  "response",
+  "error"
+]);
+function isObject(value) {
+  return typeof value === "object" && value !== null;
+}
+function badMessage(message) {
+  return {
+    ok: false,
+    error: {
+      code: PLUGIN_UI_ERROR_CODE.BAD_MESSAGE,
+      message
+    }
+  };
+}
+function parsePluginUiMessage(value) {
+  if (!isObject(value)) {
+    return badMessage("Plugin UI messages must be objects.");
+  }
+  if (value.protocol !== PLUGIN_UI_PROTOCOL) {
+    return badMessage("Plugin UI message protocol is missing or invalid.");
+  }
+  if (value.version !== PLUGIN_UI_PROTOCOL_VERSION) {
+    return {
+      ok: false,
+      error: {
+        code: PLUGIN_UI_ERROR_CODE.UNSUPPORTED_VERSION,
+        message: `Unsupported Plugin UI protocol version: ${String(value.version)}.`
+      }
+    };
+  }
+  if (typeof value.kind !== "string" || !MESSAGE_KINDS.has(value.kind)) {
+    return badMessage("Plugin UI message kind is missing or invalid.");
+  }
+  if (typeof value.type !== "string" || value.type.trim() === "") {
+    return badMessage("Plugin UI message type must be a non-empty string.");
+  }
+  const kind = value.kind;
+  if (kind !== "event" && (typeof value.id !== "string" || value.id.trim() === "")) {
+    return badMessage(`Plugin UI ${kind} messages must include a non-empty id.`);
+  }
+  if (kind === "error") {
+    if (!isObject(value.error)) {
+      return badMessage("Plugin UI error messages must include an error object.");
+    }
+    if (typeof value.error.code !== "string" || value.error.code.trim() === "") {
+      return badMessage("Plugin UI error code must be a non-empty string.");
+    }
+    if (typeof value.error.message !== "string" || value.error.message.trim() === "") {
+      return badMessage("Plugin UI error message must be a non-empty string.");
+    }
+  }
+  return {
+    ok: true,
+    value
+  };
+}
+
+// ../../packages/plugin-sdk/dist/index.js
+var HanaPluginError = class extends Error {
+  name = "HanaPluginError";
+  code;
+  details;
+  constructor(error) {
+    super(error.message);
+    this.code = error.code;
+    this.details = error.details;
+  }
+};
+var fallbackIdSeq = 0;
+function defaultIdFactory() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  fallbackIdSeq += 1;
+  return `hana-plugin-${Date.now()}-${fallbackIdSeq}`;
+}
+function getBrowserWindow() {
+  if (typeof window === "undefined") {
+    throw new Error("@hana/plugin-sdk requires a browser iframe window.");
+  }
+  return window;
+}
+function safeOriginFromUrl(value) {
+  if (!value)
+    return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+function resolveTargetOrigin(targetWindow, explicit) {
+  if (explicit)
+    return explicit;
+  const hostOrigin = new URLSearchParams(targetWindow.location.search).get("hana-host-origin");
+  if (hostOrigin)
+    return hostOrigin;
+  return safeOriginFromUrl(targetWindow.document.referrer) ?? "*";
+}
+function readInitialTheme(targetWindow) {
+  const params = new URLSearchParams(targetWindow.location.search);
+  return {
+    theme: params.get("hana-theme") ?? void 0,
+    cssUrl: params.get("hana-css") ?? void 0
+  };
+}
+function isTrustedHostEvent(event, parentWindow, targetOrigin) {
+  if (event.source !== parentWindow)
+    return false;
+  if (targetOrigin !== "*" && event.origin !== targetOrigin)
+    return false;
+  return true;
+}
+function externalOpenPayload(input) {
+  return typeof input === "string" ? { url: input } : input;
+}
+function clipboardWriteTextPayload(input) {
+  return typeof input === "string" ? { text: input } : input;
+}
+function readPluginIdFromIframeRoute(targetWindow) {
+  const match = /^\/api\/plugins\/([^/]+)(?:\/|$)/.exec(targetWindow.location.pathname || "");
+  if (!match) {
+    throw new Error("Plugin asset URL helper requires an iframe route under /api/plugins/:pluginId/.");
+  }
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    throw new Error("Plugin asset URL helper could not decode the current plugin id.");
+  }
+}
+function normalizeAssetPath(input) {
+  if (typeof input !== "string" || input.length === 0) {
+    throw new Error("Invalid plugin asset path.");
+  }
+  if (input.includes("\\") || input.includes("\0") || /^[a-z][a-z0-9+.-]*:/i.test(input)) {
+    throw new Error("Invalid plugin asset path.");
+  }
+  const stripped = input.replace(/^\/+/, "");
+  if (!stripped || stripped.startsWith("./")) {
+    throw new Error("Invalid plugin asset path.");
+  }
+  const segments = stripped.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === ".." || segment.startsWith("."))) {
+    throw new Error("Invalid plugin asset path.");
+  }
+  return segments.map((segment) => encodeURIComponent(segment)).join("/");
+}
+function pluginAssetUrl(targetWindow, input) {
+  const pluginId = readPluginIdFromIframeRoute(targetWindow);
+  const assetPath = normalizeAssetPath(input);
+  return `${targetWindow.location.origin}/api/plugins/${encodeURIComponent(pluginId)}/assets/${assetPath}`;
+}
+function readSurfaceSession(targetWindow) {
+  return new URLSearchParams(targetWindow.location.search).get(PLUGIN_SURFACE_SESSION_QUERY) || null;
+}
+function normalizePluginApiPath(input) {
+  if (typeof input !== "string" || input.length === 0) {
+    throw new Error("Invalid plugin API path.");
+  }
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.includes("\\") || trimmed.includes("\0") || trimmed.includes("#") || trimmed.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+    throw new Error("Invalid plugin API path.");
+  }
+  const stripped = trimmed.replace(/^\/+/, "");
+  if (!stripped || stripped.startsWith("./") || stripped === "api/plugins" || stripped.startsWith("api/plugins/")) {
+    throw new Error("Invalid plugin API path. Use a route path relative to the current plugin.");
+  }
+  const queryIndex = stripped.indexOf("?");
+  const rawPath = queryIndex >= 0 ? stripped.slice(0, queryIndex) : stripped;
+  if (!rawPath) {
+    throw new Error("Invalid plugin API path.");
+  }
+  const segments = rawPath.split("/");
+  for (const segment of segments) {
+    if (!segment)
+      throw new Error("Invalid plugin API path.");
+    let decoded;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      throw new Error("Invalid plugin API path.");
+    }
+    if (decoded === "." || decoded === ".." || decoded.includes("/") || decoded.includes("\\")) {
+      throw new Error("Invalid plugin API path.");
+    }
+  }
+  const parsed = new URL(`http://hana.local/${stripped}`);
+  const safePath = segments.map((segment) => encodeURIComponent(decodeURIComponent(segment))).join("/");
+  return `${safePath}${parsed.search}`;
+}
+function pluginApiUrl(targetWindow, input) {
+  const pluginId = readPluginIdFromIframeRoute(targetWindow);
+  const apiPath = normalizePluginApiPath(input);
+  return `${targetWindow.location.origin}/api/plugins/${encodeURIComponent(pluginId)}/${apiPath}`;
+}
+function pluginApiFetch(targetWindow, input, init) {
+  const surfaceSession = readSurfaceSession(targetWindow);
+  if (!surfaceSession) {
+    throw new Error("hana.api.fetch requires pluginSurfaceSession in the iframe URL.");
+  }
+  const fetchImpl = targetWindow.fetch?.bind(targetWindow) ?? globalThis.fetch?.bind(globalThis);
+  if (!fetchImpl) {
+    throw new Error("hana.api.fetch requires window.fetch.");
+  }
+  const requestInit = init ?? {};
+  const headers = new Headers(requestInit.headers);
+  headers.set(PLUGIN_SURFACE_SESSION_HEADER, surfaceSession);
+  return fetchImpl(pluginApiUrl(targetWindow, input), {
+    ...requestInit,
+    headers
+  });
+}
+function createHanaPluginSdk(options = {}) {
+  const targetWindow = options.targetWindow ?? getBrowserWindow();
+  const parentWindow = options.parentWindow ?? targetWindow.parent;
+  const targetOrigin = resolveTargetOrigin(targetWindow, options.targetOrigin);
+  const requestTimeoutMs = options.requestTimeoutMs ?? 1e4;
+  const idFactory = options.idFactory ?? defaultIdFactory;
+  let themeSnapshot = readInitialTheme(targetWindow);
+  const themeSubscribers = /* @__PURE__ */ new Set();
+  function post(message) {
+    parentWindow.postMessage(message, targetOrigin);
+  }
+  function postEvent(type, payload) {
+    const message = {
+      protocol: PLUGIN_UI_PROTOCOL,
+      version: PLUGIN_UI_PROTOCOL_VERSION,
+      kind: "event",
+      type
+    };
+    if (payload !== void 0)
+      message.payload = payload;
+    post(message);
+  }
+  function onThemeMessage(event) {
+    if (!isTrustedHostEvent(event, parentWindow, targetOrigin))
+      return;
+    const parsed = parsePluginUiMessage(event.data);
+    if (!parsed.ok)
+      return;
+    const message = parsed.value;
+    if (message.kind !== "event" || message.type !== "hana.theme.changed")
+      return;
+    if (typeof message.payload !== "object" || message.payload === null)
+      return;
+    const payload = message.payload;
+    themeSnapshot = {
+      theme: typeof payload.theme === "string" ? payload.theme : themeSnapshot.theme,
+      cssUrl: typeof payload.cssUrl === "string" ? payload.cssUrl : themeSnapshot.cssUrl
+    };
+    for (const callback of themeSubscribers)
+      callback(themeSnapshot);
+  }
+  function request(type, payload, requestOptions = {}) {
+    const id = idFactory();
+    const timeoutMs = requestOptions.timeoutMs ?? requestTimeoutMs;
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        targetWindow.removeEventListener("message", onMessage);
+        targetWindow.clearTimeout(timeout);
+      };
+      const onMessage = (event) => {
+        if (!isTrustedHostEvent(event, parentWindow, targetOrigin))
+          return;
+        const parsed = parsePluginUiMessage(event.data);
+        if (!parsed.ok)
+          return;
+        const message2 = parsed.value;
+        if (message2.id !== id || message2.type !== type)
+          return;
+        if (message2.kind === "response") {
+          cleanup();
+          resolve(message2.payload);
+        }
+        if (message2.kind === "error" && message2.error) {
+          cleanup();
+          reject(new HanaPluginError(message2.error));
+        }
+      };
+      const timeout = targetWindow.setTimeout(() => {
+        cleanup();
+        reject(new HanaPluginError({
+          code: "TIMEOUT",
+          message: `Plugin host request timed out: ${type}.`
+        }));
+      }, timeoutMs);
+      targetWindow.addEventListener("message", onMessage);
+      const message = {
+        protocol: PLUGIN_UI_PROTOCOL,
+        version: PLUGIN_UI_PROTOCOL_VERSION,
+        id,
+        kind: "request",
+        type
+      };
+      if (payload !== void 0)
+        message.payload = payload;
+      post(message);
+    });
+  }
+  return {
+    ready(payload) {
+      postEvent("hana.ready", payload);
+    },
+    assets: {
+      url(assetPath) {
+        return pluginAssetUrl(targetWindow, assetPath);
+      }
+    },
+    api: {
+      url(apiPath) {
+        return pluginApiUrl(targetWindow, apiPath);
+      },
+      fetch(apiPath, init) {
+        return pluginApiFetch(targetWindow, apiPath, init);
+      }
+    },
+    ui: {
+      resize(size) {
+        postEvent(PLUGIN_UI_CAPABILITY.UI_RESIZE, size);
+      }
+    },
+    theme: {
+      getSnapshot() {
+        return { ...themeSnapshot };
+      },
+      subscribe(callback) {
+        if (themeSubscribers.size === 0) {
+          targetWindow.addEventListener("message", onThemeMessage);
+        }
+        themeSubscribers.add(callback);
+        callback({ ...themeSnapshot });
+        return () => {
+          themeSubscribers.delete(callback);
+          if (themeSubscribers.size === 0) {
+            targetWindow.removeEventListener("message", onThemeMessage);
+          }
+        };
+      }
+    },
+    host: {
+      request
+    },
+    toast: {
+      show(input, options2) {
+        return request(PLUGIN_UI_CAPABILITY.TOAST_SHOW, input, options2);
+      }
+    },
+    external: {
+      open(input, options2) {
+        return request(PLUGIN_UI_CAPABILITY.EXTERNAL_OPEN, externalOpenPayload(input), options2);
+      }
+    },
+    clipboard: {
+      writeText(input, options2) {
+        return request(PLUGIN_UI_CAPABILITY.CLIPBOARD_WRITE_TEXT, clipboardWriteTextPayload(input), options2);
+      }
+    },
+    resources: {
+      open(input, options2) {
+        return request(PLUGIN_UI_CAPABILITY.RESOURCE_OPEN, input, options2);
+      },
+      pick(input = {}, options2) {
+        return request(PLUGIN_UI_CAPABILITY.RESOURCE_PICK, input, options2);
+      },
+      requestAccess(input, options2) {
+        return request(PLUGIN_UI_CAPABILITY.RESOURCE_REQUEST_ACCESS, input, options2);
+      }
+    }
+  };
+}
+var singleton = null;
+function getSingleton() {
+  singleton ??= createHanaPluginSdk();
+  return singleton;
+}
+var hana = {
+  ready(payload) {
+    return getSingleton().ready(payload);
+  },
+  assets: {
+    url(assetPath) {
+      return getSingleton().assets.url(assetPath);
+    }
+  },
+  api: {
+    url(apiPath) {
+      return getSingleton().api.url(apiPath);
+    },
+    fetch(apiPath, init) {
+      return getSingleton().api.fetch(apiPath, init);
+    }
+  },
+  ui: {
+    resize(size) {
+      return getSingleton().ui.resize(size);
+    }
+  },
+  theme: {
+    getSnapshot() {
+      return getSingleton().theme.getSnapshot();
+    },
+    subscribe(callback) {
+      return getSingleton().theme.subscribe(callback);
+    }
+  },
+  host: {
+    request(type, payload, options) {
+      return getSingleton().host.request(type, payload, options);
+    }
+  },
+  toast: {
+    show(input, options) {
+      return getSingleton().toast.show(input, options);
+    }
+  },
+  external: {
+    open(input, options) {
+      return getSingleton().external.open(input, options);
+    }
+  },
+  clipboard: {
+    writeText(input, options) {
+      return getSingleton().clipboard.writeText(input, options);
+    }
+  },
+  resources: {
+    open(input, options) {
+      return getSingleton().resources.open(input, options);
+    },
+    pick(input, options) {
+      return getSingleton().resources.pick(input, options);
+    },
+    requestAccess(input, options) {
+      return getSingleton().resources.requestAccess(input, options);
+    }
+  }
+};
+
 // src/ui/browser-app.ts
 var I18N = {
   "zh-CN": {
@@ -22388,12 +22854,14 @@ var I18N = {
     chooseFile: "Choose JSON file"
   }
 };
-function mountTodoApp(root2) {
+function mountTodoApp(root2, hana2) {
   if (!root2) throw new Error("Todo root element is missing");
+  if (!hana2 || typeof hana2.ready !== "function" || typeof hana2.api?.fetch !== "function") {
+    throw new Error("Todo page requires @hana/plugin-sdk");
+  }
   const locale = I18N[document.documentElement.lang] ? document.documentElement.lang : "zh-CN";
   const strings = I18N[locale];
   const t = (key) => strings[key] || I18N.en[key] || key;
-  const hana = window.hana || {};
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const state = {
     view: "today",
@@ -22424,12 +22892,9 @@ function mountTodoApp(root2) {
   const datePart = (value) => !value ? "" : value.kind === "date" ? value.date : value.localDateTime?.slice(0, 10) || "";
   const localPart = (trigger) => trigger?.localDateTime?.slice(0, 16) || "";
   const selected = () => state.items.find((item) => item.id === state.selectedId) || state.draft;
-  const routeUrl = (route) => new URL(route, window.location.href).toString();
   async function api(route, init = {}) {
     const options = { ...init, headers: { Accept: "application/json", ...init.body ? { "Content-Type": "application/json" } : {}, ...init.headers || {} } };
-    let response;
-    if (hana.api && typeof hana.api.fetch === "function") response = await hana.api.fetch(route, options);
-    else response = await fetch(routeUrl(route), options);
+    const response = await hana2.api.fetch(route, options);
     if (response && typeof response.json === "function") {
       const value = await response.json();
       if (!response.ok || value?.ok === false) {
@@ -22453,10 +22918,6 @@ function mountTodoApp(root2) {
     notify.timer = setTimeout(() => {
       toast.hidden = true;
     }, 4200);
-    try {
-      hana.ui?.toast?.({ message, kind });
-    } catch {
-    }
   }
   function navItems() {
     return [
@@ -22679,7 +23140,6 @@ function mountTodoApp(root2) {
         }
       }
       render();
-      signalReady();
     } catch (error) {
       if (generation !== loadGeneration) return;
       state.loading = false;
@@ -22784,17 +23244,24 @@ function mountTodoApp(root2) {
   }
   async function mutate(path, method = "POST", body = {}) {
     try {
-      await api(path, { method, body: JSON.stringify(body) });
-      await load();
+      const result = await api(path, { method, body: JSON.stringify(body) });
+      const changed = result?.value;
+      const preserveSelected = Boolean(state.selectedId && changed?.id === state.selectedId);
+      await load({ keepSelection: preserveSelected });
+      if (preserveSelected && !state.items.some((item) => item.id === changed.id)) {
+        state.draft = structuredClone(changed);
+        state.workspaceRef = changed.workspaceRef || null;
+        render();
+      }
     } catch (error) {
       notify(error.message || String(error), "error");
     }
   }
   async function pickWorkspace() {
     try {
-      if (!hana.resources || typeof hana.resources.pick !== "function") throw new Error("Hana resource picker is unavailable");
-      const result = await hana.resources.pick({ kind: "directory", multiple: false, title: t("pickWorkspace") });
-      const ref = result?.resourceRef || result?.ref || result?.resource || (Array.isArray(result) ? result[0] : result);
+      if (!hana2.resources || typeof hana2.resources.pick !== "function") throw new Error("Hana resource picker is unavailable");
+      const result = await hana2.resources.pick({ mode: "directory", multiple: false });
+      const ref = result?.resources?.[0];
       if (!ref || typeof ref !== "object") return;
       state.workspaceRef = ref;
       if (state.draft) state.draft.workspaceRef = ref;
@@ -22864,11 +23331,19 @@ function mountTodoApp(root2) {
       const data = new FormData(form);
       const title = String(data.get("title") || "").trim();
       if (!title) return;
+      const projectId = String(data.get("projectId") || "") || void 0;
       const submit = form.querySelector("button[type=submit]");
       if (submit) submit.disabled = true;
       try {
-        await api("api/todos", { method: "POST", body: JSON.stringify({ title, projectId: data.get("projectId") || void 0, mode: "manual", commandId: crypto.randomUUID() }) });
+        await api("api/todos", { method: "POST", body: JSON.stringify({ title, projectId, mode: "manual", commandId: crypto.randomUUID() }) });
         form.reset();
+        if (projectId) {
+          state.view = "project";
+          state.projectId = projectId;
+        } else if (state.view !== "inbox" && state.view !== "all") {
+          state.view = "inbox";
+          state.projectId = void 0;
+        }
         await load();
       } catch (error) {
         notify(error.message || String(error), "error");
@@ -22932,12 +23407,14 @@ function mountTodoApp(root2) {
     if (button.dataset.nav) {
       state.view = button.dataset.nav;
       state.projectId = void 0;
+      state.narrowDetail = false;
       await load();
       return;
     }
     if (button.dataset.project) {
       state.projectId = button.dataset.project;
       state.view = "project";
+      state.narrowDetail = false;
       await load();
       return;
     }
@@ -23033,26 +23510,12 @@ function mountTodoApp(root2) {
     }
   }
   function signalReady() {
-    try {
-      hana.ready?.();
-    } catch {
-    }
-    try {
-      window.parent?.postMessage({ type: "hana:ready", protocolVersion: 1 }, "*");
-    } catch {
-    }
+    hana2.ready();
   }
   function updateResize() {
     requestAnimationFrame(() => {
       const height = Math.max(document.documentElement.scrollHeight, root2.scrollHeight);
-      try {
-        hana.ui?.resize?.({ height });
-      } catch {
-      }
-      try {
-        window.parent?.postMessage({ type: "hana:resize", protocolVersion: 1, height }, "*");
-      } catch {
-      }
+      hana2.ui.resize({ height });
     });
   }
   if (typeof ResizeObserver !== "undefined") {
@@ -23060,6 +23523,7 @@ function mountTodoApp(root2) {
     resizeObserver.observe(root2);
   }
   render();
+  signalReady();
   load();
   return () => {
     destroyed = true;
@@ -23073,7 +23537,7 @@ function mountTodoApp(root2) {
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
 function TodoPage() {
   const hostRef = (0, import_react2.useRef)(null);
-  (0, import_react2.useEffect)(() => hostRef.current ? mountTodoApp(hostRef.current) : void 0, []);
+  (0, import_react2.useEffect)(() => hostRef.current ? mountTodoApp(hostRef.current, hana) : void 0, []);
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HanaThemeProvider, { mode: "inherit", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { ref: hostRef, className: "react-todo-host" }) });
 }
 var root = document.getElementById("root");

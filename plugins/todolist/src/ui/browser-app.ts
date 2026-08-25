@@ -107,12 +107,14 @@ const I18N = {
   },
 };
 
-export function mountTodoApp(root) {
+export function mountTodoApp(root, hana) {
   if (!root) throw new Error("Todo root element is missing");
+  if (!hana || typeof hana.ready !== "function" || typeof hana.api?.fetch !== "function") {
+    throw new Error("Todo page requires @hana/plugin-sdk");
+  }
   const locale = I18N[document.documentElement.lang] ? document.documentElement.lang : "zh-CN";
   const strings = I18N[locale];
   const t = (key) => strings[key] || I18N.en[key] || key;
-  const hana = window.hana || {};
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const state = {
     view: "today", projectId: undefined, status: "initializing", runtime: null, items: [], projects: [], agents: [],
@@ -130,13 +132,10 @@ export function mountTodoApp(root) {
   const datePart = (value) => !value ? "" : value.kind === "date" ? value.date : value.localDateTime?.slice(0, 10) || "";
   const localPart = (trigger) => trigger?.localDateTime?.slice(0, 16) || "";
   const selected = () => state.items.find((item) => item.id === state.selectedId) || state.draft;
-  const routeUrl = (route) => new URL(route, window.location.href).toString();
 
   async function api(route, init = {}) {
     const options = { ...init, headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } };
-    let response;
-    if (hana.api && typeof hana.api.fetch === "function") response = await hana.api.fetch(route, options);
-    else response = await fetch(routeUrl(route), options);
+    const response = await hana.api.fetch(route, options);
     if (response && typeof response.json === "function") {
       const value = await response.json();
       if (!response.ok || value?.ok === false) {
@@ -159,7 +158,6 @@ export function mountTodoApp(root) {
     toast.hidden = false;
     clearTimeout(notify.timer);
     notify.timer = setTimeout(() => { toast.hidden = true; }, 4200);
-    try { hana.ui?.toast?.({ message, kind }); } catch { /* host toast is optional */ }
   }
 
   function navItems() {
@@ -385,7 +383,6 @@ export function mountTodoApp(root) {
         if (refreshed) { state.draft = structuredClone(refreshed); state.workspaceRef = refreshed.workspaceRef || null; }
       }
       render();
-      signalReady();
     } catch (error) {
       if (generation !== loadGeneration) return;
       state.loading = false;
@@ -475,8 +472,15 @@ export function mountTodoApp(root) {
 
   async function mutate(path, method = "POST", body = {}) {
     try {
-      await api(path, { method, body: JSON.stringify(body) });
-      await load();
+      const result = await api(path, { method, body: JSON.stringify(body) });
+      const changed = result?.value;
+      const preserveSelected = Boolean(state.selectedId && changed?.id === state.selectedId);
+      await load({ keepSelection: preserveSelected });
+      if (preserveSelected && !state.items.some((item) => item.id === changed.id)) {
+        state.draft = structuredClone(changed);
+        state.workspaceRef = changed.workspaceRef || null;
+        render();
+      }
     } catch (error) {
       notify(error.message || String(error), "error");
     }
@@ -485,8 +489,8 @@ export function mountTodoApp(root) {
   async function pickWorkspace() {
     try {
       if (!hana.resources || typeof hana.resources.pick !== "function") throw new Error("Hana resource picker is unavailable");
-      const result = await hana.resources.pick({ kind: "directory", multiple: false, title: t("pickWorkspace") });
-      const ref = result?.resourceRef || result?.ref || result?.resource || (Array.isArray(result) ? result[0] : result);
+      const result = await hana.resources.pick({ mode: "directory", multiple: false });
+      const ref = result?.resources?.[0];
       if (!ref || typeof ref !== "object") return;
       state.workspaceRef = ref;
       if (state.draft) state.draft.workspaceRef = ref;
@@ -550,10 +554,18 @@ export function mountTodoApp(root) {
       const data = new FormData(form);
       const title = String(data.get("title") || "").trim();
       if (!title) return;
+      const projectId = String(data.get("projectId") || "") || undefined;
       const submit = form.querySelector("button[type=submit]"); if (submit) submit.disabled = true;
       try {
-        await api("api/todos", { method: "POST", body: JSON.stringify({ title, projectId: data.get("projectId") || undefined, mode: "manual", commandId: crypto.randomUUID() }) });
+        await api("api/todos", { method: "POST", body: JSON.stringify({ title, projectId, mode: "manual", commandId: crypto.randomUUID() }) });
         form.reset();
+        if (projectId) {
+          state.view = "project";
+          state.projectId = projectId;
+        } else if (state.view !== "inbox" && state.view !== "all") {
+          state.view = "inbox";
+          state.projectId = undefined;
+        }
         await load();
       } catch (error) { notify(error.message || String(error), "error"); }
       finally { if (submit) submit.disabled = false; }
@@ -598,8 +610,8 @@ export function mountTodoApp(root) {
   root.addEventListener("click", async (event) => {
     const button = event.target.closest("button");
     if (!button) return;
-    if (button.dataset.nav) { state.view = button.dataset.nav; state.projectId = undefined; await load(); return; }
-    if (button.dataset.project) { state.projectId = button.dataset.project; state.view = "project"; await load(); return; }
+    if (button.dataset.nav) { state.view = button.dataset.nav; state.projectId = undefined; state.narrowDetail = false; await load(); return; }
+    if (button.dataset.project) { state.projectId = button.dataset.project; state.view = "project"; state.narrowDetail = false; await load(); return; }
     if (button.dataset.openTodo) { openTodo(button.dataset.openTodo); return; }
     if (button.dataset.closeDetail !== undefined) { state.narrowDetail = false; state.selectedId = null; state.draft = null; render(); return; }
     if (button.dataset.reload !== undefined) { await load({ keepSelection: true }); return; }
@@ -638,15 +650,13 @@ export function mountTodoApp(root) {
   }
 
   function signalReady() {
-    try { hana.ready?.(); } catch { /* optional */ }
-    try { window.parent?.postMessage({ type: "hana:ready", protocolVersion: 1 }, "*"); } catch { /* optional */ }
+    hana.ready();
   }
 
   function updateResize() {
     requestAnimationFrame(() => {
       const height = Math.max(document.documentElement.scrollHeight, root.scrollHeight);
-      try { hana.ui?.resize?.({ height }); } catch { /* optional */ }
-      try { window.parent?.postMessage({ type: "hana:resize", protocolVersion: 1, height }, "*"); } catch { /* optional */ }
+      hana.ui.resize({ height });
     });
   }
 
@@ -655,6 +665,7 @@ export function mountTodoApp(root) {
     resizeObserver.observe(root);
   }
   render();
+  signalReady();
   load();
 
   return () => {

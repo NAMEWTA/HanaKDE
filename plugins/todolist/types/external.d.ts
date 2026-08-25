@@ -3,6 +3,18 @@ declare module "esbuild" {
   export function build(options: BuildOptions): Promise<unknown>;
 }
 
+declare module "jsdom" {
+  export interface ConstructorOptions {
+    pretendToBeVisual?: boolean;
+    url?: string;
+  }
+
+  export class JSDOM {
+    constructor(html?: string, options?: ConstructorOptions);
+    readonly window: Window & typeof globalThis;
+  }
+}
+
 declare module "react" {
   export interface MutableRefObject<T> { current: T }
   export function useEffect(effect: () => void | (() => void), dependencies?: readonly unknown[]): void;

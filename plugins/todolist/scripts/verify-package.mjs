@@ -33,6 +33,10 @@ assert.ok(manifest.capabilities.includes("task.write"));
 assert.ok(manifest.capabilities.includes("session.write"));
 assert.ok(fs.statSync(path.join(root, "assets/page.js")).size > 1_000);
 assert.ok(fs.statSync(path.join(root, "assets/page.css")).size > 1_000);
+const pageBundle = fs.readFileSync(path.join(root, "assets/page.js"), "utf8");
+assert.match(pageBundle, /X-Hana-Plugin-Surface-Session/u, "Page bundle must authenticate through the Hana SDK");
+assert.match(pageBundle, /hana\.ready/u, "Page bundle must use the official ready event");
+assert.doesNotMatch(pageBundle, /hana:ready/u, "Page bundle must not emit the obsolete raw ready event");
 
 const toolFiles = fs.readdirSync(path.join(root, "tools"))
   .filter((name) => name.endsWith(".ts"))
