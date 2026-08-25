@@ -58,7 +58,7 @@ export function PluginPageView({ pluginId }: Props) {
         ref={iframeRef}
         className={s.iframe}
         src={surfaceUrl.iframeSrc || undefined}
-        sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+        sandbox="allow-scripts allow-forms allow-popups allow-same-origin allow-downloads"
         style={{ opacity: status === 'ready' ? 1 : 0 }}
       />
     </div>

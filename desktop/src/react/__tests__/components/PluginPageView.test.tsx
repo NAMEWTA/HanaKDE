@@ -44,7 +44,7 @@ describe('PluginPageView', () => {
   });
 
   it('lets plain HTML plugin pages become visible even without an SDK ready handshake', () => {
-    render(<PluginPageView pluginId="plain-plugin" />);
+    const { container } = render(<PluginPageView pluginId="plain-plugin" />);
 
     expect(usePluginIframe).toHaveBeenCalledWith(
       'http://127.0.0.1:3210/api/plugins/plain-plugin/page?ticket=abc',
@@ -53,6 +53,9 @@ describe('PluginPageView', () => {
         slot: 'page',
         readyOnTimeout: true,
       }),
+    );
+    expect(container.querySelector('iframe')?.getAttribute('sandbox')).toBe(
+      'allow-scripts allow-forms allow-popups allow-same-origin allow-downloads',
     );
   });
 });
