@@ -1,0 +1,103 @@
+{
+  "id": "finance-workbench",
+  "name": "Finance Workbench",
+  "version": "1.0.0",
+  "minAppVersion": "0.0.4",
+  "description": "A/HK personal finance research, portfolio, backtest, automation, and evidence workbench.",
+  "trust": "full-access",
+  "hidden": true,
+  "activationEvents": [
+    "onStartup",
+    "onPageOpen",
+    "onWidgetOpen",
+    "onToolCall"
+  ],
+  "capabilities": [
+    "network.fetch",
+    "resource.read",
+    "resource.search",
+    "resource.write",
+    "resource.materialize",
+    "agent.read",
+    "session.write",
+    "model.sample",
+    "task.control",
+    "task.write"
+  ],
+  "network": {
+    "allowedHosts": ["fuyao.aicubes.cn"],
+    "methods": ["GET", "POST"],
+    "defaultTimeoutMs": 10000,
+    "maxResponseBytes": 4194304
+  },
+  "ui": {
+    "hostCapabilities": [
+      "clipboard.writeText",
+      "resource.open",
+      "resource.pick",
+      "resource.requestAccess"
+    ]
+  },
+  "contributes": {
+    "page": {
+      "title": "Finance Workbench",
+      "route": "/page",
+      "icon": "chart-candlestick"
+    },
+    "widget": {
+      "title": "Finance Workbench",
+      "route": "/widget",
+      "icon": "chart-no-axes-combined"
+    },
+    "configuration": {
+      "properties": {
+        "hithinkApiKey": {
+          "type": "string",
+          "title": "同花顺 Financial API Key",
+          "sensitive": true,
+          "scope": "global",
+          "ui": { "control": "password" }
+        },
+        "aiEnabled": {
+          "type": "boolean",
+          "title": "启用 AI 研究",
+          "default": false,
+          "scope": "global"
+        },
+        "refreshIntervalSeconds": {
+          "type": "integer",
+          "title": "行情刷新间隔（秒）",
+          "default": 30,
+          "minimum": 10,
+          "maximum": 300,
+          "scope": "global"
+        },
+        "hithinkEndpointPath": {
+          "type": "string",
+          "title": "同花顺数据接口路径",
+          "default": "/api/v1/financial-data",
+          "scope": "global"
+        }
+      }
+    }
+  },
+  "dev": {
+    "scenarios": [
+      {
+        "id": "public-research-smoke",
+        "steps": [
+          {
+            "invokeTool": {
+              "name": "research_public",
+              "input": {
+                "asset": "600519.SH",
+                "question": "Summarize the current fixture evidence."
+              }
+            }
+          },
+          { "expectToolText": "Evidence" }
+        ]
+      }
+    ]
+  }
+}

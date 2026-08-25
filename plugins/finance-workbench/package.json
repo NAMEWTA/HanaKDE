@@ -1,0 +1,29 @@
+{
+  "name": "finance-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hana/plugin-protocol": "file:../../packages/plugin-protocol",
+    "@hana/plugin-runtime": "file:../../packages/plugin-runtime",
+    "@hana/plugin-sdk": "file:../../packages/plugin-sdk",
+    "@hana/plugin-components": "file:../../packages/plugin-components",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "scripts": {
+    "build:ui": "vite build",
+    "build": "npm run build:ui",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.js",
+    "check:js": "find index.js routes src tools scripts tests -type f -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "verify": "npm run typecheck && npm run check:js && npm test && npm run build && node --check assets/panel.js && node scripts/verify-package.mjs"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}
