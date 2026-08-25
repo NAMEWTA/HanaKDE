@@ -7,7 +7,7 @@
 - **Lead：** `root`
 - **Workspace/branch：** current workspace `/Users/wta/Documents/01-Code/myCode/HanaKDE` / `hanakde`
 - **实施前基线：** `b59ab7496379ab1de5c92d6a5dde353ef01f119b`
-- **最终 checkpoint：** HEAD `6c50e42992cb3483bacd1c3f5963e17e45649e6b` 上的 current-workspace diff；`plugins/todolist/assets/page.js` SHA-256 为 `33db7facae788f2029e8919a0d94267abf50d20e87ccc1bc417257bfe2e54d96`
+- **最终 checkpoint：** implementation commit `0003a6734faddb170a9c06aa8a2fd282cef6becf`；`plugins/todolist/assets/page.js` SHA-256 为 `33db7facae788f2029e8919a0d94267abf50d20e87ccc1bc417257bfe2e54d96`
 - **状态：** completed；本地、宿主合同与真实 HanaKDE E2E 全部通过
 
 ## 1. 实现摘要
@@ -83,7 +83,7 @@ Todo Page 入口显式注入官方 `@hana/plugin-sdk`。DOM 应用不再读取 `
 | 项目 | 结果 |
 |---|---|
 | Parent before SHA | `b59ab7496379ab1de5c92d6a5dde353ef01f119b` |
-| Implementation/source SHA | Direct Spec 使用 current-workspace checkpoint；用户已授权后续 commit |
+| Implementation/source SHA | `0003a6734faddb170a9c06aa8a2fd282cef6becf` |
 | Candidate branch/workspace | current |
 | Method/conflicts | Direct Spec current workspace；无 integration merge |
 | Integration checks | 插件 `npm run verify` 与宿主 iframe Vitest 均在 current workspace 通过 |
@@ -102,7 +102,7 @@ Todo Page 入口显式注入官方 `@hana/plugin-sdk`。DOM 应用不再读取 `
 - **残余风险/已知限制：** 正式兼容目录中的旧 `0.2.0` 插件代码已备份但未直接覆盖；HanaKDE v0.0.4 将携带已验证的内置 `0.2.1`。
 - **后续 Ticket：** 无；发布由独立 v0.0.4 release change 承接。
 - **监控或回滚触发：** E2E 出现 401/403、ready 超时或 CRUD 失败时回滚内置插件资产；Todo Store 位于独立 data 目录且本次未修改。
-- **Source commit：** `not-applicable`
+- **Source commit：** `0003a6734faddb170a9c06aa8a2fd282cef6becf`
 - **Parent result：** `6c50e42992cb3483bacd1c3f5963e17e45649e6b` + verified current workspace diff
 - **Source workspace：** `/Users/wta/Documents/01-Code/myCode/HanaKDE`
 - **Evidence：** `<Path>speculo/.speculo/specdev/changes/2026-08-24-fix-todolist-plugin-loading/evidence/direct-spec.md</Path>`

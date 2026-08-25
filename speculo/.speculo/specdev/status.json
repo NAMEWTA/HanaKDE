@@ -18,6 +18,13 @@
         "specdev/diagnose-bugs",
         "specdev/implement"
       ]
+    },
+    {
+      "change": "2026-08-25-hanakde-v0-0-4-todolist-release",
+      "current_work": "specdev/implement",
+      "works_run": [
+        "specdev/spec"
+      ]
     }
   ],
   "archived": [

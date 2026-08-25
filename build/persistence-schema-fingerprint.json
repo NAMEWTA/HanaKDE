@@ -652,7 +652,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:caeb0553a80be753cf0f19e5ed9b71aa081c530fa67a7029643cb7e8c402813f",
+  "payloadFingerprint": "sha256:3d363bc9fe7ad551466645c7168173eccb90b7fdafe491296565e5681e1cb8dc",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3200,8 +3200,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "HanaKDE product-name strings changed in runtime modules without changing persisted paths, schemas, or DATA_EPOCH semantics.",
-    "payloadFingerprint": "sha256:caeb0553a80be753cf0f19e5ed9b71aa081c530fa67a7029643cb7e8c402813f"
+    "compatibilityReason": "Removed the obsolete Todo build-time fallback asset writer from the persistence inventory; persisted store paths, runtime schemas, and DATA_EPOCH semantics are unchanged.",
+    "payloadFingerprint": "sha256:3d363bc9fe7ad551466645c7168173eccb90b7fdafe491296565e5681e1cb8dc"
   },
   "schemas": [
     {
@@ -8881,14 +8881,6 @@
     {
       "exemptionId": "todolist-plugin-asset-build",
       "kind": "mkdir",
-      "ordinal": 0,
-      "reason": "Writes packaged plugin page.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
-      "sourceFile": "plugins/todolist/build.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": "todolist-plugin-asset-build",
-      "kind": "write-file",
       "ordinal": 0,
       "reason": "Writes packaged plugin page.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
       "sourceFile": "plugins/todolist/build.ts",

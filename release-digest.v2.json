@@ -3,6 +3,63 @@
   "entries": [
     {
       "schemaVersion": 1,
+      "tag": "v0.0.4",
+      "version": "0.0.4",
+      "previousTag": "v0.0.3",
+      "generatedAt": "2026-08-25T10:00:00.000Z",
+      "noUserFacingChanges": false,
+      "summary": {
+        "zh": "HanaKDE v0.0.4 修复 Todo 页面加载、宿主鉴权和桌面及窄屏下的完整任务操作流程。",
+        "en": "HanaKDE v0.0.4 fixes Todo page loading, host authentication, and the complete task workflow on desktop and narrow layouts."
+      },
+      "counts": {
+        "feature": 0,
+        "fix": 1,
+        "improvement": 0,
+        "migration": 0
+      },
+      "source": {
+        "owner": "NAMEWTA",
+        "repo": "HanaKDE",
+        "commitRange": "v0.0.3..0003a673",
+        "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.4",
+        "releaseNotes": ""
+      },
+      "items": [
+        {
+          "id": "todolist-host-workflow",
+          "kind": "fix",
+          "importance": "high",
+          "title": {
+            "zh": "Todo 宿主页面恢复可用",
+            "en": "Todo host page restored"
+          },
+          "summary": {
+            "zh": "Todo 页面改用正式插件 SDK 完成 ready 握手和 surface-session 鉴权，快速记录、自动保存、完成、移入废纸篓及恢复在桌面和窄屏布局中均可正常使用。",
+            "en": "The Todo page now uses the official plugin SDK for the ready handshake and surface-session authentication, restoring capture, autosave, completion, Trash, and restore flows across desktop and narrow layouts."
+          },
+          "details": [
+            {
+              "zh": "构建缺少 SDK 依赖时会直接失败，不再生成无鉴权的退化页面资产。",
+              "en": "Builds now fail when the SDK dependency is unavailable instead of producing an unauthenticated fallback page."
+            },
+            {
+              "zh": "新建无日期 Todo 会进入可见的收集箱，窄屏导航会正确退出详情视图。",
+              "en": "New unscheduled Todos move into the visible Inbox, and narrow-layout navigation now exits the detail view correctly."
+            }
+          ],
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "0003a673",
+              "title": "fix(todolist): restore authenticated host workflow"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "tag": "v0.0.3",
       "version": "0.0.3",
       "previousTag": "v0.0.2",
@@ -12,7 +69,12 @@
         "zh": "HanaKDE v0.0.3 完成产品品牌迁移，修复 Electron 开发运行时安装，并移除对上游 Apple 公证身份的依赖。",
         "en": "HanaKDE v0.0.3 completes the product rebrand, fixes Electron development runtime installation, and removes the upstream Apple notarization dependency."
       },
-      "counts": { "feature": 0, "fix": 2, "improvement": 1, "migration": 0 },
+      "counts": {
+        "feature": 0,
+        "fix": 2,
+        "improvement": 1,
+        "migration": 0
+      },
       "source": {
         "owner": "NAMEWTA",
         "repo": "HanaKDE",
@@ -25,37 +87,64 @@
           "id": "hanakde-product-identity",
           "kind": "improvement",
           "importance": "high",
-          "title": { "zh": "统一 HanaKDE 产品身份", "en": "Unified HanaKDE product identity" },
+          "title": {
+            "zh": "统一 HanaKDE 产品身份",
+            "en": "Unified HanaKDE product identity"
+          },
           "summary": {
             "zh": "桌面端、安装器、独立核心资产、CLI、文档和发布门禁统一使用 HanaKDE 名称，同时保留旧数据与插件生态标识兼容。",
             "en": "Desktop surfaces, installers, standalone core assets, CLI output, documentation, and release gates now use HanaKDE while legacy data and plugin ecosystem identifiers remain compatible."
           },
           "details": [],
-          "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "refactor(brand): rename product surfaces to HanaKDE" }]
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "v0.0.3",
+              "title": "refactor(brand): rename product surfaces to HanaKDE"
+            }
+          ]
         },
         {
           "id": "electron-runtime-preflight",
           "kind": "fix",
           "importance": "high",
-          "title": { "zh": "Electron 开发运行时预检", "en": "Electron development runtime preflight" },
+          "title": {
+            "zh": "Electron 开发运行时预检",
+            "en": "Electron development runtime preflight"
+          },
           "summary": {
             "zh": "固定可工作的 Node/npm 工具链，在安装和桌面启动前显式安装并校验 Electron，避免 `path.txt` 缺失导致的启动失败。",
             "en": "A working Node/npm toolchain is pinned and Electron is explicitly installed and verified before desktop startup, preventing missing `path.txt` failures."
           },
           "details": [],
-          "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "fix(dev): verify Electron runtime before startup" }]
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "v0.0.3",
+              "title": "fix(dev): verify Electron runtime before startup"
+            }
+          ]
         },
         {
           "id": "independent-unsigned-release",
           "kind": "fix",
           "importance": "high",
-          "title": { "zh": "独立的未公证发行链", "en": "Independent unsigned release pipeline" },
+          "title": {
+            "zh": "独立的未公证发行链",
+            "en": "Independent unsigned release pipeline"
+          },
           "summary": {
             "zh": "删除 Apple Developer ID 公证钩子和凭据入口，保留不依赖上游证书的本地 Mach-O 与种子完整性签名。",
             "en": "Apple Developer ID notarization hooks and credential inputs are removed while local Mach-O and seed integrity signing remain independent of upstream certificates."
           },
           "details": [],
-          "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "build(release): remove Apple notarization hook" }]
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "v0.0.3",
+              "title": "build(release): remove Apple notarization hook"
+            }
+          ]
         }
       ]
     },

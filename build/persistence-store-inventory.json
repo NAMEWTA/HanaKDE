@@ -8244,15 +8244,6 @@
       "ordinal": 0
     },
     {
-      "sourceFile": "plugins/todolist/build.ts",
-      "kind": "write-file",
-      "excerpt": "fs.writeFileSync(path.join(assets, \"page.js\"), `${source}\\nmountTodoApp(document.getElementById(\"root\"));\\n`, \"utf8\")",
-      "reason": "Writes packaged plugin page.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
-      "storeId": null,
-      "exemptionId": "todolist-plugin-asset-build",
-      "ordinal": 0
-    },
-    {
       "sourceFile": "plugins/todolist/scripts/verify-package.mjs",
       "kind": "copy-file",
       "excerpt": "fs.cpSync(root, installed, { recursive: true, filter(source) { const relative = path.relative(root, source); return !relative.startsWith(\"node_modules\") && !relative.startsWith(\"exports\") && !/^store\\.v\\d+\\.json(?:\\.|$)/u.test(path.basename",
