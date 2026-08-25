@@ -18,7 +18,8 @@
   "ui": {
     "hostCapabilities": [
       "resource.pick",
-      "clipboard.writeText"
+      "clipboard.writeText",
+      "plugin.page.open"
     ]
   },
   "contributes": {

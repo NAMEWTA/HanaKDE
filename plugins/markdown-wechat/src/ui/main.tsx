@@ -260,6 +260,16 @@ function WidgetApp(): React.ReactElement {
     setStatus(result.ok ? { kind: "success", message: `Downloaded ${result.filename}` } : { kind: "error", message: result.error ?? "Download failed" });
   }
 
+  async function openWorkbench(): Promise<void> {
+    setStatus({ kind: "working", message: "Opening workbench" });
+    try {
+      await hana.ui.openPage();
+      setStatus({ kind: "success", message: "Workbench opened" });
+    } catch (error) {
+      setStatus({ kind: "error", message: errorMessage(error) });
+    }
+  }
+
   return (
     <div className="widget-shell">
       <div className="widget-header"><span className="brand-mark" aria-hidden="true">M</span><div><strong>Markdown WeChat</strong><span>Current article</span></div></div>
@@ -269,6 +279,7 @@ function WidgetApp(): React.ReactElement {
         <span>{response?.summary.characters.toLocaleString() ?? 0} characters</span>
       </div>
       <div className="widget-actions">
+        <button className="button" onClick={() => void openWorkbench()}>Open workbench</button>
         <button className="icon-button" title="Download Markdown" aria-label="Download Markdown" disabled={!response || Boolean(response.recovery)} onClick={() => download("markdown")}>MD</button>
         <button className="icon-button" title="Download HTML" aria-label="Download HTML" disabled={!response || Boolean(response.recovery)} onClick={() => download("html")}>H</button>
       </div>

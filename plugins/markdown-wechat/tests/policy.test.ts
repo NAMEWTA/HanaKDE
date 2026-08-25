@@ -18,7 +18,7 @@ describe("plugin policy boundary", () => {
   it("declares only ResourceIO and UI host capabilities with no network", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
     expect(manifest.capabilities).toEqual(["resource.read", "resource.write"]);
-    expect(manifest.ui.hostCapabilities).toEqual(["resource.pick", "clipboard.writeText"]);
+    expect(manifest.ui.hostCapabilities).toEqual(["resource.pick", "clipboard.writeText", "plugin.page.open"]);
     expect(manifest.network).toBeUndefined();
     expect(manifest.hidden).toBe(true);
   });

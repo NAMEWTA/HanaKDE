@@ -45,8 +45,12 @@ describe("real PluginManager integration", () => {
     expect(diagnostic?.routes.pages).toEqual(expect.arrayContaining([expect.objectContaining({ route: "/page" })]));
     expect(diagnostic?.routes.widgets).toEqual(expect.arrayContaining([expect.objectContaining({ route: "/widget" })]));
     expect(diagnostic?.tools).toEqual([{ name: "markdown-wechat_render", dynamic: false }]);
-    expect(manager.getPages()).toHaveLength(1);
-    expect(manager.getWidgets()).toHaveLength(1);
+    expect(manager.getPages()).toEqual([
+      expect.objectContaining({ hostCapabilities: expect.arrayContaining(["plugin.page.open"]) }),
+    ]);
+    expect(manager.getWidgets()).toEqual([
+      expect.objectContaining({ hostCapabilities: expect.arrayContaining(["plugin.page.open"]) }),
+    ]);
     expect(manager.getAllTools().map((tool: any) => tool.name)).toContain("markdown-wechat_render");
 
     const app = manager.getRouteApp("markdown-wechat");
