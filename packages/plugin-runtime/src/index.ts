@@ -576,7 +576,7 @@ export interface HanaSessionUpdateInput {
   visibility?: 'public' | 'plugin_private' | 'private' | string;
 }
 
-export interface HanaAgentCreateInput {
+export interface HanaKDEAgentCreateInput {
   id?: string;
   name: string;
   yuan?: string;
@@ -588,7 +588,7 @@ export interface HanaAgentCreateInput {
   memoryPolicy?: { enabled?: boolean };
 }
 
-export interface HanaAgentUpdateInput {
+export interface HanaKDEAgentUpdateInput {
   name?: string;
   yuan?: string;
   ownerPluginId?: string | null;
@@ -598,6 +598,12 @@ export interface HanaAgentUpdateInput {
   toolPolicy?: { disabled?: string[] };
   config?: Record<string, unknown>;
 }
+
+/** @deprecated Use HanaKDEAgentCreateInput. */
+export type HanaAgentCreateInput = HanaKDEAgentCreateInput;
+
+/** @deprecated Use HanaKDEAgentUpdateInput. */
+export type HanaAgentUpdateInput = HanaKDEAgentUpdateInput;
 
 export interface HanaModelSampleInput {
   systemPrompt?: string;
@@ -1298,7 +1304,7 @@ export function getAgentProfile(
 
 export function createAgent(
   ctx: { pluginId?: string | null; bus?: Pick<HanaEventBus, 'request'> | null },
-  input: HanaAgentCreateInput,
+  input: HanaKDEAgentCreateInput,
   options?: Record<string, unknown>,
 ): Promise<unknown> {
   return requestBus(ctx, 'agent:create', withOwnerPlugin(ctx, { ...input }), options);
@@ -1307,7 +1313,7 @@ export function createAgent(
 export function updateAgent(
   ctx: { pluginId?: string | null; bus?: Pick<HanaEventBus, 'request'> | null },
   agentId: string,
-  patch: HanaAgentUpdateInput,
+  patch: HanaKDEAgentUpdateInput,
   options?: Record<string, unknown>,
 ): Promise<unknown> {
   return requestBus(ctx, 'agent:update', { agentId, ...withOwnerPlugin(ctx, { ...patch }) }, options);

@@ -13,8 +13,11 @@ describe("local startup contract", () => {
   it("runs dependency integrity before every source startup build and direct launcher spawn", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
     for (const scriptName of ["start", "start:dev", "start:vite"]) {
-      expect(pkg.scripts[scriptName].split("&&")[0].trim()).toBe("npm run verify:runtime-deps");
+      const steps = pkg.scripts[scriptName].split("&&").map((step: string) => step.trim());
+      expect(steps[0]).toBe("npm run verify:electron-runtime");
+      expect(steps[1]).toBe("npm run verify:runtime-deps");
     }
+    expect(pkg.scripts.postinstall).toContain("ensure-electron-runtime.mjs --install");
     expect(pkg.scripts.postinstall).toContain("patch-pi-sdk.cjs");
     expect(pkg.scripts.postinstall).toContain("verify-runtime-dependencies.mjs");
 

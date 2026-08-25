@@ -676,7 +676,7 @@ export async function runPackagedDirectFlow({
     mounted = false;
     receipt.cleanup.mountDetached = true;
     if (adhocResign) await adhocResignApp(installedApp);
-    const appExecutable = path.join(installedApp, "Contents", "MacOS", "HanaAgent");
+    const appExecutable = path.join(installedApp, "Contents", "MacOS", "HanaKDE");
     if (!fsSync.statSync(appExecutable, { throwIfNoEntry: false })?.isFile()) {
       throw new Error("[macos-packaged-flow] installed app executable is missing");
     }

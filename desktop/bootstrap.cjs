@@ -143,8 +143,8 @@ try {
     error: serializeError(err),
   });
   showBootstrapError(
-    "HanaAgent Launch Failed",
-    `HanaAgent failed before HANA_HOME could be resolved.\n\n${err?.message || err}\n\nDiagnostic file:\n${diagnosticPath || diagnosticsDir}`,
+    "HanaKDE Launch Failed",
+    `HanaKDE failed before HANA_HOME could be resolved.\n\n${err?.message || err}\n\nDiagnostic file:\n${diagnosticPath || diagnosticsDir}`,
   );
   exitAfterBootstrapFailure();
 }
@@ -181,7 +181,7 @@ function verifyWindowsInstallSurfaceBeforeMain() {
     diagnosticPath,
   });
   const detail = launchIntegrity.formatInstallSurfaceError(result, diagnosticPath);
-  showBootstrapError("HanaAgent Launch Failed", detail);
+  showBootstrapError("HanaKDE Launch Failed", detail);
   exitAfterBootstrapFailure();
   return false;
 }
@@ -210,8 +210,8 @@ function loadDesktopMain() {
     appendLaunchLog("desktop-main-load-failed", { ...payload, diagnosticPath });
     writeLaunchMarker("desktop-main-load-failed", { diagnosticPath });
     showBootstrapError(
-      "HanaAgent Launch Failed",
-      `HanaAgent failed before the desktop main process finished loading.\n\n${err?.message || err}\n\nDiagnostic file:\n${diagnosticPath || diagnosticsDir}`,
+      "HanaKDE Launch Failed",
+      `HanaKDE failed before the desktop main process finished loading.\n\n${err?.message || err}\n\nDiagnostic file:\n${diagnosticPath || diagnosticsDir}`,
     );
     exitAfterBootstrapFailure();
   }

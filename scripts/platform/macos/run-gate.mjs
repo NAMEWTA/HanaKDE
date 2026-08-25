@@ -41,7 +41,7 @@ function findAppBundle(packageDir) {
 function inspectAppBundle(packageDir) {
   const app = findAppBundle(packageDir);
   const resources = path.join(app, "Contents", "Resources");
-  const executable = path.join(app, "Contents", "MacOS", "HanaAgent");
+  const executable = path.join(app, "Contents", "MacOS", "HanaKDE");
   const asar = path.join(resources, "app.asar");
   const seed = path.join(resources, "seed");
   const required = [asar, seed, executable];

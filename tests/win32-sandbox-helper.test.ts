@@ -20,7 +20,7 @@ describe("resolveWin32SandboxHelper", () => {
         HANA_DESKTOP_RESOURCES_PATH: "C:\\Hana\\resources",
         HANA_DESKTOP_IS_PACKAGED: "1",
         HANA_DESKTOP_APP_PATH: "C:\\OldHana\\resources\\app.asar",
-        HANA_DESKTOP_EXEC_PATH: "C:\\OldHana\\HanaAgent.exe",
+        HANA_DESKTOP_EXEC_PATH: "C:\\OldHana\\HanaKDE.exe",
       },
       resourcesPath: "C:\\Electron\\resources",
       cwd: "C:\\repo",
@@ -30,7 +30,7 @@ describe("resolveWin32SandboxHelper", () => {
   });
 
   it("resolves the installed helper and bundled Git from old packaged-shell variables", () => {
-    const appPath = "C:\\Program Files\\HanaAgent\\resources\\app.asar";
+    const appPath = "C:\\Program Files\\HanaKDE\\resources\\app.asar";
     const expectedResources = path.win32.dirname(appPath);
     const expectedHelper = path.win32.join(
       expectedResources,
@@ -42,7 +42,7 @@ describe("resolveWin32SandboxHelper", () => {
     const env = {
       HANA_DESKTOP_IS_PACKAGED: "1",
       HANA_DESKTOP_APP_PATH: appPath,
-      HANA_DESKTOP_EXEC_PATH: "C:\\Program Files\\HanaAgent\\HanaAgent.exe",
+      HANA_DESKTOP_EXEC_PATH: "C:\\Program Files\\HanaKDE\\HanaKDE.exe",
       HANA_ROOT: "C:\\Users\\Hana\\.hanako\\artifacts\\server\\0.412.7",
     };
     const existsSync = (candidate: string) => candidate === expectedHelper || candidate === expectedGit;
@@ -70,7 +70,7 @@ describe("resolveWin32SandboxHelper", () => {
         HANA_DESKTOP_RESOURCES_PATH: explicitResources,
         HANA_DESKTOP_IS_PACKAGED: "1",
         HANA_DESKTOP_APP_PATH: "C:\\OldHana\\resources\\app.asar",
-        HANA_DESKTOP_EXEC_PATH: "C:\\OldHana\\HanaAgent.exe",
+        HANA_DESKTOP_EXEC_PATH: "C:\\OldHana\\HanaKDE.exe",
       },
       resourcesPath: null,
       existsSync: () => true,
@@ -89,7 +89,7 @@ describe("resolveWin32SandboxHelper", () => {
       env: {
         HANA_DESKTOP_IS_PACKAGED: "0",
         HANA_DESKTOP_APP_PATH: "C:\\Hana\\resources\\app.asar",
-        HANA_DESKTOP_EXEC_PATH: "C:\\Hana\\HanaAgent.exe",
+        HANA_DESKTOP_EXEC_PATH: "C:\\Hana\\HanaKDE.exe",
       },
       resourcesPath: null,
       cwd: "C:\\repo",
@@ -103,7 +103,7 @@ describe("resolveWin32SandboxHelper", () => {
       env: {
         HANA_DESKTOP_IS_PACKAGED: "1",
         HANA_DESKTOP_APP_PATH: "C:\\Hana\\resources\\app.asar",
-        HANA_DESKTOP_EXEC_PATH: "C:\\Hana\\HanaAgent.exe",
+        HANA_DESKTOP_EXEC_PATH: "C:\\Hana\\HanaKDE.exe",
         HANA_ROOT: "C:\\Users\\Hana\\.hanako\\artifacts\\server\\0.412.7",
       },
       resourcesPath: null,

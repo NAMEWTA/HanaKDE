@@ -116,9 +116,9 @@ export function inspectWindowsPackage(
   assertSupportedArch(arch);
   const packageRoot = path.resolve(packageDir);
   assertDirectory(packageRoot, "unpacked package");
-  const executablePath = path.join(packageRoot, "HanaAgent.exe");
-  assertFile(executablePath, "HanaAgent.exe");
-  assertPortableExecutable(executablePath, "HanaAgent.exe");
+  const executablePath = path.join(packageRoot, "HanaKDE.exe");
+  assertFile(executablePath, "HanaKDE.exe");
+  assertPortableExecutable(executablePath, "HanaKDE.exe");
 
   const resources = path.join(packageRoot, "resources");
   const seed = path.join(resources, "seed");
@@ -167,7 +167,7 @@ export function inspectWindowsPackage(
 
   return {
     packageRoot: path.basename(packageRoot),
-    executable: "HanaAgent.exe",
+    executable: "HanaKDE.exe",
     serverArchive: serverArchives[0],
     rendererArchive: rendererArchives[0],
     manifest: manifests[0],

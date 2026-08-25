@@ -1,6 +1,6 @@
 {
-  "name": "HanaAgent",
-  "short_name": "HanaAgent",
+  "name": "HanaKDE",
+  "short_name": "HanaKDE",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

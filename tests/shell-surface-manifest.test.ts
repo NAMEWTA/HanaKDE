@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * census, not against package.json's electron-builder `build` config
  * directly — so if someone edits `build.files` / `build.extraResources` /
  * `build.mac.extraResources` / `build.win.extraResources` (or the
- * afterPack/afterSign hooks, or bumps the pinned Electron version) without
+ * afterPack hooks, or bumps the pinned Electron version) without
  * updating the manifest, this test must fail. Two independent directions:
  *
  *   1. Forward: every source path/glob the manifest declares must exist on
@@ -151,12 +151,14 @@ describe("shell-surface-manifest.json: reverse (electron-builder config is fully
     reverseCheckExtraResources(pkg.build.win.extraResources, "win", "package.json build.win.extraResources");
   });
 
-  it("afterPack/afterSign hooks match package.json build config", () => {
+  it("tracks the afterPack hook without an Apple notarization hook", () => {
     const afterPack = stripLeadingDotSlash(pkg.build.afterPack);
-    const afterSign = stripLeadingDotSlash(pkg.build.afterSign);
     const manifestScripts = manifest.buildHooks.map((h: { script: string }) => stripLeadingDotSlash(h.script));
     expect(manifestScripts).toContain(afterPack);
-    expect(manifestScripts).toContain(afterSign);
+    expect(pkg.build).not.toHaveProperty("afterSign");
+    expect(manifest.buildHooks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ hook: "afterSign" }),
+    ]));
   });
 });
 

@@ -1,12 +1,12 @@
 <p align="center">
-  <img src=".github/assets/banner.jpg" width="100%" alt="HanaAgent Banner">
+  <img src=".github/assets/banner.jpg" width="100%" alt="HanaKDE Banner">
 </p>
 
 <p align="center">
-  <img src=".github/assets/HanaAgent-280.png" width="80" alt="HanaAgent">
+  <img src=".github/assets/HanaKDE-280.png" width="80" alt="HanaKDE">
 </p>
 
-<h1 align="center">HanaAgent</h1>
+<h1 align="center">HanaKDE</h1>
 
 <p align="center">A personal AI agent with memory and soul</p>
 
@@ -17,11 +17,11 @@
 
 ---
 
-## What is HanaAgent
+## What is HanaKDE
 
-HanaAgent is a personal AI agent that is easier to use than traditional coding agents. It has memory, personality, and can act autonomously. Multiple agents can work together on your machine.
+HanaKDE is a personal AI agent that is easier to use than traditional coding agents. It has memory, personality, and can act autonomously. Multiple agents can work together on your machine.
 
-As an assistant, it is gentle: no complex configuration files, no obscure jargon. HanaAgent is designed not just for coders, but for everyone who works at a computer.
+As an assistant, it is gentle: no complex configuration files, no obscure jargon. HanaKDE is designed not just for coders, but for everyone who works at a computer.
 As a tool, it is powerful: it remembers everything you've said, operates your computer, browses the web, searches for information, reads and writes files, executes code, manages schedules, and can even learn new skills on its own.
 
 ## Features
@@ -30,7 +30,7 @@ As a tool, it is powerful: it remembers everything you've said, operates your co
 
 **Personality** — Not a generic "AI assistant". Each agent has its own voice and behavior through personality templates. Agents are self-contained folders, easy to back up and manage.
 
-**Tools** — Read/write files, run one-shot commands or persistent terminal sessions, browse the web, search the internet through browser-backed or API providers, take screenshots and segmented long screenshots, preview media, and inspect pages. Covers the vast majority of daily work scenarios. A server-first CLI can also attach to the same HanaAgent Server to show status, list sessions, and continue chats from a terminal.
+**Tools** — Read/write files, run one-shot commands or persistent terminal sessions, browse the web, search the internet through browser-backed or API providers, take screenshots and segmented long screenshots, preview media, and inspect pages. Covers the vast majority of daily work scenarios. A server-first CLI can also attach to the same HanaKDE Server to show status, list sessions, and continue chats from a terminal.
 
 **Skills** — Built-in compatibility with the community Skills ecosystem. Agents can also install skills from GitHub or write their own. Strict safety review enabled by default.
 
@@ -52,14 +52,14 @@ As a tool, it is powerful: it remembers everything you've said, operates your co
 
 **Multi-Platform Bridge** — A single agent can connect to Telegram, Feishu, QQ, and WeChat bots simultaneously. Chat from any platform and remotely operate your computer. Bridge sessions carry platform context, and notifications can be delivered back to the current external platform.
 
-**Mobile & LAN Frontends** — HanaAgent Server can host the `/mobile/` PWA. Phones can sign in with a device access key or local account, view sessions, chat, and manage workbench files. Another desktop frontend can also connect to an existing LAN HanaAgent Server with a LAN URL and access key.
+**Mobile & LAN Frontends** — HanaKDE Server can host the `/mobile/` PWA. Phones can sign in with a device access key or local account, view sessions, chat, and manage workbench files. Another desktop frontend can also connect to an existing LAN HanaKDE Server with a LAN URL and access key.
 
 **i18n** — Interface available in 5 languages: Chinese, English, Japanese, Korean, and Traditional Chinese.
 
 ## Screenshots
 
 <p align="center">
-  <img src=".github/assets/screenshot-main.jpg" width="100%" alt="HanaAgent Main Interface">
+  <img src=".github/assets/screenshot-main.jpg" width="100%" alt="HanaKDE Main Interface">
 </p>
 
 ## Quick Start
@@ -68,7 +68,11 @@ As a tool, it is powerful: it remembers everything you've said, operates your co
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 
-The app is signed and notarized with an Apple Developer ID. macOS should allow it to launch directly.
+The current package does not use Apple Developer ID signing or notarization. If macOS blocks the first launch, verify that you trust the download and run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/HanaKDE.app
+```
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 
@@ -78,7 +82,7 @@ The app is signed and notarized with an Apple Developer ID. macOS should allow i
 
 ### First Run
 
-On first launch, an onboarding wizard will guide you through setup: choose a language, enter your name, connect a model provider (API key + base URL), and select three models — a **chat model** (main conversation), a **utility model** (lightweight tasks), and a **utility large model** (memory compilation and deep analysis). In settings you can also choose a **vision model** that lets text-only chat models work with image attachments through Vision Bridge. HanaAgent supports OpenAI-compatible providers, Anthropic-style providers, OAuth providers, and local models via Ollama.
+On first launch, an onboarding wizard will guide you through setup: choose a language, enter your name, connect a model provider (API key + base URL), and select three models — a **chat model** (main conversation), a **utility model** (lightweight tasks), and a **utility large model** (memory compilation and deep analysis). In settings you can also choose a **vision model** that lets text-only chat models work with image attachments through Vision Bridge. HanaKDE supports OpenAI-compatible providers, Anthropic-style providers, OAuth providers, and local models via Ollama.
 
 ## Architecture
 
@@ -121,23 +125,24 @@ User data is rooted at `HANA_HOME` (`~/.hanako` in production, `~/.hanako-dev` i
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (signed & notarized) |
+| macOS (Apple Silicon) | Supported (unsigned and not notarized) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Supported (AppImage / deb) |
-| Mobile (PWA) | v0: phone sessions and workbench access through the same HanaAgent Server |
+| Mobile (PWA) | v0: phone sessions and workbench access through the same HanaKDE Server |
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
+# Install and use the repository-pinned Node/npm toolchain
+volta install node@24.16.0 npm@11.13.0
+volta run npm ci
 
-# Start with Electron (builds renderer first)
-npm start
+# Start the Electron development environment (verifies the runtime first)
+volta run npm run start:dev
 
 # Start with Vite HMR (run npm run dev:renderer first)
-npm run start:vite
+volta run npm run start:vite
 
 # Server only
 npm run server

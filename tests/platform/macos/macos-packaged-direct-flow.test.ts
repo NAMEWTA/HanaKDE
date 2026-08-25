@@ -19,7 +19,7 @@ describe("macOS packaged direct-flow runner", () => {
 
   it("requires an explicit DMG and validates artifact coordinates", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-t23-packaged-options-"));
-    const dmg = path.join(root, "HanaAgent.dmg");
+    const dmg = path.join(root, "HanaKDE.dmg");
     fs.writeFileSync(dmg, "fixture", "utf8");
     try {
       expect(parsePackagedFlowOptions([

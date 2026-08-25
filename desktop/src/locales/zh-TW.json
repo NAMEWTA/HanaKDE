@@ -395,7 +395,7 @@
   },
   "announcement": {
     "title": "更新完成 · v{version}",
-    "fallbackBody": "HanaAgent 已更新至 v{version}。",
+    "fallbackBody": "HanaKDE 已更新至 v{version}。",
     "confirm": "知道了"
   },
   "skills": {
@@ -1385,7 +1385,7 @@
         "scheduledTaskCompletion": "排程任務完成",
         "patrolCompletion": "巡檢完成",
         "never": "從不",
-        "whenUnfocused": "焦點不在 HanaAgent 時",
+        "whenUnfocused": "焦點不在 HanaKDE 時",
         "whenSessionUnfocused": "焦點不在該聊天時",
         "always": "總是"
       }
@@ -1622,7 +1622,7 @@
       "updateChecking": "正在檢查更新…",
       "updateDownloading": "{agentName}正在準備新家",
       "updateReadyInstall": "v{version} 已就緒",
-      "updateInstalling": "正在安裝更新，HanaAgent 會自動重新啟動…",
+      "updateInstalling": "正在安裝更新，HanaKDE 會自動重新啟動…",
       "updateInstallManualHint": "點「重啟更新」後安裝，直接退出不會自動安裝",
       "updateInstall": "重新啟動更新",
       "updateInstallNow": "重新啟動立即更新",
@@ -1649,7 +1649,7 @@
       "updateManifestReleasedAtViaMirror": "貨架清單簽發於 {date}（經備用源）",
       "updateCheckBtn": "檢查更新",
       "updateRetryBtn": "重試",
-      "updateNeedInstall": "請先將 HanaAgent 移動到應用程式資料夾",
+      "updateNeedInstall": "請先將 HanaKDE 移動到應用程式資料夾",
       "updateDiskSpace": "磁碟空間不足，無法下載更新",
       "updateDigestCta": "此次更新你將獲得",
       "updateDigestTitle": "此次更新你將獲得",
@@ -1688,7 +1688,7 @@
       "mobileAccess": "手機存取",
       "desktopAccess": "電腦存取",
       "lanToggle": "允許區域網路裝置存取",
-      "lanHint": "開啟後，同一區域網路內的手機和電腦可以存取這台 HanaAgent Server",
+      "lanHint": "開啟後，同一區域網路內的手機和電腦可以存取這台 HanaKDE Server",
       "port": "固定連接埠",
       "portHint": "用於書籤和 QR Code；修改後需要重新啟動 Hana 生效",
       "mobileUrl": "手機存取地址",
@@ -1723,7 +1723,7 @@
       "desktopKeyFailed": "產生失敗",
       "connectLanServer": "連線區域網路伺服器",
       "remoteServerUrl": "伺服器位址",
-      "remoteServerUrlHint": "填入另一台電腦或 NAS 上 HanaAgent Server 的地址",
+      "remoteServerUrlHint": "填入另一台電腦或 NAS 上 HanaKDE Server 的地址",
       "remoteServerKey": "存取密鑰",
       "remoteServerKeyHint": "填入那台伺服器設定頁產生的電腦存取密鑰",
       "remoteServerConnected": "已連線區域網路伺服器",
@@ -3225,7 +3225,7 @@
     "skillMissingName": "SKILL.md 中缺少 name 欄位",
     "skillNameInvalid": "技能名稱無效（\"{name}\"）。僅允許字母、數字、底線和短橫線。",
     "skillPathMustBeAbsolute": "路徑必須是絕對路徑: {path}",
-    "skillCannotAddSelfDir": "不能新增 HanaAgent 自身的技能目錄",
+    "skillCannotAddSelfDir": "不能新增 HanaKDE 自身的技能目錄",
     "skillInvalidName": "無效的技能名稱",
     "skillExternalCannotDelete": "外部相容技能無法從此處刪除",
     "skillNotExists": "技能不存在",
@@ -3441,7 +3441,7 @@
   },
   "main": {
     "tray": {
-      "show": "顯示 HanaAgent",
+      "show": "顯示 HanaKDE",
       "settings": "設定",
       "quit": "結束",
       "repairArtifacts": "修復元件…"
@@ -3450,28 +3450,28 @@
       "selectFolder": "選擇工作資料夾",
       "selectSkill": "選擇技能",
       "selectPlugin": "選擇插件",
-      "launchFailedTitle": "HanaAgent 啟動失敗",
-      "launchFailedBody": "HanaAgent v{version}\n\n{detail}\n\n詳細日誌已儲存至：\n{logPath}\n\n請將此截圖或日誌檔案傳送給開發者。",
-      "serverRestartFailed": "HanaAgent v{version}\n\nServer 崩潰後重新啟動失敗。\n{error}\n\n請重新啟動應用程式。",
-      "serverMultipleCrash": "HanaAgent v{version}\n\nServer 多次崩潰 ({reason})。\n\n請重新啟動應用程式。",
+      "launchFailedTitle": "HanaKDE 啟動失敗",
+      "launchFailedBody": "HanaKDE v{version}\n\n{detail}\n\n詳細日誌已儲存至：\n{logPath}\n\n請將此截圖或日誌檔案傳送給開發者。",
+      "serverRestartFailed": "HanaKDE v{version}\n\nServer 崩潰後重新啟動失敗。\n{error}\n\n請重新啟動應用程式。",
+      "serverMultipleCrash": "HanaKDE v{version}\n\nServer 多次崩潰 ({reason})。\n\n請重新啟動應用程式。",
       "serverStartTimeout": "Server 啟動逾時",
       "serverKilledBySignal": "Server 被訊號終止 ({signal})",
       "serverExitedWithCode": "Server 已結束，code: {code}",
-      "serverFilesNotReady": "自動更新剛完成，新版本檔案仍在寫入磁碟（缺少 {missing}），已等待 {waited} 秒仍未就緒。請稍後重新啟動 HanaAgent。",
-      "serverModuleMissing": "Server 啟動失敗：找不到模組 {module}。\n通常是自動更新剛完成、新版本檔案仍在寫入磁碟所致。\n建議：等待 1-2 分鐘後重新啟動 HanaAgent；若反覆出現，請至 GitHub 回報。",
-      "devDependencyIncomplete": "開發依賴不完整（{module}）。請執行 `volta run npm ci`，然後重新啟動 HanaAgent。",
-      "packagedComponentIncomplete": "已安裝的應用程式元件不完整（{module}）。HanaAgent 可以重設應用程式元件並重新啟動。",
-      "packagedComponentRepairBody": "HanaAgent 因應用程式元件 {module} 不完整而無法啟動。修復只會重設已安裝的應用程式元件並重新啟動 HanaAgent，不會影響助手、對話和設定。",
-      "installFailedTitle": "HanaAgent 更新",
-      "installFailedBody": "更新安裝失敗：\n{error}\n\n請重新啟動 HanaAgent 後重試，或前往設定頁面手動檢查更新。",
+      "serverFilesNotReady": "自動更新剛完成，新版本檔案仍在寫入磁碟（缺少 {missing}），已等待 {waited} 秒仍未就緒。請稍後重新啟動 HanaKDE。",
+      "serverModuleMissing": "Server 啟動失敗：找不到模組 {module}。\n通常是自動更新剛完成、新版本檔案仍在寫入磁碟所致。\n建議：等待 1-2 分鐘後重新啟動 HanaKDE；若反覆出現，請至 GitHub 回報。",
+      "devDependencyIncomplete": "開發依賴不完整（{module}）。請執行 `volta run npm ci`，然後重新啟動 HanaKDE。",
+      "packagedComponentIncomplete": "已安裝的應用程式元件不完整（{module}）。HanaKDE 可以重設應用程式元件並重新啟動。",
+      "packagedComponentRepairBody": "HanaKDE 因應用程式元件 {module} 不完整而無法啟動。修復只會重設已安裝的應用程式元件並重新啟動 HanaKDE，不會影響助手、對話和設定。",
+      "installFailedTitle": "HanaKDE 更新",
+      "installFailedBody": "更新安裝失敗：\n{error}\n\n請重新啟動 HanaKDE 後重試，或前往設定頁面手動檢查更新。",
       "repairArtifactsTitle": "修復元件",
-      "repairArtifactsBody": "此操作會將 HanaAgent 的應用元件重設為安裝包內建的版本，並重新啟動應用程式。你的資料（助手、對話、設定）不受影響。",
+      "repairArtifactsBody": "此操作會將 HanaKDE 的應用元件重設為安裝包內建的版本，並重新啟動應用程式。你的資料（助手、對話、設定）不受影響。",
       "repairArtifactsConfirm": "修復並重新啟動",
       "repairArtifactsCancel": "取消",
       "repairArtifactsExit": "退出",
       "repairArtifactsFailedTitle": "元件修復失敗",
-      "repairArtifactsFailedBody": "部分應用程式元件無法重設。HanaAgent 將結束且不會自動重新啟動。",
-      "trainUpdateApplyFailedBody": "HanaAgent v{version}\n\n更新套用失敗：\n{error}\n\n請重新啟動應用程式。"
+      "repairArtifactsFailedBody": "部分應用程式元件無法重設。HanaKDE 將結束且不會自動重新啟動。",
+      "trainUpdateApplyFailedBody": "HanaKDE v{version}\n\n更新套用失敗：\n{error}\n\n請重新啟動應用程式。"
     },
     "notification": {
       "ready": "通知已就緒",
@@ -3571,7 +3571,7 @@
     "inputHelp": "輸入 /help 查看命令列表"
   },
   "sandbox": {
-    "blocked": "[安全策略] {reason}\n\n此操作被 HanaAgent 的沙盒安全策略阻止，表示命令越過了路徑或權限邊界。先檢查目前工作台、具體路徑寫法，以及目標檔案是否本來就應該放在允許的工作台或 session 路徑內。請向使用者說明被攔截的路徑和原因；只有使用者明確決定時，再討論是否修改沙盒設定。",
+    "blocked": "[安全策略] {reason}\n\n此操作被 HanaKDE 的沙盒安全策略阻止，表示命令越過了路徑或權限邊界。先檢查目前工作台、具體路徑寫法，以及目標檔案是否本來就應該放在允許的工作台或 session 路徑內。請向使用者說明被攔截的路徑和原因；只有使用者明確決定時，再討論是否修改沙盒設定。",
     "blockedNeedsEscalation": "[安全策略] {reason}\n\n此命令在沙盒模式下被攔截。如果它對目前任務重要且為唯讀查詢，請帶一句話 justification 用 sandbox_permissions=\"require_escalated\" 重新執行，等待使用者審批。",
     "noSudo": "禁止使用 sudo",
     "noSu": "禁止使用 su 切換使用者",
@@ -3867,7 +3867,7 @@
     "next": "下一张"
   },
   "mobile": {
-    "startupFailed": "HanaAgent 启动失败",
+    "startupFailed": "HanaKDE 启动失败",
     "auth": {
       "scopeError": "目前登入權限已過期，請用帳號密碼重新登入。",
       "loginFailed": "登入失敗",

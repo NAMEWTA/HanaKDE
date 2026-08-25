@@ -58,7 +58,7 @@ describe("macos Cua provider", () => {
       env: {
         HANA_COMPUTER_USE_RUNTIME_ROOT: "/opt/hana-runtime",
         HANA_DESKTOP_IS_PACKAGED: "1",
-        HANA_DESKTOP_RESOURCES_PATH: "/Applications/HanaAgent.app/Contents/Resources",
+        HANA_DESKTOP_RESOURCES_PATH: "/Applications/HanaKDE.app/Contents/Resources",
       },
       existsSync: () => false,
       homeDir: "/Users/hana",
@@ -68,11 +68,11 @@ describe("macos Cua provider", () => {
   });
 
   it("resolves the new shell resource contract instead of the OTA artifact root", () => {
-    const helper = "/Applications/HanaAgent.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
+    const helper = "/Applications/HanaKDE.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
     const command = resolveCuaDriverCommand({
       env: {
         HANA_DESKTOP_IS_PACKAGED: "1",
-        HANA_DESKTOP_RESOURCES_PATH: "/Applications/HanaAgent.app/Contents/Resources",
+        HANA_DESKTOP_RESOURCES_PATH: "/Applications/HanaKDE.app/Contents/Resources",
         HANA_ROOT: "/Users/hana/.hanako/artifacts/server/0.415.9-darwin-arm64",
         HANA_CUA_DRIVER_PATH: "/opt/cua-driver",
       },
@@ -86,7 +86,7 @@ describe("macos Cua provider", () => {
   });
 
   it("recovers old packaged shells from app.asar and executable paths", () => {
-    const helper = "/Applications/HanaAgent.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
+    const helper = "/Applications/HanaKDE.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
     const baseEnv = {
       HANA_DESKTOP_IS_PACKAGED: "1",
       HANA_ROOT: "/Users/hana/.hanako/artifacts/server/0.412.7-darwin-arm64",
@@ -94,14 +94,14 @@ describe("macos Cua provider", () => {
     const fromAppPath = resolveCuaDriverCommand({
       env: {
         ...baseEnv,
-        HANA_DESKTOP_APP_PATH: "/Applications/HanaAgent.app/Contents/Resources/app.asar",
+        HANA_DESKTOP_APP_PATH: "/Applications/HanaKDE.app/Contents/Resources/app.asar",
       },
       existsSync: (p) => p === helper,
     });
     const fromExecPath = resolveCuaDriverCommand({
       env: {
         ...baseEnv,
-        HANA_DESKTOP_EXEC_PATH: "/Applications/HanaAgent.app/Contents/MacOS/HanaAgent",
+        HANA_DESKTOP_EXEC_PATH: "/Applications/HanaKDE.app/Contents/MacOS/HanaKDE",
       },
       existsSync: (p) => p === helper,
     });
@@ -111,10 +111,10 @@ describe("macos Cua provider", () => {
   });
 
   it("keeps the exact pre-artifact Resources/server layout compatible", () => {
-    const helper = "/Applications/HanaAgent.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
+    const helper = "/Applications/HanaKDE.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
     const command = resolveCuaDriverCommand({
       env: {
-        HANA_ROOT: "/Applications/HanaAgent.app/Contents/Resources/server",
+        HANA_ROOT: "/Applications/HanaKDE.app/Contents/Resources/server",
         HANA_CUA_DRIVER_PATH: "/opt/cua-driver",
       },
       existsSync: (p) => p === helper || p === "/opt/cua-driver",
@@ -135,7 +135,7 @@ describe("macos Cua provider", () => {
         HANA_ROOT: "/Users/hana/.hanako/artifacts/server/0.415.9-darwin-arm64",
         HANA_DESKTOP_RESOURCES_PATH: "relative/fake-resources",
         HANA_DESKTOP_APP_PATH: "/tmp/app.asar",
-        HANA_DESKTOP_EXEC_PATH: "/tmp/HanaAgent",
+        HANA_DESKTOP_EXEC_PATH: "/tmp/HanaKDE",
         HANA_CUA_DRIVER_PATH: "/opt/cua-driver",
       },
       existsSync: (p) => p === artifactHelper || p === cwdHelper || p === "/opt/cua-driver",
@@ -148,11 +148,11 @@ describe("macos Cua provider", () => {
   });
 
   it("does not silently replace a missing packaged helper with an external driver", () => {
-    const expectedHelper = "/Applications/HanaAgent.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
+    const expectedHelper = "/Applications/HanaKDE.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
     const command = resolveCuaDriverCommand({
       env: {
         HANA_DESKTOP_IS_PACKAGED: "1",
-        HANA_DESKTOP_RESOURCES_PATH: "/Applications/HanaAgent.app/Contents/Resources",
+        HANA_DESKTOP_RESOURCES_PATH: "/Applications/HanaKDE.app/Contents/Resources",
         HANA_CUA_DRIVER_PATH: "/opt/cua-driver",
       },
       existsSync: (p) => p === "/opt/cua-driver",
@@ -783,7 +783,7 @@ describe("macos Cua provider", () => {
   it("reports an authoritative packaged helper path as missing", async () => {
     const missing = Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" });
     const { runner } = makeRunner(() => { throw missing; });
-    const command = "/Applications/HanaAgent.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
+    const command = "/Applications/HanaKDE.app/Contents/Resources/computer-use/macos/hana-computer-use-helper";
     const provider = createMacosCuaProvider({
       platform: "darwin",
       command,

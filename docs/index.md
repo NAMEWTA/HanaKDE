@@ -1,6 +1,6 @@
-# HanaKDE (HanaAgent) — 项目目录结构完整索引
+# HanaKDE (HanaKDE) — 项目目录结构完整索引
 
-> **项目名称**: HanaAgent（npm 包名 `hanako`）
+> **项目名称**: HanaKDE（npm 包名 `hanako`）
 > **版本**: v0.0.1
 > **描述**: 带有记忆和灵魂的个人 AI 助理
 > **作者**: liliMozi
@@ -47,7 +47,7 @@
 
 ## 1. 项目整体概览
 
-HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端个人 AI 助理，具备以下核心特性：
+HanaKDE 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端个人 AI 助理，具备以下核心特性：
 
 - **多 Agent 架构**：支持多代理通信（频道、DM、事件总线）
 - **记忆系统**：高斯衰减记忆、事实存储、反思编译
@@ -74,7 +74,7 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 | 打包工具 | electron-builder 26.8.1 |
 | 测试框架 | Vitest 4.0.18 |
 | 代码规范 | ESLint 9.39.4 |
-| Node.js | >= 24.12.0 < 25 |
+| Node.js | >= 24.12.0 < 25（Volta 固定 24.16.0） |
 | 模块系统 | ESM (type: "module") + 部分 CJS 兼容 |
 
 ---
@@ -670,7 +670,7 @@ HanaAgent 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端�
 | 文件 | 说明 |
 |------|------|
 | `banner.jpg` | 仓库 README 横幅 |
-| `HanaAgent-280.png` | 280×280 应用图标 |
+| `HanaKDE-280.png` | 280×280 应用图标 |
 | `screenshot-main.jpg` | 主界面截图 |
 
 #### Issue 模板 (`ISSUE_TEMPLATE/`)

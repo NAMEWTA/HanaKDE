@@ -16,13 +16,13 @@ describe("login item settings", () => {
   it("uses a dedicated login-start argument on Windows so startup can stay hidden", async () => {
     const { START_AT_LOGIN_ARG, getLoginItemOptions, wasLaunchedAtLogin } = await loadModule();
 
-    expect(getLoginItemOptions("win32", "C:\\Program Files\\HanaAgent\\HanaAgent.exe")).toEqual({
-      path: "C:\\Program Files\\HanaAgent\\HanaAgent.exe",
+    expect(getLoginItemOptions("win32", "C:\\Program Files\\HanaKDE\\HanaKDE.exe")).toEqual({
+      path: "C:\\Program Files\\HanaKDE\\HanaKDE.exe",
       args: [START_AT_LOGIN_ARG],
     });
     expect(wasLaunchedAtLogin({
       platform: "win32",
-      argv: ["HanaAgent.exe", START_AT_LOGIN_ARG],
+      argv: ["HanaKDE.exe", START_AT_LOGIN_ARG],
       loginItemSettings: {},
     })).toBe(true);
   });
@@ -32,7 +32,7 @@ describe("login item settings", () => {
 
     expect(wasLaunchedAtLogin({
       platform: "darwin",
-      argv: ["HanaAgent"],
+      argv: ["HanaKDE"],
       loginItemSettings: { wasOpenedAtLogin: true },
     })).toBe(true);
   });
@@ -41,7 +41,7 @@ describe("login item settings", () => {
     const { getAutoLaunchStatus } = await loadModule();
     const app = createAppMock();
 
-    expect(getAutoLaunchStatus({ app, platform: "linux", argv: [], execPath: "/opt/HanaAgent/hana" })).toEqual({
+    expect(getAutoLaunchStatus({ app, platform: "linux", argv: [], execPath: "/opt/HanaKDE/hana" })).toEqual({
       supported: false,
       openAtLogin: false,
       openedAtLogin: false,
@@ -58,17 +58,17 @@ describe("login item settings", () => {
       app,
       platform: "win32",
       argv: [],
-      execPath: "C:\\HanaAgent\\HanaAgent.exe",
+      execPath: "C:\\HanaKDE\\HanaKDE.exe",
       enabled: true,
     });
 
     expect(app.setLoginItemSettings).toHaveBeenCalledWith({
       openAtLogin: true,
-      path: "C:\\HanaAgent\\HanaAgent.exe",
+      path: "C:\\HanaKDE\\HanaKDE.exe",
       args: [START_AT_LOGIN_ARG],
     });
     expect(app.getLoginItemSettings).toHaveBeenCalledWith({
-      path: "C:\\HanaAgent\\HanaAgent.exe",
+      path: "C:\\HanaKDE\\HanaKDE.exe",
       args: [START_AT_LOGIN_ARG],
     });
     expect(status).toMatchObject({

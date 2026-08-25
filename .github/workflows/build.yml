@@ -208,7 +208,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          SKIP_NOTARIZE: "true"
 
       # 同上：Windows job 直调 electron-builder，seed kit 校验必须单独接线。
       - name: Verify seed kit (Windows)
@@ -256,8 +255,8 @@ jobs:
             dist/*.AppImage
             dist/*.deb
             dist/latest*.yml
-            dist-standalone/HanaCore-*-Windows-x64.tar.gz
-            dist-standalone/HanaCore-*-Windows-x64.manifest.json
+            dist-standalone/HanaKDE-Core-*-Windows-x64.tar.gz
+            dist-standalone/HanaKDE-Core-*-Windows-x64.manifest.json
           if-no-files-found: error
 
   release:
@@ -329,8 +328,8 @@ jobs:
 
           echo "=== Uploading self-contained Windows standalone server assets ==="
           find artifacts -type f \( \
-              -path '*/dist-standalone/HanaCore-*-Windows-x64.tar.gz' -o \
-              -path '*/dist-standalone/HanaCore-*-Windows-x64.manifest.json' \
+              -path '*/dist-standalone/HanaKDE-Core-*-Windows-x64.tar.gz' -o \
+              -path '*/dist-standalone/HanaKDE-Core-*-Windows-x64.manifest.json' \
             \) -print0 |
             while IFS= read -r -d '' f; do
               echo "  $f"
@@ -378,17 +377,17 @@ jobs:
           echo "$ASSETS" | grep -qx 'latest.yml' || MISSING+=("latest.yml")
           echo "$ASSETS" | grep -qx 'latest-linux.yml' || MISSING+=("latest-linux.yml")
           echo "$ASSETS" | grep -qx 'release-digest.v1.json' || MISSING+=("release-digest.v1.json")
-          echo "$ASSETS" | grep -qE '^HanaAgent-.*-macOS-arm64\.dmg$' || MISSING+=("macOS-arm64.dmg")
-          echo "$ASSETS" | grep -qE '^HanaAgent-.*-macOS-arm64\.zip$' || MISSING+=("macOS-arm64.zip")
-          echo "$ASSETS" | grep -qE '^HanaAgent-.*-macOS-x64\.dmg$' || MISSING+=("macOS-x64.dmg")
-          echo "$ASSETS" | grep -qE '^HanaAgent-.*-macOS-x64\.zip$' || MISSING+=("macOS-x64.zip")
-          echo "$ASSETS" | grep -qE '^HanaAgent-.*-Windows-x64\.exe$' || MISSING+=("Windows-x64.exe")
-          echo "$ASSETS" | grep -qE '^HanaAgent-.*-Linux-(x64|x86_64)\.AppImage$' || MISSING+=("Linux AppImage")
-          echo "$ASSETS" | grep -qE '^HanaAgent-.*-Linux-(x64|amd64)\.deb$' || MISSING+=("Linux deb")
-          echo "$ASSETS" | grep -qE '^HanaCore-.*-Windows-x64\.tar\.gz$' || MISSING+=("Windows x64 standalone server archive")
-          echo "$ASSETS" | grep -qE '^HanaCore-.*-Windows-x64\.manifest\.json$' || MISSING+=("Windows x64 standalone server manifest")
+          echo "$ASSETS" | grep -qE '^HanaKDE-.*-macOS-arm64\.dmg$' || MISSING+=("macOS-arm64.dmg")
+          echo "$ASSETS" | grep -qE '^HanaKDE-.*-macOS-arm64\.zip$' || MISSING+=("macOS-arm64.zip")
+          echo "$ASSETS" | grep -qE '^HanaKDE-.*-macOS-x64\.dmg$' || MISSING+=("macOS-x64.dmg")
+          echo "$ASSETS" | grep -qE '^HanaKDE-.*-macOS-x64\.zip$' || MISSING+=("macOS-x64.zip")
+          echo "$ASSETS" | grep -qE '^HanaKDE-.*-Windows-x64\.exe$' || MISSING+=("Windows-x64.exe")
+          echo "$ASSETS" | grep -qE '^HanaKDE-.*-Linux-(x64|x86_64)\.AppImage$' || MISSING+=("Linux AppImage")
+          echo "$ASSETS" | grep -qE '^HanaKDE-.*-Linux-(x64|amd64)\.deb$' || MISSING+=("Linux deb")
+          echo "$ASSETS" | grep -qE '^HanaKDE-Core-.*-Windows-x64\.tar\.gz$' || MISSING+=("Windows x64 standalone server archive")
+          echo "$ASSETS" | grep -qE '^HanaKDE-Core-.*-Windows-x64\.manifest\.json$' || MISSING+=("Windows x64 standalone server manifest")
 
-          if echo "$ASSETS" | grep -qE '^HanaCore-.*-Windows-x64\.manifest\.json\.sig$'; then
+          if echo "$ASSETS" | grep -qE '^HanaKDE-Core-.*-Windows-x64\.manifest\.json\.sig$'; then
             echo "::error::Obsolete standalone manifest signature leaked into the release"
             exit 1
           fi

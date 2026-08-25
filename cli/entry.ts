@@ -63,7 +63,7 @@ export async function main(argv = process.argv.slice(2)) {
 
   let connection: any = resolveConnection({ url: args.url, token: args.token });
   if (!connection.ok && shouldAutoStartServer(args)) {
-    console.error(`${ansi.dim}Starting local HanaAgent Server...${ansi.reset}`);
+    console.error(`${ansi.dim}Starting local HanaKDE Server...${ansi.reset}`);
     connection = await startLocalServerAndWait({ projectRoot: PROJECT_ROOT });
   }
   if (!connection.ok) {

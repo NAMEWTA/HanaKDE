@@ -186,7 +186,7 @@ describe("build.yml: early releases require no operator-managed secrets", () => 
     ))).toBe(false);
   });
 
-  it("disables platform signing, notarization, automatic OTA, and secret-backed mirrors", () => {
+  it("disables platform signing, Apple notarization, automatic OTA, and secret-backed mirrors", () => {
     const forbiddenSecrets = [
       "HANA_SIGN_KEY",
       "CSC_LINK",
@@ -205,10 +205,9 @@ describe("build.yml: early releases require no operator-managed secrets", () => 
     const steps = doc.jobs.build?.steps ?? [];
     const mac = steps.find((step) => step.name === "Build macOS (DMG + ZIP)");
     const windows = steps.find((step) => step.name === "Build Windows installer");
-    expect(mac?.env).toMatchObject({
-      CSC_IDENTITY_AUTO_DISCOVERY: "false",
-      SKIP_NOTARIZE: "true",
-    });
+    expect(mac?.env).toMatchObject({ CSC_IDENTITY_AUTO_DISCOVERY: "false" });
+    expect(source).not.toContain("SKIP_NOTARIZE");
+    expect(source).not.toContain("APPLE_APP_SPECIFIC_PASSWORD");
     expect(windows?.env).toMatchObject({ CSC_IDENTITY_AUTO_DISCOVERY: "false" });
     expect(doc.jobs).not.toHaveProperty("publish-train");
     expect(doc.jobs).not.toHaveProperty("mirror-atomgit");
@@ -243,18 +242,18 @@ describe("build.yml: Windows standalone server stays outside the seed/OTA bounda
     const buildSteps = doc.jobs.build?.steps ?? [];
     const uploadArtifact = buildSteps.find((step) => step.name === "Upload artifacts");
     const uploadArtifactText = JSON.stringify(uploadArtifact);
-    expect(uploadArtifactText).toContain("dist-standalone/HanaCore-*-Windows-x64.tar.gz");
-    expect(uploadArtifactText).toContain("dist-standalone/HanaCore-*-Windows-x64.manifest.json");
-    expect(uploadArtifactText).not.toContain("dist-standalone/HanaCore-*-Windows-x64.manifest.json.sig");
+    expect(uploadArtifactText).toContain("dist-standalone/HanaKDE-Core-*-Windows-x64.tar.gz");
+    expect(uploadArtifactText).toContain("dist-standalone/HanaKDE-Core-*-Windows-x64.manifest.json");
+    expect(uploadArtifactText).not.toContain("dist-standalone/HanaKDE-Core-*-Windows-x64.manifest.json.sig");
 
     const releaseSteps = doc.jobs.release?.steps ?? [];
     const releaseUpload = releaseSteps.find((step) => step.name === "Upload release assets");
     const releaseGate = releaseSteps.find((step) => step.name === "Verify release assets");
-    expect(stepRun(releaseUpload ?? {})).toContain("dist-standalone/HanaCore-*-Windows-x64.tar.gz");
-    expect(stepRun(releaseUpload ?? {})).toContain("dist-standalone/HanaCore-*-Windows-x64.manifest.json");
-    expect(stepRun(releaseUpload ?? {})).not.toContain("dist-standalone/HanaCore-*-Windows-x64*'");
-    expect(stepRun(releaseGate ?? {})).toContain("HanaCore-.*-Windows-x64\\.tar\\.gz");
-    expect(stepRun(releaseGate ?? {})).toContain("HanaCore-.*-Windows-x64\\.manifest\\.json");
+    expect(stepRun(releaseUpload ?? {})).toContain("dist-standalone/HanaKDE-Core-*-Windows-x64.tar.gz");
+    expect(stepRun(releaseUpload ?? {})).toContain("dist-standalone/HanaKDE-Core-*-Windows-x64.manifest.json");
+    expect(stepRun(releaseUpload ?? {})).not.toContain("dist-standalone/HanaKDE-Core-*-Windows-x64*'");
+    expect(stepRun(releaseGate ?? {})).toContain("HanaKDE-Core-.*-Windows-x64\\.tar\\.gz");
+    expect(stepRun(releaseGate ?? {})).toContain("HanaKDE-Core-.*-Windows-x64\\.manifest\\.json");
     expect(stepRun(releaseGate ?? {})).toContain("Obsolete standalone manifest signature leaked into the release");
     expect(stepRun(releaseGate ?? {})).not.toContain(
       'MISSING+=("Windows x64 standalone server manifest signature")',
@@ -265,7 +264,7 @@ describe("build.yml: Windows standalone server stays outside the seed/OTA bounda
     expect(doc.jobs).not.toHaveProperty("publish-train");
     const releaseText = JSON.stringify(doc.jobs.release);
     expect(releaseText).toContain("dist-standalone");
-    expect(releaseText).toContain("HanaCore-");
+    expect(releaseText).toContain("HanaKDE-Core-");
     expect(releaseText).not.toContain("publish-train.mjs");
   });
 });

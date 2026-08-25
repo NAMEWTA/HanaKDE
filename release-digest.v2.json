@@ -3,6 +3,64 @@
   "entries": [
     {
       "schemaVersion": 1,
+      "tag": "v0.0.3",
+      "version": "0.0.3",
+      "previousTag": "v0.0.2",
+      "generatedAt": "2026-08-25T02:30:34.000Z",
+      "noUserFacingChanges": false,
+      "summary": {
+        "zh": "HanaKDE v0.0.3 完成产品品牌迁移，修复 Electron 开发运行时安装，并移除对上游 Apple 公证身份的依赖。",
+        "en": "HanaKDE v0.0.3 completes the product rebrand, fixes Electron development runtime installation, and removes the upstream Apple notarization dependency."
+      },
+      "counts": { "feature": 0, "fix": 2, "improvement": 1, "migration": 0 },
+      "source": {
+        "owner": "NAMEWTA",
+        "repo": "HanaKDE",
+        "commitRange": "v0.0.2..v0.0.3",
+        "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.3",
+        "releaseNotes": ""
+      },
+      "items": [
+        {
+          "id": "hanakde-product-identity",
+          "kind": "improvement",
+          "importance": "high",
+          "title": { "zh": "统一 HanaKDE 产品身份", "en": "Unified HanaKDE product identity" },
+          "summary": {
+            "zh": "桌面端、安装器、独立核心资产、CLI、文档和发布门禁统一使用 HanaKDE 名称，同时保留旧数据与插件生态标识兼容。",
+            "en": "Desktop surfaces, installers, standalone core assets, CLI output, documentation, and release gates now use HanaKDE while legacy data and plugin ecosystem identifiers remain compatible."
+          },
+          "details": [],
+          "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "refactor(brand): rename product surfaces to HanaKDE" }]
+        },
+        {
+          "id": "electron-runtime-preflight",
+          "kind": "fix",
+          "importance": "high",
+          "title": { "zh": "Electron 开发运行时预检", "en": "Electron development runtime preflight" },
+          "summary": {
+            "zh": "固定可工作的 Node/npm 工具链，在安装和桌面启动前显式安装并校验 Electron，避免 `path.txt` 缺失导致的启动失败。",
+            "en": "A working Node/npm toolchain is pinned and Electron is explicitly installed and verified before desktop startup, preventing missing `path.txt` failures."
+          },
+          "details": [],
+          "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "fix(dev): verify Electron runtime before startup" }]
+        },
+        {
+          "id": "independent-unsigned-release",
+          "kind": "fix",
+          "importance": "high",
+          "title": { "zh": "独立的未公证发行链", "en": "Independent unsigned release pipeline" },
+          "summary": {
+            "zh": "删除 Apple Developer ID 公证钩子和凭据入口，保留不依赖上游证书的本地 Mach-O 与种子完整性签名。",
+            "en": "Apple Developer ID notarization hooks and credential inputs are removed while local Mach-O and seed integrity signing remain independent of upstream certificates."
+          },
+          "details": [],
+          "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "build(release): remove Apple notarization hook" }]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "tag": "v0.0.2",
       "version": "0.0.2",
       "previousTag": "v0.0.1",

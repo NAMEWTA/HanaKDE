@@ -4,7 +4,7 @@
 
 ## 安装
 
-1. 关闭正在运行的 HanaKDE/HanaAgent。
+1. 关闭正在运行的 HanaKDE/HanaKDE。
 2. 备份现有 `plugins/todolist/`，以及 Hana 为该插件分配的数据目录。
 3. 删除旧的 `plugins/todolist/`。
 4. 将本包中的整个 `todolist/` 目录复制为 `plugins/todolist/`。

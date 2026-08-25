@@ -47,9 +47,9 @@ export function parsePackagedFlowOptions(argv) {
   const installInput = optionValue(argv, "--install");
   if (!installInput) throw new Error("[windows-packaged-flow] --install is required");
   const installRoot = path.resolve(installInput);
-  const executablePath = path.join(installRoot, "HanaAgent.exe");
+  const executablePath = path.join(installRoot, "HanaKDE.exe");
   if (!fsSync.statSync(executablePath, { throwIfNoEntry: false })?.isFile()) {
-    throw new Error("[windows-packaged-flow] --install must contain HanaAgent.exe");
+    throw new Error("[windows-packaged-flow] --install must contain HanaKDE.exe");
   }
   const version = optionValue(argv, "--version") ?? "0.446.6";
   if (!VERSION_PATTERN.test(version)) {
@@ -309,7 +309,7 @@ export async function runPackagedDirectFlow({ installRoot, version = "0.446.6" }
     env.APPDATA = roamingAppData;
     env.LOCALAPPDATA = localAppData;
     delete env.HANA_ROOT;
-    child = spawn(path.resolve(installRoot, "HanaAgent.exe"), [
+    child = spawn(path.resolve(installRoot, "HanaKDE.exe"), [
       `--remote-debugging-port=${chromiumPort}`,
       "--remote-debugging-address=127.0.0.1",
       ...WINDOWS_CHROMIUM_SWITCHES,

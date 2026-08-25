@@ -27,7 +27,7 @@ describe("Memory Dream closed unit pipeline", () => {
 
   it("requires the atomizer to cover every source while allowing a source to split", () => {
     const sourceBlocks = buildDreamSourceBlocks({
-      facts: "User writes videos and maintains HanaAgent.",
+      facts: "User writes videos and maintains HanaKDE.",
       today: "",
       weekDays: [],
       longterm: "",
@@ -35,13 +35,13 @@ describe("Memory Dream closed unit pipeline", () => {
     const units = validateDreamAtomization({
       units: [
         { sourceBlockId: "source:facts:0", section: "facts", text: "User writes videos." },
-        { sourceBlockId: "source:facts:0", section: "facts", text: "User maintains HanaAgent." },
+        { sourceBlockId: "source:facts:0", section: "facts", text: "User maintains HanaKDE." },
       ],
     }, sourceBlocks);
 
     expect(units.map((unit) => unit.text)).toEqual([
       "User writes videos.",
-      "User maintains HanaAgent.",
+      "User maintains HanaKDE.",
     ]);
     expect(units.every((unit) => unit.sourceBlockIds[0] === "source:facts:0")).toBe(true);
   });
@@ -152,7 +152,7 @@ describe("Memory Dream closed unit pipeline", () => {
       dedupePlan: { inputUnits: [], units: [], groups: [], exactDuplicateOperations: [] },
       optimizedUnits: [
         { id: "result:0", section: "facts", text: "User writes videos.", order: 0 },
-        { id: "result:1", section: "facts", text: "User maintains HanaAgent.", order: 1 },
+        { id: "result:1", section: "facts", text: "User maintains HanaKDE.", order: 1 },
         { id: "result:2", section: "facts", text: "User prefers tea.", order: 2 },
         { id: "result:3", section: "longterm", text: "Hana shipped a local build.", order: 3 },
       ],
@@ -161,7 +161,7 @@ describe("Memory Dream closed unit pipeline", () => {
     const plan = validateAndRenderDreamComposition({ paragraphs: [
       {
         section: "facts", topic: "User projects", sourceUnitIds: ["result:0", "result:1"],
-        text: "User writes videos and maintains HanaAgent.",
+        text: "User writes videos and maintains HanaKDE.",
       },
       {
         section: "facts", topic: "Drink preference", sourceUnitIds: ["result:2"],
@@ -173,7 +173,7 @@ describe("Memory Dream closed unit pipeline", () => {
       },
     ] }, optimization, current);
 
-    expect(plan.sections.facts).toBe("User writes videos and maintains HanaAgent.\n\nUser prefers tea.");
+    expect(plan.sections.facts).toBe("User writes videos and maintains HanaKDE.\n\nUser prefers tea.");
     expect(plan.sections.longterm).toBe("Hana shipped a local build.");
     expect(plan.sections.today).toBe(current.today);
     expect(plan.sections.weekDays).toEqual(current.weekDays);

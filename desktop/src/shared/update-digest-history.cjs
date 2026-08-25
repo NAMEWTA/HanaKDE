@@ -37,7 +37,7 @@ async function fetchJson(fetchImpl, url, { maxChars, timeoutMs }) {
     const response = await fetchImpl(url, {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": "HanaAgent-update-history",
+        "User-Agent": "HanaKDE-update-history",
       },
       signal: controller.signal,
     });

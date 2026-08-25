@@ -23,7 +23,7 @@ const resolvedModel = {
 };
 
 const current = {
-  facts: "User writes videos and maintains HanaAgent.",
+  facts: "User writes videos and maintains HanaKDE.",
   today: "Today stays outside Dream.",
   weekDays: [{ date: "2026-08-07", body: "Week stays outside Dream." }],
   longterm: "User likes concise answers.",
@@ -44,7 +44,7 @@ describe("Memory Dream five-stage model boundary", () => {
       .mockResolvedValueOnce(JSON.stringify({
         units: [
           { sourceBlockId: "source:facts:0", section: "facts", text: "User writes videos." },
-          { sourceBlockId: "source:facts:0", section: "facts", text: "User maintains HanaAgent." },
+          { sourceBlockId: "source:facts:0", section: "facts", text: "User maintains HanaKDE." },
           { sourceBlockId: "source:longterm:0", section: "longterm", text: "User likes concise answers." },
         ],
       }));
@@ -53,7 +53,7 @@ describe("Memory Dream five-stage model boundary", () => {
 
     expect(result.units.map((unit) => unit.text)).toEqual([
       "User writes videos.",
-      "User maintains HanaAgent.",
+      "User maintains HanaKDE.",
       "User likes concise answers.",
     ]);
     expect(callTextMock).toHaveBeenCalledTimes(2);
@@ -134,7 +134,7 @@ describe("Memory Dream five-stage model boundary", () => {
     expect(payload.safetyLimit).toEqual({
       maxTotalBodyChars: 5_000,
       maxEditableBodyChars: 4_949,
-      currentEditableBodyChars: 70,
+      currentEditableBodyChars: 68,
       preservedBodyChars: 51,
       role: "safety_ceiling_not_target",
     });
@@ -236,7 +236,7 @@ describe("Memory Dream five-stage model boundary", () => {
       dedupePlan: { inputUnits: [], units: [], groups: [], exactDuplicateOperations: [] },
       optimizedUnits: [
         { id: "result:0", groupId: "group:0", sourceUnitIds: ["atom:0"], sourceBlockIds: ["source:facts:0"], section: "facts", text: "User writes videos.", order: 0 },
-        { id: "result:1", groupId: "group:1", sourceUnitIds: ["atom:1"], sourceBlockIds: ["source:facts:0"], section: "facts", text: "User maintains HanaAgent.", order: 1 },
+        { id: "result:1", groupId: "group:1", sourceUnitIds: ["atom:1"], sourceBlockIds: ["source:facts:0"], section: "facts", text: "User maintains HanaKDE.", order: 1 },
         { id: "result:2", groupId: "group:2", sourceUnitIds: ["atom:2"], sourceBlockIds: ["source:longterm:0"], section: "longterm", text: "User likes concise answers.", order: 2 },
       ],
       removedGroups: [],
@@ -251,7 +251,7 @@ describe("Memory Dream five-stage model boundary", () => {
           section: "facts",
           topic: "User projects",
           sourceUnitIds: ["result:0", "result:1"],
-          text: "User writes videos and maintains HanaAgent.",
+          text: "User writes videos and maintains HanaKDE.",
         },
         {
           section: "longterm",

@@ -1,6 +1,6 @@
 # openhanako
 
-Companion distribution name for **HanaAgent** — a personal AI agent
+Companion distribution name for **HanaKDE** — a personal AI agent
 with memory and soul.
 
 This is an **early-access** build published ahead of the 1.0 launch.

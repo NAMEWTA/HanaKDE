@@ -204,12 +204,9 @@ finalizeServerPackageJsonVersion({ outDir, version: rootPkg.version });
 writeServerWrapperScripts({ outDir, isWin });
 
 // ── 11. server + renderer 树 → 一份签名 seed 归档（双 artifact 管线）──
-// ⚠️ 顺序铁律：先签名，后装箱。Apple notary
-// 会递归解包 tar.gz 校验箱内每个 Mach-O，而 electron-builder 阶段的签名看
-// 不进归档内部；packDualKindSeed 在 packTree 之前对 server 树内 Mach-O 做
-// 签名（本地 ad-hoc codesign；æ­£å¼ CI 换 Developer ID 时必须保持同一顺序——
-// 把 Developer ID 签名步骤插到 packDualKindSeed 之前或替换其签名器实现，
-// 绝不允许"先装箱再签外壳"）。这一步必须是 build-server 的最后一步：server
+// ⚠️ 顺序铁律：先做本地 ad-hoc Mach-O 签名，再装箱。打包器无法修改归档
+// 内部的二进制；packDualKindSeed 在 packTree 之前完成签名，保证解压后的
+// seed 可由 macOS 正常加载。这一步必须是 build-server 的最后一步：server
 // 树在装箱后不允许再被任何步骤触碰。renderer 树（desktop/dist-renderer/）
 // 由 build:renderer 在本脚本之前产出（package.json 的 build:client 组合脚本
 // 保证顺序）；纯 web 静态资源，不需要签名，只做"不含 Mach-O"的断言。

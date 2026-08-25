@@ -652,7 +652,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:dfe43f068d1a020d658fd06af95b9a425337c987f79bedde66b6be6c1dc68f03",
+  "payloadFingerprint": "sha256:caeb0553a80be753cf0f19e5ed9b71aa081c530fa67a7029643cb7e8c402813f",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3200,8 +3200,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "HanaKDE v0.0.1 adds environment-gated Windows Playwright startup stage diagnostics. Persisted schemas, DATA_EPOCH, store paths, ownership, and migration behavior remain unchanged.",
-    "payloadFingerprint": "sha256:dfe43f068d1a020d658fd06af95b9a425337c987f79bedde66b6be6c1dc68f03"
+    "compatibilityReason": "HanaKDE product-name strings changed in runtime modules without changing persisted paths, schemas, or DATA_EPOCH semantics.",
+    "payloadFingerprint": "sha256:caeb0553a80be753cf0f19e5ed9b71aa081c530fa67a7029643cb7e8c402813f"
   },
   "schemas": [
     {
@@ -3398,7 +3398,7 @@
       "contract": "desktop window bounds, release announcement bookmark, and update cache version marker readers",
       "kind": "directory-contract",
       "module": "desktop/main.cjs",
-      "sourceHash": "sha256:2ce109d5a3745bf75701080786b830f6ee1854a1777627836f220bd1f0ba21cc",
+      "sourceHash": "sha256:910bf13a39763f2c7d7e92cf3ef4fc54c8f92669cecdf13c0ca4002d787fc36e",
       "storeId": "desktop-window-version-state"
     },
     {
@@ -3611,7 +3611,7 @@
       "contract": "debug logs, browser cold state, switch diagnostics, and WeChat cache readers",
       "kind": "directory-contract",
       "module": "lib/debug-log.ts",
-      "sourceHash": "sha256:b17c104fd85fe7f3751137519fdb4ff4d8aec2d5a386e0fb358167d83da6ede6",
+      "sourceHash": "sha256:4a3b9e9130127e29bbf83dd4fbcb46223d1b60d7dabd531fac5807ec1b03775e",
       "storeId": "runtime-diagnostics"
     },
     {
@@ -3653,7 +3653,7 @@
       "contract": "server-info writer and desktop bootstrap reader",
       "kind": "runtime-contract",
       "module": "server/index.ts",
-      "sourceHash": "sha256:2ca4b97da002dc7a6cb698a5766a8754863ec21c0e0f3e5574eabdc0b2a645ce",
+      "sourceHash": "sha256:c89ceaac4d91c7f6b523af3746e0f7fc1ee1851539b964b2e2a18ee2532f1fb9",
       "storeId": "server-runtime-info"
     },
     {
@@ -3787,7 +3787,7 @@
       "contract": "SKILL.md package, bundle registry, and export staging protocols",
       "kind": "directory-contract",
       "module": "lib/skills/skill-package-installer.ts",
-      "sourceHash": "sha256:5a2271d372236897663e9f9c1da68b5d886bdfa720f3edfea78277c6e26e754e",
+      "sourceHash": "sha256:2588ac407411c51cda612d8b04dbbe52add4a9ba2d941faad255fb9966667c60",
       "storeId": "skill-state"
     },
     {

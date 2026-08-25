@@ -1,78 +1,70 @@
 {
   "schemaVersion": 1,
-  "tag": "v0.0.2",
-  "version": "0.0.2",
-  "previousTag": "v0.0.1",
-  "generatedAt": "2026-08-24T04:35:04.000Z",
+  "tag": "v0.0.3",
+  "version": "0.0.3",
+  "previousTag": "v0.0.2",
+  "generatedAt": "2026-08-25T02:30:34.000Z",
   "noUserFacingChanges": false,
   "summary": {
-    "zh": "Knowledge 工作区现在像 VS Code workspace 一样，在同一棵资源树中并列展示主目录和额外挂载目录，并与聊天工作台共享一致的文件树视觉。",
-    "en": "The Knowledge workspace now presents the main directory and additional mounts as sibling roots in one VS Code-style explorer, using the same file-tree presentation as the chat workbench."
+    "zh": "HanaKDE v0.0.3 完成产品品牌迁移，修复 Electron 开发运行时安装，并移除对上游 Apple 公证身份的依赖。",
+    "en": "HanaKDE v0.0.3 completes the product rebrand, fixes Electron development runtime installation, and removes the upstream Apple notarization dependency."
   },
-  "counts": {
-    "feature": 1,
-    "fix": 1,
-    "improvement": 0,
-    "migration": 0
-  },
+  "counts": { "feature": 1, "fix": 2, "improvement": 1, "migration": 0 },
   "source": {
     "owner": "NAMEWTA",
     "repo": "HanaKDE",
-    "commitRange": "v0.0.1..18310e5e",
-    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.2",
+    "commitRange": "v0.0.2..v0.0.3",
+    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.3",
     "releaseNotes": ""
   },
   "items": [
     {
-      "id": "knowledge-multi-root-explorer",
-      "kind": "fix",
-      "importance": "high",
-      "title": {
-        "zh": "Knowledge 多根资源树",
-        "en": "Multi-root Knowledge explorer"
-      },
-      "summary": {
-        "zh": "移除重复的来源栏，把主目录与额外挂载目录作为同一 Explorer 的一级兄弟根，并显示真实目录名称。",
-        "en": "The duplicate Sources panel is removed, and the main directory and additional mounts now appear as sibling roots in one Explorer with their real directory names."
-      },
-      "details": [
-        {
-          "zh": "Knowledge 与聊天工作台复用同一个树行 Renderer 和 HanaKDE 既有文件图标，统一行高、缩进、展开控件与长名称截断。",
-          "en": "Knowledge and the chat workbench now share one tree-row renderer and HanaKDE's existing file icons, aligning row height, indentation, disclosure controls, and long-name truncation."
-        },
-        {
-          "zh": "桌面与窄窗口布局均收敛为单一 Explorer，并保留选择、键盘导航、懒加载、拖拽和打开行为。",
-          "en": "Desktop and narrow layouts both use a single Explorer while preserving selection, keyboard navigation, lazy loading, drag and drop, and open behavior."
-        }
-      ],
-      "sources": [
-        {
-          "type": "commit",
-          "ref": "18310e5e",
-          "title": "feat(knowledge): unify mounted roots in explorer"
-        }
-      ]
-    },
-    {
       "id": "file-history",
       "kind": "feature",
       "importance": "high",
-      "title": {
-        "zh": "文件历史、差异与恢复",
-        "en": "File history, diffs, and restore"
-      },
+      "title": { "zh": "文件历史、差异与恢复", "en": "File history, diffs, and restore" },
       "summary": {
         "zh": "从主工作区和文件树查看历史版本、比较差异并执行受保护的恢复操作。",
         "en": "Inspect historical versions, compare changes, and perform guarded restores from the main workspace and file tree."
       },
       "details": [],
-      "sources": [
-        {
-          "type": "commit",
-          "ref": "2421bfed",
-          "title": "feat(T-16): expose Workbench History flow"
-        }
-      ]
+      "sources": [{ "type": "commit", "ref": "2421bfed", "title": "feat(T-16): expose Workbench History flow" }]
+    },
+    {
+      "id": "hanakde-product-identity",
+      "kind": "improvement",
+      "importance": "high",
+      "title": { "zh": "统一 HanaKDE 产品身份", "en": "Unified HanaKDE product identity" },
+      "summary": {
+        "zh": "桌面端、安装器、独立核心资产、CLI、文档和发布门禁统一使用 HanaKDE 名称，同时保留旧数据与插件生态标识兼容。",
+        "en": "Desktop surfaces, installers, standalone core assets, CLI output, documentation, and release gates now use HanaKDE while legacy data and plugin ecosystem identifiers remain compatible."
+      },
+      "details": [],
+      "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "refactor(brand): rename product surfaces to HanaKDE" }]
+    },
+    {
+      "id": "electron-runtime-preflight",
+      "kind": "fix",
+      "importance": "high",
+      "title": { "zh": "Electron 开发运行时预检", "en": "Electron development runtime preflight" },
+      "summary": {
+        "zh": "固定可工作的 Node/npm 工具链，在安装和桌面启动前显式安装并校验 Electron，避免 `path.txt` 缺失导致的启动失败。",
+        "en": "A working Node/npm toolchain is pinned and Electron is explicitly installed and verified before desktop startup, preventing missing `path.txt` failures."
+      },
+      "details": [],
+      "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "fix(dev): verify Electron runtime before startup" }]
+    },
+    {
+      "id": "independent-unsigned-release",
+      "kind": "fix",
+      "importance": "high",
+      "title": { "zh": "独立的未公证发行链", "en": "Independent unsigned release pipeline" },
+      "summary": {
+        "zh": "删除 Apple Developer ID 公证钩子和凭据入口，保留不依赖上游证书的本地 Mach-O 与种子完整性签名。",
+        "en": "Apple Developer ID notarization hooks and credential inputs are removed while local Mach-O and seed integrity signing remain independent of upstream certificates."
+      },
+      "details": [],
+      "sources": [{ "type": "commit", "ref": "v0.0.3", "title": "build(release): remove Apple notarization hook" }]
     }
   ]
 }

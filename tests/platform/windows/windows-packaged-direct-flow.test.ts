@@ -15,14 +15,14 @@ describe("Windows packaged direct-flow runner", () => {
     expect(() => assertPackagedFlowPlatform("linux")).toThrow(/requires win32/);
   });
 
-  it("requires an installed HanaAgent.exe and validates version coordinates", () => {
+  it("requires an installed HanaKDE.exe and validates version coordinates", () => {
     const root = fs.mkdtempSync(path.join(process.env.TEMP || ".", "hana-t22-packaged-options-"));
     const install = path.join(root, "install");
     fs.mkdirSync(install, { recursive: true });
-    fs.writeFileSync(path.join(install, "HanaAgent.exe"), "fixture", "utf8");
+    fs.writeFileSync(path.join(install, "HanaKDE.exe"), "fixture", "utf8");
     try {
       expect(parsePackagedFlowOptions(["--install", install, "--version", "0.446.6"]))
-        .toMatchObject({ installRoot: path.resolve(install), executablePath: path.join(path.resolve(install), "HanaAgent.exe"), version: "0.446.6" });
+        .toMatchObject({ installRoot: path.resolve(install), executablePath: path.join(path.resolve(install), "HanaKDE.exe"), version: "0.446.6" });
       expect(() => parsePackagedFlowOptions([])).toThrow(/--install/);
       expect(() => parsePackagedFlowOptions(["--install", install, "--version", "../escape"]))
         .toThrow(/version/);

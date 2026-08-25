@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fail-closed verification for the Windows HanaCore standalone release asset.
+ * Fail-closed verification for the Windows HanaKDE-Core standalone release asset.
  * Verification happens after packaging and before CI uploads anything.
  */
 import { execFileSync, spawnSync } from "child_process";

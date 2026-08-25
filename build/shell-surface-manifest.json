@@ -187,12 +187,6 @@
       "script": "scripts/fix-modules.cjs",
       "readsSignKey": false,
       "note": "Validates the seed/ four-piece kit landed in extraResources and patches asar production deps / node_modules/.bin symlinks. Does not read HANA_SIGN_KEY."
-    },
-    {
-      "hook": "afterSign",
-      "script": "scripts/notarize.cjs",
-      "readsSignKey": false,
-      "note": "Skipped locally via SKIP_NOTARIZE=true (same convention as npm run install:local). electron-builder's --dir target does not invoke afterSign at all in practice since there is no code-signed artifact to notarize, but the hook itself is a no-op without Apple credentials regardless."
     }
   ],
   "buildShellSteps": [

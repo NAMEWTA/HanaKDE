@@ -1000,7 +1000,7 @@ export function createChatRoute(engine: any, hub: any, {
       const { agentId, agentName, sessionId } = identity;
       const idempotencyKey = streamId ? `chat-completion:${sessionId}:${streamId}` : null;
       const delivery = engine.deliverNotification({
-        title: agentName || "HanaAgent",
+        title: agentName || "HanaKDE",
         body: t("notification.chatCompletionBody"),
         channels: ["desktop"],
         desktopFocusPolicy: prefs.chatCompletion === "when_session_unfocused"

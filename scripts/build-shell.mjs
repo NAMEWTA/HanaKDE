@@ -44,7 +44,7 @@
  *
  * Local unsigned run (mirrors the existing `npm run install:local`
  * convention):
- *   CSC_IDENTITY_AUTO_DISCOVERY=false SKIP_NOTARIZE=true npm run build:shell
+ *   CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:shell
  */
 import fs from "fs";
 import path from "path";

@@ -1,12 +1,12 @@
 <p align="center">
-  <img src=".github/assets/banner.jpg" width="100%" alt="HanaAgent Banner">
+  <img src=".github/assets/banner.jpg" width="100%" alt="HanaKDE Banner">
 </p>
 
 <p align="center">
-  <img src=".github/assets/HanaAgent-280.png" width="80" alt="HanaAgent">
+  <img src=".github/assets/HanaKDE-280.png" width="80" alt="HanaKDE">
 </p>
 
-<h1 align="center">HanaAgent</h1>
+<h1 align="center">HanaKDE</h1>
 
 <p align="center">一个有记忆、有灵魂的私人 AI 助理</p>
 
@@ -17,17 +17,17 @@
 
 ---
 
-## HanaAgent 是什么
+## HanaKDE 是什么
 
-HanaAgent 是一个更加易用的 AI agent，有记忆，有性格，会主动行动，还能多 Agent 在你的电脑上一同工作。
+HanaKDE 是一个更加易用的 AI agent，有记忆，有性格，会主动行动，还能多 Agent 在你的电脑上一同工作。
 
-作为助手，Ta 是温柔的：不需要写复杂的配置，不需要理解晦涩的术语。HanaAgent 它不只面向 coder ，而是为每一个坐在电脑前工作的人设计的助手。
+作为助手，Ta 是温柔的：不需要写复杂的配置，不需要理解晦涩的术语。HanaKDE 它不只面向 coder ，而是为每一个坐在电脑前工作的人设计的助手。
 作为工具，Ta 是强大的：记住你说过的每一件事，操作你的电脑，浏览网页，搜索信息，读写文件，执行代码，管理日程，还能自主学习新技能。
 
 我开这个项目的初衷是：弥合绝大多数人和 AI Agent 之间的缝隙，让强大的 Agent 能力不再只局限于命令行里。于是我做了比传统 Coding Agent 更多一些的优化：一方面是强化 Agent「像人」的属性，是你和他们沟通更自然；另一方面，因为我本职也是一介文员，所以我也针对日常办公场景做了很多工具性和流程性的优化，敬请探索。
-此外，HanaAgent 有比较完备的图形页面。
+此外，HanaKDE 有比较完备的图形页面。
 
-如果你用过 claude code、codex、Manus 等 CLI 或是图形化的 Agent，你会在 HanaAgent 这里找到熟悉又新奇的感觉。
+如果你用过 claude code、codex、Manus 等 CLI 或是图形化的 Agent，你会在 HanaKDE 这里找到熟悉又新奇的感觉。
 
 ## 功能特性
 
@@ -35,7 +35,7 @@ HanaAgent 是一个更加易用的 AI agent，有记忆，有性格，会主动�
 
 **人格** — 不是千篇一律的"AI 助手"。通过人格模板和自定义人格文件塑造独特的性格，每个 Agent 都有自己的说话方式和行为逻辑，Agent 之间分离做得很好，备份方便，Agent 就是文件夹，后续还会添加备份功能。
 
-**工具** — 读写文件、执行一次性命令或持续终端会话、浏览网页、通过浏览器后端或 API 搜索互联网、截图、分段长截图、媒体预览、检查网页。能力覆盖日常办公的绝大多数场景。也可以通过 server-first CLI 连接同一个 HanaAgent Server，在终端里查看状态、列会话和继续对话。
+**工具** — 读写文件、执行一次性命令或持续终端会话、浏览网页、通过浏览器后端或 API 搜索互联网、截图、分段长截图、媒体预览、检查网页。能力覆盖日常办公的绝大多数场景。也可以通过 server-first CLI 连接同一个 HanaKDE Server，在终端里查看状态、列会话和继续对话。
 
 **SKILLS 支持** — 内置兼容庞大 SKILLS 社区生态，之外，我也做了一些主动的优化：有时候干活之前，Agent 会从 GitHub 安装社区技能，Agent 也可以自己编写并学会新技能，有比较不错的主动性。当然，默认情况给 Agent 做了比较严格的 SKILLS 审核，如果发现 SKILLS 装不上可以自行关闭。
 
@@ -57,14 +57,14 @@ HanaAgent 是一个更加易用的 AI agent，有记忆，有性格，会主动�
 
 **多平台接入** — 同一个 Agent 可以同时接入 Telegram、飞书、QQ、微信机器人，在任何平台和 Ta 对话，可以远程操作电脑；Bridge 消息会带平台上下文，通知也可以回发到当前外部平台。
 
-**移动端与 LAN 前端** — HanaAgent Server 可以托管 `/mobile/` PWA，手机通过设备访问密钥或本地账号登录，查看会话、继续聊天和管理工作台文件。另一台桌面端也可以通过 LAN URL + access key 连接到已有 HanaAgent Server，继续消费同一套会话和资源。
+**移动端与 LAN 前端** — HanaKDE Server 可以托管 `/mobile/` PWA，手机通过设备访问密钥或本地账号登录，查看会话、继续聊天和管理工作台文件。另一台桌面端也可以通过 LAN URL + access key 连接到已有 HanaKDE Server，继续消费同一套会话和资源。
 
 **国际化** — 界面支持中文、英文、日文、韩文、繁体中文 5 种语言。
 
 ## 截图
 
 <p align="center">
-  <img src=".github/assets/screenshot-main.jpg" width="100%" alt="HanaAgent 主界面">
+  <img src=".github/assets/screenshot-main.jpg" width="100%" alt="HanaKDE 主界面">
 </p>
 
 ## 快速开始
@@ -73,7 +73,11 @@ HanaAgent 是一个更加易用的 AI agent，有记忆，有性格，会主动�
 
 **macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/NAMEWTA/HanaKDE/releases) 下载最新 `.dmg`。
 
-应用已通过 Apple Developer ID 签名和公证，macOS 应该可以直接打开。
+当前发布包不使用 Apple Developer ID 签名或公证。若 macOS 阻止首次打开，请确认下载来源可信后执行：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/HanaKDE.app
+```
 
 **Windows**：从 [Releases](https://github.com/NAMEWTA/HanaKDE/releases) 下载最新 `.exe` 安装包。
 
@@ -83,7 +87,7 @@ HanaAgent 是一个更加易用的 AI agent，有记忆，有性格，会主动�
 
 ### 首次运行
 
-首次启动时，引导向导会带你完成配置：选择语言、输入你的名字、连接模型提供商（API key + base URL），并选择三个模型：**对话模型**（主对话）、**小工具模型**（轻量任务）、**大工具模型**（记忆编译和深度分析）。设置页还可以单独选择**视觉模型**，让文本模型通过 Vision Bridge 处理图片附件。HanaAgent 支持 OpenAI 兼容、Anthropic 风格、OAuth Provider 和 Ollama 本地模型等多类接入。
+首次启动时，引导向导会带你完成配置：选择语言、输入你的名字、连接模型提供商（API key + base URL），并选择三个模型：**对话模型**（主对话）、**小工具模型**（轻量任务）、**大工具模型**（记忆编译和深度分析）。设置页还可以单独选择**视觉模型**，让文本模型通过 Vision Bridge 处理图片附件。HanaKDE 支持 OpenAI 兼容、Anthropic 风格、OAuth Provider 和 Ollama 本地模型等多类接入。
 目前也添加了 OpenAI 的 OAuth 登录，鉴于 Anthropic 会有封号风险，所以暂时不提供。
 
 ## 架构
@@ -127,23 +131,24 @@ Server 以独立 Node.js 进程运行（由 Electron spawn 或独立启动），
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（已签名公证） |
+| macOS (Apple Silicon) | 已支持（未签名、未公证） |
 | macOS (Intel) | 已支持 |
 | Windows | Beta |
 | Linux | 已支持（AppImage / deb） |
-| 移动端 (PWA) | v0：同一 HanaAgent Server 的手机会话与工作台访问 |
+| 移动端 (PWA) | v0：同一 HanaKDE Server 的手机会话与工作台访问 |
 
 ## 开发
 
 ```bash
-# 安装依赖
-npm install
+# 安装并使用仓库锁定的 Node/npm
+volta install node@24.16.0 npm@11.13.0
+volta run npm ci
 
-# Electron 启动（自动构建 renderer）
-npm start
+# Electron 开发环境（自动校验 Electron runtime 并构建 renderer）
+volta run npm run start:dev
 
 # Vite HMR 开发（需先运行 npm run dev:renderer）
-npm run start:vite
+volta run npm run start:vite
 
 # 仅启动 server
 npm run server

@@ -1,7 +1,7 @@
-; installer.nsh - NSIS custom hooks for HanaAgent installer
+; installer.nsh - NSIS custom hooks for HanaKDE installer
 ;
-; Owns the Windows overlay boundary for HanaAgent installs. The installer may
-; replace HanaAgent-owned program files, while user/runtime state stays outside
+; Owns the Windows overlay boundary for HanaKDE installs. The installer may
+; replace HanaKDE-owned program files, while user/runtime state stays outside
 ; $INSTDIR.
 
 ; Disable CRC integrity check. electron-builder's post-compilation PE editing
@@ -16,7 +16,7 @@ CRCCheck off
   Push $1
   InitPluginsDir
   System::Call 'kernel32::GetTickCount() i.r0'
-  FileOpen $1 "$PLUGINSDIR\hanaagent-install-timing.log" a
+  FileOpen $1 "$PLUGINSDIR\hanakde-install-timing.log" a
   ${IfNot} ${Errors}
     FileWrite $1 "tickMs=$0 phase=${_PHASE} event=${_EVENT}$\r$\n"
     FileClose $1
@@ -27,8 +27,8 @@ CRCCheck off
 !macroend
 
 !macro hanakoPersistInstallTiming
-  IfFileExists "$PLUGINSDIR\hanaagent-install-timing.log" 0 +2
-    CopyFiles /SILENT "$PLUGINSDIR\hanaagent-install-timing.log" "$INSTDIR\hanaagent-install-timing.log"
+  IfFileExists "$PLUGINSDIR\hanakde-install-timing.log" 0 +2
+    CopyFiles /SILENT "$PLUGINSDIR\hanakde-install-timing.log" "$INSTDIR\hanakde-install-timing.log"
 !macroend
 
 !macro hanakoFindProcess _NAME _RETURN
@@ -37,7 +37,10 @@ CRCCheck off
 !macroend
 
 !macro hanakoFindRunningProcesses _RETURN
-  !insertmacro hanakoFindProcess HanaAgent.exe ${_RETURN}
+  !insertmacro hanakoFindProcess HanaKDE.exe ${_RETURN}
+  ${If} ${_RETURN} != 0
+    !insertmacro hanakoFindProcess HanaAgent.exe ${_RETURN}
+  ${EndIf}
   ${If} ${_RETURN} != 0
     !insertmacro hanakoFindProcess Hanako.exe ${_RETURN}
   ${EndIf}
@@ -61,6 +64,7 @@ CRCCheck off
 !macroend
 
 !macro hanakoKillRunningProcesses _FORCE
+  !insertmacro hanakoKillProcess HanaKDE.exe ${_FORCE}
   !insertmacro hanakoKillProcess HanaAgent.exe ${_FORCE}
   !insertmacro hanakoKillProcess Hanako.exe ${_FORCE}
   !insertmacro hanakoKillProcess hana-server.exe ${_FORCE}
@@ -97,7 +101,7 @@ CRCCheck off
   Push $0
   Push $R2
   StrCpy $R2 ""
-  !insertmacro hanakoRequireInstallSurfaceFile "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "HanaAgent.exe"
+  !insertmacro hanakoRequireInstallSurfaceFile "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "HanaKDE.exe"
   !insertmacro hanakoRequireInstallSurfaceFile "$INSTDIR\resources\app.asar" "resources\app.asar"
   !insertmacro hanakoRequireInstallSurfaceFile "$INSTDIR\resources\app-update.yml" "resources\app-update.yml"
   ; manifest 文件名带平台限定（seed-train-<platform>-<arch>.json，见
@@ -111,13 +115,13 @@ CRCCheck off
   !insertmacro hanakoRequireInstallSurfaceFile "$INSTDIR\resources\git\usr\bin\sh.exe" "MinGit sh.exe"
 
   ${If} $R2 != ""
-    DetailPrint "HanaAgent install surface self-check failed."
-    FileOpen $0 "$INSTDIR\hanaagent-install-diagnostics.log" w
-    FileWrite $0 "HanaAgent install surface self-check failed.$\r$\n"
+    DetailPrint "HanaKDE install surface self-check failed."
+    FileOpen $0 "$INSTDIR\hanakde-install-diagnostics.log" w
+    FileWrite $0 "HanaKDE install surface self-check failed.$\r$\n"
     FileWrite $0 "Install dir: $INSTDIR$\r$\n"
     FileWrite $0 "Missing or unreadable files:$R2$\r$\n"
     FileClose $0
-    MessageBox MB_OK|MB_ICONSTOP "HanaAgent installation is incomplete. Missing or unreadable files:$R2$\r$\n$\r$\nDiagnostic file:$\r$\n$INSTDIR\hanaagent-install-diagnostics.log"
+    MessageBox MB_OK|MB_ICONSTOP "HanaKDE installation is incomplete. Missing or unreadable files:$R2$\r$\n$\r$\nDiagnostic file:$\r$\n$INSTDIR\hanakde-install-diagnostics.log"
     SetErrorLevel 1
     !insertmacro hanakoInstallTimingMark "installSurfaceSelfCheck" "failed"
     !insertmacro hanakoPersistInstallTiming
@@ -125,9 +129,10 @@ CRCCheck off
     Pop $0
     Quit
   ${Else}
+    Delete "$INSTDIR\hanakde-install-diagnostics.log"
     Delete "$INSTDIR\hanaagent-install-diagnostics.log"
     Delete "$INSTDIR\hanako-install-diagnostics.log"
-    DetailPrint "HanaAgent install surface self-check passed."
+    DetailPrint "HanaKDE install surface self-check passed."
   ${EndIf}
   Pop $R2
   Pop $0
@@ -213,7 +218,7 @@ CRCCheck off
   FileWrite $0 `  $$_.ProcessId -ne $$selfPid -and $$_.ProcessId -ne $$installerPid -and ((Test-HanaPath $$_.ExecutablePath) -or (Test-HanaCommand $$_.CommandLine))$\r$\n`
   FileWrite $0 `})$\r$\n`
   FileWrite $0 `$$matches | ForEach-Object {$\r$\n`
-  FileWrite $0 `  Write-Output ("HanaAgent-owned process still running: {0} pid={1} path={2}" -f $$_.Name, $$_.ProcessId, $$_.ExecutablePath)$\r$\n`
+  FileWrite $0 `  Write-Output ("HanaKDE-owned process still running: {0} pid={1} path={2}" -f $$_.Name, $$_.ProcessId, $$_.ExecutablePath)$\r$\n`
   FileWrite $0 `}$\r$\n`
   FileWrite $0 `if ($$matches.Count -gt 0) { exit 0 } else { exit 10 }$\r$\n`
   FileClose $0
@@ -254,7 +259,7 @@ CRCCheck off
 
 !macro hanakoBypassOldUninstallerForUpdate
   ${If} ${isUpdated}
-    DetailPrint "Update mode detected; bypassing the previous uninstaller and preparing a HanaAgent-owned overlay."
+    DetailPrint "Update mode detected; bypassing the previous uninstaller and preparing a HanaKDE-owned overlay."
     !insertmacro hanakoPrepareOwnedOverlay
     DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"
     !ifdef UNINSTALL_REGISTRY_KEY_2
@@ -313,14 +318,14 @@ CRCCheck off
   !insertmacro hanakoInstallTimingMark "customCheckAppRunning" "start"
   !insertmacro hanakoBypassOldUninstallerForUpdate
   !insertmacro hanakoStopInstallDirProcesses
-  ; Finder exit contract: 0 = found HanaAgent-owned processes, 10 = confirmed
+  ; Finder exit contract: 0 = found HanaKDE-owned processes, 10 = confirmed
   ; none, anything else = query unavailable (PowerShell blocked / WMI broken).
   ; $R9 = 1 when the query is unavailable and we must fall back to the
   ; cmd-based image-name sweep below.
   StrCpy $R9 0
   !insertmacro hanakoFindInstallDirProcesses $R0
   ${If} $R0 == 0
-    DetailPrint "Detected HanaAgent-owned process in install directory; closing it before install."
+    DetailPrint "Detected HanaKDE-owned process in install directory; closing it before install."
     Sleep 500
     !insertmacro hanakoStopInstallDirProcesses
 
@@ -329,9 +334,9 @@ CRCCheck off
       !insertmacro hanakoFindInstallDirProcesses $R0
       ${If} $R0 == 0
         IntOp $R1 $R1 + 1
-        DetailPrint "Waiting for HanaAgent-owned install-directory processes to close."
+        DetailPrint "Waiting for HanaKDE-owned install-directory processes to close."
         ${If} $R1 > 2
-          DetailPrint "HanaAgent-owned install-directory processes still running; asking user to retry."
+          DetailPrint "HanaKDE-owned install-directory processes still running; asking user to retry."
           MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY hanako_retry_install_dir_close
           Quit
           hanako_retry_install_dir_close:
@@ -341,11 +346,11 @@ CRCCheck off
         Sleep 1000
         Goto hanako_check_install_dir_processes
       ${ElseIf} $R0 != 10
-        DetailPrint "HanaAgent process query became unavailable (code $R0); switching to image-name cleanup."
+        DetailPrint "HanaKDE process query became unavailable (code $R0); switching to image-name cleanup."
         StrCpy $R9 1
       ${EndIf}
   ${ElseIf} $R0 != 10
-    DetailPrint "HanaAgent process query unavailable (code $R0); falling back to image-name cleanup."
+    DetailPrint "HanaKDE process query unavailable (code $R0); falling back to image-name cleanup."
     StrCpy $R9 1
   ${EndIf}
 
@@ -362,7 +367,7 @@ CRCCheck off
   ${If} $R8 == 1
   !insertmacro hanakoFindRunningProcesses $R0
   ${If} $R0 == 0
-    DetailPrint "Detected HanaAgent.exe, Hanako.exe, or hana-server.exe; closing them before install."
+    DetailPrint "Detected HanaKDE.exe, Hanako.exe, or hana-server.exe; closing them before install."
     !insertmacro hanakoKillRunningProcesses 0
     Sleep 500
 
@@ -377,9 +382,9 @@ CRCCheck off
       !insertmacro hanakoFindRunningProcesses $R0
       ${If} $R0 == 0
         IntOp $R1 $R1 + 1
-        DetailPrint "Waiting for HanaAgent.exe, Hanako.exe, or hana-server.exe to close."
+        DetailPrint "Waiting for HanaKDE.exe, Hanako.exe, or hana-server.exe to close."
         ${If} $R1 > 2
-          DetailPrint "HanaAgent.exe, Hanako.exe, or hana-server.exe still running; asking user to retry."
+          DetailPrint "HanaKDE.exe, Hanako.exe, or hana-server.exe still running; asking user to retry."
           MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY hanako_retry_close
           Quit
           hanako_retry_close:
@@ -432,10 +437,17 @@ CRCCheck off
   FileWrite $0 `}$\r$\n`
   FileWrite $0 `Remove-OwnedShortcut ([Environment]::GetEnvironmentVariable('HANA_DESKTOP_LEGACY_SHORTCUT'))$\r$\n`
   FileWrite $0 `Remove-OwnedShortcut ([Environment]::GetEnvironmentVariable('HANA_STARTMENU_LEGACY_SHORTCUT'))$\r$\n`
+  FileWrite $0 `Remove-OwnedShortcut ([Environment]::GetEnvironmentVariable('HANA_DESKTOP_HANAAGENT_SHORTCUT'))$\r$\n`
+  FileWrite $0 `Remove-OwnedShortcut ([Environment]::GetEnvironmentVariable('HANA_STARTMENU_HANAAGENT_SHORTCUT'))$\r$\n`
   FileWrite $0 `$$legacyDir = [Environment]::GetEnvironmentVariable('HANA_STARTMENU_LEGACY_DIR')$\r$\n`
   FileWrite $0 `if (-not [string]::IsNullOrWhiteSpace($$legacyDir) -and (Test-Path -LiteralPath $$legacyDir -PathType Container)) {$\r$\n`
   FileWrite $0 `  Get-ChildItem -LiteralPath $$legacyDir -Filter '*.lnk' | Where-Object { -not $$_.PSIsContainer } | ForEach-Object { Remove-OwnedShortcut $$_.FullName }$\r$\n`
   FileWrite $0 `  try { Remove-Item -LiteralPath $$legacyDir -Force -ErrorAction Stop } catch {}$\r$\n`
+  FileWrite $0 `}$\r$\n`
+  FileWrite $0 `$$legacyAgentDir = [Environment]::GetEnvironmentVariable('HANA_STARTMENU_HANAAGENT_DIR')$\r$\n`
+  FileWrite $0 `if (-not [string]::IsNullOrWhiteSpace($$legacyAgentDir) -and (Test-Path -LiteralPath $$legacyAgentDir -PathType Container)) {$\r$\n`
+  FileWrite $0 `  Get-ChildItem -LiteralPath $$legacyAgentDir -Filter '*.lnk' | Where-Object { -not $$_.PSIsContainer } | ForEach-Object { Remove-OwnedShortcut $$_.FullName }$\r$\n`
+  FileWrite $0 `  try { Remove-Item -LiteralPath $$legacyAgentDir -Force -ErrorAction Stop } catch {}$\r$\n`
   FileWrite $0 `}$\r$\n`
   FileClose $0
   Pop $0
@@ -452,6 +464,9 @@ CRCCheck off
   System::Call 'kernel32::SetEnvironmentVariable(t "HANA_DESKTOP_LEGACY_SHORTCUT", t "$DESKTOP\Hanako.lnk") i.r0'
   System::Call 'kernel32::SetEnvironmentVariable(t "HANA_STARTMENU_LEGACY_SHORTCUT", t "$SMPROGRAMS\Hanako.lnk") i.r0'
   System::Call 'kernel32::SetEnvironmentVariable(t "HANA_STARTMENU_LEGACY_DIR", t "$SMPROGRAMS\Hanako") i.r0'
+  System::Call 'kernel32::SetEnvironmentVariable(t "HANA_DESKTOP_HANAAGENT_SHORTCUT", t "$DESKTOP\HanaAgent.lnk") i.r0'
+  System::Call 'kernel32::SetEnvironmentVariable(t "HANA_STARTMENU_HANAAGENT_SHORTCUT", t "$SMPROGRAMS\HanaAgent.lnk") i.r0'
+  System::Call 'kernel32::SetEnvironmentVariable(t "HANA_STARTMENU_HANAAGENT_DIR", t "$SMPROGRAMS\HanaAgent") i.r0'
   nsExec::ExecToLog `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$1"`
   Pop $0
   Pop $1
@@ -461,7 +476,7 @@ CRCCheck off
 
 !macro hanakoRemoveOwnedInstallTrees
   !insertmacro hanakoInstallTimingMark "removeOwnedInstallTrees" "start"
-  DetailPrint "Removing HanaAgent-owned install files"
+  DetailPrint "Removing HanaKDE-owned install files"
   SetOutPath "$TEMP"
   ; 老版本安装面是散装 resources\server 目录；现在改成 resources\seed 归档，
   ; 这行只在升级覆盖老版本时才会真正命中，负责清掉旧安装留下的散装树。
@@ -481,8 +496,11 @@ CRCCheck off
   RMDir /r "$INSTDIR\swiftshader"
   Delete "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
   Delete "$INSTDIR\${UNINSTALL_FILENAME}"
+  Delete "$INSTDIR\HanaAgent.exe"
+  Delete "$INSTDIR\Uninstall HanaAgent.exe"
   Delete "$INSTDIR\Hanako.exe"
   Delete "$INSTDIR\Uninstall Hanako.exe"
+  Delete "$INSTDIR\hanaagent-install-diagnostics.log"
   Delete "$INSTDIR\hanako-install-diagnostics.log"
   !insertmacro hanakoRemoveLegacyGlobalShortcuts
   Delete "$INSTDIR\uninstallerIcon.ico"
@@ -516,9 +534,9 @@ CRCCheck off
 !macro customUnInstallCheck
   !insertmacro hanakoInstallTimingMark "customUnInstallCheck" "start"
   ${If} ${Errors}
-    DetailPrint `Previous uninstaller could not be launched; preparing a HanaAgent-owned overlay.`
+    DetailPrint `Previous uninstaller could not be launched; preparing a HanaKDE-owned overlay.`
   ${ElseIf} $R0 != 0
-    DetailPrint `Previous uninstaller exited with code $R0; preparing a HanaAgent-owned overlay.`
+    DetailPrint `Previous uninstaller exited with code $R0; preparing a HanaKDE-owned overlay.`
   ${EndIf}
   !insertmacro hanakoPrepareOwnedOverlay
   ClearErrors
@@ -528,9 +546,9 @@ CRCCheck off
 !macro customUnInstallCheckCurrentUser
   !insertmacro hanakoInstallTimingMark "customUnInstallCheckCurrentUser" "start"
   ${If} ${Errors}
-    DetailPrint `Previous current-user uninstaller could not be launched; continuing with HanaAgent-owned overlay.`
+    DetailPrint `Previous current-user uninstaller could not be launched; continuing with HanaKDE-owned overlay.`
   ${ElseIf} $R0 != 0
-    DetailPrint `Previous current-user uninstaller exited with code $R0; continuing with HanaAgent-owned overlay.`
+    DetailPrint `Previous current-user uninstaller exited with code $R0; continuing with HanaKDE-owned overlay.`
   ${EndIf}
   !insertmacro hanakoPrepareOwnedOverlay
   ClearErrors

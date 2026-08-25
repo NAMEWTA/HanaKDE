@@ -1,4 +1,4 @@
-# HanaAgent
+# HanaKDE
 
 A personal AI agent with memory and soul.
 

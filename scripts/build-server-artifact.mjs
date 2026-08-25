@@ -24,14 +24,9 @@
  * 不是 schema 约束）。因此 manifest 生成从"打包 server 归档"这一步里搬出来，
  * 挪到"两个归档都打完之后"的编排步骤——ONE 签名 manifest，覆盖两种 kind。
  *
- * ⚠️ 签名顺序铁律：为满足 Apple notarization，
- * Apple notary service 会递归解包内嵌归档（含 tar.gz）并校验其中每一个
- * Mach-O —— 箱内出现未签名二进制会让整个 app 公证失败。Mach-O 签名是嵌入
- * 字节、能原样穿过 ustar 打包，但今天的签名发生在 electron-builder 遍历阶段，
- * 它看不进归档内部。因此：**先签名，后装箱** —— 对 server 树内二进制的一切
- * 签名（本地 ad-hoc；æ­£å¼ CI 的 Developer ID 同理）都必须发生在 packTree 之前。
- * release workflow 接 CI 时，Developer ID 签名步骤必须插在本模块 packServerArchive 调用
- * 之前，这个顺序没有任何例外。renderer 树是纯 web 静态资源，不含 Mach-O，
+ * ⚠️ 签名顺序铁律：**先做本地 ad-hoc Mach-O 签名，后装箱**。签名字节能
+ * 原样穿过 ustar 打包，而 electron-builder 无法修改归档内部的二进制，因此
+ * server 树内的签名必须发生在 packTree 之前。renderer 树是纯 web 静态资源，不含 Mach-O，
  * 因此不需要签名步骤，只需要一个"确实不含 Mach-O"的断言（防止未来某个
  * native 依赖被误拷进 dist-renderer 时静默把未签名二进制带进箱）。
  *
@@ -107,8 +102,7 @@ export function isMachOBuffer(buf) {
 /**
  * Walks `rootDir` and returns every regular file whose leading bytes carry
  * a Mach-O magic (node binary, .node addons, spawn-helper 等). Magic-based
- * detection instead of extension lists so nothing signable slips through —
- * an unsigned Mach-O inside the seed fails notarization for the whole app.
+ * detection instead of extension lists so nothing loadable slips through.
  * @param {string} rootDir
  * @returns {string[]} absolute paths
  */
@@ -366,8 +360,7 @@ export async function packServerArchive({ outDir, artifactOutDir, version, platf
  * 平台无关：输出到 `artifactOutDir`（建议 dist-renderer-artifact/ 顶层目录，
  * 不按 os-arch 分目录）。renderer 树是纯 web 静态资源，不该含任何 Mach-O ——
  * 断言这一点而不是静默放行，防止未来某个 native 依赖被误拷进
- * dist-renderer 时把未签名二进制悄悄带进箱（装箱后无法再签名，会在
- * notarization 阶段才炸，那时已经太晚）。
+ * dist-renderer 时把未签名二进制悄悄带进箱（装箱后已无法再签名）。
  * @param {{
  *   rendererDistDir: string,
  *   artifactOutDir: string,

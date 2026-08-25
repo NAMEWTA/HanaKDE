@@ -1,7 +1,7 @@
 /**
  * Electron client single-instance guard.
  *
- * Electron's requestSingleInstanceLock() is scoped by userData, so HanaAgent sets
+ * Electron's requestSingleInstanceLock() is scoped by userData, so HanaKDE sets
  * userData from HANA_HOME before requesting the lock. Production and dev homes
  * get different namespaces, while duplicate launches within the same home are
  * redirected to the first client.

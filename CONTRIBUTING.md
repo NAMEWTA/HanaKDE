@@ -1,13 +1,13 @@
-# Contributing to HanaAgent
+# Contributing to HanaKDE
 
-感谢你对 HanaAgent 的关注！
+感谢你对 HanaKDE 的关注！
 
 ## 开发环境
 
 ### 前置条件
 
-- Node.js >= 24.12 (see package.json engines)
-- npm (latest compatible with your Node.js version)
+- Node.js 24.16.0（由 `package.json` 的 Volta 配置锁定）
+- npm 11.13.0
 - C/C++ 编译工具链（编译 `better-sqlite3` native module 需要）：
   - **macOS**：`xcode-select --install`（安装 Command Line Tools）
   - **Linux**：`sudo apt install build-essential python3`（Debian/Ubuntu）
@@ -16,11 +16,12 @@
 ### 本地运行
 
 ```bash
-# 安装依赖
-npm install
+# 安装并使用锁定工具链
+volta install node@24.16.0 npm@11.13.0
+volta run npm ci
 
-# 启动 Electron（自动构建前端）
-npm start
+# 启动 Electron 开发环境（自动校验 Electron runtime 并构建前端）
+volta run npm run start:dev
 
 # 或者用 Vite HMR 开发前端
 npm run dev:renderer
@@ -32,7 +33,7 @@ npm run start:vite
 
 | 命令 | 说明 |
 |------|------|
-| `npm start` | 构建前端 + 启动 Electron |
+| `npm run start:dev` | 校验 Electron runtime、构建前端并启动开发环境 |
 | `npm run start:vite` | Vite HMR 模式启动 |
 | `npm test` | 运行测试（Vitest） |
 | `npm run typecheck` | TypeScript 类型检查 |

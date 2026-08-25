@@ -59,7 +59,7 @@ describe("Windows blocking gate runner", () => {
       const seed = path.join(root, "resources", "seed");
       fs.mkdirSync(seed, { recursive: true });
       for (const relative of [
-        "HanaAgent.exe",
+        "HanaKDE.exe",
         "resources/app.asar",
         "resources/git/cmd/git.exe",
         "resources/git/mingw64/bin/git.exe",
@@ -84,7 +84,7 @@ describe("Windows blocking gate runner", () => {
         ],
       });
       expect(result).toMatchObject({
-        executable: "HanaAgent.exe",
+        executable: "HanaKDE.exe",
         manifest: "seed-train-win32-x64.json",
         minGitRuntime: "resources/git",
         sandboxHelper: "resources/sandbox/windows/hana-win-sandbox.exe",
@@ -101,7 +101,7 @@ describe("Windows blocking gate runner", () => {
       const seed = path.join(root, "resources", "seed");
       fs.mkdirSync(seed, { recursive: true });
       for (const relative of [
-        "HanaAgent.exe",
+        "HanaKDE.exe",
         "resources/app.asar",
         "resources/git/cmd/git.exe",
         "resources/git/mingw64/bin/git.exe",
@@ -136,10 +136,10 @@ describe("Windows blocking gate runner", () => {
   it("requires a real executable for the NSIS inventory", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-t22-installer-"));
     try {
-      const installer = path.join(root, "HanaAgent-0.446.6.exe");
+      const installer = path.join(root, "HanaKDE-0.446.6.exe");
       writePeFixture(installer);
       expect(inspectWindowsInstaller(installer)).toEqual({
-        installer: "HanaAgent-0.446.6.exe",
+        installer: "HanaKDE-0.446.6.exe",
         peHeaderVerified: true,
       });
       const wrongExtension = path.join(root, "not-an-installer.zip");

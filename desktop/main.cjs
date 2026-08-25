@@ -1,9 +1,9 @@
 /**
- * HanaAgent Desktop — Electron 主进程
+ * HanaKDE Desktop — Electron 主进程
  *
  * 职责：
  * 1. 创建启动窗口（splash）
- * 2. spawn() 启动 HanaAgent Server
+ * 2. spawn() 启动 HanaKDE Server
  * 3. 等待 server 就绪 + 主窗口初始化完成
  * 4. 关闭 splash，显示主窗口
  * 5. 优雅关闭
@@ -130,7 +130,7 @@ markWindowsPlaywrightStartupStage("imports-loaded");
   const preloadPath = path.join(__dirname, "preload.bundle.cjs");
   if (!fs.existsSync(preloadPath)) {
     const msg = `Missing preload bundle:\n${preloadPath}\n\nBuild is incomplete. Run 'npm run build:preload' or rebuild the installer.`;
-    try { dialog.showErrorBox("HanaAgent failed to start", msg); } catch {}
+    try { dialog.showErrorBox("HanaKDE failed to start", msg); } catch {}
     console.error("[desktop] " + redactLogText(msg));
     process.exit(1);
   }
@@ -283,7 +283,7 @@ async function serverEnvironmentForNetworkProxy(baseEnv) {
 }
 
 // 按 HANA_HOME 隔离 Electron userData（localStorage / cache / session）
-// 生产: ~/Library/Application Support/Hanako（历史目录，随 HanaAgent 显示名保留）
+// 生产: ~/Library/Application Support/Hanako（历史目录，随 HanaKDE 显示名保留）
 // 开发: ~/Library/Application Support/Hanako-dev
 const defaultHome = path.join(os.homedir(), ".hanako");
 configureClientSingleInstance(app, {
@@ -505,7 +505,7 @@ let _crashFallbackNotice = null;
  * 诊断专用文案（crash log、`dialog.trainUpdateApplyFailedBody` 这类"进程崩了
  * 请重启"对话框）刻意继续读 `app.getVersion()`，不经这个访问器——那些场景
  * 问的是"哪个壳进程崩了"，不是"用户在用哪个内容版本"。
- * 该例外的适用范围收窄如下：crash.log 头部自本次起两行并写——壳行（`HanaAgent shell:`）
+ * 该例外的适用范围收窄如下：crash.log 头部自本次起两行并写——壳行（`HanaKDE shell:`）
  * 保留上述"哪个壳进程崩了"的例外语义，内容行（`Content:`）由本访问器提供。
  * 原因是热更新后壳版本与内容版本会分叉，只报壳版本会把新内容里的崩溃标成
  * 老版本，系统性误导排障；两行并写让"哪个壳崩的"和"崩的是哪份代码"都可读。
@@ -793,7 +793,7 @@ function createBrowserWindowWithDiagnostics(label, opts, { windowsMinimalRetry =
       height: opts?.height || 820,
       minWidth: opts?.minWidth,
       minHeight: opts?.minHeight,
-      title: opts?.title || "HanaAgent",
+      title: opts?.title || "HanaKDE",
       show: opts?.show === true,
       ...(opts?.x != null ? { x: opts.x } : {}),
       ...(opts?.y != null ? { y: opts.y } : {}),
@@ -1275,8 +1275,8 @@ async function startServer() {
         console.warn(`[desktop] 残留 server PID ${existingInfo.pid} 仍存活，保留 server-info.json 供下次启动识别`);
         if (disposition.failFast) {
           const err = new Error(
-            `STALE_SERVER_UNCLEANED: residual HanaAgent server (PID ${existingInfo.pid}) is still running and holds port ${Number.isInteger(stalePort) ? stalePort : "unknown"} (${verification.reason}). ` +
-            `Quit it from Task Manager (look for hana-server.exe) or restart the computer, then launch HanaAgent again.`
+            `STALE_SERVER_UNCLEANED: residual HanaKDE server (PID ${existingInfo.pid}) is still running and holds port ${Number.isInteger(stalePort) ? stalePort : "unknown"} (${verification.reason}). ` +
+            `Quit it from Task Manager (look for hana-server.exe) or restart the computer, then launch HanaKDE again.`
           );
           err.code = "STALE_SERVER_UNCLEANED";
           throw err;
@@ -1406,7 +1406,7 @@ async function resolvePackagedArtifactBoot() {
     if (app.isPackaged) {
       throw new Error(
         `Packaged app is missing its artifact seed (expected under ${path.join(resourcesPath, "seed")}). `
-          + "The installation is broken — please reinstall HanaAgent.",
+          + "The installation is broken — please reinstall HanaKDE.",
       );
     }
     return null;
@@ -1500,7 +1500,7 @@ function notifyComponentQuarantined() {
   try {
     if (!Notification.isSupported()) return;
     const notif = new Notification({
-      title: "HanaAgent",
+      title: "HanaKDE",
       body: mt(
         "notification.componentQuarantined",
         null,
@@ -1700,7 +1700,7 @@ async function triggerArtifactRepairFlow({ startupFailure = null } = {}) {
       : mt(
         "dialog.repairArtifactsBody",
         null,
-        "This resets HanaAgent's app components to the originally installed version and restarts the app. Your data (agents, sessions, settings) is not affected.",
+        "This resets HanaKDE's app components to the originally installed version and restarts the app. Your data (agents, sessions, settings) is not affected.",
       ),
   });
   return runArtifactRepairRecovery({
@@ -1717,7 +1717,7 @@ async function triggerArtifactRepairFlow({ startupFailure = null } = {}) {
       console.error(`[desktop] artifact repair incomplete: ${failureList}`);
       dialog.showErrorBox(
         mt("dialog.repairArtifactsFailedTitle", null, "Component Repair Failed"),
-        mt("dialog.repairArtifactsFailedBody", null, "Some app components could not be reset. HanaAgent will exit without restarting."),
+        mt("dialog.repairArtifactsFailedBody", null, "Some app components could not be reset. HanaKDE will exit without restarting."),
       );
       forceQuitApp = true;
     },
@@ -1858,7 +1858,7 @@ async function _spawnServerOnce(serverInfoPath, artifactBootContext) {
     });
     if (!guardianBin) {
       throw new Error(
-        "WINDOWS_SERVER_GUARDIAN_MISSING: hana-win-sandbox.exe is required to supervise the server process tree. Rebuild or reinstall HanaAgent."
+        "WINDOWS_SERVER_GUARDIAN_MISSING: hana-win-sandbox.exe is required to supervise the server process tree. Rebuild or reinstall HanaKDE."
       );
     }
     serverEnv.HANA_WIN32_SANDBOX_HELPER = guardianBin;
@@ -1978,7 +1978,7 @@ function monitorServer() {
         writeCrashLog(`Server 重启失败: ${err.message}`);
         // 壳身份用途：崩溃诊断对话框，问的是"哪个壳进程崩了"，见
         // getCurrentContentVersion() 声明处对这类诊断文案的例外说明。
-        dialog.showErrorBox("HanaAgent Server", mt("dialog.serverRestartFailed", {
+        dialog.showErrorBox("HanaKDE Server", mt("dialog.serverRestartFailed", {
           version: app?.getVersion?.() || "unknown",
           error: err.message,
         }));
@@ -1986,7 +1986,7 @@ function monitorServer() {
     } else {
       writeCrashLog(`Server 多次崩溃 (${reason})，放弃重启`);
       // 壳身份用途：同上。
-      dialog.showErrorBox("HanaAgent Server", mt("dialog.serverMultipleCrash", {
+      dialog.showErrorBox("HanaKDE Server", mt("dialog.serverMultipleCrash", {
         version: app?.getVersion?.() || "unknown",
         reason,
       }));
@@ -2006,7 +2006,7 @@ function showPrimaryWindow() {
 /**
  * 创建系统托盘图标
  * - 双击：显示主窗口
- * - 右键菜单：显示 HanaAgent / 设置 / 退出
+ * - 右键菜单：显示 HanaKDE / 设置 / 退出
  */
 function resolveTrayAssetCandidates(fileName) {
   const candidates = [];
@@ -2046,10 +2046,10 @@ function createTray() {
     if (process.platform === "darwin") resolved.image.setTemplateImage(true);
   }
   tray = new Tray(resolved.image);
-  tray.setToolTip(isDev ? "HanaAgent (dev)" : "HanaAgent");
+  tray.setToolTip(isDev ? "HanaKDE (dev)" : "HanaKDE");
 
   const buildMenu = () => Menu.buildFromTemplate([
-    { label: mt("tray.show", null, "Show HanaAgent"), click: () => showPrimaryWindow() },
+    { label: mt("tray.show", null, "Show HanaKDE"), click: () => showPrimaryWindow() },
     { label: mt("tray.settings", null, "Settings"), click: () => createSettingsWindow() },
     { type: "separator" },
     // 修复逃生门：本仓库没有独立的应用菜单栏基础设施
@@ -2275,12 +2275,12 @@ function writeCrashLog(errorMessage) {
   })();
 
   const content = redactMainLogText([
-    `=== HanaAgent Crash Log ===`,
+    `=== HanaKDE Crash Log ===`,
     // 壳身份 + 内容版本双行并写：壳行回答"哪个壳进程崩了"（见
     // getCurrentContentVersion() 声明处对这类诊断文案的例外说明，该例外保留），
     // 内容行回答"崩的是哪个版本的代码"——热更新后两者会分叉，只写壳版本会把
     // 新内容里的崩溃标成老版本，误导用户与排障（已实际发生过一次）。
-    `HanaAgent shell: v${app?.getVersion?.() || "unknown"}`,
+    `HanaKDE shell: v${app?.getVersion?.() || "unknown"}`,
     `Content: v${contentVersion}`,
     `Time: ${timestamp}`,
     `Error: ${errorMessage}`,
@@ -2322,7 +2322,7 @@ function createSplashWindow() {
     height: 280,
     resizable: false,
     frame: false,
-    title: "HanaAgent",
+    title: "HanaKDE",
     ...titleBarOpts({ x: 12, y: 12 }),
     transparent: true,
     show: false,
@@ -2796,7 +2796,7 @@ function createMainWindow() {
     height: saved?.height || 820,
     minWidth: 420,
     minHeight: 500,
-    title: "HanaAgent",
+    title: "HanaKDE",
     ...titleBarOpts({ x: 16, y: 16 }),
     backgroundColor: getThemeBackgroundColor(initialTheme),
     show: false,
@@ -4390,7 +4390,7 @@ function createOnboardingWindow(query = {}) {
     height: 780,
     resizable: false,
     frame: false,
-    title: "HanaAgent",
+    title: "HanaKDE",
     ...titleBarOpts({ x: 16, y: 16 }),
     backgroundColor: getThemeBackgroundColor(initialTheme),
     show: false,
@@ -4895,7 +4895,7 @@ function buildScreenshotHTML(payload) {
   ${bodyHTML}
   <footer class="watermark">
     <img class="watermark-logo" src="${logoUrl}" />
-    <span class="watermark-text">HanaAgent</span>
+    <span class="watermark-text">HanaKDE</span>
   </footer>
 </body>
 </html>`;
@@ -5100,10 +5100,10 @@ async function applyTrainUpdateNow(senderWebContents) {
       // 用跟现有崩溃重启失败同款的错误对话框告知用户重启应用（复用既有
       // installFailedTitle 键——同属"更新失败"这一类对话框标题）。
       // 壳身份用途：诊断对话框，见 getCurrentContentVersion() 声明处的例外说明。
-      dialog.showErrorBox(mt("dialog.installFailedTitle", null, "HanaAgent Update"), mt(
+      dialog.showErrorBox(mt("dialog.installFailedTitle", null, "HanaKDE Update"), mt(
         "dialog.trainUpdateApplyFailedBody",
         { version: app?.getVersion?.() || "unknown", error: result.error },
-        `HanaAgent update failed to apply: ${result.error}\n\nPlease restart the app.`,
+        `HanaKDE update failed to apply: ${result.error}\n\nPlease restart the app.`,
       ));
     }
     return { ok: false, error: result.error };
@@ -5664,7 +5664,7 @@ wrapIpcOn("settings-changed", (_event, type, data) => {
     // 重建托盘菜单，使标签跟随新 locale
     if (tray && !tray.isDestroyed()) {
       const buildMenu = () => Menu.buildFromTemplate([
-        { label: mt("tray.show", null, "Show HanaAgent"), click: () => showPrimaryWindow() },
+        { label: mt("tray.show", null, "Show HanaKDE"), click: () => showPrimaryWindow() },
         { label: mt("tray.settings", null, "Settings"), click: () => createSettingsWindow() },
         { type: "separator" },
         { label: mt("tray.repairArtifacts", null, "Repair Components…"), click: () => { triggerArtifactRepairFlow().catch((err) => console.error(`[desktop] repair flow failed: ${err.message}`)); } },
@@ -6268,7 +6268,7 @@ resolveDesktopApplicationReady({ app }).then(async () => {
         startupId: desktopStartupId,
       });
     }
-    console.log("[desktop] 启动 HanaAgent Server...");
+    console.log("[desktop] 启动 HanaKDE Server...");
     await startServer();
     if (process.platform === "win32") {
       markGpuStartupPhase({
@@ -6397,7 +6397,7 @@ resolveDesktopApplicationReady({ app }).then(async () => {
     // 壳身份用途：启动失败对话框，见 getCurrentContentVersion() 声明处的
     // 例外说明——这里问的是"哪个壳进程启动失败"。
     dialog.showErrorBox(
-      mt("dialog.launchFailedTitle", null, "HanaAgent Launch Failed"),
+      mt("dialog.launchFailedTitle", null, "HanaKDE Launch Failed"),
       mt("dialog.launchFailedBody", {
         version: app?.getVersion?.() || "unknown",
         detail,

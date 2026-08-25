@@ -328,7 +328,7 @@ describe("office plugin tools", () => {
     }));
     const rendererDist = path.join(tempDir, "active-renderer");
     const helperEnv = {
-      HANA_DESKTOP_EXEC_PATH: "/Applications/HanaAgent.app/Contents/MacOS/HanaAgent",
+      HANA_DESKTOP_EXEC_PATH: "/Applications/HanaKDE.app/Contents/MacOS/HanaKDE",
       HANA_DESKTOP_IS_PACKAGED: "1",
       HANA_RENDERER_DIST: rendererDist,
       ELECTRON_RUN_AS_NODE: "1",
@@ -352,7 +352,7 @@ describe("office plugin tools", () => {
     );
 
     expect(observedCommand).toMatchObject({
-      command: "/Applications/HanaAgent.app/Contents/MacOS/HanaAgent",
+      command: "/Applications/HanaKDE.app/Contents/MacOS/HanaKDE",
       args: ["--hana-office-html-to-pdf", expect.stringMatching(/job\.json$/)],
     });
     expect(observedSpawnOptions).toMatchObject({
@@ -408,7 +408,7 @@ describe("office plugin tools", () => {
       },
       {
         env: {
-          HANA_DESKTOP_EXEC_PATH: "/Applications/HanaAgent.app/Contents/MacOS/HanaAgent",
+          HANA_DESKTOP_EXEC_PATH: "/Applications/HanaKDE.app/Contents/MacOS/HanaKDE",
           HANA_DESKTOP_IS_PACKAGED: "1",
         },
         spawn: fakeSpawn,

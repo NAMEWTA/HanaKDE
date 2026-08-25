@@ -632,7 +632,7 @@ describe("desktop launch failure dialog: data-epoch dedicated branches (C7 E4)",
       await writeDataEpochStamp(homeDir, { minimumReaderEpoch: 5, committedDataEpoch: 5, lastVersion: "9.9.9" });
       const context = buildDataEpochDialogContext(homeDir);
 
-      const crashInfo = `=== HanaAgent Crash Log ===\n--- Server Output ---\n[stderr] HANA_DATA_EPOCH_BLOCKED reason=epoch-downgrade-blocked\n[stderr] [data-epoch] 数据安全闸拒绝启动\n`;
+      const crashInfo = `=== HanaKDE Crash Log ===\n--- Server Output ---\n[stderr] HANA_DATA_EPOCH_BLOCKED reason=epoch-downgrade-blocked\n[stderr] [data-epoch] 数据安全闸拒绝启动\n`;
       const detail = context.buildLaunchFailureDialogDetail({ code: undefined, message: "" }, crashInfo);
 
       expect(detail).toContain("数据已被更新的版本使用");
@@ -746,12 +746,12 @@ describe("desktop crash log version header", () => {
     const { returned, onDisk, header } = runWriteCrashLog(() => "0.442.0");
 
     expect(header).toEqual([
-      "=== HanaAgent Crash Log ===",
-      "HanaAgent shell: v0.421.24",
+      "=== HanaKDE Crash Log ===",
+      "HanaKDE shell: v0.421.24",
       "Content: v0.442.0",
     ]);
     // 单行时代的旧格式不得复活：只报壳版本会把新内容里的崩溃标成老版本。
-    expect(onDisk).not.toMatch(/^HanaAgent: v/m);
+    expect(onDisk).not.toMatch(/^HanaKDE: v/m);
     expect(returned).toBe(onDisk);
   });
 
@@ -760,7 +760,7 @@ describe("desktop crash log version header", () => {
       throw new Error("content version accessor unavailable");
     });
 
-    expect(header[1]).toBe("HanaAgent shell: v0.421.24");
+    expect(header[1]).toBe("HanaKDE shell: v0.421.24");
     expect(header[2]).toBe("Content: vunknown");
   });
 });

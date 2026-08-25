@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// HanaAgent CLI — early access build.
+// HanaKDE CLI — early access build.
 // The full CLI (serve / chat / data tooling) ships with the 1.0 release
 // on this same package name; `npm update -g hanaagent` will pick it up.
 
@@ -13,7 +13,7 @@ if (arg === "--version" || arg === "-v") {
 }
 
 console.log(`
-  HanaAgent ${VERSION} (early access)
+  HanaKDE ${VERSION} (early access)
 
   A personal AI agent with memory and soul.
 

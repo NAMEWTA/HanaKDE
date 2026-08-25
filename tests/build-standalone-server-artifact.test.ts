@@ -94,7 +94,7 @@ describe("Windows standalone server artifact", () => {
     expect(fs.readFileSync(path.join(repoRoot, ".gitignore"), "utf8")).toMatch(/^dist-standalone\/$/m);
   });
 
-  it("builds a SHA-256-manifested HanaCore archive without mutating the thin server tree", async () => {
+  it("builds a SHA-256-manifested HanaKDE-Core archive without mutating the thin server tree", async () => {
     const root = makeTempRoot();
     const inputs = createInputs(root);
     const before = snapshotTree(inputs.serverDir);
@@ -102,7 +102,7 @@ describe("Windows standalone server artifact", () => {
     const result = await buildWindowsStandaloneArtifact({ rootDir: root, log: () => {} });
     const names = standaloneArtifactNames("1.2.3");
 
-    expect(path.basename(result.archivePath)).toBe("HanaCore-1.2.3-Windows-x64.tar.gz");
+    expect(path.basename(result.archivePath)).toBe("HanaKDE-Core-1.2.3-Windows-x64.tar.gz");
     expect(path.basename(result.archivePath)).toBe(names.archiveName);
     expect(path.basename(result.archivePath)).not.toMatch(/^server-/);
     expect(result.archivePath).toContain(`${path.sep}dist-standalone${path.sep}`);
@@ -263,7 +263,7 @@ describe("Windows standalone server artifact", () => {
     const workDir = "C:\\Temp\\hana smoke";
     const runtimeEnvRoot = `${workDir}\\.ephemeral\\win32-sandbox-env`;
     const spec = standaloneRestrictedTokenSmokeSpec({
-      layoutRoot: "C:\\downloads\\HanaCore",
+      layoutRoot: "C:\\downloads\\HanaKDE-Core",
       workDir,
       hanaHome: "C:\\Temp\\hana home",
       env: {
@@ -275,7 +275,7 @@ describe("Windows standalone server artifact", () => {
       },
     });
 
-    expect(spec.helperPath).toBe("C:\\downloads\\HanaCore\\sandbox\\windows\\hana-win-sandbox.exe");
+    expect(spec.helperPath).toBe("C:\\downloads\\HanaKDE-Core\\sandbox\\windows\\hana-win-sandbox.exe");
     expect(spec.args).toEqual([
       "--cwd", workDir,
       "--writable-root", workDir,
@@ -313,15 +313,15 @@ describe("Windows standalone server artifact", () => {
       USERNAME: "runner",
       SystemDrive: "C:",
       HANA_HOME: "C:\\Temp\\hana home",
-      HANA_ROOT: "C:\\downloads\\HanaCore\\server",
-      HANA_SERVER_ENTRY: "C:\\downloads\\HanaCore\\server\\bundle\\index.js",
+      HANA_ROOT: "C:\\downloads\\HanaKDE-Core\\server",
+      HANA_SERVER_ENTRY: "C:\\downloads\\HanaKDE-Core\\server\\bundle\\index.js",
       HANA_WIN32_SANDBOX_HELPER: spec.helperPath,
     });
   });
 
   it("runs the production exec_command chain through the extracted wrapper with a hermetic environment", () => {
     const spec = standaloneExecCommandSmokeSpec({
-      layoutRoot: "C:\\downloads\\HanaCore",
+      layoutRoot: "C:\\downloads\\HanaKDE-Core",
       workDir: "C:\\Temp\\hana smoke",
       hanaHome: "C:\\Temp\\hana home",
       env: {
@@ -332,13 +332,13 @@ describe("Windows standalone server artifact", () => {
     });
 
     expect(spec.command).toBe("C:\\Windows\\System32\\cmd.exe");
-    expect(spec.args.join(" ")).toContain('call "C:\\downloads\\HanaCore\\hana-server.cmd"');
+    expect(spec.args.join(" ")).toContain('call "C:\\downloads\\HanaKDE-Core\\hana-server.cmd"');
     expect(spec.windowsVerbatimArguments).toBe(true);
     expect(spec.env.Path).not.toContain("Program Files\\Git");
     expect(spec.env.HANA_ROOT).toBe("Z:\\hana-poison\\server");
-    expect(spec.env.HANA_STANDALONE_EXPECTED_ROOT).toBe("C:\\downloads\\HanaCore\\server");
+    expect(spec.env.HANA_STANDALONE_EXPECTED_ROOT).toBe("C:\\downloads\\HanaKDE-Core\\server");
     expect(spec.env.HANA_STANDALONE_EXPECTED_HELPER)
-      .toBe("C:\\downloads\\HanaCore\\sandbox\\windows\\hana-win-sandbox.exe");
+      .toBe("C:\\downloads\\HanaKDE-Core\\sandbox\\windows\\hana-win-sandbox.exe");
     expect(spec.env.HANA_INTERNAL_STANDALONE_RUNTIME_SMOKE).toBe("1");
     expect(spec.env).not.toHaveProperty("NODE_OPTIONS");
     expect(spec.env).not.toHaveProperty("HANA_STANDALONE_EXEC_MARKER");
