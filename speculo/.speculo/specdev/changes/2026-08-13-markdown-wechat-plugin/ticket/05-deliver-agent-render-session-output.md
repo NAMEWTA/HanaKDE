@@ -9,9 +9,9 @@ planning_depth: deep
 planning_depth_reason: 新增 namespaced Agent tool 的输入互斥、ResourceRef 读取、plugin_output 权限和 SessionFile 交付合同，涉及数据权限与 session identity。
 ready: true
 risk: high
-blocked_by: [T-01]
-contract_ids: [AC-008, AC-013, AC-014, AC-015]
-owner: unassigned
+blocked_by: [T-02]
+contract_ids: [AC-013, AC-014, AC-015]
+owner: root
 expected_changes: ["<Path>plugins/markdown-wechat/tools/**</Path>", "<Path>plugins/markdown-wechat/src/tooling/**</Path>", "<Path>plugins/markdown-wechat/tests/agent-render.test.ts</Path>"]
 writable_paths: ["<Path>plugins/markdown-wechat/tools/**</Path>", "<Path>plugins/markdown-wechat/src/tooling/**</Path>", "<Path>plugins/markdown-wechat/tests/agent-render.test.ts</Path>"]
 read_only_paths: ["<Path>packages/plugin-runtime/src/index.ts</Path>", "<Path>core/plugin-manager.ts</Path>", "<Path>examples/plugins/sdk-showcase/tools/create-note.js</Path>", "<Path>plugins/markdown-wechat/manifest.json</Path>", "<Path>temp/md-wechat/src/lib/renderer.js</Path>"]
@@ -96,6 +96,11 @@ Agent 调用工具时传入 Markdown 或 ResourceRef。工具校验输入后读�
 | 失败路径 | invalid/stage/resource fault injection | 缺失/同时输入、拒绝读取、无 session、stage 失败 | 稳定错误，不创建伪文件、不暴露绝对路径 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-05.md</Path>` |
 | 回归 | tool catalog | PluginManager diagnostics/tool invocation | namespace、permission 和 renderer 复用不回归 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-05.md</Path>` |
 
+- **Workspace checks：** Lead 在 current workspace 使用 Node 24 运行 Agent tool、ResourceRef、stageFile 测试与插件 typecheck/build/verify。
+- **E2E disposition：** required：PluginManager invocation context、ResourceIO、session permission 与 SessionFile staging 是宿主集成边界。
+- **E2E owner/environment：** Lead / current-workspace；宿主 tool invocation 场景覆盖 Markdown/ResourceRef、session/no-session、denial 和 stage failure。
+- **Integration evidence：** 记录 implementation commit、parent before、direct-parent tool/SessionFile 集成和 result SHA。
+
 ## 9. 发布、迁移与恢复
 
 - **迁移顺序：** 无旧数据迁移；每次输出生成独立 plugin-data file。
@@ -107,6 +112,6 @@ Agent 调用工具时传入 Markdown 或 ResourceRef。工具校验输入后读�
 
 ## 10. 验收标准
 
-- [ ] AC-008、AC-013、AC-014、AC-015：两种输入、SessionFile/no-session、错误和纯产出边界通过。
+- [ ] AC-013、AC-014、AC-015：两种输入、SessionFile/no-session、错误和纯产出边界通过；AC-008 的 Page/Widget 下载由 T-03 覆盖。
 - [ ] Evidence 写入 `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-05.md</Path>`。
 - [ ] 不修改用户 workspace，不接受绝对路径，不绕过 ResourceIO。

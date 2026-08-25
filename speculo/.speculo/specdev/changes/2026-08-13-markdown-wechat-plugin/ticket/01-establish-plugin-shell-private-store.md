@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: []
 contract_ids: [AC-001, AC-002, AC-011, AC-012]
-owner: unassigned
+owner: root
 expected_changes: ["<Path>plugins/markdown-wechat/manifest.json</Path>", "<Path>plugins/markdown-wechat/index.ts</Path>", "<Path>plugins/markdown-wechat/routes/**</Path>", "<Path>plugins/markdown-wechat/src/**</Path>", "<Path>plugins/markdown-wechat/assets/**</Path>", "<Path>plugins/markdown-wechat/tests/**</Path>"]
 writable_paths: ["<Path>plugins/markdown-wechat/**</Path>"]
 read_only_paths: ["<Path>core/plugin-manager.ts</Path>", "<Path>core/plugin-context.ts</Path>", "<Path>packages/plugin-sdk/src/index.ts</Path>", "<Path>examples/plugins/sdk-showcase/**</Path>", "<Path>skills2set/hana-plugin-creator/**</Path>", "<Path>temp/md-wechat/**</Path>"]
@@ -95,6 +95,11 @@ shared_path_owners: []
 | 失败路径 | private store 故障注入 | 同一测试覆盖 missing/corrupt/unsupported/write failure | 错误可见，内存草稿保留，不伪造恢复成功 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-01.md</Path>` |
 | UI E2E（owner：当前执行 owner） | Page/Widget reload smoke | Playwright 打开两个 surface、编辑、重载 | 两个 surface 读同一 envelope，Widget 无第二编辑器 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-01.md</Path>` |
 | 回归 | PluginManager existing tests | `npx vitest run <Path>tests/plugin-manager.test.ts</Path> <Path>tests/plugin-ui-contributions.test.ts</Path>` | 既有插件 discovery/UI 合同保持 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-01.md</Path>` |
+
+- **Workspace checks：** Lead 在 current workspace 使用 Node 24 运行插件 shell/store 测试、插件 typecheck/build/verify 和定向宿主回归。
+- **E2E disposition：** required：跨 PluginManager、Page/Widget iframe、ready 与持久化重载边界。
+- **E2E owner/environment：** Lead / current-workspace；打开 Page/Widget、编辑并重载，验证同一 envelope 与 Widget 只读摘要。
+- **Integration evidence：** 记录非空 implementation commit、parent before SHA、current-workspace direct-parent 验证结果和等于实现提交的 result SHA。
 
 ## 9. 发布、迁移与恢复
 

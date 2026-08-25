@@ -10,8 +10,8 @@ planning_depth_reason: 汇合全部金融模块、共享契约、路径边界、
 ready: true
 risk: critical
 blocked_by: [T-11, T-09, T-08, T-07, T-06, T-05, T-04, T-03, T-02, T-01]
-contract_ids: [AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010, AC-011, AC-012, AC-013, AC-014, AC-015, AC-016, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-024, AC-025, AC-026, AC-027, AC-028, AC-029, AC-030, AC-031, AC-032, AC-033]
-owner: release-owner
+contract_ids: [AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010, AC-011, AC-012, AC-013, AC-014, AC-015, AC-016, AC-017, AC-018, AC-019, AC-020, AC-021, AC-022, AC-023, AC-024, AC-025, AC-026, AC-027, AC-028, AC-029, AC-030, AC-031, AC-032, AC-033, AC-034, AC-035, AC-036, AC-037, AC-038]
+owner: root
 expected_changes: ["<Path>plugins/finance-workbench/**</Path>"]
 writable_paths: ["<Path>plugins/finance-workbench/**</Path>"]
 read_only_paths: ["<Path>PLUGIN_SDK.md</Path>", "<Path>PLUGINS.md</Path>", "<Path>packages/plugin-sdk/**</Path>", "<Path>packages/plugin-runtime/**</Path>"]
@@ -30,7 +30,7 @@ shared_path_owners: ["<Path>plugins/finance-workbench/**</Path> => T-12 release-
 
 - **目标：** 将 T-01～T-11 汇合为可直接上线、可诊断、可卸载的内置 A/HK 个人量化金融插件。
 - **可观察产出：** 全部 Spec 模块从总览进入并可用；跨模块状态/证据/隐私一致；构建、安装、dev loop、桌面/窄屏、删除插件和无交易副作用门全部通过。
-- **来源：** `US-001`～`US-018`、`AC-001`～`AC-033`、`ADR-001`～`ADR-003`、`DEC-001`～`DEC-009`。
+- **来源：** `US-001`～`US-021`、`AC-001`～`AC-038`、`ADR-001`～`ADR-006`、`DEC-001`～`DEC-012`。
 - **当前事实：** 这是唯一全插件根写入 owner；前序票据分别持有各自子路径并需 Evidence 完整，任何模块不可因 provider unavailable 而删除入口。
 - **Planning Depth 原因：** 是全 change 的发布汇合和不可逆发布批准点，必须有跨票验证、回滚和残余风险记录。
 
@@ -58,7 +58,7 @@ shared_path_owners: ["<Path>plugins/finance-workbench/**</Path> => T-12 release-
 
 ## 4. 要构建什么
 
-从总览进入资产、自选、行情、研究底稿、组合、筛选、回测、监控、任务、Agent 和导入导出，每个模块都能完成正常和 fallback 流程。跨模块传递使用同一 AssetRef/DataSnapshot/EvidenceRef/ResearchRun/ConsentRecord；诊断页能定位任意失败。禁用/删除插件后 Hana 核心、其他插件和用户原始资源仍可正常工作。
+从总览进入数据源配置、资产、自选、行情、研究底稿、组合、筛选、回测、监控、任务、Agent 和导入导出，每个模块都能完成正常和受控 fallback 流程。跨模块传递使用同一 AssetRef/DataSnapshot/SourcePolicy/SourceDecision/RunSourceManifest/EvidenceRef/ResearchRun/ConsentRecord；诊断页能定位任意失败。`hithink-rest` BYOK 与适用 A 股优先规则可验证，`hithink-market-dump` 未过原型门时保持 blocked/unavailable。禁用/删除插件后 Hana 核心、其他插件和用户原始资源仍可正常工作。
 
 ## 5. 实现契约
 
@@ -92,10 +92,15 @@ shared_path_owners: ["<Path>plugins/finance-workbench/**</Path> => T-12 release-
 | 行为或风险 | 验证接缝 | 命令或步骤 | 预期结果 | Evidence |
 |---|---|---|---|---|
 | 正常路径 | plugin.dev + route/tool/UI integration | 安装、启用、列 surface、运行 scenario，逐模块走通 | 全部入口和状态可用，AC 证据可追溯 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
-| 失败路径 | negative/security/recovery suite | 注入 provider/ResourceIO/Task/Agent/secret/交易/迁移错误 | release blocked 或安全降级，无隐藏副作用 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
+| 失败路径 | negative/security/recovery suite | 注入 provider/BYOK/source policy/run manifest/local prototype/ResourceIO/Task/Agent/secret/交易/迁移错误 | release blocked 或安全降级，无 silent fallback、敏感值泄露或隐藏副作用 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
 | 回归 | project baseline/build | 运行现有插件/宿主相关测试和构建 | 宿主及其他插件无回归，核心不依赖金融插件 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
-| UI E2E（owner：release-owner） | desktop/narrow/a11y/screenshot | 按页面和状态运行 E2E、可访问性树、视觉检查 | 无重叠/溢出，键盘可用，状态文字准确 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
+| UI E2E（owner：Lead） | desktop/narrow/a11y/screenshot | 按页面和状态运行 E2E、可访问性树、视觉检查 | 无重叠/溢出，键盘可用，状态文字准确 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
 | 可卸载 | isolated delete smoke | 在临时隔离环境删除 `<Path>plugins/finance-workbench/</Path>` 并启动宿主 | Hana 核心/其他插件/原始资源仍正常 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>` |
+
+- **Workspace checks（current-workspace）：** release implementation owner 在 current workspace 运行全插件单元/组件/集成、静态路径与无交易扫描、类型检查、lint、client/server 构建和安装预检，不创建 source worktree。
+- **E2E disposition：** required：本票是全部模块、宿主插件运行时、外部 capability、隐私安全、桌面/窄屏和可卸载性的最终发布门，任何下层证据都不能替代组合状态验证。
+- **E2E owner/environment：** Lead / current-workspace；在 direct-parent 最终组合状态逐模块运行正常/失败/恢复场景、桌面/窄屏/a11y/视觉检查、启停与隔离删除 smoke，预期 AC-001 至 AC-038 全部可追溯且无隐藏副作用。
+- **Integration evidence（direct-parent）：** 记录 release implementation commit、parent before SHA、完整验证命令/退出状态、E2E 与可卸载结果、最终父分支 result SHA 及其包含全部 Ticket commits 的证明。
 
 ## 9. 发布、迁移与恢复
 
@@ -108,7 +113,7 @@ shared_path_owners: ["<Path>plugins/finance-workbench/**</Path> => T-12 release-
 
 ## 10. 验收标准
 
-- [ ] `AC-001`～`AC-033` 全部有前序 Ticket Evidence 和本票集成证据，无 deferred/uncovered。
+- [ ] `AC-001`～`AC-038` 全部有前序 Ticket Evidence 和本票集成证据，无 deferred/uncovered。
 - [ ] 生产实现和测试 fixture 只在 `<Path>plugins/finance-workbench/</Path>`，宿主/其他插件无金融代码。
 - [ ] plugin.dev、构建、UI、隐私、安全、数据正确性、任务恢复和无交易副作用门全部通过。
 - [ ] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-12.md</Path>`，无未批准偏差。

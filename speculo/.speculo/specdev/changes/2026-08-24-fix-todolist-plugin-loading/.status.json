@@ -4,7 +4,7 @@
   "change": "2026-08-24-fix-todolist-plugin-loading",
   "change_status": "completed",
   "current_work": null,
-  "works_run": ["specdev/diagnose-bugs", "specdev/implement"],
+  "works_run": ["specdev/diagnose-bugs", "specdev/implement", "specdev/triage"],
   "claimed_investigations": [],
   "execution_authorization": {
     "implementation_commit": {"status": "authorized", "source": "user-confirmation", "granted_at": "2026-08-25T17:54:18+08:00", "scope": "Commit and push the verified TodoList fix as part of HanaKDE v0.0.4"},
@@ -13,7 +13,7 @@
   },
   "leadership": {"current": "root", "epoch": 1, "assigned_at": "2026-08-24T11:31:02+08:00", "history": []},
   "created_at": "2026-08-24T11:31:02+08:00",
-  "updated_at": "2026-08-25T17:54:18+08:00",
+  "updated_at": "2026-08-25T22:39:44+08:00",
   "completed_at": "2026-08-25T17:54:18+08:00",
   "archived": false,
   "archive_path": null,

@@ -9,9 +9,9 @@ planning_depth: standard
 planning_depth_reason: 跨插件 manifest/source 静态策略、Plugin Dev Loop diagnostics/scenario 和隔离删除 smoke，但不改变宿主公共接口。
 ready: true
 risk: high
-blocked_by: [T-01]
+blocked_by: [T-02, T-05]
 contract_ids: [AC-001, AC-016, AC-017, AC-018]
-owner: unassigned
+owner: root
 expected_changes: ["<Path>plugins/markdown-wechat/tests/policy.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/diagnostics.test.ts</Path>", "<Path>plugins/markdown-wechat/README.md</Path>"]
 writable_paths: ["<Path>plugins/markdown-wechat/tests/policy.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/diagnostics.test.ts</Path>", "<Path>plugins/markdown-wechat/README.md</Path>"]
 read_only_paths: ["<Path>plugins/markdown-wechat/manifest.json</Path>", "<Path>core/plugin-manager.ts</Path>", "<Path>core/plugin-dev-service.ts</Path>", "<Path>server/routes/plugins.ts</Path>", "<Path>scripts/build-server.mjs</Path>", "<Path>PLUGINS.md</Path>", "<Path>skills2set/hana-plugin-creator/SKILL.md</Path>"]
@@ -95,6 +95,11 @@ shared_path_owners: []
 | scenario | T-01 manifest.dev.scenarios + Plugin Dev scenario | 运行 open-page 和 render tool scenario | 可重复完成，失败类别可诊断 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-06.md</Path>` |
 | policy failure | static scan | `npx vitest run <Path>plugins/markdown-wechat/tests/policy.test.ts</Path>` | 无 network/migration/custom static route/third-party fetch | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-06.md</Path>` |
 | removal regression | isolated copy | 临时复制仓库，删除 plugin dir，执行 `npm run build:server`/启动 smoke | 构建启动成功，其它插件无 unresolved import | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-06.md</Path>` |
+
+- **Workspace checks：** Lead 在 current workspace 使用 Node 24 运行 policy/diagnostics 测试、插件 verify、宿主 diagnostics fixture 和隔离删除 build smoke。
+- **E2E disposition：** required：真实 diagnostics/scenario、Page/tool surfaces 与可删除启动回归跨插件和宿主生命周期边界。
+- **E2E owner/environment：** Lead / current-workspace；先运行 Plugin Dev 场景，再在可恢复临时副本中移除插件并执行 build/start smoke。
+- **Integration evidence：** 记录 implementation commit、parent before、direct-parent diagnostics/removal 验证和 result SHA；临时副本路径与清理事实写入 Evidence。
 
 ## 9. 发布、迁移与恢复
 

@@ -11,9 +11,9 @@ ready: true
 risk: high
 blocked_by: [T-02]
 contract_ids: [AC-005, AC-006, AC-008, AC-009]
-owner: unassigned
-expected_changes: ["<Path>plugins/markdown-wechat/src/clipboard/**</Path>", "<Path>plugins/markdown-wechat/src/download/**</Path>", "<Path>plugins/markdown-wechat/src/components/actions/**</Path>", "<Path>plugins/markdown-wechat/tests/clipboard.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/download.test.ts</Path>"]
-writable_paths: ["<Path>plugins/markdown-wechat/src/clipboard/**</Path>", "<Path>plugins/markdown-wechat/src/download/**</Path>", "<Path>plugins/markdown-wechat/src/components/actions/**</Path>", "<Path>plugins/markdown-wechat/tests/clipboard.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/download.test.ts</Path>"]
+owner: root
+expected_changes: ["<Path>plugins/markdown-wechat/src/clipboard/**</Path>", "<Path>plugins/markdown-wechat/src/download/**</Path>", "<Path>plugins/markdown-wechat/src/components/actions/**</Path>", "<Path>plugins/markdown-wechat/assets/**</Path>", "<Path>plugins/markdown-wechat/tests/clipboard.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/download.test.ts</Path>"]
+writable_paths: ["<Path>plugins/markdown-wechat/src/clipboard/**</Path>", "<Path>plugins/markdown-wechat/src/download/**</Path>", "<Path>plugins/markdown-wechat/src/components/actions/**</Path>", "<Path>plugins/markdown-wechat/assets/**</Path>", "<Path>plugins/markdown-wechat/tests/clipboard.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/download.test.ts</Path>"]
 read_only_paths: ["<Path>plugins/markdown-wechat/src/renderer/**</Path>", "<Path>packages/plugin-sdk/src/index.ts</Path>", "<Path>desktop/src/react/plugin-ui/capabilities.ts</Path>", "<Path>temp/md-wechat/src/lib/clipboard.js</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -95,6 +95,11 @@ shared_path_owners: []
 | 复制失败 | permission/API failure injection | 禁用 ClipboardItem/selection 或拒绝权限 | 不报告成功，提供源码复制/HTML 下载 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-03.md</Path>` |
 | 正常下载 | browser download smoke | 点击 Markdown/HTML 导出并读取下载文件 | 内容、MIME、扩展名正确，不写 workspace | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-03.md</Path>` |
 | 回归 | UI renderer test | `npx vitest run <Path>plugins/markdown-wechat/tests/download.test.ts</Path>` | 下载动作不改变 source/theme/private state | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-03.md</Path>` |
+
+- **Workspace checks：** Lead 在 current workspace 使用 Node 24 运行 clipboard/download 测试与插件 typecheck/build/verify。
+- **E2E disposition：** required：ClipboardItem、selection fallback、用户手势和浏览器下载属于真实 Chromium 权限/下载边界。
+- **E2E owner/environment：** Lead / current-workspace；真实 Page 中验证允许、拒绝、API 缺失、desktop/narrow 下载和 payload。
+- **Integration evidence：** 记录 implementation commit、parent before、direct-parent 浏览器验证和 result SHA。
 
 ## 9. 发布、迁移与恢复
 

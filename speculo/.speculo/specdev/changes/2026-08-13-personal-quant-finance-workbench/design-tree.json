@@ -3,7 +3,7 @@
   "artifact": "design-tree",
   "change": "2026-08-13-personal-quant-finance-workbench",
   "status": "consensus",
-  "round": 3,
+  "round": 5,
   "nodes": [
     {
       "id": "D-001",
@@ -125,6 +125,50 @@
       "round": 3,
       "answer": "用户确认：首版所有规划模块全部上线，包括 A/HK 行情与 K 线、资产/自选、财务/公告/研报/新闻、筛选/因子、回测、监控/告警、组合/持仓、Agent 研究、导入导出。上线含义是每个模块都有可操作入口、完整状态和替代路径；具体市场/数据集/provider 可以如实标记 supported/partial/experimental/unavailable，但不得隐藏模块或将不可用结果伪装为可信结果。",
       "log_ref": "LOG-011"
+    },
+    {
+      "id": "D-012",
+      "title": "同花顺官方 Provider 的产品角色",
+      "question": "Financial-API 在首版中应是什么角色：仅列为用户可选 provider，还是在用户配置 API Key 且 capability probe 通过后，成为 A 股适用 dataset 的出厂优先 provider？它不能覆盖港股、分钟 K、新闻/公告/研报原文，也不能自动满足 PIT 回测。",
+      "depends_on": [],
+      "recommendation": "采用出厂内置但 BYOK 的 `hithink-rest` adapter：对 A 股标的、日线、复权、财务、估值、日历、指数/板块、特色数据和基金逐项探测并优先路由；未配置 Key 时显示 unavailable + 配置入口；港股和缺失 dataset 继续使用其他 provider/导入，绝不全局绑定同花顺。",
+      "status": "answered",
+      "round": 4,
+      "answer": "用户确认按推荐执行：内置 BYOK 的 hithink-rest adapter；用户配置 API Key 且逐 dataset capability probe 通过后，作为 A 股适用数据集的出厂优先 provider；港股和缺失数据继续使用其他 provider 或导入。",
+      "log_ref": "LOG-013"
+    },
+    {
+      "id": "D-013",
+      "title": "数据源选择与切换语义",
+      "question": "多 provider 场景采用何种用户与运行时语义：只提供全局数据源开关，还是按 market x dataset x workflow 提供 `auto` 与 `pinned`，并在研究/回测运行开始后冻结来源？",
+      "depends_on": [],
+      "recommendation": "采用逐 dataset 的 `auto | pinned`。交互式查询的 auto 只在身份、字段、单位、复权、日历、PIT 和质量语义等价时自动 fallback，并显示切换记录；ResearchRun/BacktestRun 开始后冻结 provider、adapter version、schema hash、snapshot lineage 和 source policy，失败时暂停或新建 run，不在运行中静默换源。",
+      "status": "answered",
+      "round": 4,
+      "answer": "用户确认按推荐执行：按 market x dataset x workflow 使用 auto | pinned；交互查询仅允许有记录的语义等价 fallback；ResearchRun/BacktestRun 启动后冻结来源 manifest，运行中不得静默换源。",
+      "log_ref": "LOG-014"
+    },
+    {
+      "id": "D-014",
+      "title": "API Key 与数据授权形态",
+      "question": "若启用同花顺官方 Provider，首版采用用户自有 API Key，还是由产品方提供共享 Key/代理服务？这会改变凭据保管、配额归属、数据条款和系统落点。",
+      "depends_on": ["D-012"],
+      "recommendation": "首版只采用 BYOK；Key 通过插件 sensitive configuration 录入并仅在 Node route 中读取，禁止嵌入、导出或进入日志。共享 Key、零配置代理或数据再分发必须先取得书面商业/数据授权，并另行设计服务端配额与凭据保管。",
+      "status": "answered",
+      "round": 5,
+      "answer": "用户确认按完整推荐执行：首版只采用 BYOK，Key 由敏感配置保存并仅在 Node route 中读取；不提供共享 Key 或产品代理，除非未来先取得书面商业和数据授权并另行设计。",
+      "log_ref": "LOG-015"
+    },
+    {
+      "id": "D-015",
+      "title": "Market Dumps 与本地历史源",
+      "question": "是否把官方 Market Dumps + 插件私有 DuckDB 纳入首版数据源合同，用于全市场/多标的历史研究和价格型回测？这需要验证 native dependency 的跨平台打包、数据体积、增量同步、迁移和卸载行为。",
+      "depends_on": ["D-012", "D-013"],
+      "recommendation": "现在就定义 `hithink-market-dump` 本地 source kind 和路由语义，但先做隔离原型；只有 macOS/Windows/Linux 打包、首次下载、断点续传、近 10 日增量、复权、质量检查、磁盘预算和卸载均通过后才标 supported。直接实现 Node 插件私有 DuckDB，不复制或拉起许可证不清的 Python marketdb/CLI 子进程。",
+      "status": "answered",
+      "round": 5,
+      "answer": "用户确认按完整推荐执行：现在定义 hithink-market-dump 本地 source kind；用 Node 插件私有 DuckDB 做隔离原型，跨平台打包、同步、复权、质量、磁盘和卸载全部通过后才标 supported；不复制或拉起 Python/CLI 子进程。",
+      "log_ref": "LOG-016"
     }
   ]
 }

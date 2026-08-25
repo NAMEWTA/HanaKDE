@@ -1131,6 +1131,42 @@ function validateTriage(path, expectedChange, errors) {
   return { path, meta, body };
 }
 
+function validateEngineeringCognitiveMentor(path, expectedChange, errors) {
+  if (!isFile(path)) return null;
+  const { meta, body } = parseFrontmatter(path);
+  const required = [
+    "schema_version",
+    "artifact",
+    "change",
+    "status",
+    "primary_mode",
+    "current_phase",
+    "understanding_status",
+    "updated_at",
+    "closed_at",
+    "last_mlog_id",
+  ];
+  const missing = required.filter((key) => !(key in meta));
+  if (missing.length) errors.push(`engineering-cognitive-mentor.md: missing keys ${JSON.stringify(missing)}`);
+  if (meta.schema_version !== 1 || meta.artifact !== "engineering-cognitive-mentor") {
+    errors.push("engineering-cognitive-mentor.md: artifact/schema_version must be engineering-cognitive-mentor/1");
+  }
+  if (meta.change !== expectedChange) errors.push("engineering-cognitive-mentor.md: change must equal directory name");
+  if (!new Set(["active", "blocked", "completed", "cancelled"]).has(meta.status)) {
+    errors.push(`engineering-cognitive-mentor.md: invalid status ${meta.status}`);
+  }
+  if (!new Set(["unverified", "partial", "confirmed", "accepted-summary", "declined", "blocked"]).has(meta.understanding_status)) {
+    errors.push(`engineering-cognitive-mentor.md: invalid understanding_status ${meta.understanding_status}`);
+  }
+  if (meta.status === "completed" && (!meta.closed_at || !String(meta.last_mlog_id ?? "").trim())) {
+    errors.push("engineering-cognitive-mentor.md: completed artifact requires closed_at and last_mlog_id");
+  }
+  for (const heading of ["## 3. 执行摘要", "## 10. 未决问题与待验证项", "## 11. 理解确认", "## 12. 后续路线与移交", "## 14. 完整交互日志"]) {
+    if (!body.includes(heading)) errors.push(`engineering-cognitive-mentor.md: missing '${heading}'`);
+  }
+  return { path, meta, body };
+}
+
 function validateDiagnosis(path, expectedChange, errors) {
   if (!isFile(path)) {
     errors.push("missing diagnosis artifact");
@@ -1276,7 +1312,10 @@ function validateMap(path, errors) {
 }
 
 function validateGoalPlan(path, errors) {
-  if (!isFile(path)) return null;
+  if (!isFile(path)) {
+    errors.push(`${basename(path)}: required Goal Plan file does not exist`);
+    return null;
+  }
   const { meta, body } = parseFrontmatter(path);
   const required = [
     "schema_version",
@@ -2079,6 +2118,12 @@ function validateChange(change, stage = null, repoRoot = null) {
   const triage = isFile(triagePath) || sourceRequired
     ? validateTriage(triagePath, basename(change), errors)
     : null;
+  const mentor = validateEngineeringCognitiveMentor(
+    join(change, "engineering-cognitive-mentor.md"),
+    basename(change),
+    errors,
+  );
+  const completedNonImplementationArtifact = mentor?.meta.status === "completed";
   const diagnosisPath = join(change, "diagnosis.md");
   if (isFile(diagnosisPath) || stage === "diagnosis") {
     validateDiagnosis(diagnosisPath, basename(change), errors);
@@ -2086,7 +2131,8 @@ function validateChange(change, stage = null, repoRoot = null) {
   validateReviews(change, stage === "review", errors);
   validatePrototypes(change, stage === "prototype", errors);
 
-  const specRequired = new Set(["spec", "tickets", "goal-plan", "implement", "complete"]).has(stage);
+  const specRequired = new Set(["spec", "tickets", "goal-plan", "implement"]).has(stage)
+    || (stage === "complete" && !completedNonImplementationArtifact);
   const specPath = join(change, "spec.md");
   const spec = isFile(specPath) || specRequired
     ? validateSpec(specPath, errors, warnings)
@@ -2200,7 +2246,9 @@ function validateChange(change, stage = null, repoRoot = null) {
         (id) => !new RegExp(`${escapeRegExp(id)}.*\\bdeferred\\b`, "i").test(ticketsMap.body),
       );
     }
-    if (uncovered.length) {
+    // Direct Specs intentionally have no Ticket artifacts. Contract coverage is
+    // only a Ticket-mode invariant once the Spec opts into Tickets or Tickets exist.
+    if ((spec.meta.ready_for_tickets === true || tickets.size > 0) && uncovered.length) {
       errors.push(`Spec acceptance contracts are not covered by Tickets: ${JSON.stringify(uncovered)}`);
     }
     if (spec.meta.ready_for_tickets === true && !declaredContracts.size) {
@@ -2342,6 +2390,7 @@ function validateChange(change, stage = null, repoRoot = null) {
   if (
     stage === "complete" &&
     !ticketFiles.length &&
+    !completedNonImplementationArtifact &&
     !isFile(join(change, "evidence", "direct-spec.md"))
   ) {
     errors.push("complete stage without Tickets requires evidence/direct-spec.md");

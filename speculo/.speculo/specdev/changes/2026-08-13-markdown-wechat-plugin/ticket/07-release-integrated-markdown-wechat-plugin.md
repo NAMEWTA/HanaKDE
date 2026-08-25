@@ -11,7 +11,7 @@ ready: true
 risk: critical
 blocked_by: [T-02, T-03, T-04, T-05, T-06]
 contract_ids: [AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010, AC-011, AC-012, AC-013, AC-014, AC-015, AC-016, AC-017, AC-018]
-owner: unassigned
+owner: root
 expected_changes: ["<Path>plugins/markdown-wechat/**</Path>", "<Path>speculo/.speculo/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-07.md</Path>"]
 writable_paths: ["<Path>plugins/markdown-wechat/**</Path>"]
 read_only_paths: ["<Path>package.json</Path>", "<Path>package-lock.json</Path>", "<Path>core/**</Path>", "<Path>server/**</Path>", "<Path>desktop/**</Path>", "<Path>scripts/**</Path>", "<Path>tests/**</Path>", "<Path>examples/plugins/**</Path>", "<Path>temp/md-wechat/**</Path>"]
@@ -38,7 +38,7 @@ shared_path_owners: []
 
 ### 已锁定决策
 
-- 只有 T-01～T-06 Evidence 完整、Ticket 状态 ready/review 后才能运行 T-07。
+- 只有 T-01～T-06 Evidence 完整且 Ticket 状态均为 done 后才能运行 T-07。
 - 任何宿主/根依赖/公共测试需求均停止并走 deviation control，不在发布票中偷偷扩大范围。
 - 发布阻塞硬门是插件加载/删除、核心渲染/复制、ResourceIO 安全和 Agent 产出；主题数量差异可作为非阻塞残余风险，但不得掩盖合同失败。
 
@@ -96,6 +96,11 @@ shared_path_owners: []
 | 构建 | server/client/typecheck | `npm run typecheck`; `npm run build:server`; `npm run build:client` | plugin runtime/assets 可解析并收录 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-07.md</Path>` |
 | Browser E2E | Page/Widget/clipboard/download | Playwright desktop + narrow smoke | 无重叠，复制/下载状态准确 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-07.md</Path>` |
 | Removal/release | isolated plugin deletion | 复制临时工作树，删除 plugin dir，build/start | HanaKDE 仍可构建启动，无 unresolved plugin import | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-07.md</Path>` |
+
+- **Workspace checks：** Lead 在 current workspace 使用 Node 24 重跑插件 verify、宿主定向回归、根 typecheck、server/client build 与路径审计。
+- **E2E disposition：** required：最终发布门必须覆盖真实 Page/Widget、clipboard/download、ResourceIO、Agent SessionFile、diagnostics 和 removal。
+- **E2E owner/environment：** Lead / current-workspace；所有前票 done 后运行 desktop/narrow host E2E 与隔离删除 build/start smoke。
+- **Integration evidence：** 记录最终 implementation commit、parent before、direct-parent 全量 Gate、result SHA、父分支包含关系和未运行项。
 
 ## 9. 发布、迁移与恢复
 

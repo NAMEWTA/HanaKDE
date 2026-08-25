@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: [T-04]
 contract_ids: [AC-009]
-owner: implementation-owner
+owner: root
 expected_changes: ["<Path>plugins/finance-workbench/src/research-data/**</Path>", "<Path>plugins/finance-workbench/src/evidence/**</Path>", "<Path>plugins/finance-workbench/routes/research-data.*</Path>", "<Path>plugins/finance-workbench/tests/research-data.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/evidence.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/finance-workbench/src/research-data/**</Path>", "<Path>plugins/finance-workbench/src/evidence/**</Path>", "<Path>plugins/finance-workbench/routes/research-data.*</Path>", "<Path>plugins/finance-workbench/tests/research-data.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/evidence.integration.test.ts</Path>"]
 read_only_paths: ["<Path>plugins/finance-workbench/src/domain/**</Path>", "<Path>plugins/finance-workbench/src/data/**</Path>", "<Path>plugins/finance-workbench/src/assets/**</Path>", "<Path>plugins/finance-workbench/src/quotes/**</Path>", "<Path>temp/finance-references/Vibe-Research/**</Path>", "<Path>temp/finance-references/TradingAgents-astock/**</Path>"]
@@ -93,7 +93,12 @@ shared_path_owners: []
 | 正常路径 | dossier/evidence integration | 查询 A/HK 财务、公告、研报、新闻 fixture | 每条记录有来源、时间、hash、coverage 和质量状态 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>` |
 | 失败路径 | PIT/license/source fault | 删除原文、缺 PIT/单位、ResourceIO deny | partial/blocked，不能输出确定性结论或泄露正文 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>` |
 | 回归 | T-02 snapshot/T-03 identity | 运行共享数据合同测试 | EvidenceRef 与 AssetRef 版本兼容 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>` |
-| UI E2E（owner：当前执行 owner） | dossier page | 桌面/窄屏打开记录、原文和缺口 | 状态、引用和替代路径可操作 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>` |
+| UI E2E（owner：Lead） | dossier page | 桌面/窄屏打开记录、原文和缺口 | 状态、引用和替代路径可操作 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-05.md</Path>` |
+
+- **Workspace checks（current-workspace）：** implementation owner 在 current workspace 运行 dossier/EvidenceRef、PIT/license/source fault fixture、ResourceIO 拒绝、脱敏、类型检查和插件构建，不创建 source worktree。
+- **E2E disposition：** required：财务与内容记录从 provider/ResourceIO 进入 dossier UI 并打开原始证据，跨越外部来源、权限和浏览器边界，必须证明缺证据不会冒充确定性事实。
+- **E2E owner/environment：** Lead / current-workspace；在 direct-parent 状态于桌面/窄屏查询记录、打开/拒绝原文并模拟缺 PIT、缺许可和引用失效，预期 EvidenceRef、coverage、时间与 partial/blocked 状态一致且私有正文不泄露。
+- **Integration evidence（direct-parent）：** 记录 implementation commit、parent before SHA、ResourceIO/provider 场景、E2E 结果与脱敏核对、父分支 result SHA 及包含关系。
 
 ## 9. 发布、迁移与恢复
 

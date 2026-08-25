@@ -17,8 +17,8 @@ assets:
   - <Path>{roots.state}/specdev/changes/2026-08-24-knowledge-multi-root-explorer-redesign/prototypes/PROTO-001/assets/multi-root-explorer-narrow.png</Path>
 winner: multi-root-explorer + Desk tree-row renderer
 promotion_target: <Path>{roots.state}/specdev/changes/2026-08-24-knowledge-multi-root-explorer-redesign/spec.md</Path>
-cleanup_status: registered
-updated_at: 2026-08-24T11:32:00+08:00
+cleanup_status: clean
+updated_at: 2026-08-25T22:39:44+08:00
 ---
 
 # Prototype PROTO-001: Knowledge 多根 Explorer
@@ -48,5 +48,5 @@ updated_at: 2026-08-24T11:32:00+08:00
 
 - **Promotion target:** <Path>{roots.state}/specdev/changes/2026-08-24-knowledge-multi-root-explorer-redesign/spec.md</Path>
 - **Main cleanup:** clean
-- **Temporary branch retained:** yes，等待独立 cleanup 授权
+- **Temporary branch retained:** no；完成审计时原 branch 与 worktree 已不存在，本次仅回写观察事实，未执行删除
 - **Wayfinder solution comment:** not-applicable

@@ -82,3 +82,87 @@ Agent 工具 schema 必须表达 `requiresConfirmation`、数据范围、外发�
 ### Verification / Migration
 
 静态扫描、插件发现/卸载测试、manifest capability 校验和无金融插件宿主启动测试必须证明实现没有越界。无需从旧 `quant-finance-workbench` 目录迁移生产代码；该名称只保留在历史研究和决策记录中。
+
+## ADR-004: 同花顺官方 REST 作为 BYOK A 股优先 Provider
+
+**Status:** accepted
+**Source:** LOG-013 / LOG-015 / user decision 2026-08-23
+**Supersedes:** none
+
+### Context
+
+现有多 provider 规格没有指定一个条款和契约相对清晰的 A 股优先来源。Financial-API 由同花顺官方维护并提供结构化 REST，但其能力按账号授权，公开范围不覆盖港股、分钟 K 和新闻/公告/研报原文，公开资料也没有赋予产品共享 Key 或数据再分发权。
+
+### Decision
+
+在 `<Path>plugins/finance-workbench/</Path>` 内置 `hithink-rest` adapter。用户以 BYOK 配置 API Key，逐 market/dataset capability probe 通过后，该 adapter 成为适用 A 股数据集的出厂优先 provider。未配置、未授权或质量门失败时显示 unavailable/partial/blocked，并保留其他 provider 与导入路径。首版不嵌入共享 Key、不建立产品代理，也不把同花顺设为港股或全域唯一来源。
+
+### Trade-off
+
+相较于零配置共享凭据，BYOK 增加一次用户配置；换取账号、配额和授权边界明确，并避免产品方承担未约定的数据代理与再分发责任。相较于普通可选 provider，出厂优先能减少 A 股默认路径的不确定性，但必须维护逐数据集能力矩阵。
+
+### Consequences
+
+- Key 只在插件敏感配置与 Node route 中读取，不进入前端、日志、快照、导出或 fixture。
+- `fuyao.aicubes.cn` 通过 manifest network allowlist 和 `ctx.network.fetch()` 访问。
+- 港股、分钟 K、PIT 历史、原文内容及其他缺失数据继续使用其他合法 provider 或用户导入。
+
+### Verification / Migration
+
+使用最小授权请求验证实际账号 capability、错误码、限流、schema、时间、单位和空值；未通过项不得标 supported。共享 Key 或代理服务只能由未来获得书面授权的新决定引入。
+
+## ADR-005: 逐数据集 SourcePolicy 与运行来源冻结
+
+**Status:** accepted
+**Source:** LOG-014 / user decision 2026-08-23
+**Supersedes:** none
+
+### Context
+
+A 股、港股和不同数据集的 provider 覆盖与质量不对称。全局数据源开关无法表达这种差异；研究和回测中途静默换源又会破坏可复现性、PIT、单位和快照 lineage。
+
+### Decision
+
+每个 market x dataset x workflow 使用 `auto | pinned` SourcePolicy。交互式 `auto` 只在身份、字段、单位、复权、日历、PIT 和质量语义等价时执行有记录的 fallback；`pinned` 只使用指定来源。ResearchRun 和 BacktestRun 启动后冻结 provider、adapter version、schema hash、snapshot lineage 和 SourcePolicy version，运行中来源失败时暂停或创建新 run，不静默切换。
+
+### Trade-off
+
+比全局开关和无条件 fallback 增加路由决策、UI 与审计复杂度；换取跨数据集正确表达、用户控制和确定性运行可复现性。
+
+### Consequences
+
+- DataSnapshot 记录 SourceDecision、候选排除原因和切换历史。
+- 不同 provider 的行不得在未知 lineage 下合并成同一可信快照。
+- 监控可切换等价实时源，但必须保存 source change；研究和回测需新建 run。
+
+### Verification / Migration
+
+fixture 覆盖 auto、pinned、等价/非等价 fallback、运行中失败、重启恢复和 source manifest 重放；旧快照缺来源清单时隔离或降级。
+
+## ADR-006: Market Dumps 本地源须通过跨平台原型门
+
+**Status:** accepted
+**Source:** LOG-016 / user decision 2026-08-23
+**Supersedes:** none
+
+### Context
+
+全市场、多标的和多年历史研究不适合逐股 REST。官方 Market Dumps 提供全 A 股日 K、增量和复权事件，但 Node DuckDB native dependency、数据体积、同步恢复、卸载和 Python 包许可证冲突尚未在 Hana 插件分发模型中验证。
+
+### Decision
+
+在 SourcePolicy 中定义 `hithink-market-dump` 插件私有本地 source kind，并以 Node DuckDB 为候选实现。它只有在 macOS、Windows、Linux 的打包加载、首次下载、断点续传、近十日增量、去重、复权、质量检查、磁盘预算、迁移和卸载原型全部通过后才能标 supported。不得复制或拉起 Python marketdb/CLI 子进程；原型失败时保持 unavailable/blocked，不修改宿主绕过。
+
+### Trade-off
+
+比直接绑定官方 CLI 或 Python 需要更多插件侧实现和跨平台验证；换取单一 Node 运行时、插件私有数据归属、可删除性与许可边界清晰。
+
+### Consequences
+
+- 本地历史源先进入 Prototype Work，再回到 Spec/Ticket 修订。
+- 大规模价格型研究可优先本地；财务、指数历史成分和其他未进入 dump 的数据仍按各自 provider 能力处理。
+- 数据目录必须有容量预估、同步状态、版本迁移和卸载/保留选择。
+
+### Verification / Migration
+
+原型必须提供三平台 artifact/loading 证据、损坏/中断恢复、重复增量幂等、复权 fixture、质量检查和删除插件后宿主可启动证据；任一门失败不得宣称 supported。

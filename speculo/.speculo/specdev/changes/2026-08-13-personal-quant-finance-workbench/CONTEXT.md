@@ -35,3 +35,15 @@ _Avoid_: 以分阶段路线删除首版模块；以“全部上线”取消质�
 
 **插件实现目录**：本 change 的生产实现严格限定在 `<Path>plugins/finance-workbench/</Path>`；manifest、UI、路由、工具、任务、数据适配器、私有数据和测试 fixture 均属于该插件目录。若需要宿主 SDK 之外的能力，另开 system change，不得把金融实现写入 HanaKDE 本体或其他插件。
 _Avoid_: 使用 `quant-finance-workbench` 作为新实现目录；通过修改 core/server/shared 绕过插件边界
+
+**同花顺官方 Provider**：`hithink-rest` 是首版内置的 BYOK A 股 provider adapter；用户配置 API Key 且逐数据集 capability probe 通过后，它成为适用 A 股数据集的出厂优先来源，不承担港股、分钟 K 或新闻/公告/研报原文能力。
+_Avoid_: 全局同花顺数据源；把有效 API Key 等同于所有 capability 均获授权
+
+**数据源策略**：每个 market x dataset x workflow 使用 `auto | pinned` 的 SourcePolicy。`auto` 只在身份、字段、单位、复权、日历、PIT 和质量语义等价时允许有记录的 fallback；`pinned` 只使用用户指定来源。
+_Avoid_: 单一全局数据源开关；无记录的静默 fallback
+
+**运行来源清单**：ResearchRun 和 BacktestRun 启动时冻结 provider、adapter version、schema hash、snapshot lineage 与 SourcePolicy version；运行中来源失败时暂停或新建 run，不静默换源。
+_Avoid_: 用不同来源继续同一个研究或回测 run；混合未知 lineage
+
+**同花顺本地历史源**：`hithink-market-dump` 是基于官方 Market Dumps 和插件私有 Node DuckDB 的候选本地 source kind；只有跨平台打包、同步、复权、质量、磁盘和卸载原型全部通过后才能标记 supported。
+_Avoid_: 逐股 REST 拉取全市场历史；复制或拉起 Python marketdb/CLI 子进程

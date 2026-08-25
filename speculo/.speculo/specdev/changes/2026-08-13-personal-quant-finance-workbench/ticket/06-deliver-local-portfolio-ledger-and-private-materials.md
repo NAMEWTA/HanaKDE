@@ -10,8 +10,8 @@ planning_depth_reason: 涉及个人持仓、成本/P&L、隐私、ResourceIO 和
 ready: true
 risk: critical
 blocked_by: [T-05]
-contract_ids: [AC-011, AC-012, AC-013, AC-015]
-owner: implementation-owner
+contract_ids: [AC-011, AC-012, AC-013, AC-014, AC-015]
+owner: root
 expected_changes: ["<Path>plugins/finance-workbench/src/portfolio/**</Path>", "<Path>plugins/finance-workbench/src/private-materials/**</Path>", "<Path>plugins/finance-workbench/routes/portfolio.*</Path>", "<Path>plugins/finance-workbench/tests/portfolio.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/private-materials.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/finance-workbench/src/portfolio/**</Path>", "<Path>plugins/finance-workbench/src/private-materials/**</Path>", "<Path>plugins/finance-workbench/routes/portfolio.*</Path>", "<Path>plugins/finance-workbench/tests/portfolio.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/private-materials.integration.test.ts</Path>"]
 read_only_paths: ["<Path>plugins/finance-workbench/src/domain/**</Path>", "<Path>plugins/finance-workbench/src/data/**</Path>", "<Path>plugins/finance-workbench/src/assets/**</Path>", "<Path>plugins/finance-workbench/src/research-data/**</Path>", "<Path>temp/finance-references/Vibe-Research/**</Path>", "<Path>PLUGIN_SDK.md</Path>"]
@@ -94,7 +94,12 @@ shared_path_owners: []
 | 正常路径 | ledger/ResourceIO integration | 预览并提交手工和 CSV/JSON/Parquet 账本，计算 P&L，打开私有引用 | 版本、成本、股数、费用、币种和引用可追溯 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>` |
 | 失败路径 | parser/permission/fx fixture | 注入坏行、重复、版本冲突、缺价格/汇率、ResourceIO deny、secret | 不写入/partial/stale/permission_denied，正文不外发 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>` |
 | 回归 | T-03/T-04/T-05 integration | 运行身份、行情、证据测试 | 账本只接受 confirmed AssetRef 和 DataSnapshot | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>` |
-| UI E2E（owner：当前执行 owner） | portfolio/import/materials page | 桌面/窄屏完成预览、拒绝、提交和撤销引用 | 字段不溢出，隐私状态清晰且可恢复 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>` |
+| UI E2E（owner：Lead） | portfolio/import/materials page | 桌面/窄屏完成预览、拒绝、提交和撤销引用 | 字段不溢出，隐私状态清晰且可恢复 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-06.md</Path>` |
+
+- **Workspace checks（current-workspace）：** implementation owner 在 current workspace 运行 ledger、P&L、导入 parser、ResourceIO/permission、缺价格/汇率和隐私回归 fixture、类型检查及插件构建，不创建 source worktree。
+- **E2E disposition：** required：导入预览/提交、私有文件授权、账本持久化和 P&L 展示跨越文件、权限、存储、行情与 UI 边界，涉及个人金融数据完整性和隐私。
+- **E2E owner/environment：** Lead / current-workspace；在 direct-parent 状态于桌面/窄屏执行手工与文件导入、拒绝坏行、确认提交、缺价/汇率降级、打开及撤销私有引用，预期无未确认写入、无正文外发且 P&L 状态可追溯。
+- **Integration evidence（direct-parent）：** 记录 implementation commit、parent before SHA、隔离测试文件与授权场景、E2E/隐私结果、父分支 result SHA 及包含关系。
 
 ## 9. 发布、迁移与恢复
 

@@ -9,7 +9,7 @@
 1. **需要修改特权子系统：能装进盒子。** 首选设计只消费 Hana 已暴露的 SDK、EventBus、ResourceIO、模型和任务能力，不改写会话、Provider Registry、权限主体或系统迁移。若后续确认必须新增通用量化运行时、原生 TCP/进程能力或系统数据迁移，应拆出独立系统前置 change，不能塞回金融插件。
 2. **定义被别人依赖的契约原语：能装进盒子。** 金融能力只服务本插件；对外可选能力必须允许缺失并优雅降级，插件不拥有新的系统 Registry。
 3. **启动即常驻且不可按需激活：能装进盒子。** 页面、工具和研究流程可按打开页面或调用工具激活；监控/同步任务即使使用启动激活，也只是可删除的插件任务，不得成为 Hana 启动前置。
-4. **可整块删除性：能装进盒子。** 删除 `<Path>plugins/quant-finance-workbench/</Path>` 后只失去金融工作台，Hana 的会话、模型、资源与其他插件仍完整运行。
+4. **可整块删除性：能装进盒子。** 删除 `<Path>plugins/finance-workbench/</Path>` 后只失去金融工作台，Hana 的会话、模型、资源与其他插件仍完整运行。
 5. **可用贡献面表达：能装进盒子，存在待验证边界。** 预期由 page/widget、routes、tools、skills、configuration、lifecycle、EventBus 和 TaskRegistry 表达。Python 量化库、TCP 行情、长时间计算、流式进度与本地子进程是否能完全落在公开插件契约内，交由 Wayfinder 专项调查；不能表达的部分必须降级、外置或另立系统 change。
 6. **权限自洽：能装进盒子，采用 full-access。** 外部 HTTP 只经 `ctx.network.fetch()` 和白名单；用户文件只经 `ctx.resources`；密钥只经 `ctx.config`；模型推理经 `sampleText()` 或插件私有 Session/Agent；iframe 只调用同插件 route。不得绕过权限系统或把秘密放进前端资产。
 7. **产物归属：能装进盒子。** 行情缓存、索引和任务状态属于插件私有存储；研究笔记、导出报告和用户数据通过 ResourceIO 或 SessionFile 交付；不得创建未经契约管理的全局数据库或跨插件共享状态。
@@ -26,7 +26,7 @@
 
 **落点建议**
 
-- 目录：`<Path>plugins/quant-finance-workbench/</Path>`。
+- 目录：`<Path>plugins/finance-workbench/</Path>`。
 - 贡献面：page 为主工作台；可选 widget；routes 作为浏览器与数据/任务后端边界；tools 供 Agent 调用；skills 提供投研纪律；configuration 管理数据源与非敏感偏好；lifecycle/TaskRegistry 管理可恢复同步和监控。
 - 权限：`full-access`。候选 capabilities 包含 `network.fetch`、`model.sample`、按实际使用声明的 session/agent、ResourceIO read/write/materialize，以及 UI hostCapabilities；最终清单必须遵守最小权限。
 - SDK 约束：iframe 使用 `hana.api.fetch()`；第三方请求只在 Node 侧使用 `ctx.network.fetch()`；首屏不自动调用 LLM；密钥只存 `ctx.config`；用户资源不使用裸 `fs`；插件生成文件通过 SessionFile 交付。

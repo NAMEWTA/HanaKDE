@@ -8,7 +8,7 @@
 - **Workspace/branch：** current workspace `/Users/wta/Documents/01-Code/myCode/HanaKDE` / `hanakde`
 - **实施前基线：** `b59ab7496379ab1de5c92d6a5dde353ef01f119b`
 - **最终 checkpoint：** implementation commit `18310e5e7afef6a392b4786a8ab2269cb298d059`
-- **状态：** review；远端 Node 24 Knowledge E2E 与 validator pending
+- **状态：** completed；Node 24 Knowledge E2E、Direct Spec validator 与完成门均已通过
 
 ## 1. 实现摘要
 
@@ -47,8 +47,8 @@ Knowledge 删除独立 Sources 栏，把 `main` 与 mounted sources 作为同一
 | AC-002 | KnowledgeLayout | 组件测试输入 `Main workspace` 并断言不再显示强制 `Working directory` | pass-local |
 | AC-003 | Shared Renderer / Desk / Knowledge | 三组测试均断言 `data-workspace-tree-row`；截图测得行高集合仅 `[28]`；继续使用 `ICONS/getFileIcon` | pass-local |
 | AC-004 | 来源状态 | 既有 loading/error/retry/unavailable 组件回归通过，状态移动到 Explorer 内 | pass-local |
-| AC-005 | 600x720 窄窗口 | `production-narrow.png`；`horizontalOverflow=false`、tree 在 editor 前、两者宽度均 599px | pass-local；real E2E pending |
-| AC-006 | 选择/键盘/拖拽/打开 | Knowledge tree integration/keyboard 与 DeskSection 定向回归 31/31，全部定向测试 50/50 | pass-local；real E2E pending |
+| AC-005 | 600x720 窄窗口 | `production-narrow.png`；`horizontalOverflow=false`；Node 24 desktop E2E-KW-023 通过五语言、主题、窄屏与可访问性检查 | pass |
+| AC-006 | 选择/键盘/拖拽/打开 | Knowledge tree integration/keyboard 与 DeskSection 定向回归 31/31；Node 24 desktop E2E-KW-015 通过 | pass |
 
 ## 5. Workspace Verification
 
@@ -63,13 +63,15 @@ Knowledge 删除独立 Sources 栏，把 `main` 与 mounted sources 作为同一
 | `npm run build:renderer` | current-workspace | pass | Vite 3131 modules；仅既有 script/chunk warning |
 | 路由隔离 Playwright desktop/narrow 截图 | current-workspace, `http://127.0.0.1:5173/index.html` | pass | 单树、双根、28px 行高；桌面/窄屏均无横向溢出 |
 | `git diff --check` | current-workspace | pass | 无 whitespace error |
-| `npm run test:knowledge:e2e:desktop -- E2E-KW-001-shell.spec.ts` 与 web-open | current-workspace | blocked-before-assertion | fixture health 为 `unavailable`；当前 Node 22.22.3 无法加载 ABI 137 的 `better-sqlite3` |
+| `volta run --node 24.16.0 npm run test:knowledge:e2e:desktop -- E2E-KW-001-shell.spec.ts` | current-workspace / Node 24.16.0 ABI 137 | pass | E2E-KW-001 与 E2E-KW-023，2/2 passed |
+| `volta run --node 24.16.0 npm run test:knowledge:e2e:open -- E2E-KW-001-shell.spec.ts` | current-workspace / Node 24.16.0 ABI 137 | pass | E2E-KW-001 passed；desktop-only E2E-KW-023 按项目条件 skipped |
+| `volta run --node 24.16.0 npx playwright test -c tests/knowledge-workspace-e2e/playwright.config.ts --project=desktop-full E2E-KW-014-024-resource-operations.spec.ts --grep E2E-KW-015` | current-workspace / Node 24.16.0 ABI 137 | pass | 键盘、范围选择、上下文、排序、预览与 reveal，1/1 passed |
 | `npm test` | current-workspace | not-a-reliable-gate | retained prototype worktree 被重复收集，另含 native ABI 与外部 suite；2480 files，24220 pass / 513 fail / 16 skip |
 | `npm run lint` | current-workspace | not-a-reliable-gate | 递归进入 retained worktree 及其 `node_modules` symlink；41641 problems；目标 ESLint 单独通过 |
 
 - **失败后修复与重跑：** 共享 CSS 初次触发 2 个 bare-spacing 与 2 个 hardcoded-color；改为仓库 spacing token 和 `color-mix` 后 style-discipline 8/8，并重跑组件、类型、构建和视觉验证。
-- **未运行检查：** 可执行的真实 Knowledge E2E。项目要求 Node `>=24.12.0 <25`，本机仅发现 Volta Node `22.22.3`；`better-sqlite3` 当前编译为 NODE_MODULE_VERSION 137，而运行时要求 127。未擅自安装 Node 或重建依赖。
-- **E2E：** required；当前 disposition 为 environment-blocked，owner 为 Lead，恢复条件是使用项目要求的 Node 24.12+ 并安装 ABI 匹配的依赖后重跑 desktop/open 场景。
+- **未运行检查：** 无合同要求的未运行检查；web-open 的 E2E-KW-023 按测试自身 desktop-only 条件跳过，不是缺失验证。
+- **E2E：** required / passed；owner 为 Lead，使用本机已有 Volta Node 24.16.0 与 ABI 137 的 `better-sqlite3`，未安装或重建依赖。
 - **视觉证据：** `<Path>evidence/assets/production-desktop.png</Path>` SHA-256 `44a95e1e1da2029b7eba8f7d86631576f62539c1ebff492a7d34e183dc01816b`；`<Path>evidence/assets/production-narrow.png</Path>` SHA-256 `0452fbf4d55f7710098c4c08b76ef04f30e4af9327bd607a539ff154db5ca7c2`。
 
 ## 6. 双轴审查
@@ -96,21 +98,21 @@ Knowledge 删除独立 Sources 栏，把 `main` 与 mounted sources 作为同一
 | Method/conflicts | Direct Spec current workspace；无 integration merge |
 | Integration checks | 定向 Vitest、style discipline、typecheck、目标 ESLint、boundary、renderer build、视觉检查均通过 |
 | E2E disposition | required |
-| E2E result | environment-blocked；健康检查前因 Node/native ABI 失败 |
+| E2E result | passed；desktop shell/narrow 2/2、web-open shell 1/1、desktop E2E-KW-015 1/1 |
 | Parent result/re-read | `hanakde` HEAD 包含 implementation commit `18310e5e7afef6a392b4786a8ab2269cb298d059` |
 
 ## 8. 偏差与决策
 
 - **偏差：** 无产品或 Spec 偏差
-- **记录：** SpecDev validator 对 `ready_for_tickets: false` 的 Direct Spec 仍要求 acceptance contracts 由 Tickets 覆盖，导致 stage spec/implement error；未创建伪 Ticket、未删除 AC
+- **记录：** 修复 SpecDev validator，使 `ready_for_tickets:false` 且没有 Ticket 的 Direct Spec 不再错误要求 Ticket contract coverage；stage implement 已通过，未创建伪 Ticket或删除 AC。
 - **批准来源及影响：** 用户已批准计划、实施、commit、push 与 `v0.0.2` release；未授权原型来源清理或本地依赖重建
 
 ## 9. 残余风险与交付定位
 
-- **残余风险/已知限制：** 真实 server-backed Knowledge shell E2E 尚未执行；当前证据覆盖组件行为、生产构建和路由隔离视觉，但不替代 native/server 集成。
-- **后续 Ticket：** 无；恢复 Node 24.12+ 与匹配依赖后在同一 Direct Spec 完成 E2E。
-- **监控或回滚触发：** 远端 E2E 若出现来源顺序、ResourceIO payload、键盘/拖拽或打开行为回归，则不创建 release tag，并在本 change 追加修复提交。
-- **Prototype source：** `speculo/2026-08-24-knowledge-multi-root-explorer-redesign/prototype-PROTO-001` / `<Path>specdev-worktree/prototype-knowledge-multi-root-explorer</Path>`，按未授权 cleanup 状态保留
+- **残余风险/已知限制：** web-open 不运行 desktop-only 窄屏/主题场景；该场景已由 desktop-full E2E 与生产截图覆盖。
+- **后续 Ticket：** 无。
+- **监控或回滚触发：** 后续回归若出现来源顺序、ResourceIO payload、键盘/拖拽或打开行为退化，则以 implementation commit `18310e5e` 为固定点诊断。
+- **Prototype source：** 原 locator `speculo/2026-08-24-knowledge-multi-root-explorer-redesign/prototype-PROTO-001` / `<Path>specdev-worktree/prototype-knowledge-multi-root-explorer</Path>`；完成审计时 branch 与 worktree 已不存在，本次未执行清理动作。
 - **Source commit：** `18310e5e7afef6a392b4786a8ab2269cb298d059`
 - **Parent result：** `18310e5e7afef6a392b4786a8ab2269cb298d059`
 - **Source workspace：** `/Users/wta/Documents/01-Code/myCode/HanaKDE`

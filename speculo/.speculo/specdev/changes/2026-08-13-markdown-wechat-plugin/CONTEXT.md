@@ -21,7 +21,7 @@ _Avoid_: Agent 直接覆盖工作区、宿主绝对路径参数
 **插件私有持久化**：Markdown 文档、主题选择、编辑器设置和草稿状态由插件私有数据存储管理；它们不是用户工作区资源，也不以 iframe 浏览器存储作为唯一权威。
 _Avoid_: 隐式工作区文件、iframe storage authority
 
-**显式文件交付**：Markdown 导入通过宿主资源选择与 ResourceIO 读取；Markdown/HTML 导出默认作为 SessionFile 交付；工作区写回必须是用户另行选择路径后的显式 ResourceIO 操作。
+**显式文件交付**：Markdown 导入通过宿主资源选择与 ResourceIO 读取；Page/Widget 的 Markdown/HTML 导出使用浏览器下载，Agent tool 仅在存在 session context 时通过 SessionFile 交付；工作区写回必须是用户另行选择路径后的显式 ResourceIO 操作。
 _Avoid_: 隐式工作区写回、绝对路径交付、伪造 MEDIA 输出
 
 **v1 本地媒体边界**：v1 只承载本地图片/视频预览及公众号复制需要的占位语义，不提供第三方图床上传或外部网络媒体托管。

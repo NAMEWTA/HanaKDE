@@ -166,3 +166,112 @@
 - **约束或不变量：** 不隐藏模块；不把 `partial/experimental/unavailable` 结果作为可信金融结论；交易、券商、资金动作仍永久不在范围。
 - **后续：** 设计树进入共识确认；下游 Spec 必须按全模块首版重排交付和验收，不再使用“V0 延后模块”的旧路线。
 - **替代/被替代：** 替代此前 INV-07 中 V0-V5 的“能力分阶段出现”建议；保留其能力依赖和质量门。
+
+## LOG-012 — 2026-08-23 — 同花顺官方 Financial-API 接入事实基线
+- **设计树节点：** 不适用
+- **轮次与依赖：** round 4 / 无
+- **状态：** confirmed
+- **问题：** HiThink-Tech/Financial-API 是否能增强当前金融工作台的数据来源、数据源切换和本地历史数据路径？
+- **事实与来源：** 研究固定在上游 commit `9dbef74d2ce535857e610eec265bcb9302942d48`（tag `v0.1.5`，2026-08-17）以及 2026-08-23 在线契约 `<Url>https://fuyao.aicubes.cn/llms-full.txt</Url>`。该项目由同花顺官方维护，以同一 API Key 提供 REST、托管 MCP、Node CLI、Python toolkit 和 Market Dumps/本地 DuckDB；公开 REST 使用 `X-api-key`、HTTP 200 + `{code,message,request_id,data}` 业务信封，明确区分认证、权限、参数、未就绪、限流与上游失败。
+- **事实与来源：** 当前公开范围可补强 A 股标的、快照、日 K、复权事件、财务报表/指标、最新估值、近一年交易日历、指数/板块、集合竞价、特色数据、基金及全市场 Parquet；不提供港股、分钟 K、tick、宏观、新闻/公告/研报原文。显式 `thscodes` 行情快照的顶层 `timestamp` 可为 `null`，指数成分只提供当前值，交易日历只覆盖近一年，财务接口没有历史修订/vintage 契约，因此这些数据不能自动通过 live observed-at 或 PIT 回测门。
+- **事实与来源：** 官方 CLI 已实现 `auto | local | remote` 路由：远程用于快照/财务/指数/特色/日历，本地用于 panel/factors/db，历史数据在本地覆盖窗口时优先本地；单标的可回退远程，批量历史在本地不足时 fail closed。该策略可作为 Hana 数据源路由的行为参考，但它只解决同花顺远端与本地库的选择，不等于 Hana 的跨 provider 切换合同。
+- **事实与来源：** 上游公开文档未给出固定价格、QPS、再分发或商用数据条款，权限与频率以账号 capability 为准；线上可用性必须用用户授权 Key 做最小探测。根仓库与 Node CLI 标 MIT，但 Python `marketdb` 的 `pyproject.toml` 标记 `Proprietary`，在上游澄清前不得复制或打包 Python 实现。
+- **事实与来源：** Hana 插件现有 `ctx.network.fetch()`、`network.allowedHosts`、敏感 configuration、owner-only plugin config、`ctx.dataDir`、routes/tools 和 TaskRegistry 足以容纳 REST adapter 与插件私有数据。若要求通用 OS Keyring/Secret API 或跨插件共享量化数据库，则属于宿主契约原语，应另开 system change。
+- **选项：** 不接入；把 REST 作为普通可选 provider；把 REST 作为 A 股出厂优先 provider，并把 Market Dumps 作为受原型门约束的可选本地源；整包嵌入 CLI/Python/MCP。
+- **推荐：** 直接 REST adapter 作为 A 股出厂优先 provider，但采用 BYOK、逐 dataset capability probe 和严格质量门；MCP 只作为可选 Agent 入口；不嵌入 Python/CLI。把 `auto | pinned`、远端/本地/导入来源和 run-level source manifest 加入现有 Provider contract，Market Dumps + 插件私有 DuckDB 另经跨平台原型后再标 supported。
+- **结论：** 可发现事实已关闭；D-012 至 D-015 记录仍需用户决定的产品/架构取舍。
+- **原因：** 官方来源显著降低 A 股网页抓取与许可不透明风险，也提供稳定错误/批量历史路径；但覆盖范围、PIT、live timestamp、账号授权和数据条款不足以让它成为 A/HK 全域单一真相源。
+- **影响工件：** design tree / 后续 ADR / Spec / T-02 / T-04 / T-05 / T-08 / T-11
+- **约束或不变量：** 不把仓库 MIT 等同于数据再分发权；不把 HTTP 200、API Key 有效或 `timestamp=null` 当作金融新鲜度证据；不在同一 ResearchRun/BacktestRun 中静默更换 provider 或混合未知 lineage。
+- **后续：** 用户回答 round 4 frontier 后，继续 D-014/D-015；共识后回到 Spec 修订，不直接实施。
+- **替代/被替代：** 补充 LOG-007；不推翻其多 provider 与能力分级原则。
+
+## LOG-013 — 2026-08-23 — 同花顺官方 Provider 的产品角色
+- **设计树节点：** D-012
+- **轮次与依赖：** round 4 / 无
+- **状态：** confirmed
+- **问题：** Financial-API 是普通可选 provider，还是 A 股适用数据集的出厂优先 provider？
+- **事实与来源：** LOG-012 证明其为同花顺官方结构化服务，并确认只覆盖 A 股适用数据集，不能替代港股和缺失内容源。
+- **选项：** 不接入；普通可选；配置用户 Key 且探测通过后作为 A 股出厂优先 provider。
+- **推荐：** 内置 `hithink-rest` adapter，逐 dataset 探测后优先路由，未配置或未通过门禁时保持 unavailable/partial/blocked。
+- **结论：** 用户确认按推荐执行。
+- **原因：** 官方结构化契约显著优于未经授权的网页端点，同时不掩盖市场和数据集缺口。
+- **影响工件：** CONTEXT / ADR / Spec / T-02 / T-04 / T-05
+- **约束或不变量：** 不做全局同花顺绑定；港股、分钟 K 和原文数据继续走其他 provider 或导入。
+- **后续：** Spec 修订 capability matrix 和 provider inventory。
+- **替代/被替代：** 补充 LOG-007 的出厂多源策略。
+
+## LOG-014 — 2026-08-23 — 逐数据集数据源策略与运行冻结
+- **设计树节点：** D-013
+- **轮次与依赖：** round 4 / 无
+- **状态：** confirmed
+- **问题：** 数据源采用全局开关，还是逐 dataset 的 `auto | pinned` 并冻结研究/回测来源？
+- **事实与来源：** LOG-012 记录官方 CLI 的 `auto | local | remote` 只处理同花顺本地/远端；本 change 还需跨 provider、导入和运行可复现性合同。
+- **选项：** 全局开关；逐 dataset 手工选择；逐 dataset `auto | pinned` + run-level source manifest。
+- **推荐：** 交互查询允许有记录的语义等价 auto fallback；ResearchRun/BacktestRun 启动后冻结 provider、adapter、schema、lineage 和 policy version。
+- **结论：** 用户确认按推荐执行。
+- **原因：** 兼顾日常可用性、跨数据集覆盖差异和研究/回测可复现性。
+- **影响工件：** CONTEXT / ADR / Spec / T-02 / T-04 / T-08 / T-11
+- **约束或不变量：** 运行中失败不得静默换源；非等价切换必须显式新建 run 或重新确认质量门。
+- **后续：** Spec 增加 SourcePolicy、SourceDecision 和 RunSourceManifest 合同。
+- **替代/被替代：** 无
+
+## LOG-015 — 2026-08-23 — 同花顺 API Key 与授权形态
+- **设计树节点：** D-014
+- **轮次与依赖：** round 5 / D-012
+- **状态：** confirmed
+- **问题：** 首版采用用户自有 API Key，还是共享 Key/产品代理？
+- **事实与来源：** LOG-012 记录公开文档未给出固定价格、QPS、再分发或商用数据条款，账号 capability 与配额需要线上探测。
+- **选项：** BYOK；内嵌共享 Key；产品方代理服务。
+- **推荐：** 首版只采用 BYOK；敏感配置只在 Node route 读取。共享 Key/代理必须在书面商业和数据授权后另立设计。
+- **结论：** 用户确认按完整推荐执行。
+- **原因：** 将配额、权限和账号生命周期归还用户，避免未经授权的共享凭据与数据再分发。
+- **影响工件：** CONTEXT / ADR / Spec / T-02 / T-10 / T-11
+- **约束或不变量：** Key 不进前端、日志、快照、导出或 fixture；未配置时提供 unavailable + 配置入口。
+- **后续：** Spec 明确敏感 configuration、最小认证探针和凭据失效状态。
+- **替代/被替代：** 无
+
+## LOG-016 — 2026-08-23 — Market Dumps 与插件私有历史源
+- **设计树节点：** D-015
+- **轮次与依赖：** round 5 / D-012, D-013
+- **状态：** confirmed
+- **问题：** 是否把 Market Dumps + 插件私有 DuckDB 纳入首版 source contract？
+- **事实与来源：** LOG-012 证明 Market Dumps 提供全 A 股十年日 K、近十交易日增量和复权事件；Hana Node 版本满足官方 Node CLI 下限，但 native dependency 仍需逐平台打包验证，Python 包许可证存在冲突。
+- **选项：** 不纳入；直接宣称 supported；先定义 source kind 并用隔离原型决定支持等级。
+- **推荐：** 定义 `hithink-market-dump` 本地 source kind；直接实现 Node 插件私有 DuckDB，先验证跨平台打包、断点续传、增量、复权、质量、磁盘预算和卸载，再决定 supported/partial/blocked。
+- **结论：** 用户确认按完整推荐执行。
+- **原因：** 全市场和多标的历史研究不适合逐股 REST，请求规模需要本地库；原型门防止 native runtime 和数据生命周期破坏插件可删除性。
+- **影响工件：** CONTEXT / ADR / Spec / Prototype / T-02 / T-08 / T-11
+- **约束或不变量：** 不复制或拉起 Python marketdb/CLI 子进程；原型失败时保留 source contract 和 unavailable/blocked 状态，不修改宿主补洞。
+- **后续：** 共识后路由回 Spec，并先为本地源建立 bounded prototype gate。
+- **替代/被替代：** 无
+
+## LOG-017 — 2026-08-23 — 整棵设计树共识确认与发布校验阻塞
+- **设计树节点：** 不适用
+- **轮次与依赖：** round 5 / D-001 至 D-015
+- **状态：** confirmed
+- **问题：** 设计树的全部适用分支是否已经走过、没有遗漏，并达成用户共识？
+- **事实与来源：** 当前 design tree 没有 open 节点；用户明确回复“确认共识”。随后执行 `validate-specdev.mjs --stage grill`，现有 12 张 Ready Ticket 均因缺少 E2E disposition 和明确 execution environment 而失败，共 12 个错误。
+- **选项：** 确认共识；指出遗漏并继续访谈。
+- **推荐：** 确认共识，并在校验恢复后发布 `consensus`。
+- **结论：** 用户已明确确认 D-001 至 D-015 的整棵设计树共识；由于强制 grill 校验失败，按工作流暂不把 design tree 标为 `consensus`，保持 G Work 可恢复。
+- **原因：** G 工作流要求用户明确确认且阶段校验通过后才能发布共识；用户确认已经满足，唯一剩余阻塞是既有 Ticket 工件与当前校验契约不一致。
+- **影响工件：** design tree / change status / 既有 12 张 Ticket
+- **约束或不变量：** 不因校验失败丢失用户确认；不在 G Work 中越权改写 Ticket；校验通过前不路由或自动执行下一 Work。
+- **后续：** 通过拥有 Ticket 的工作流补齐 12 张 Ready Ticket 的 E2E disposition 与明确 execution environment，再恢复 G 重新校验并发布共识。
+- **替代/被替代：** 无
+
+## LOG-018 — 2026-08-23 — Ticket 契约修复后正式发布设计共识
+- **设计树节点：** 不适用
+- **轮次与依赖：** round 5 / LOG-017
+- **状态：** confirmed
+- **问题：** 既有 Ticket 校验阻塞解除后，是否可以正式发布已获用户确认的整棵设计树共识？
+- **事实与来源：** 用户明确要求通过 `<Path>{roots.workflows}/specdev/T-tickets/T-tickets.md</Path>` 补齐后返回 G。T Work 为 T-01 至 T-12 补齐 required E2E disposition、Lead owner、current-workspace/direct-parent 执行环境和集成证据，并同步 Tickets Map；`validate-specdev.mjs --stage tickets` 与 `--stage grill` 均返回 `0 error(s), 0 warning(s)`。
+- **选项：** 保持可恢复阻塞；发布共识并路由下游。
+- **推荐：** 正式发布共识并路由 S-spec。
+- **结论：** design tree 正式标记为 `consensus`；G Work 成功完成，当前 work 清空。
+- **原因：** frontier 为空、用户已明确确认 D-001 至 D-015，且强制 grill 校验已经通过，满足全部发布条件。
+- **影响工件：** design tree / LOG / change status / global status
+- **约束或不变量：** 本次只修复规划工件，未授权或执行产品实现；现有 Spec 尚未纳入 `hithink-rest`、SourcePolicy、RunSourceManifest 和 `hithink-market-dump` 原型门，不能直接沿用旧 Spec/Ticket 开始实现。
+- **后续：** 进入 `<Path>{roots.workflows}/specdev/S-spec/S-spec.md</Path>` 修订外部行为和验收合同；随后重新投影 Tickets，并在实现前通过 P-goal-plan 重建 v6 Goal Plan。
+- **替代/被替代：** 解除 LOG-017 的校验阻塞，不替代其中的用户共识证据。

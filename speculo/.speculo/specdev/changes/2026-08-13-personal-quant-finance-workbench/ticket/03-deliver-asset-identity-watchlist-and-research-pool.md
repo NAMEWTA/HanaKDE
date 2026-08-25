@@ -11,9 +11,9 @@ ready: true
 risk: high
 blocked_by: [T-02]
 contract_ids: [AC-005, AC-010]
-owner: implementation-owner
-expected_changes: ["<Path>plugins/finance-workbench/src/assets/**</Path>", "<Path>plugins/finance-workbench/src/watchlist/**</Path>", "<Path>plugins/finance-workbench/tests/asset-identity.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/watchlist.integration.test.ts</Path>"]
-writable_paths: ["<Path>plugins/finance-workbench/src/assets/**</Path>", "<Path>plugins/finance-workbench/src/watchlist/**</Path>", "<Path>plugins/finance-workbench/tests/asset-identity.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/watchlist.integration.test.ts</Path>"]
+owner: root
+expected_changes: ["<Path>plugins/finance-workbench/src/assets/**</Path>", "<Path>plugins/finance-workbench/src/watchlist/**</Path>", "<Path>plugins/finance-workbench/routes/assets.*</Path>", "<Path>plugins/finance-workbench/tools/assets.*</Path>", "<Path>plugins/finance-workbench/tests/asset-identity.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/watchlist.integration.test.ts</Path>"]
+writable_paths: ["<Path>plugins/finance-workbench/src/assets/**</Path>", "<Path>plugins/finance-workbench/src/watchlist/**</Path>", "<Path>plugins/finance-workbench/routes/assets.*</Path>", "<Path>plugins/finance-workbench/tools/assets.*</Path>", "<Path>plugins/finance-workbench/tests/asset-identity.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/watchlist.integration.test.ts</Path>"]
 read_only_paths: ["<Path>plugins/finance-workbench/src/domain/**</Path>", "<Path>plugins/finance-workbench/src/data/**</Path>", "<Path>plugins/finance-workbench/manifest.json</Path>", "<Path>temp/finance-references/**</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -94,7 +94,12 @@ shared_path_owners: []
 | 正常路径 | identity/list integration | 搜索 A/HK 标的、确认、加入/排序/删除自选和研究池 | AssetRef 可追溯且列表状态可见 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-03.md</Path>` |
 | 失败路径 | migration/conflict fixture | 输入旧代码、同名跨市场、重复和失效 provider mapping | 要求确认或返回稳定错误，不进入下游计算 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-03.md</Path>` |
 | 回归 | T-02 snapshot consumer | 运行 provider/domain 集成测试 | 只消费 confirmed AssetRef，删除列表不删除数据快照 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-03.md</Path>` |
-| UI E2E（owner：当前执行 owner） | asset/watchlist page | 桌面/窄屏执行搜索、确认、排序、删除 | 不重叠，冲突原因与替代路径可操作 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-03.md</Path>` |
+| UI E2E（owner：Lead） | asset/watchlist page | 桌面/窄屏执行搜索、确认、排序、删除 | 不重叠，冲突原因与替代路径可操作 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-03.md</Path>` |
+
+- **Workspace checks（current-workspace）：** implementation owner 在 current workspace 运行 AssetRef identity、旧代码迁移、冲突 fixture、列表持久化、类型检查和插件构建，不创建 source worktree。
+- **E2E disposition：** required：搜索确认到自选/研究池持久化是跨 route、存储与 UI 的用户工作流，且错误身份会污染全部下游金融计算。
+- **E2E owner/environment：** Lead / current-workspace；在 direct-parent 状态于桌面和窄屏执行 A/HK 搜索、歧义确认、加入、排序、删除及刷新恢复，预期只有 confirmed AssetRef 可进入列表且冲突原因可操作。
+- **Integration evidence（direct-parent）：** 记录 implementation commit、parent before SHA、Lead 场景步骤与结果、E2E 截图/可访问性证据、父分支 result SHA 及包含关系。
 
 ## 9. 发布、迁移与恢复
 

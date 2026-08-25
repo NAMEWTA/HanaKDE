@@ -10,8 +10,8 @@ planning_depth_reason: 涉及用户资源权限、ResourceRef 输入、版本冲
 ready: true
 risk: high
 blocked_by: [T-01]
-contract_ids: [AC-007, AC-009, AC-010, AC-014]
-owner: unassigned
+contract_ids: [AC-007, AC-010, AC-014]
+owner: root
 expected_changes: ["<Path>plugins/markdown-wechat/routes/resource-io.ts</Path>", "<Path>plugins/markdown-wechat/src/resources/**</Path>", "<Path>plugins/markdown-wechat/src/components/resources/**</Path>", "<Path>plugins/markdown-wechat/tests/resource-io.test.ts</Path>"]
 writable_paths: ["<Path>plugins/markdown-wechat/routes/resource-io.ts</Path>", "<Path>plugins/markdown-wechat/src/resources/**</Path>", "<Path>plugins/markdown-wechat/src/components/resources/**</Path>", "<Path>plugins/markdown-wechat/tests/resource-io.test.ts</Path>"]
 read_only_paths: ["<Path>packages/plugin-runtime/src/index.ts</Path>", "<Path>packages/plugin-protocol/src/index.ts</Path>", "<Path>server/routes/resource-io.ts</Path>", "<Path>desktop/src/react/services/knowledge-workspace-client.ts</Path>", "<Path>plugins/markdown-wechat/manifest.json</Path>"]
@@ -96,6 +96,11 @@ shared_path_owners: []
 | 正常写回 | expected-version integration | 选择目标并确认 | 仅成功版本写入改变目标 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-04.md</Path>` |
 | 冲突/安全回归 | conflict + absolute-path scan | 修改目标版本后写回；传绝对路径参数 | fail closed，目标/草稿保留，无 raw fs | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-04.md</Path>` |
 
+- **Workspace checks：** Lead 在 current workspace 使用 Node 24 运行 ResourceIO 正常/拒绝/冲突测试、插件 typecheck/build/verify 和定向宿主 ResourceIO 回归。
+- **E2E disposition：** required：surface picker、route、ResourceIO 权限与 expected-version 写回跨越 iframe/server/resource 边界。
+- **E2E owner/environment：** Lead / current-workspace；真实或宿主 fixture 中验证选择、导入、拒绝、显式写回与版本冲突。
+- **Integration evidence：** 记录 implementation commit、parent before、direct-parent ResourceIO 集成/E2E 和 result SHA。
+
 ## 9. 发布、迁移与恢复
 
 - **迁移顺序：** 不迁移旧数据；显式 Markdown 文件导入是唯一文章迁移路径。
@@ -107,6 +112,6 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] AC-007、AC-009、AC-010、AC-014：导入、媒体边界、显式写回、ResourceRef 工具读取通过。
+- [ ] AC-007、AC-010、AC-014：导入、显式写回和 ResourceRef 安全边界通过；AC-009 由 T-02/T-03 的 renderer/media Evidence 覆盖。
 - [ ] 所有 ResourceIO 正常/拒绝/冲突证据写入 `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-04.md</Path>`。
 - [ ] 不访问绝对路径，不绕过 ResourceIO，不发生隐式 workspace write。

@@ -2,7 +2,7 @@
 schema_version: 3
 artifact: tickets-map
 change: 2026-08-13-markdown-wechat-plugin
-status: draft
+status: ready
 ---
 
 # Tickets Map: Markdown 公众号排版内置插件
@@ -11,7 +11,7 @@ status: draft
 - **Spec：** `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/spec.md</Path>`
 - **Ticket 目录：** `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/</Path>`
 - **Evidence 目录：** `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/</Path>`
-- **可选 Goal Plan：** `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/goal-plan.md</Path>`
+- **Goal Plan：** `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/goal-plan.md</Path>`
 
 ## 1. 目标与拆分策略
 
@@ -23,13 +23,13 @@ status: draft
 
 | ID | Ticket | 可观察产出 | Blocked By | Depth | Risk | Ready | Owner | Contract IDs | Wave/Gate | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T-01 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/01-establish-plugin-shell-private-store.md</Path>` | 内置插件可加载，Page/Widget route 和私有 versioned envelope 可恢复 | — | deep | high | yes | unassigned | AC-001、AC-002、AC-011、AC-012 | W1 / G1 根契约 | ready |
-| T-02 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/02-deliver-editor-renderer-surfaces.md</Path>` | Page 编辑器、核心 Markdown 预览、主题/字号/字体和窄布局 | T-01 | standard | high | yes | unassigned | AC-002、AC-003、AC-004、AC-009、AC-012 | W2 / G2 编辑预览 | ready |
-| T-03 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/03-deliver-clipboard-and-browser-download.md</Path>` | 富文本复制、源码回退、Markdown/HTML 浏览器下载 | T-02 | standard | high | yes | unassigned | AC-005、AC-006、AC-008、AC-009 | W3 / G2 产出交付 | ready |
-| T-04 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/04-deliver-resource-import-and-explicit-writeback.md</Path>` | ResourceIO 导入、读取失败保留草稿、显式版本写回 | T-01 | deep | high | yes | unassigned | AC-007、AC-009、AC-010、AC-014 | W2 / G3 资源边界 | ready |
-| T-05 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/05-deliver-agent-render-session-output.md</Path>` | Markdown/ResourceRef 纯产出 tool，带 session 时交付 HTML SessionFile | T-01 | deep | high | yes | unassigned | AC-008、AC-013、AC-014、AC-015 | W2 / G3 Agent 产出 | ready |
-| T-06 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/06-deliver-policy-diagnostics-and-removal.md</Path>` | 无网络/迁移违规、Plugin diagnostics/scenario 与整块删除验证 | T-01 | standard | high | yes | unassigned | AC-001、AC-016、AC-017、AC-018 | W4 / G4 宿主边界 | ready |
-| T-07 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/07-release-integrated-markdown-wechat-plugin.md</Path>` | 全部合同汇合，构建/typecheck/test、桌面 smoke 和发布证据完整 | T-02、T-03、T-04、T-05、T-06 | deep | critical | yes | unassigned | AC-001～AC-018 | W5 / G5 发布 Gate | ready |
+| T-01 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/01-establish-plugin-shell-private-store.md</Path>` | 内置插件可加载，Page/Widget route 和私有 versioned envelope 可恢复 | — | deep | high | yes | root | AC-001、AC-002、AC-011、AC-012 | W1 / G1 根契约 | ready |
+| T-02 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/02-deliver-editor-renderer-surfaces.md</Path>` | Page 编辑器、核心 Markdown 预览、主题/字号/字体和窄布局 | T-01 | standard | high | yes | root | AC-002、AC-003、AC-004、AC-009、AC-012 | W2 / G2 编辑预览 | ready |
+| T-03 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/03-deliver-clipboard-and-browser-download.md</Path>` | 富文本复制、源码回退、Markdown/HTML 浏览器下载 | T-02 | standard | high | yes | root | AC-005、AC-006、AC-008、AC-009 | W3 / G2 产出交付 | ready |
+| T-04 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/04-deliver-resource-import-and-explicit-writeback.md</Path>` | ResourceIO 导入、读取失败保留草稿、显式版本写回 | T-01 | deep | high | yes | root | AC-007、AC-010、AC-014 | W4 / G3 资源边界 | ready |
+| T-05 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/05-deliver-agent-render-session-output.md</Path>` | Markdown/ResourceRef 纯产出 tool，带 session 时交付 HTML SessionFile | T-02 | deep | high | yes | root | AC-013、AC-014、AC-015 | W3 / G3 Agent 产出 | ready |
+| T-06 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/06-deliver-policy-diagnostics-and-removal.md</Path>` | 无网络/迁移违规、Plugin diagnostics/scenario 与整块删除验证 | T-02、T-05 | standard | high | yes | root | AC-001、AC-016、AC-017、AC-018 | W5 / G4 宿主边界 | ready |
+| T-07 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/ticket/07-release-integrated-markdown-wechat-plugin.md</Path>` | 全部合同汇合，构建/typecheck/test、桌面 smoke 和发布证据完整 | T-02、T-03、T-04、T-05、T-06 | deep | critical | yes | root | AC-001～AC-018 | W6 / G5 发布 Gate | ready |
 
 Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；本表只作同步投影。由于所有 Ticket 的产品写入边界均为同一插件根，Map 中依赖边是串行 owner 交接，不安排并行代码写入。
 
@@ -37,17 +37,17 @@ Ticket frontmatter 是状态、依赖、深度和路径访问契约的权威；�
 
 ```text
 T-01 [READY, plugin shell/private store]
-  ├─→ T-02 [editor/renderer/surfaces]
-  │     └─→ T-03 [clipboard/browser download]
   ├─→ T-04 [ResourceIO import/writeback]
-  ├─→ T-05 [Agent render/SessionFile]
-  └─→ T-06 [policy/diagnostics/removal]
+  └─→ T-02 [editor/renderer/surfaces]
+        ├─→ T-03 [clipboard/browser download]
+        └─→ T-05 [Agent render/SessionFile]
+              └─→ T-06 [policy/diagnostics/removal]
         
 T-02 ─→ T-03
 T-02, T-03, T-04, T-05, T-06 ─→ T-07 [integrated release]
 ```
 
-T-04、T-05、T-06 只依赖 T-01 的 plugin shell/private data contract，理论上可在独立 worktree 并行；当前插件根路径是 shared owner 且没有 Goal Plan 委派，因此默认顺序执行，避免 writable overlap。
+T-04 只依赖 T-01 的 plugin shell/private data contract；T-05 消费 T-02 renderer，T-06 消费 Page 与 tool 场景。Goal Plan 采用 current workspace 后全部 Ticket 仍严格串行，避免插件根交叉写入。
 
 ## 4. 合同覆盖矩阵
 
@@ -60,8 +60,8 @@ T-04、T-05、T-06 只依赖 T-01 的 plugin shell/private data contract，理�
 | AC-005 | T-03、T-07 | browser ClipboardItem smoke | covered | HTML+plain text |
 | AC-006 | T-03、T-07 | permission/API failure injection | covered | 不虚报成功 |
 | AC-007 | T-04、T-07 | ResourceIO read/picker fixture | covered | 导入与拒绝 |
-| AC-008 | T-03、T-05、T-07 | browser download + tool fixture | covered | UI 下载，Agent SessionFile |
-| AC-009 | T-02、T-03、T-04、T-07 | renderer/media/no-network tests | covered | 本地媒体占位 |
+| AC-008 | T-03、T-07 | browser download fixture | covered | Page/Widget 浏览器下载 |
+| AC-009 | T-02、T-03、T-07 | renderer/media/no-network tests | covered | 本地媒体占位 |
 | AC-010 | T-04、T-07 | ResourceIO conflict integration | covered | 显式版本写回 |
 | AC-011 | T-01、T-07 | private store reload fixture | covered | schema envelope 恢复 |
 | AC-012 | T-01、T-02、T-07 | Page/Widget shared-store smoke | covered | Widget 不分叉状态 |
@@ -89,11 +89,11 @@ T-04、T-05、T-06 只依赖 T-01 的 plugin shell/private data contract，理�
 
 - **G1 根契约：** T-01 验证内置发现、surface、私有 envelope 和可恢复错误。
 - **G2 用户闭环：** T-02～T-03 验证编辑、预览、主题、复制和下载。
-- **G3 资源/Agent 边界：** T-04～T-05 验证 ResourceIO、版本冲突、ResourceRef 和 SessionFile。
+- **G3 资源/Agent 边界：** T-04 与 T-05 验证 ResourceIO、版本冲突、ResourceRef 和 SessionFile。
 - **G4 宿主策略：** T-06 验证无网络/迁移违规、diagnostics/scenario 和删除 smoke。
 - **G5 发布：** T-07 汇合所有合同并运行适用构建、类型、插件测试、桌面 E2E 和路径审计。
 
-正式跨 Ticket 编排仅在数量、Deep Ticket 或共享根路径需要时进入 `<Path>{roots.workflows}/specdev/P-goal-plan/P-goal-plan.md</Path>`；本 Map 不预设 Lead/Worker。
+正式跨 Ticket 编排由 v6 Goal Plan 负责；current workspace 下由 root 作为 Lead/implementation owner 严格串行推进。
 
 ## 7. 横切契约与风险
 

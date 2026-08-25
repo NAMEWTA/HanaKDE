@@ -11,9 +11,9 @@ ready: true
 risk: high
 blocked_by: [T-01]
 contract_ids: [AC-002, AC-003, AC-004, AC-009, AC-012]
-owner: unassigned
-expected_changes: ["<Path>plugins/markdown-wechat/src/editor/**</Path>", "<Path>plugins/markdown-wechat/src/renderer/**</Path>", "<Path>plugins/markdown-wechat/src/theme/**</Path>", "<Path>plugins/markdown-wechat/src/components/surfaces/**</Path>", "<Path>plugins/markdown-wechat/assets/ui/**</Path>", "<Path>plugins/markdown-wechat/tests/renderer.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/surfaces.test.ts</Path>"]
-writable_paths: ["<Path>plugins/markdown-wechat/src/editor/**</Path>", "<Path>plugins/markdown-wechat/src/renderer/**</Path>", "<Path>plugins/markdown-wechat/src/theme/**</Path>", "<Path>plugins/markdown-wechat/src/components/surfaces/**</Path>", "<Path>plugins/markdown-wechat/assets/ui/**</Path>", "<Path>plugins/markdown-wechat/tests/renderer.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/surfaces.test.ts</Path>"]
+owner: root
+expected_changes: ["<Path>plugins/markdown-wechat/routes/page.ts</Path>", "<Path>plugins/markdown-wechat/routes/widget.ts</Path>", "<Path>plugins/markdown-wechat/src/editor/**</Path>", "<Path>plugins/markdown-wechat/src/renderer/**</Path>", "<Path>plugins/markdown-wechat/src/theme/**</Path>", "<Path>plugins/markdown-wechat/src/components/surfaces/**</Path>", "<Path>plugins/markdown-wechat/assets/ui/**</Path>", "<Path>plugins/markdown-wechat/tests/renderer.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/surfaces.test.ts</Path>"]
+writable_paths: ["<Path>plugins/markdown-wechat/routes/page.ts</Path>", "<Path>plugins/markdown-wechat/routes/widget.ts</Path>", "<Path>plugins/markdown-wechat/src/editor/**</Path>", "<Path>plugins/markdown-wechat/src/renderer/**</Path>", "<Path>plugins/markdown-wechat/src/theme/**</Path>", "<Path>plugins/markdown-wechat/src/components/surfaces/**</Path>", "<Path>plugins/markdown-wechat/assets/ui/**</Path>", "<Path>plugins/markdown-wechat/tests/renderer.test.ts</Path>", "<Path>plugins/markdown-wechat/tests/surfaces.test.ts</Path>"]
 read_only_paths: ["<Path>plugins/markdown-wechat/manifest.json</Path>", "<Path>core/plugin-manager.ts</Path>", "<Path>packages/plugin-sdk/src/index.ts</Path>", "<Path>temp/md-wechat/src/lib/renderer.js</Path>", "<Path>temp/md-wechat/tests/renderer.test.js</Path>"]
 shared_paths: []
 shared_path_owners: []
@@ -81,7 +81,7 @@ shared_path_owners: []
 
 ## 7. 路径访问契约
 
-- **预计修改点：** `<Path>plugins/markdown-wechat/src/**</Path>`、`<Path>plugins/markdown-wechat/assets/**</Path>`、`<Path>plugins/markdown-wechat/routes/**</Path>` 和插件内 tests。
+- **预计修改点：** `<Path>plugins/markdown-wechat/src/**</Path>`、`<Path>plugins/markdown-wechat/assets/**</Path>`、`<Path>plugins/markdown-wechat/routes/page.ts</Path>`、`<Path>plugins/markdown-wechat/routes/widget.ts</Path>` 和插件内 tests。
 - **可写范围：** frontmatter `writable_paths` 列出的 editor/renderer/theme/surfaces/assets/ui 与测试路径；其它插件路径只读。
 - **只读上下文：** `<Path>plugins/markdown-wechat/manifest.json</Path>`、`<Path>core/plugin-manager.ts</Path>`、`<Path>packages/plugin-sdk/src/index.ts</Path>`、`<Path>temp/md-wechat/src/lib/renderer.js</Path>`、`<Path>temp/md-wechat/tests/renderer.test.js</Path>`。
 - **共享路径：** 无；T-01 已交付插件根，T-02 依赖其 Evidence。
@@ -95,6 +95,11 @@ shared_path_owners: []
 | 失败路径 | sanitizer/parser fixture | 同一测试输入危险 HTML、javascript URL、无效主题 | 安全降级，源文不丢失，错误可观察 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-02.md</Path>` |
 | UI E2E（owner：当前执行 owner） | Page/Widget Playwright | 打开桌面/窄 viewport，编辑、切换主题、Widget 导航 | 预览实时更新、无重叠、Widget 无第二编辑器 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-02.md</Path>` |
 | 回归 | TypeScript/UI test | `npx vitest run <Path>plugins/markdown-wechat/tests/surfaces.test.ts</Path>` | Page/Widget route 和 T-01 store 合同不回归 | `<Path>{roots.state}/specdev/changes/2026-08-13-markdown-wechat-plugin/evidence/T-02.md</Path>` |
+
+- **Workspace checks：** Lead 在 current workspace 使用 Node 24 运行 renderer/surface 测试、插件 typecheck/build/verify 和定向样式检查。
+- **E2E disposition：** required：真实 iframe 中的编辑、预览、主题、Widget 导航与窄屏布局无法仅由 Node 测试证明。
+- **E2E owner/environment：** Lead / current-workspace；desktop 与 narrow viewport 打开真实 Page/Widget，验证预览更新、无重叠和单一编辑状态。
+- **Integration evidence：** 记录 implementation commit、parent before、direct-parent 回归/E2E 与 result SHA。
 
 ## 9. 发布、迁移与恢复
 

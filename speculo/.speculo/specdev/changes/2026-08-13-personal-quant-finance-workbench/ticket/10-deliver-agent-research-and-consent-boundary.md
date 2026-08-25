@@ -11,7 +11,7 @@ ready: true
 risk: critical
 blocked_by: [T-09, T-06]
 contract_ids: [AC-025, AC-026, AC-027, AC-028, AC-029]
-owner: implementation-owner
+owner: root
 expected_changes: ["<Path>plugins/finance-workbench/src/agent/**</Path>", "<Path>plugins/finance-workbench/routes/agent.*</Path>", "<Path>plugins/finance-workbench/tools/**</Path>", "<Path>plugins/finance-workbench/tests/agent-security.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/agent.e2e.spec.ts</Path>"]
 writable_paths: ["<Path>plugins/finance-workbench/src/agent/**</Path>", "<Path>plugins/finance-workbench/routes/agent.*</Path>", "<Path>plugins/finance-workbench/tools/**</Path>", "<Path>plugins/finance-workbench/tests/agent-security.integration.test.ts</Path>", "<Path>plugins/finance-workbench/tests/agent.e2e.spec.ts</Path>"]
 read_only_paths: ["<Path>plugins/finance-workbench/manifest.json</Path>", "<Path>plugins/finance-workbench/src/domain/**</Path>", "<Path>plugins/finance-workbench/src/data/**</Path>", "<Path>plugins/finance-workbench/src/research-data/**</Path>", "<Path>plugins/finance-workbench/src/portfolio/**</Path>", "<Path>plugins/finance-workbench/src/automation/**</Path>", "<Path>temp/finance-references/Vibe-Research/**</Path>", "<Path>temp/finance-references/TradingAgents-astock/**</Path>"]
@@ -94,7 +94,12 @@ shared_path_owners: []
 | 正常路径 | Agent tool/session harness | AI 关闭时走确定性路径，开启后运行公开证据一次性研究 | 预算内完成，事实均有 EvidenceRef | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>` |
 | 失败路径 | permission/egress fault injection | 请求私有字段、外发、长期任务、通知、写文件、交易意图并拒绝/超预算 | confirmation_required/permission_denied，无网络/写入/工具副作用 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>` |
 | 回归 | T-05/T-06/T-09 contract | 运行 evidence/private/task tests | consent 只作用当前 run/字段，任务取消语义不回归 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>` |
-| UI E2E（owner：当前执行 owner） | agent research page | 桌面/窄屏执行预览、批准、拒绝、过期和查看证据 | 字段目标预算清晰、状态不重叠 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>` |
+| UI E2E（owner：Lead） | agent research page | 桌面/窄屏执行预览、批准、拒绝、过期和查看证据 | 字段目标预算清晰、状态不重叠 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-10.md</Path>` |
+
+- **Workspace checks（current-workspace）：** implementation owner 在 current workspace 运行 Agent tool allowlist、ConsentRecord、预算/过期、egress 拒绝、无交易静态与运行时扫描、类型检查和插件构建，不创建 source worktree。
+- **E2E disposition：** required：Agent session、模型外发、私有字段确认、长期任务/通知/文件写入和无交易边界跨越模型、网络、权限与用户副作用，属于安全与隐私关键路径。
+- **E2E owner/environment：** Lead / current-workspace；在 direct-parent 状态验证 AI-off 确定性路径、公开研究、逐字段批准/拒绝/过期、超预算及交易意图，预期拒绝时无网络/写入/任务副作用，批准结果逐事实绑定 EvidenceRef。
+- **Integration evidence（direct-parent）：** 记录 implementation commit、parent before SHA、脱敏模型/工具 harness、网络与写入负断言、E2E 结果、父分支 result SHA 及包含关系。
 
 ## 9. 发布、迁移与恢复
 

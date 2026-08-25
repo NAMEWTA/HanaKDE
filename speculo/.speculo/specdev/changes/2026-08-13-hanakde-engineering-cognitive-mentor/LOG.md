@@ -14,3 +14,11 @@
 - **原因：** Core/Server/Hub 的边界需要独立解释，但 Prompt、Bridge、Automation、Resource 和 Plugin 又必须由跨域主线串联。
 - **来源：** Lead 静态研究；三个 agent team 域报告；`engineering-cognitive-mentor.md` MLOG-002。
 - **后果：** 当前 change 已具备完整教学导出，但理解状态仍为 unverified；未运行项目命令、测试、构建或诊断。
+
+## LOG-003 — 2026-08-25T22:39:44+08:00 — 教学会话关闭
+
+- **决定：** 按用户“完成全部 change、审批默认通过”的最新指令关闭教学会话；理解状态记录为 accepted-summary，不记录为 confirmed。
+- **原因：** 11 篇教学附件、证据索引和最终综合已满足工件交付标准；用户未进行独立复述，因此不能宣称完全理解。
+- **来源：** USER-DECISION:2026-08-25-complete-all-changes；`engineering-cognitive-mentor.md` MLOG-003。
+- **后果：** Q-001～Q-003 作为非阻塞延后项留在归档历史；后续深化通过新 change，不改写本次关闭事实。
+- **关联：** `engineering-cognitive-mentor.md` MLOG-003。

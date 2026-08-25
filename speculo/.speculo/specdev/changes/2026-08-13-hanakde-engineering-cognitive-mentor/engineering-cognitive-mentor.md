@@ -2,15 +2,15 @@
 schema_version: 1
 artifact: engineering-cognitive-mentor
 change: 2026-08-13-hanakde-engineering-cognitive-mentor
-status: active
+status: completed
 primary_mode: codebase
 secondary_modes: [architecture, domain-learning]
-current_phase: export
-understanding_status: unverified
+current_phase: closed
+understanding_status: accepted-summary
 started_at: 2026-08-13T00:00:00+08:00
-updated_at: 2026-08-13T00:00:00+08:00
-closed_at: null
-last_mlog_id: MLOG-002
+updated_at: 2026-08-25T22:39:44+08:00
+closed_at: 2026-08-25T22:39:44+08:00
+last_mlog_id: MLOG-003
 next_question: null
 ---
 
@@ -53,7 +53,7 @@ next_question: null
 
 ## 3. 执行摘要
 
-Lead 静态勘察表明，HanaKDE 是一个以独立 HanaAgent Server 为运行中枢的多进程桌面系统：Electron 是受控客户端和宿主，`server/` 负责传输、组合、鉴权和生命周期，`core/` 通过 `HanaEngine` 组织领域管理器，`hub/` 负责后台调度与消息路由，`lib/` 与 `shared/` 提供资源、安全、记忆、知识、Provider、Bridge 和自动化基础，`packages/` 与 `plugins/` 构成可扩展协议和运行时。
+Lead 静态勘察表明，HanaKDE 是一个以独立 Server 为运行中枢的多进程桌面系统：Electron 是受控客户端和宿主，`server/` 负责传输、组合、鉴权和生命周期，`core/` 通过 `HanaEngine` 组织领域管理器，`hub/` 负责后台调度与消息路由，`lib/` 与 `shared/` 提供资源、安全、记忆、知识、Provider、Bridge 和自动化基础，`packages/` 与 `plugins/` 构成可扩展协议和运行时。
 
 当前最重要的教学原则是“总图 + 域卷 + 跨域业务流”：`core`、`server`、`hub` 各自成卷，但由独立的业务流文档串联；`desktop` 按客户端/宿主视角教学拆分，不把认知拆分误写成代码重构。
 
@@ -159,24 +159,24 @@ SQLite, JSONL, workspace resources, external providers
 
 | ID | 问题 | 为什么重要 | 所需信息/证据 | 是否阻塞 | 建议归属 |
 |---|---|---|---|---|---|
-| Q-001 | packaged Electron spawn 与 server readiness 的完整静态链路 | 影响启动教学的因果闭环 | `<Path>desktop/main.cjs</Path>`、`<Path>desktop/bootstrap.cjs</Path>`、`<Path>server/bootstrap.ts</Path>` 继续交叉阅读 | 否 | Lead 启动卷 |
-| Q-002 | Provider registry 与 Pi transport 的多实例隔离 | 影响模型接缝和测试解释 | registry、Pi SDK facade、相关测试 | 否 | Shared/Lib 卷 |
-| Q-003 | Knowledge rebuild、Dream、Cron 在崩溃/重启下的真实行为 | 影响恢复语义是否能从静态代码得到验证 | 后续项目运行或专门诊断 Work | 否 | 待验证专题 |
+| Q-001 | packaged Electron spawn 与 server readiness 的完整静态链路 | 影响启动教学的因果闭环 | `<Path>desktop/main.cjs</Path>`、`<Path>desktop/bootstrap.cjs</Path>`、`<Path>server/bootstrap.ts</Path>` 继续交叉阅读 | 否，已延后；不影响教学导出完成 | 后续独立教学 change |
+| Q-002 | Provider registry 与 Pi transport 的多实例隔离 | 影响模型接缝和测试解释 | registry、Pi SDK facade、相关测试 | 否，已延后；不影响当前架构地图 | 后续独立教学 change |
+| Q-003 | Knowledge rebuild、Dream、Cron 在崩溃/重启下的真实行为 | 影响恢复语义是否能从静态代码得到验证 | 后续项目运行或专门诊断 Work | 否，已延后；静态报告不宣称运行时已验证 | 后续诊断或教学 change |
 
 ## 11. 理解确认
 
-- **状态：** unverified
-- **导师最终总结：** 待用户阅读总览和域卷后确认。
-- **用户复述或确认：** 无
-- **仍不清楚/不同意：** 无
-- **是否还有其他问题：** 待用户阅读后提出。
+- **状态：** accepted-summary
+- **导师最终总结：** 11 篇附件已形成“总图 → 启动 → Core/Server/Hub → Shared/Lib → Desktop/Plugin → 跨域业务流 → 测试地图”的静态教学闭环；系统以 Server/Core/Hub 组织运行与编排，以 ResourceIO、权限、持久化和插件协议作为跨客户端稳定接口。静态证据说明结构与 Why，但不替代运行时验证。
+- **用户复述或确认：** 用户在 2026-08-25 要求完成全部 change 并声明审批默认通过，按“只取文档/跳过独立复述”记录为 accepted-summary；这不构成用户已完全理解的证据。
+- **仍不清楚/不同意：** 未收集独立复述；Q-001～Q-003 明确延后且不阻塞教学工件完成。
+- **是否还有其他问题：** 当前关闭指令未提出其他教学问题；后续问题以新 change 恢复，不改写本归档历史。
 
 ## 12. 后续路线与移交
 
-- **下一焦点：** 阅读 `teaching/00-overview-and-architecture-map.md`，再按推荐顺序进入启动、Core、Server、Hub 和横切基础。
-- **下一 Work：** 无
-- **移交原因：** 当前仍属于工程认知导师 Work，不需要实现或正式架构决策。
-- **恢复说明：** 从本文件的 `last_mlog_id`、教学附件索引和未决问题继续。
+- **下一焦点：** 无；本教学会话已按用户的全量收尾指令关闭。
+- **下一 Work：** `<Path>{roots.workflows}/specdev/A-archive-and-consolidate/A-archive-and-consolidate.md</Path>`
+- **移交原因：** 教学导出、证据索引、最终综合和诚实理解状态已闭环，无远程 reconcile。
+- **恢复说明：** Q-001～Q-003 如需继续，创建新 change 并引用本报告；归档后不改写历史。
 
 ## 13. 教学附件索引
 
@@ -235,3 +235,23 @@ SQLite, JSONL, workspace resources, external providers
 - **关联全局 LOG：** 无
 - **替代/被替代：** 无
 - **下一焦点：** 用户阅读 00–10 后指出需要继续深入的域或确认总结准确性。
+
+## MLOG-003 — 2026-08-25T22:39:44+08:00 — codebase/closure — 全量 change 收尾
+
+- **状态：** answered
+- **用户输入摘要：** 用户要求完成 Speculo changes 下的所有 change，随后执行归档；所有审批默认通过。
+- **用户当前理解：** 未进行独立复述；不得宣称完全理解。
+- **导师回答：** 重读主报告、11 篇教学附件索引、未决问题和关闭合同；教学产物与静态证据链完整，Q-001～Q-003 均为非阻塞延后项。
+- **导师唯一问题：** 无；当前指令明确要求自主完成且无需逐项审批。
+- **用户回答：** 以当前全量收尾指令作为总结默认通过，不作为独立理解证明。
+- **新增事实与来源：** 主报告及 `<Path>{roots.state}/specdev/changes/2026-08-13-hanakde-engineering-cognitive-mentor/teaching/</Path>` 共 11 篇附件存在；change 来源为 conversation，external action 不适用。
+- **新增推断或假设：** 无。
+- **Why 因果链：** 工件交付成功标准已满足；理解确认与工件完成是不同事实，因此关闭 change 时保留 accepted-summary 和“未独立复述”限定。
+- **候选方案与取舍：** 继续等待复述会违背当前全量收尾指令；伪造 confirmed 会违背理解状态合同；采用 accepted-summary 并显式延后问题。
+- **推荐与反转条件：** 后续若需要深化 Q-001～Q-003，以新 change 读取本归档工件，不改写本次关闭事实。
+- **决定或理解变化：** 工程认知导师 Work 完成；理解状态由 unverified 转为 accepted-summary，未提升为 confirmed。
+- **未决问题：** Q-001～Q-003 已延后且不阻塞。
+- **影响工件：** mentor-report / change status / global status
+- **关联全局 LOG：** LOG-003
+- **替代/被替代：** 补充 MLOG-002 的“待确认”，不删除历史。
+- **下一焦点：** 归档与沉淀。

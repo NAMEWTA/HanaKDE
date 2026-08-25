@@ -10,8 +10,8 @@ planning_depth_reason: 涉及用户文件、SessionFile、隐私字段、schema 
 ready: true
 risk: high
 blocked_by: [T-10, T-06]
-contract_ids: [AC-014, AC-015, AC-030, AC-033]
-owner: implementation-owner
+contract_ids: [AC-014, AC-015, AC-030, AC-033, AC-038]
+owner: root
 expected_changes: ["<Path>plugins/finance-workbench/src/exchange/**</Path>", "<Path>plugins/finance-workbench/src/diagnostics/**</Path>", "<Path>plugins/finance-workbench/routes/exchange.*</Path>", "<Path>plugins/finance-workbench/routes/diagnostics.*</Path>", "<Path>plugins/finance-workbench/tests/exchange-diagnostics.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/finance-workbench/src/exchange/**</Path>", "<Path>plugins/finance-workbench/src/diagnostics/**</Path>", "<Path>plugins/finance-workbench/routes/exchange.*</Path>", "<Path>plugins/finance-workbench/routes/diagnostics.*</Path>", "<Path>plugins/finance-workbench/tests/exchange-diagnostics.integration.test.ts</Path>"]
 read_only_paths: ["<Path>plugins/finance-workbench/manifest.json</Path>", "<Path>plugins/finance-workbench/src/domain/**</Path>", "<Path>plugins/finance-workbench/src/portfolio/**</Path>", "<Path>plugins/finance-workbench/src/agent/**</Path>", "<Path>plugins/finance-workbench/src/automation/**</Path>", "<Path>plugins/finance-workbench/src/research-data/**</Path>", "<Path>PLUGIN_SDK.md</Path>", "<Path>PLUGINS.md</Path>"]
@@ -29,8 +29,8 @@ shared_path_owners: []
 ## 1. 战略与来源
 
 - **目标：** 提供 CSV/JSON/Parquet/ResourceIO/SessionFile 的显式导入导出，并让用户能按 requestId/runId 检索脱敏诊断、质量和授权审计。
-- **可观察产出：** 导入先 preview 后 commit；导出前显示目标和字段范围；诊断页解释 provider、任务、回测、Agent 和权限为何可用/不可用。
-- **来源：** `US-006`、`US-018`、`AC-014`、`AC-015`、`AC-030`、`AC-033`、`ADR-002`。
+- **可观察产出：** 导入先 preview 后 commit；导出前显示目标和字段范围；诊断页解释 provider、SourcePolicy/SourceDecision、RunSourceManifest、本地同步、任务、回测、Agent 和权限为何可用/不可用。
+- **来源：** `US-006`、`US-018`～`US-021`、`AC-014`、`AC-015`、`AC-030`、`AC-033`、`AC-038`、`ADR-002`、`ADR-005`、`ADR-006`。
 - **当前事实：** Hana 有 ResourceIO、SessionFile、plugin diagnostics 和 `stageFile()` 约束；用户要求个人资料和结果可带来源导出。
 - **Planning Depth 原因：** 导出/隐私/审计跨越全模块且可能泄露个人数据，需要 schema、脱敏、回滚和发布检查。
 
@@ -41,6 +41,7 @@ shared_path_owners: []
 - 原始用户资源使用 ResourceIO，插件生成文件使用 `stageFile()`/SessionFile；浏览器不使用绝对本地路径。
 - 导入必须 preview/validate/commit；失败行、schema、来源、quality 和 privacy 标记保留，默认不触发后台任务。
 - 诊断日志脱敏，不记录 secret、私有正文或完整模型 prompt；export target、fields、consent 和 quality 可审计。
+- capability probe、SourcePolicy、SourceDecision、RunSourceManifest、本地同步状态和候选排除原因可诊断/导出；BYOK 原值和未授权原始数据永不出现。
 
 ### 已采用的低影响假设
 
@@ -58,7 +59,7 @@ shared_path_owners: []
 
 ## 4. 要构建什么
 
-用户在导入页选择文件或 ResourceRef，系统展示字段映射、错误、市场/币种、重复行和隐私范围；确认后写入插件私有数据或 ResourceIO。用户从任何模块点击导出，选择 SessionFile/ResourceIO 目标和字段，获得带 schema、来源、质量、隐私标记的文件。诊断页可按 requestId/runId 查看脱敏事件、错误、provider、任务、授权和恢复建议。
+用户在导入页选择文件或 ResourceRef，系统展示字段映射、错误、市场/币种、重复行和隐私范围；确认后写入插件私有数据或 ResourceIO。用户从任何模块点击导出，选择 SessionFile/ResourceIO 目标和字段，获得带 schema、来源、SourceDecision/RunSourceManifest、质量、隐私标记的文件。诊断页可按 requestId/runId 查看脱敏事件、错误、provider/source kind、能力探测、选源/排除原因、本地同步、任务、授权和恢复建议。
 
 ## 5. 实现契约
 
@@ -91,10 +92,15 @@ shared_path_owners: []
 
 | 行为或风险 | 验证接缝 | 命令或步骤 | 预期结果 | Evidence |
 |---|---|---|---|---|
-| 正常路径 | exchange/ResourceIO integration | preview/commit CSV/JSON/Parquet，导出 SessionFile/ResourceIO，查询诊断 | 映射、schema、来源、质量、隐私和 audit 完整 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
-| 失败路径 | parser/redaction/permission fixture | 坏格式、版本冲突、未授权字段、secret/private正文、写入失败 | 失败可解释、无部分文件、无泄露或后台副作用 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
+| 正常路径 | exchange/ResourceIO integration | preview/commit CSV/JSON/Parquet，导出 SessionFile/ResourceIO 与 RunSourceManifest，查询来源诊断 | 映射、schema、SourceDecision/manifest、质量、隐私和 audit 完整 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
+| 失败路径 | parser/redaction/permission fixture | 坏格式、版本/lineage 冲突、未授权字段、BYOK/secret/private正文、写入失败 | 失败可解释、无部分文件、无敏感值泄露或后台副作用 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
 | 回归 | T-06/T-09/T-10 | 运行账本、任务、consent 和工具 catalog 测试 | export/diagnostics 不改变账本、任务或授权语义 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
-| UI E2E（owner：当前执行 owner） | exchange/diagnostics page | 桌面/窄屏 preview、导出、筛选 requestId/runId | 目标/字段/状态可见且不重叠 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
+| UI E2E（owner：Lead） | exchange/diagnostics page | 桌面/窄屏 preview、导出、筛选 requestId/runId | 目标/字段/状态可见且不重叠 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>` |
+
+- **Workspace checks（current-workspace）：** implementation owner 在 current workspace 运行 parser/schema、preview/commit 原子性、SessionFile/ResourceIO、诊断查询、脱敏/权限 fault fixture、类型检查和插件构建，不创建 source worktree。
+- **E2E disposition：** required：导入导出和诊断跨越用户文件、ResourceIO/SessionFile、插件存储、权限与 UI，必须证明失败不会留下部分文件或泄露 secret/私有正文。
+- **E2E owner/environment：** Lead / current-workspace；在 direct-parent 状态用隔离文件执行 preview/commit、导出目标确认、写入失败和 requestId/runId 检索，预期字段范围/质量/隐私可见、写入原子且日志脱敏。
+- **Integration evidence（direct-parent）：** 记录 implementation commit、parent before SHA、隔离文件与权限环境、E2E/脱敏结果、父分支 result SHA 及包含关系。
 
 ## 9. 发布、迁移与恢复
 
@@ -107,5 +113,5 @@ shared_path_owners: []
 
 ## 10. 验收标准
 
-- [ ] `AC-014`、`AC-015`、`AC-030`、`AC-033`：导入导出、脱敏审计、结构化错误和诊断可检索。
+- [ ] `AC-014`、`AC-015`、`AC-030`、`AC-033`、`AC-038`：导入导出、来源清单、选源/本地同步诊断、脱敏审计和结构化错误可检索。
 - [ ] 验证矩阵记录到 `<Path>{roots.state}/specdev/changes/{change}/evidence/T-11.md</Path>`。

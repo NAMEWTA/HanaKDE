@@ -1,9 +1,24 @@
 # Direct Spec Implementation Evidence
 
+- **Change:** `2026-08-25-hanakde-v0-0-4-todolist-release`
+- **Lead:** `root`
+- **Workspace:** current workspace / `hanakde`
+- **Parent before SHA:** `0003a6734faddb170a9c06aa8a2fd282cef6becf`
+- **Final checkpoint/result SHA:** `e64e45ae0195ab8624fac77b26dc20aff2332711`
 - TodoList implementation commit: `0003a6734faddb170a9c06aa8a2fd282cef6becf`.
 - Release commit/tag: `e64e45ae0195ab8624fac77b26dc20aff2332711` / `v0.0.4`.
 - Successful workflow: `https://github.com/NAMEWTA/HanaKDE/actions/runs/32836866539`.
 - Published release: `https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.4`.
+
+## Acceptance Mapping
+
+| Acceptance | Evidence | Result |
+|---|---|---|
+| Root and lock versions are 0.0.4; Todo remains 0.2.1 | release commit and package verification | pass |
+| v1/v2 release digests describe the verified v0.0.4 delta | digest validators | pass |
+| Todo regression and real host behavior remain green | 30/30 plugin, 8/8 iframe, 12/12 real host E2E | pass |
+| Annotated v0.0.4 tag points to verified release commit | local/origin tag peel to `e64e45ae` | pass |
+| Cross-platform Release is complete | workflow `32836866539` success at `e64e45ae`; non-draft prerelease with 13 assets | pass |
 
 ## Verification
 
@@ -37,3 +52,13 @@
 - No HanaAgent Apple signing or notarization identity is used.
 - The local ephemeral seed-signing private key was deleted after verification and is not recoverable or committed.
 - Unrelated finance, Knowledge redesign, and pnpm workspace changes are excluded from release commits.
+
+## Review, Deviations And Risk
+
+- **Standard axis:** pass; version/digest/persistence/build/package verification is internally consistent and the published matrix completed successfully.
+- **Conformance axis:** pass; the release contains the verified Todo fix and compatible release metadata without Finance, Knowledge or pnpm migration work.
+- **E2E disposition:** required/passed; local real-host Todo E2E and remote cross-platform packaging both passed.
+- **Unverified items:** none required by the Direct Spec.
+- **Deviations:** none.
+- **Residual risk:** macOS artifacts retain the approved non-notarized HanaKDE signing boundary.
+- **Re-read:** `e64e45ae` is contained by current `hanakde` and `origin/hanakde`; tag and successful workflow use the same SHA; workspace dirt is unrelated later Speculo planning work.

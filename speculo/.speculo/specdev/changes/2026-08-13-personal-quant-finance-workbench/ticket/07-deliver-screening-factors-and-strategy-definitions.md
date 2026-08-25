@@ -11,7 +11,7 @@ ready: true
 risk: high
 blocked_by: [T-05]
 contract_ids: [AC-016]
-owner: implementation-owner
+owner: root
 expected_changes: ["<Path>plugins/finance-workbench/src/quant/screener/**</Path>", "<Path>plugins/finance-workbench/src/quant/strategy/**</Path>", "<Path>plugins/finance-workbench/routes/quant-definition.*</Path>", "<Path>plugins/finance-workbench/tests/quant-definition.integration.test.ts</Path>"]
 writable_paths: ["<Path>plugins/finance-workbench/src/quant/screener/**</Path>", "<Path>plugins/finance-workbench/src/quant/strategy/**</Path>", "<Path>plugins/finance-workbench/routes/quant-definition.*</Path>", "<Path>plugins/finance-workbench/tests/quant-definition.integration.test.ts</Path>"]
 read_only_paths: ["<Path>plugins/finance-workbench/src/domain/**</Path>", "<Path>plugins/finance-workbench/src/assets/**</Path>", "<Path>plugins/finance-workbench/src/data/**</Path>", "<Path>plugins/finance-workbench/src/research-data/**</Path>", "<Path>temp/finance-references/tickflow-stock-panel/**</Path>", "<Path>temp/finance-references/TradingAgents-astock/**</Path>"]
@@ -93,6 +93,11 @@ shared_path_owners: []
 | 正常路径 | AST/definition integration | 创建 A/HK 筛选、因子、权重、再平衡并保存版本 | 预览候选和来源可解释，定义可被回测消费 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>` |
 | 失败路径 | validator fixture | 注入未知字段、单位冲突、未来字段、循环和任意代码 | 定位诊断、blocked、零执行副作用 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>` |
 | 回归 | T-03/T-05 contract | 运行 AssetRef/EvidenceRef 测试 | 定义只引用 confirmed/有证据字段 | `<Path>{roots.state}/specdev/changes/{change}/evidence/T-07.md</Path>` |
+
+- **Workspace checks（current-workspace）：** implementation owner 在 current workspace 运行 AST parser/validator、版本化持久化、字段/单位/未来数据/cycle fault fixture、类型检查和插件构建，不创建 source worktree。
+- **E2E disposition：** required：用户从编辑入口保存策略并预览 Universe 的路径跨越 UI、route、版本存储与数据字段解析，必须证明任意代码和未来字段无法执行。
+- **E2E owner/environment：** Lead / current-workspace；在 direct-parent 状态创建、保存、重开并预览 A/HK 筛选/因子/策略，同时提交未知字段、单位冲突、循环和任意代码，预期合法版本可解释且非法定义 blocked、零执行副作用。
+- **Integration evidence（direct-parent）：** 记录 implementation commit、parent before SHA、策略 UI/route 场景与安全断言、E2E 结果、父分支 result SHA 及包含关系。
 
 ## 9. 发布、迁移与恢复
 

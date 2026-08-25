@@ -89,7 +89,7 @@ Todo Page 入口显式注入官方 `@hana/plugin-sdk`。DOM 应用不再读取 `
 | Integration checks | 插件 `npm run verify` 与宿主 iframe Vitest 均在 current workspace 通过 |
 | E2E disposition | required；验证真实 HanaKDE 插件 Page |
 | E2E result | passed；desktop/narrow 五语言 12/12，无 401/403 |
-| Parent result/re-read | HEAD `6c50e42992cb3483bacd1c3f5963e17e45649e6b` + verified current-workspace diff |
+| Parent result/re-read | Direct-parent result `0003a6734faddb170a9c06aa8a2fd282cef6becf`；后续 `e64e45ae` 与当前 HEAD 仅为发行/文档祖先，均包含该实现提交 |
 
 ## 8. 偏差与决策
 
@@ -103,6 +103,6 @@ Todo Page 入口显式注入官方 `@hana/plugin-sdk`。DOM 应用不再读取 `
 - **后续 Ticket：** 无；发布由独立 v0.0.4 release change 承接。
 - **监控或回滚触发：** E2E 出现 401/403、ready 超时或 CRUD 失败时回滚内置插件资产；Todo Store 位于独立 data 目录且本次未修改。
 - **Source commit：** `0003a6734faddb170a9c06aa8a2fd282cef6becf`
-- **Parent result：** `6c50e42992cb3483bacd1c3f5963e17e45649e6b` + verified current workspace diff
+- **Parent result：** `0003a6734faddb170a9c06aa8a2fd282cef6becf`
 - **Source workspace：** `/Users/wta/Documents/01-Code/myCode/HanaKDE`
 - **Evidence：** `<Path>speculo/.speculo/specdev/changes/2026-08-24-fix-todolist-plugin-loading/evidence/direct-spec.md</Path>`
