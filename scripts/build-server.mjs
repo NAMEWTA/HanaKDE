@@ -47,6 +47,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 import {
   applyPlatformPackageTrim,
@@ -68,6 +69,10 @@ import {
 import { copyServerRuntimeAssets } from "./build-server-runtime-assets.mjs";
 import { packDualKindSeed } from "./build-server-artifact.mjs";
 import { copySecureFsHelperRuntime } from "./build-secure-fs-helper.mjs";
+import {
+  collectLocalFileDependencyClosure,
+  stageLocalFileDependencies,
+} from "./build-server-deps.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -169,6 +174,20 @@ console.log("[build-server] resource files copied");
 // plugins/，因此 build-server-open.mjs 不传这份清单。
 const pluginPackageDeps = await collectBundledPluginPackageDependencies({ rootDir: ROOT });
 const pluginNftRoots = await collectBundledPluginNftRoots({ rootDir: ROOT });
+const rootPackage = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
+const localPluginDependencies = collectLocalFileDependencyClosure({
+  rootDir: ROOT,
+  rootDependencies: rootPackage.dependencies || {},
+  packageNames: pluginPackageDeps,
+});
+if (localPluginDependencies.length > 0) {
+  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+  execFileSync(npmCommand, ["run", "build:packages"], { cwd: ROOT, stdio: "inherit" });
+  stageLocalFileDependencies({ outDir, localDependencies: localPluginDependencies });
+  for (const dependency of localPluginDependencies) {
+    console.log(`[build-server]   ${dependency.relativeDir}/`);
+  }
+}
 const { externalPkg, rootPkg } = await resolveAndInstallExternalServerDeps({
   rootDir: ROOT,
   outDir,
@@ -178,7 +197,12 @@ const { externalPkg, rootPkg } = await resolveAndInstallExternalServerDeps({
   isWin,
   runWithTargetNode,
   cachedNpmCli,
-  extraPackageNames: pluginPackageDeps,
+  extraPackageNames: [
+    ...new Set([
+      ...pluginPackageDeps,
+      ...localPluginDependencies.map((dependency) => dependency.packageName),
+    ]),
+  ],
 });
 
 // ── 7. @vercel/nft 追踪：只保留运行时实际需要的文件 ──

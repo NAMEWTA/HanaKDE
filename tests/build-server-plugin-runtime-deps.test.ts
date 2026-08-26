@@ -146,12 +146,29 @@ describe("bundled plugin runtime dependencies", () => {
       'export { runtimeBuild } from "runtime-build-package";\n',
       "utf-8",
     );
+    fs.writeFileSync(
+      path.join(rootDir, "plugins", "compiled-plugin", "vite.config.ts"),
+      'import "vite"; import "@vitejs/plugin-react";\n',
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(rootDir, "plugins", "compiled-plugin", "vitest.config.ts"),
+      'import "vitest/config";\n',
+      "utf-8",
+    );
 
     const packages = await collectBundledPluginPackageDependencies({ rootDir });
     expect(packages).not.toContain("build-only-package");
+    expect(packages).not.toContain("vite");
+    expect(packages).not.toContain("vitest");
+    expect(packages).not.toContain("@vitejs/plugin-react");
     expect(packages).toContain("runtime-build-package");
     await expect(collectBundledPluginNftRoots({ rootDir }))
       .resolves.not.toContain("plugins/compiled-plugin/build.ts");
+    await expect(collectBundledPluginNftRoots({ rootDir }))
+      .resolves.not.toContain("plugins/compiled-plugin/vite.config.ts");
+    await expect(collectBundledPluginNftRoots({ rootDir }))
+      .resolves.not.toContain("plugins/compiled-plugin/vitest.config.ts");
     await expect(collectBundledPluginNftRoots({ rootDir }))
       .resolves.toContain("plugins/compiled-plugin/src/build.ts");
   });

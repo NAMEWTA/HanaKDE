@@ -65,7 +65,9 @@ export function buildExternalPackage(
   const dependencies = {};
 
   for (const [packageName, requestedVersion] of Object.entries(externalDeps)) {
-    dependencies[packageName] = rootLock
+    dependencies[packageName] = typeof requestedVersion === "string" && requestedVersion.startsWith("file:")
+      ? requestedVersion
+      : rootLock
       ? getLockedPackageVersion(rootLock, packageName)
       : requestedVersion;
   }
@@ -80,6 +82,90 @@ export function buildExternalPackage(
     type: "module",
     dependencies,
   };
+}
+
+function localFileDependencySource(rootDir, packageName, specifier) {
+  const sourceDir = path.resolve(rootDir, specifier.slice("file:".length));
+  const relativeDir = path.relative(rootDir, sourceDir);
+  if (!relativeDir || relativeDir.startsWith("..") || path.isAbsolute(relativeDir)) {
+    throw new Error(`[build-server] local dependency ${packageName} must resolve inside the repository: ${specifier}`);
+  }
+  return { sourceDir, relativeDir };
+}
+
+/**
+ * Finds root-declared file: packages needed by an initial external set. Local
+ * package manifests are followed by name so workspace dependencies such as
+ * runtime -> protocol are installed from the same staged repository paths.
+ */
+export function collectLocalFileDependencyClosure({ rootDir, rootDependencies, packageNames }) {
+  const queue = [...packageNames];
+  const visited = new Set();
+  const localDependencies = [];
+
+  while (queue.length > 0) {
+    const packageName = queue.shift();
+    if (visited.has(packageName)) continue;
+    visited.add(packageName);
+
+    const specifier = rootDependencies[packageName];
+    if (typeof specifier !== "string" || !specifier.startsWith("file:")) continue;
+
+    const { sourceDir, relativeDir } = localFileDependencySource(rootDir, packageName, specifier);
+    const packageJsonPath = path.join(sourceDir, "package.json");
+    if (!fs.existsSync(packageJsonPath)) {
+      throw new Error(`[build-server] local dependency ${packageName} is missing ${packageJsonPath}`);
+    }
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    if (packageJson.name !== packageName) {
+      throw new Error(
+        `[build-server] local dependency name mismatch: expected ${packageName}, found ${packageJson.name || "<missing>"}`,
+      );
+    }
+
+    localDependencies.push({ packageName, specifier, sourceDir, relativeDir });
+    for (const dependencyName of Object.keys(packageJson.dependencies || {})) {
+      if (typeof rootDependencies[dependencyName] === "string"
+        && rootDependencies[dependencyName].startsWith("file:")) {
+        queue.push(dependencyName);
+      }
+    }
+  }
+
+  return localDependencies.sort((a, b) => a.packageName.localeCompare(b.packageName));
+}
+
+export function stageLocalFileDependencies({ outDir, localDependencies }) {
+  for (const dependency of localDependencies) {
+    const targetDir = path.resolve(outDir, dependency.relativeDir);
+    const relativeTarget = path.relative(outDir, targetDir);
+    if (!relativeTarget || relativeTarget.startsWith("..") || path.isAbsolute(relativeTarget)) {
+      throw new Error(`[build-server] invalid local dependency target: ${dependency.relativeDir}`);
+    }
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+    fs.cpSync(dependency.sourceDir, targetDir, { recursive: true });
+  }
+}
+
+export function materializeLocalFileDependencies({ outDir, dependencies }) {
+  const materialized = [];
+  for (const [packageName, specifier] of Object.entries(dependencies)) {
+    if (typeof specifier !== "string" || !specifier.startsWith("file:")) continue;
+
+    const { sourceDir } = localFileDependencySource(outDir, packageName, specifier);
+    const installedDir = path.resolve(outDir, "node_modules", packageName);
+    const relativeInstalledDir = path.relative(path.join(outDir, "node_modules"), installedDir);
+    if (!relativeInstalledDir || relativeInstalledDir.startsWith("..") || path.isAbsolute(relativeInstalledDir)) {
+      throw new Error(`[build-server] invalid local dependency install path: ${packageName}`);
+    }
+    const stat = fs.lstatSync(installedDir);
+    if (!stat.isSymbolicLink()) continue;
+
+    fs.unlinkSync(installedDir);
+    fs.cpSync(sourceDir, installedDir, { recursive: true });
+    materialized.push(packageName);
+  }
+  return materialized;
 }
 
 function packageNameFromBareSpecifier(specifier) {

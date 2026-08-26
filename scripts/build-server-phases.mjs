@@ -30,6 +30,7 @@ import {
   buildExternalPackage,
   collectBareImportPackageNames,
   collectInstalledOptionalDependencyDirs,
+  materializeLocalFileDependencies,
   verifyExternalEntrypoints,
 } from "./build-server-deps.mjs";
 import { pruneRuntimeDeadFiles } from "./build-server-prune.mjs";
@@ -489,6 +490,13 @@ export async function resolveAndInstallExternalServerDeps({
 
   log("[build-server] installing external dependencies...");
   runWithTargetNode(`"${cachedNpmCli}" install --omit=dev --no-audit --no-fund --ignore-scripts=false`);
+  const materializedLocalDependencies = materializeLocalFileDependencies({
+    outDir,
+    dependencies: externalPkg.dependencies,
+  });
+  if (materializedLocalDependencies.length > 0) {
+    log(`[build-server] materialized local dependencies: ${materializedLocalDependencies.join(", ")}`);
+  }
   ensureNodePtySpawnHelperExecutable({ baseDir: outDir, platform, arch, isWin });
 
   // Verify every string Vite external actually resolved into node_modules.

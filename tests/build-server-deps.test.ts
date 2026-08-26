@@ -10,7 +10,10 @@ import {
   buildJiebaRuntimeSmokeScript,
   collectBareImportPackageNames,
   collectInstalledOptionalDependencyDirs,
+  collectLocalFileDependencyClosure,
+  materializeLocalFileDependencies,
   readPackageJsonWithRetry,
+  stageLocalFileDependencies,
   verifyExternalEntrypoints,
 } from "../scripts/build-server-deps.mjs";
 
@@ -103,6 +106,65 @@ describe("build-server external dependency packaging", () => {
         "lru-cache": "11.2.7",
       },
     });
+  });
+
+  it("preserves and stages the transitive closure of local file dependencies", () => {
+    const rootDir = makeTempDir();
+    const outDir = path.join(rootDir, "out");
+    const runtimeDir = path.join(rootDir, "packages", "runtime");
+    const protocolDir = path.join(rootDir, "packages", "protocol");
+    fs.mkdirSync(path.join(runtimeDir, "dist"), { recursive: true });
+    fs.mkdirSync(path.join(protocolDir, "dist"), { recursive: true });
+    fs.writeFileSync(path.join(runtimeDir, "package.json"), JSON.stringify({
+      name: "@hana/runtime",
+      version: "0.0.0",
+      dependencies: { "@hana/protocol": "0.0.0" },
+    }));
+    fs.writeFileSync(path.join(protocolDir, "package.json"), JSON.stringify({
+      name: "@hana/protocol",
+      version: "0.0.0",
+    }));
+    fs.writeFileSync(path.join(runtimeDir, "dist", "index.js"), "export const runtime = true;\n");
+    fs.writeFileSync(path.join(protocolDir, "dist", "index.js"), "export const protocol = true;\n");
+
+    const rootDependencies = {
+      "@hana/runtime": "file:packages/runtime",
+      "@hana/protocol": "file:packages/protocol",
+    };
+    const localDependencies = collectLocalFileDependencyClosure({
+      rootDir,
+      rootDependencies,
+      packageNames: ["@hana/runtime"],
+    });
+    expect(localDependencies.map(({ packageName }) => packageName)).toEqual([
+      "@hana/protocol",
+      "@hana/runtime",
+    ]);
+
+    stageLocalFileDependencies({ outDir, localDependencies });
+    expect(fs.existsSync(path.join(outDir, "packages", "runtime", "dist", "index.js"))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, "packages", "protocol", "dist", "index.js"))).toBe(true);
+
+    const installedRuntimeDir = path.join(outDir, "node_modules", "@hana", "runtime");
+    const installedProtocolDir = path.join(outDir, "node_modules", "@hana", "protocol");
+    fs.mkdirSync(path.dirname(installedRuntimeDir), { recursive: true });
+    fs.symlinkSync(runtimeDir, installedRuntimeDir, process.platform === "win32" ? "junction" : "dir");
+    fs.symlinkSync(protocolDir, installedProtocolDir, process.platform === "win32" ? "junction" : "dir");
+
+    expect(materializeLocalFileDependencies({ outDir, dependencies: rootDependencies })).toEqual([
+      "@hana/runtime",
+      "@hana/protocol",
+    ]);
+    expect(fs.lstatSync(installedRuntimeDir).isSymbolicLink()).toBe(false);
+    expect(fs.lstatSync(installedProtocolDir).isSymbolicLink()).toBe(false);
+    expect(fs.existsSync(path.join(installedRuntimeDir, "dist", "index.js"))).toBe(true);
+
+    const serverPkg = buildExternalPackage(
+      { version: "1.0.1" },
+      rootDependencies,
+      { rootLock: { packages: {} } },
+    );
+    expect(serverPkg.dependencies).toEqual(rootDependencies);
   });
 
   it("protects installed optional runtime packages owned by server externals", () => {

@@ -23,7 +23,7 @@ function isPluginRuntimeEntry(relativePath) {
   const parts = relativePath.split(/[\\/]/);
   if (parts.some((part) => IGNORED_RUNTIME_DIRS.has(part))) return false;
   const base = parts.at(-1) || "";
-  if (parts.length === 2 && /^build\.[cm]?[jt]s$/i.test(base)) return false;
+  if (parts.length === 2 && /^(?:build|.+\.config)\.[cm]?[jt]s$/i.test(base)) return false;
   if (/\.(?:test|spec)\.[cm]?js$/i.test(base)) return false;
   return PLUGIN_RUNTIME_EXTENSIONS.has(path.extname(base));
 }

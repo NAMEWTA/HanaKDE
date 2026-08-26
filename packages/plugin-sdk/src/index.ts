@@ -188,7 +188,7 @@ function readPluginIdFromIframeRoute(targetWindow: Window): string {
     throw new Error('Plugin asset URL helper requires an iframe route under /api/plugins/:pluginId/.');
   }
   try {
-    return decodeURIComponent(match[1]);
+    return decodeURIComponent(match[1]!);
   } catch {
     throw new Error('Plugin asset URL helper could not decode the current plugin id.');
   }

@@ -84,6 +84,8 @@
     "@earendil-works/pi-ai": "0.80.3",
     "@earendil-works/pi-coding-agent": "0.80.3",
     "@firecrawl/anydoc": "0.1.2",
+    "@hana/plugin-protocol": "file:packages/plugin-protocol",
+    "@hana/plugin-runtime": "file:packages/plugin-runtime",
     "@hono/node-server": "^1.19.11",
     "@hono/node-ws": "^1.3.0",
     "@larksuiteoapi/node-sdk": "^1.59.0",

@@ -11,7 +11,13 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@hana/plugin-protocol": ["../../packages/plugin-protocol/src/index.ts"],
+      "@hana/plugin-runtime": ["../../packages/plugin-runtime/src/index.ts"],
+      "@hana/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"]
+    }
   },
   "include": [
     "index.ts",
