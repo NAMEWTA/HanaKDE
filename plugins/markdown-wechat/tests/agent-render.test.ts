@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { execute, name, parameters } from "../tools/render.ts";
 import { mockContext, removeDirectory, temporaryDirectory } from "./helpers.ts";
@@ -14,7 +15,7 @@ describe("Agent render tool", () => {
     expect(parameters.additionalProperties).toBe(false);
     expect(result.content).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining("no session file") })]));
     expect((result.details as any).markdownWechat.sessionFile).toBe("unavailable_without_session");
-    expect(fs.existsSync(`${dir}/generated`)).toBe(false);
+    expect(fs.existsSync(path.join(dir, "generated"))).toBe(false);
   });
 
   it("reads ResourceRef and stages only plugin-private HTML as SessionFile", async () => {
@@ -28,7 +29,7 @@ describe("Agent render tool", () => {
       },
     });
     const result = await execute({ resourceRef: { kind: "local", name: "article.md" }, title: "Agent result" }, context);
-    expect(stagedPath.startsWith(`${dir}/generated/`)).toBe(true);
+    expect(stagedPath.startsWith(`${path.join(dir, "generated")}${path.sep}`)).toBe(true);
     expect(fs.readFileSync(stagedPath, "utf8")).toContain("<!doctype html>");
     expect((result.details as any).markdownWechat.sessionFile).toBe("created");
     expect(result.details).toHaveProperty("media");
@@ -43,6 +44,6 @@ describe("Agent render tool", () => {
       stageFile() { throw new Error("registry unavailable"); },
     }));
     expect((failed.details as any).error.code).toBe("stage_failed");
-    expect(fs.readdirSync(`${dir}/generated`)).toHaveLength(0);
+    expect(fs.readdirSync(path.join(dir, "generated"))).toHaveLength(0);
   });
 });

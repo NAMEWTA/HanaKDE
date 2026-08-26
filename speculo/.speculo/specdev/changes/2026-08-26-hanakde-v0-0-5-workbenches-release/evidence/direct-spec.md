@@ -4,7 +4,7 @@
 - **Lead:** `root`
 - **Workspace:** current workspace / `hanakde`
 - **Implementation baseline:** `befea22f5da9c65509efe95daeeef8d35b115c7b`
-- **Status:** clean-checkout install and packaging repair verified; corrected remote publication pending
+- **Status:** v0.0.5 published with 13 assets; final branch CI rerun pending after Windows path-test repair
 
 ## Acceptance Mapping
 
@@ -18,7 +18,7 @@
 | Repository release gates pass | typecheck; ESLint 0 errors; four package builds; client production build | pass |
 | CI-equivalent unit/integration suite passes | main shard: 1225 files / 12312 tests; isolated gates: 83 tests; Todo: 30 tests | pass |
 | Clean-checkout install and server packaging include plugin workspace runtime | isolated full `npm ci`; source-mapped typecheck without package `dist`; 78 focused tests; complete signed darwin-arm64 server build; runtime import and seed-kit verification | pass |
-| Annotated tag, remote workflow, and 13 release assets | awaiting branch/tag push and GitHub verification | pending |
+| Annotated tag, remote workflow, and 13 release assets | Build `32924983037`: success; published prerelease has 13 expected assets | pass |
 
 ## Implementation Notes
 
@@ -56,4 +56,5 @@
 - The first pushed candidate (`5663876d4541aff4f3e25d948d1c8db4341b369f`) reached remote CI but failed on clean-checkout workspace package resolution; Build run `32920794734` failed before release creation. No GitHub Release was published from that candidate. The annotated tag will be moved to the verified repair commit before the corrected build is triggered.
 - The second pushed candidate (`80b3380d8fb5b803c8e52a12108000bb4e139dce`) proved the server packaging fix locally but exposed that declaring its workspace packages as root production dependencies made clean `npm ci` postinstall verify their not-yet-built `dist`. CI run `32923201223` and Build run `32923242517` failed consistently at that install gate; no release was created. The final design discovers these packages from the workspace manifest only for the generated server package and passes isolated clean-install plus full packaging verification.
 - The third pushed candidate (`41f38515f9503896da78b1cc1fb8d47265967f8f`) passed Build on macOS arm64, macOS x64, and Linux x64. Windows alone failed because Node 24 rejects direct `execFileSync("npm.cmd", ...)` with `EINVAL`; Build run `32924200579` therefore skipped release creation. Workspace builds now execute the already-resolved npm CLI JavaScript with `process.execPath`, matching the cross-platform invocation used elsewhere; the build-order contract and all four workspace package builds pass locally.
-- Remote workflow, release URL, asset inventory, and final release commit will be appended after publication.
+- Final release commit `4ec79cf1a96b2c8aa15559f6bae9abab9d34cbea` passed all four Build matrix platforms plus the Release job in run `32924983037`. GitHub published non-draft prerelease `v0.0.5` at `https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.5` with exactly 13 expected assets.
+- Branch CI run `32924979040` passed 15 of 16 jobs and 12,283 of 12,285 Windows general tests. Its two failures were test-only forward-slash assumptions in Electron runtime and Markdown staging assertions; both now normalize or construct platform paths and pass locally. A branch-only rerun is pending; the published production artifacts are unchanged.

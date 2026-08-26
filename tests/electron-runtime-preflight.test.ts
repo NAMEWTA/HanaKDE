@@ -52,10 +52,9 @@ describe("Electron runtime preflight", () => {
     fs.writeFileSync(path.join(packageDirectory, "path.txt"), "electron", "utf8");
     fs.writeFileSync(path.join(packageDirectory, "dist", "electron"), "fixture", "utf8");
 
-    expect(inspectElectronRuntime(packageDirectory)).toMatchObject({
-      ready: false,
-      reason: expect.stringContaining("dist/version"),
-    });
+    const inspection = inspectElectronRuntime(packageDirectory);
+    expect(inspection.ready).toBe(false);
+    expect(inspection.reason?.replaceAll("\\", "/")).toContain("dist/version");
   });
 
   it("accepts a complete runtime", () => {
