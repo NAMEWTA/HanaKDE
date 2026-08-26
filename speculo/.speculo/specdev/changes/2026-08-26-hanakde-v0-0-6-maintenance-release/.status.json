@@ -2,11 +2,12 @@
   "schema_version": 6,
   "artifact": "change-status",
   "change": "2026-08-26-hanakde-v0-0-6-maintenance-release",
-  "change_status": "active",
-  "current_work": "specdev/implement",
+  "change_status": "completed",
+  "current_work": null,
   "works_run": [
     "specdev/triage",
-    "specdev/spec"
+    "specdev/spec",
+    "specdev/implement"
   ],
   "claimed_investigations": [],
   "execution_authorization": {
@@ -36,8 +37,8 @@
     "history": []
   },
   "created_at": "2026-08-26T14:21:23+08:00",
-  "updated_at": "2026-08-26T14:21:23+08:00",
-  "completed_at": null,
+  "updated_at": "2026-08-26T15:20:23+08:00",
+  "completed_at": "2026-08-26T15:20:23+08:00",
   "archived": false,
   "archive_path": null,
   "blockers": [],
