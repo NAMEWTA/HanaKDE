@@ -19,6 +19,7 @@
   "include": [
     "tests/**/*.ts",
     "tests/**/*.tsx",
+    "desktop/src/assets.d.ts",
     "desktop/src/global.d.ts"
   ],
   "exclude": [

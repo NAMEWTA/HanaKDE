@@ -3,6 +3,113 @@
   "entries": [
     {
       "schemaVersion": 1,
+      "tag": "v0.0.5",
+      "version": "0.0.5",
+      "previousTag": "v0.0.4",
+      "generatedAt": "2026-08-26T01:33:57.902Z",
+      "noUserFacingChanges": false,
+      "summary": {
+        "zh": "HanaKDE v0.0.5 新增 Markdown 公众号排版与个人量化金融研究工作台，并完善插件页面的导出和跳转体验。",
+        "en": "HanaKDE v0.0.5 adds Markdown publishing and personal quantitative finance research workbenches, with complete export and navigation flows for plugin pages."
+      },
+      "counts": {
+        "feature": 2,
+        "fix": 0,
+        "improvement": 0,
+        "migration": 0
+      },
+      "source": {
+        "owner": "NAMEWTA",
+        "repo": "HanaKDE",
+        "commitRange": "v0.0.4..befea22f",
+        "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.5",
+        "releaseNotes": ""
+      },
+      "items": [
+        {
+          "id": "markdown-wechat-workbench",
+          "kind": "feature",
+          "importance": "high",
+          "title": {
+            "zh": "Markdown 公众号排版工作台",
+            "en": "Markdown publishing workbench"
+          },
+          "summary": {
+            "zh": "在 HanaKDE 中编辑 Markdown、实时预览公众号样式，并通过富文本复制或浏览器下载交付排版结果。",
+            "en": "Edit Markdown, preview publication-ready styling live, and deliver formatted results through rich-text copy or browser downloads inside HanaKDE."
+          },
+          "details": [
+            {
+              "zh": "Page、Widget 和 Agent tool 共用受权限保护的插件数据、资源导入和显式写回流程。",
+              "en": "Page, Widget, and Agent tools share permission-scoped plugin data, resource import, and explicit write-back flows."
+            },
+            {
+              "zh": "Widget 可直接打开完整工作台，页面导出不再依赖聊天 Session。",
+              "en": "The Widget can open the full workbench directly, and Page exports no longer depend on a chat Session."
+            }
+          ],
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "cd479e01",
+              "title": "feat(plugins): add Markdown WeChat workbench"
+            },
+            {
+              "type": "commit",
+              "ref": "3607ba0b",
+              "title": "feat(markdown-wechat): open workspace from widget"
+            },
+            {
+              "type": "commit",
+              "ref": "908326fa",
+              "title": "fix(plugins): allow surface downloads"
+            },
+            {
+              "type": "commit",
+              "ref": "55b90791",
+              "title": "feat(plugins): add own-page navigation capability"
+            }
+          ]
+        },
+        {
+          "id": "finance-research-workbench",
+          "kind": "feature",
+          "importance": "high",
+          "title": {
+            "zh": "个人量化金融研究工作台",
+            "en": "Personal quantitative finance research workbench"
+          },
+          "summary": {
+            "zh": "为 A 股和港股提供可追溯的数据研究、组合账本、筛选、因子策略、回测、监控与定时研究工作流。",
+            "en": "Research A-share and Hong Kong markets with traceable data, a portfolio ledger, screening, factor strategies, backtests, monitors, and scheduled research workflows."
+          },
+          "details": [
+            {
+              "zh": "数据源能力、质量、策略和运行 lineage 会被冻结并随证据记录，缺失或不完整数据不会被静默当成可用。",
+              "en": "Provider capability, quality, policy, and run lineage are frozen with evidence; missing or incomplete data is never silently treated as usable."
+            },
+            {
+              "zh": "私有材料和模型研究采用单次字段级授权；工作台永久保持 research-only，不提供下单或资金操作。",
+              "en": "Private material and model research use one-run field-level consent; the workbench remains permanently research-only with no order or funds operations."
+            }
+          ],
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "3e2619e4",
+              "title": "feat(plugins): add finance workbench"
+            },
+            {
+              "type": "commit",
+              "ref": "3866178b",
+              "title": "fix(finance-workbench): build browser-safe UI bundle"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "tag": "v0.0.4",
       "version": "0.0.4",
       "previousTag": "v0.0.3",

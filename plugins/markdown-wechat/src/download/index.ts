@@ -7,9 +7,12 @@ export interface DownloadArtifact {
 export interface DownloadResult { ok: boolean; filename: string; error?: string }
 
 export function safeDocumentName(value: unknown): string {
-  const normalized = String(value ?? "article")
+  const normalizedBase = String(value ?? "article")
     .normalize("NFKC")
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+    .replace(/[<>:"/\\|?*]/g, "-");
+  const normalized = Array.from(normalizedBase, (character) =>
+    character.charCodeAt(0) <= 0x1f ? "-" : character
+  ).join("")
     .replace(/\s+/g, " ")
     .replace(/[. ]+$/g, "")
     .trim()

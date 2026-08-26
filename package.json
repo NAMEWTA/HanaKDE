@@ -1,6 +1,6 @@
 {
   "name": "hanakde",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "description": "HanaKDE - a personal AI agent with memory and soul",
   "license": "Apache-2.0",
@@ -58,7 +58,7 @@
     "verify:runtime-deps": "node scripts/verify-runtime-dependencies.mjs",
     "pack:server:standalone": "node scripts/build-standalone-server-artifact.mjs x64",
     "verify:standalone:server": "node scripts/verify-standalone-server-artifact.mjs x64 --smoke",
-    "test": "vitest run --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**' --exclude 'plugins/todolist/tests/**'",
+    "test": "vitest run --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**' --exclude 'plugins/todolist/tests/**' --exclude 'plugins/finance-workbench/tests/**'",
     "test:knowledge:e2e": "playwright test -c tests/knowledge-workspace-e2e/playwright.config.ts",
     "test:knowledge:e2e:desktop": "playwright test -c tests/knowledge-workspace-e2e/playwright.config.ts --project=desktop-full",
     "test:knowledge:e2e:open": "playwright test -c tests/knowledge-workspace-e2e/playwright.config.ts --project=web-open",
@@ -71,7 +71,7 @@
     "rehearse:open": "node scripts/rehearse-open-export.mjs",
     "lint": "eslint .",
     "lint:boundary": "node scripts/lint-open-boundary.mjs",
-    "test:watch": "vitest --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**' --exclude 'plugins/todolist/tests/**'",
+    "test:watch": "vitest --exclude '**/.claude/**' --exclude '**/.cache/**' --exclude '**/dist/**' --exclude '**/dist-server/**' --exclude '**/dist-computer-use/**' --exclude '**/dist-sandbox/**' --exclude 'plugins/todolist/tests/**' --exclude 'plugins/finance-workbench/tests/**'",
     "postinstall": "node scripts/ensure-electron-runtime.mjs --install && node scripts/patch-pi-sdk.cjs && node scripts/verify-runtime-dependencies.mjs"
   },
   "dependencies": {

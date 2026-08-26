@@ -1,55 +1,107 @@
 {
   "schemaVersion": 1,
-  "tag": "v0.0.4",
-  "version": "0.0.4",
-  "previousTag": "v0.0.3",
-  "generatedAt": "2026-08-25T10:00:00.000Z",
+  "tag": "v0.0.5",
+  "version": "0.0.5",
+  "previousTag": "v0.0.4",
+  "generatedAt": "2026-08-26T01:33:57.902Z",
   "noUserFacingChanges": false,
   "summary": {
-    "zh": "HanaKDE v0.0.4 修复 Todo 页面加载、宿主鉴权和桌面及窄屏下的完整任务操作流程。",
-    "en": "HanaKDE v0.0.4 fixes Todo page loading, host authentication, and the complete task workflow on desktop and narrow layouts."
+    "zh": "HanaKDE v0.0.5 新增 Markdown 公众号排版与个人量化金融研究工作台，并完善插件页面的导出和跳转体验。",
+    "en": "HanaKDE v0.0.5 adds Markdown publishing and personal quantitative finance research workbenches, with complete export and navigation flows for plugin pages."
   },
-  "counts": { "feature": 1, "fix": 1, "improvement": 0, "migration": 0 },
+  "counts": {
+    "feature": 2,
+    "fix": 0,
+    "improvement": 0,
+    "migration": 0
+  },
   "source": {
     "owner": "NAMEWTA",
     "repo": "HanaKDE",
-    "commitRange": "v0.0.3..0003a673",
-    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.4",
+    "commitRange": "v0.0.4..befea22f",
+    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.5",
     "releaseNotes": ""
   },
   "items": [
     {
-      "id": "file-history",
+      "id": "markdown-wechat-workbench",
       "kind": "feature",
       "importance": "high",
-      "title": { "zh": "文件历史、差异与恢复", "en": "File history, diffs, and restore" },
-      "summary": {
-        "zh": "从主工作区和文件树查看历史版本、比较差异并执行受保护的恢复操作。",
-        "en": "Inspect historical versions, compare changes, and perform guarded restores from the main workspace and file tree."
+      "title": {
+        "zh": "Markdown 公众号排版工作台",
+        "en": "Markdown publishing workbench"
       },
-      "details": [],
-      "sources": [{ "type": "commit", "ref": "2421bfed", "title": "feat(T-16): expose Workbench History flow" }]
-    },
-    {
-      "id": "todolist-host-workflow",
-      "kind": "fix",
-      "importance": "high",
-      "title": { "zh": "Todo 宿主页面恢复可用", "en": "Todo host page restored" },
       "summary": {
-        "zh": "Todo 页面改用正式插件 SDK 完成 ready 握手和 surface-session 鉴权，快速记录、自动保存、完成、移入废纸篓及恢复在桌面和窄屏布局中均可正常使用。",
-        "en": "The Todo page now uses the official plugin SDK for the ready handshake and surface-session authentication, restoring capture, autosave, completion, Trash, and restore flows across desktop and narrow layouts."
+        "zh": "在 HanaKDE 中编辑 Markdown、实时预览公众号样式，并通过富文本复制或浏览器下载交付排版结果。",
+        "en": "Edit Markdown, preview publication-ready styling live, and deliver formatted results through rich-text copy or browser downloads inside HanaKDE."
       },
       "details": [
         {
-          "zh": "构建缺少 SDK 依赖时会直接失败，不再生成无鉴权的退化页面资产。",
-          "en": "Builds now fail when the SDK dependency is unavailable instead of producing an unauthenticated fallback page."
+          "zh": "Page、Widget 和 Agent tool 共用受权限保护的插件数据、资源导入和显式写回流程。",
+          "en": "Page, Widget, and Agent tools share permission-scoped plugin data, resource import, and explicit write-back flows."
         },
         {
-          "zh": "新建无日期 Todo 会进入可见的收集箱，窄屏导航会正确退出详情视图。",
-          "en": "New unscheduled Todos move into the visible Inbox, and narrow-layout navigation now exits the detail view correctly."
+          "zh": "Widget 可直接打开完整工作台，页面导出不再依赖聊天 Session。",
+          "en": "The Widget can open the full workbench directly, and Page exports no longer depend on a chat Session."
         }
       ],
-      "sources": [{ "type": "commit", "ref": "0003a673", "title": "fix(todolist): restore authenticated host workflow" }]
+      "sources": [
+        {
+          "type": "commit",
+          "ref": "cd479e01",
+          "title": "feat(plugins): add Markdown WeChat workbench"
+        },
+        {
+          "type": "commit",
+          "ref": "3607ba0b",
+          "title": "feat(markdown-wechat): open workspace from widget"
+        },
+        {
+          "type": "commit",
+          "ref": "908326fa",
+          "title": "fix(plugins): allow surface downloads"
+        },
+        {
+          "type": "commit",
+          "ref": "55b90791",
+          "title": "feat(plugins): add own-page navigation capability"
+        }
+      ]
+    },
+    {
+      "id": "finance-research-workbench",
+      "kind": "feature",
+      "importance": "high",
+      "title": {
+        "zh": "个人量化金融研究工作台",
+        "en": "Personal quantitative finance research workbench"
+      },
+      "summary": {
+        "zh": "为 A 股和港股提供可追溯的数据研究、组合账本、筛选、因子策略、回测、监控与定时研究工作流。",
+        "en": "Research A-share and Hong Kong markets with traceable data, a portfolio ledger, screening, factor strategies, backtests, monitors, and scheduled research workflows."
+      },
+      "details": [
+        {
+          "zh": "数据源能力、质量、策略和运行 lineage 会被冻结并随证据记录，缺失或不完整数据不会被静默当成可用。",
+          "en": "Provider capability, quality, policy, and run lineage are frozen with evidence; missing or incomplete data is never silently treated as usable."
+        },
+        {
+          "zh": "私有材料和模型研究采用单次字段级授权；工作台永久保持 research-only，不提供下单或资金操作。",
+          "en": "Private material and model research use one-run field-level consent; the workbench remains permanently research-only with no order or funds operations."
+        }
+      ],
+      "sources": [
+        {
+          "type": "commit",
+          "ref": "3e2619e4",
+          "title": "feat(plugins): add finance workbench"
+        },
+        {
+          "type": "commit",
+          "ref": "3866178b",
+          "title": "fix(finance-workbench): build browser-safe UI bundle"
+        }
+      ]
     }
   ]
 }

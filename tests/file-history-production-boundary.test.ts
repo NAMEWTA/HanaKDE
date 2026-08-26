@@ -81,25 +81,21 @@ describe("file-history production boundary", () => {
     expect(scanner).toContain('"FileHistoryStore"');
   });
 
-  it("advertises the activated File History flow exactly once in packaged release digests", () => {
-    const digestPaths = ["release-digest.v1.json", "release-digest.v2.json"];
+  it("retains the activated File History flow exactly once in packaged release history", () => {
+    const digest = json("release-digest.v2.json");
+    const entries = releaseDigestEntries(digest);
+    const itemIds = entries.flatMap(entry => {
+      const items = entry.items;
+      if (!Array.isArray(items)) return [];
 
-    for (const digestPath of digestPaths) {
-      const digest = json(digestPath);
-      const entries = releaseDigestEntries(digest);
-      const itemIds = entries.flatMap(entry => {
-        const items = entry.items;
-        if (!Array.isArray(items)) return [];
+      return items.map(item => (
+        item && typeof item === "object" && !Array.isArray(item)
+          ? (item as Record<string, unknown>).id
+          : undefined
+      ));
+    });
 
-        return items.map(item => (
-          item && typeof item === "object" && !Array.isArray(item)
-            ? (item as Record<string, unknown>).id
-            : undefined
-        ));
-      });
-
-      expect(itemIds.filter(id => id === "file-history")).toHaveLength(1);
-      expect(JSON.stringify(digest)).toMatch(/file history/i);
-    }
+    expect(itemIds.filter(id => id === "file-history")).toHaveLength(1);
+    expect(JSON.stringify(digest)).toMatch(/file history/i);
   });
 });
