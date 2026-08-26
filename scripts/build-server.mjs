@@ -186,8 +186,7 @@ const localPluginDependencies = collectLocalFileDependencyClosure({
   packageNames: pluginPackageDeps,
 });
 if (localPluginDependencies.length > 0) {
-  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-  execFileSync(npmCommand, ["run", "build:packages"], { cwd: ROOT, stdio: "inherit" });
+  execFileSync(process.execPath, [cachedNpmCli, "run", "build:packages"], { cwd: ROOT, stdio: "inherit" });
   stageLocalFileDependencies({ outDir, localDependencies: localPluginDependencies });
   for (const dependency of localPluginDependencies) {
     console.log(`[build-server]   ${dependency.relativeDir}/`);

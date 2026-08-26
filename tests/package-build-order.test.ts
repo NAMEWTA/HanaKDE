@@ -45,6 +45,15 @@ describe("package build order", () => {
     );
   });
 
+  it("runs workspace package builds through the cross-platform npm CLI", () => {
+    const serverBuilder = fs.readFileSync(path.join(rootDir, "scripts", "build-server.mjs"), "utf-8");
+
+    expect(serverBuilder).toContain(
+      'execFileSync(process.execPath, [cachedNpmCli, "run", "build:packages"]',
+    );
+    expect(serverBuilder).not.toContain('execFileSync("npm.cmd"');
+  });
+
   it("packages the Windows standalone archive only after the server tree and sandbox helper exist", () => {
     const scripts = packageScripts();
     const distWin = scripts["dist:win"];
