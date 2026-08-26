@@ -1,0 +1,46 @@
+{
+  "schema_version": 6,
+  "artifact": "change-status",
+  "change": "2026-08-26-hanakde-v0-0-6-maintenance-release",
+  "change_status": "active",
+  "current_work": "specdev/implement",
+  "works_run": [
+    "specdev/triage",
+    "specdev/spec"
+  ],
+  "claimed_investigations": [],
+  "execution_authorization": {
+    "implementation_commit": {
+      "status": "authorized",
+      "source": "USER-DECISION:2026-08-26-commit-push-release-plus-0.0.1",
+      "granted_at": "2026-08-26T14:21:23+08:00",
+      "scope": "Prepare and commit HanaKDE v0.0.6"
+    },
+    "local_candidate_integration": {
+      "status": "authorized",
+      "source": "USER-DECISION:2026-08-26-commit-push-release-plus-0.0.1",
+      "granted_at": "2026-08-26T14:21:23+08:00",
+      "scope": "Push hanakde, create and push annotated v0.0.6 tag, and publish the GitHub Release"
+    },
+    "source_cleanup": {
+      "status": "not-authorized",
+      "source": null,
+      "granted_at": null,
+      "scope": "No temporary worktree is used"
+    }
+  },
+  "leadership": {
+    "current": "root",
+    "epoch": 1,
+    "assigned_at": "2026-08-26T14:21:23+08:00",
+    "history": []
+  },
+  "created_at": "2026-08-26T14:21:23+08:00",
+  "updated_at": "2026-08-26T14:21:23+08:00",
+  "completed_at": null,
+  "archived": false,
+  "archive_path": null,
+  "blockers": [],
+  "deviations": [],
+  "worktrees": []
+}

@@ -3,6 +3,32 @@
   "entries": [
     {
       "schemaVersion": 1,
+      "tag": "v0.0.6",
+      "version": "0.0.6",
+      "previousTag": "v0.0.5",
+      "generatedAt": "2026-08-26T06:32:28.000Z",
+      "noUserFacingChanges": true,
+      "summary": {
+        "zh": "HanaKDE v0.0.6 是一次维护发布，不包含新的用户可见功能或行为变化。",
+        "en": "HanaKDE v0.0.6 is a maintenance release with no new user-facing features or behavior changes."
+      },
+      "counts": {
+        "feature": 0,
+        "fix": 0,
+        "improvement": 0,
+        "migration": 0
+      },
+      "source": {
+        "owner": "NAMEWTA",
+        "repo": "HanaKDE",
+        "commitRange": "v0.0.5..6e596762",
+        "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.6",
+        "releaseNotes": ""
+      },
+      "items": []
+    },
+    {
+      "schemaVersion": 1,
       "tag": "v0.0.5",
       "version": "0.0.5",
       "previousTag": "v0.0.4",
