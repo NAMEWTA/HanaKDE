@@ -93,12 +93,45 @@ function localFileDependencySource(rootDir, packageName, specifier) {
   return { sourceDir, relativeDir };
 }
 
+function workspaceDirectories(rootDir, workspacePatterns) {
+  const directories = [];
+  for (const pattern of workspacePatterns || []) {
+    if (typeof pattern !== "string" || pattern.length === 0) continue;
+    if (!pattern.includes("*")) {
+      directories.push(path.resolve(rootDir, pattern));
+      continue;
+    }
+    if (!pattern.endsWith("/*") || pattern.slice(0, -2).includes("*")) {
+      throw new Error(`[build-server] unsupported workspace pattern for local server dependencies: ${pattern}`);
+    }
+    const parentDir = path.resolve(rootDir, pattern.slice(0, -2));
+    if (!fs.existsSync(parentDir)) continue;
+    for (const entry of fs.readdirSync(parentDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) directories.push(path.join(parentDir, entry.name));
+    }
+  }
+  return directories;
+}
+
+export function collectWorkspaceDependencySpecs({ rootDir, workspacePatterns }) {
+  const specs = {};
+  for (const workspaceDir of workspaceDirectories(rootDir, workspacePatterns)) {
+    const packageJsonPath = path.join(workspaceDir, "package.json");
+    if (!fs.existsSync(packageJsonPath)) continue;
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    if (typeof packageJson.name !== "string" || packageJson.name.length === 0) continue;
+    const relativeDir = path.relative(rootDir, workspaceDir).split(path.sep).join("/");
+    specs[packageJson.name] = `file:${relativeDir}`;
+  }
+  return specs;
+}
+
 /**
  * Finds root-declared file: packages needed by an initial external set. Local
  * package manifests are followed by name so workspace dependencies such as
  * runtime -> protocol are installed from the same staged repository paths.
  */
-export function collectLocalFileDependencyClosure({ rootDir, rootDependencies, packageNames }) {
+export function collectLocalFileDependencyClosure({ rootDir, dependencySpecs, packageNames }) {
   const queue = [...packageNames];
   const visited = new Set();
   const localDependencies = [];
@@ -108,7 +141,7 @@ export function collectLocalFileDependencyClosure({ rootDir, rootDependencies, p
     if (visited.has(packageName)) continue;
     visited.add(packageName);
 
-    const specifier = rootDependencies[packageName];
+    const specifier = dependencySpecs[packageName];
     if (typeof specifier !== "string" || !specifier.startsWith("file:")) continue;
 
     const { sourceDir, relativeDir } = localFileDependencySource(rootDir, packageName, specifier);
@@ -125,8 +158,8 @@ export function collectLocalFileDependencyClosure({ rootDir, rootDependencies, p
 
     localDependencies.push({ packageName, specifier, sourceDir, relativeDir });
     for (const dependencyName of Object.keys(packageJson.dependencies || {})) {
-      if (typeof rootDependencies[dependencyName] === "string"
-        && rootDependencies[dependencyName].startsWith("file:")) {
+      if (typeof dependencySpecs[dependencyName] === "string"
+        && dependencySpecs[dependencyName].startsWith("file:")) {
         queue.push(dependencyName);
       }
     }

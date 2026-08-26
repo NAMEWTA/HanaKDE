@@ -405,6 +405,7 @@ function removeBinDirs(nmDir) {
  *   runWithTargetNode: (cmd: string, opts?: object) => void,
  *   cachedNpmCli: string,
  *   extraPackageNames?: string[],
+ *   extraDependencySpecs?: Record<string, string>,
  *   pinnedTransitiveDeps?: string[],
  *   log?: (msg: string) => void,
  * }} params
@@ -420,6 +421,7 @@ export async function resolveAndInstallExternalServerDeps({
   runWithTargetNode,
   cachedNpmCli,
   extraPackageNames = [],
+  extraDependencySpecs = {},
   pinnedTransitiveDeps = ["lru-cache"],
   log = (msg) => console.log(msg),
 }) {
@@ -447,7 +449,8 @@ export async function resolveAndInstallExternalServerDeps({
     }
   }
 
-  const undeclaredExtraDeps = extraPackageNames.filter((packageName) => !deps[packageName]);
+  const availableDependencySpecs = { ...deps, ...extraDependencySpecs };
+  const undeclaredExtraDeps = extraPackageNames.filter((packageName) => !availableDependencySpecs[packageName]);
   if (undeclaredExtraDeps.length > 0) {
     throw new Error(
       "[build-server] required package(s) missing from root dependencies: "
@@ -455,7 +458,7 @@ export async function resolveAndInstallExternalServerDeps({
     );
   }
   for (const packageName of extraPackageNames) {
-    externalDeps[packageName] = deps[packageName];
+    externalDeps[packageName] = availableDependencySpecs[packageName];
   }
 
   const bundleExternalImports = collectBareImportPackageNames(

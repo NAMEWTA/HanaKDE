@@ -71,6 +71,7 @@ import { packDualKindSeed } from "./build-server-artifact.mjs";
 import { copySecureFsHelperRuntime } from "./build-secure-fs-helper.mjs";
 import {
   collectLocalFileDependencyClosure,
+  collectWorkspaceDependencySpecs,
   stageLocalFileDependencies,
 } from "./build-server-deps.mjs";
 
@@ -175,9 +176,13 @@ console.log("[build-server] resource files copied");
 const pluginPackageDeps = await collectBundledPluginPackageDependencies({ rootDir: ROOT });
 const pluginNftRoots = await collectBundledPluginNftRoots({ rootDir: ROOT });
 const rootPackage = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
+const workspaceDependencySpecs = collectWorkspaceDependencySpecs({
+  rootDir: ROOT,
+  workspacePatterns: rootPackage.workspaces,
+});
 const localPluginDependencies = collectLocalFileDependencyClosure({
   rootDir: ROOT,
-  rootDependencies: rootPackage.dependencies || {},
+  dependencySpecs: workspaceDependencySpecs,
   packageNames: pluginPackageDeps,
 });
 if (localPluginDependencies.length > 0) {
@@ -203,6 +208,9 @@ const { externalPkg, rootPkg } = await resolveAndInstallExternalServerDeps({
       ...localPluginDependencies.map((dependency) => dependency.packageName),
     ]),
   ],
+  extraDependencySpecs: Object.fromEntries(
+    localPluginDependencies.map((dependency) => [dependency.packageName, dependency.specifier]),
+  ),
 });
 
 // ── 7. @vercel/nft 追踪：只保留运行时实际需要的文件 ──

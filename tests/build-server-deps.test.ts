@@ -11,6 +11,7 @@ import {
   collectBareImportPackageNames,
   collectInstalledOptionalDependencyDirs,
   collectLocalFileDependencyClosure,
+  collectWorkspaceDependencySpecs,
   materializeLocalFileDependencies,
   readPackageJsonWithRetry,
   stageLocalFileDependencies,
@@ -127,13 +128,17 @@ describe("build-server external dependency packaging", () => {
     fs.writeFileSync(path.join(runtimeDir, "dist", "index.js"), "export const runtime = true;\n");
     fs.writeFileSync(path.join(protocolDir, "dist", "index.js"), "export const protocol = true;\n");
 
-    const rootDependencies = {
+    const dependencySpecs = collectWorkspaceDependencySpecs({
+      rootDir,
+      workspacePatterns: ["packages/*"],
+    });
+    expect(dependencySpecs).toEqual({
       "@hana/runtime": "file:packages/runtime",
       "@hana/protocol": "file:packages/protocol",
-    };
+    });
     const localDependencies = collectLocalFileDependencyClosure({
       rootDir,
-      rootDependencies,
+      dependencySpecs,
       packageNames: ["@hana/runtime"],
     });
     expect(localDependencies.map(({ packageName }) => packageName)).toEqual([
@@ -151,9 +156,9 @@ describe("build-server external dependency packaging", () => {
     fs.symlinkSync(runtimeDir, installedRuntimeDir, process.platform === "win32" ? "junction" : "dir");
     fs.symlinkSync(protocolDir, installedProtocolDir, process.platform === "win32" ? "junction" : "dir");
 
-    expect(materializeLocalFileDependencies({ outDir, dependencies: rootDependencies })).toEqual([
-      "@hana/runtime",
+    expect(materializeLocalFileDependencies({ outDir, dependencies: dependencySpecs })).toEqual([
       "@hana/protocol",
+      "@hana/runtime",
     ]);
     expect(fs.lstatSync(installedRuntimeDir).isSymbolicLink()).toBe(false);
     expect(fs.lstatSync(installedProtocolDir).isSymbolicLink()).toBe(false);
@@ -161,10 +166,10 @@ describe("build-server external dependency packaging", () => {
 
     const serverPkg = buildExternalPackage(
       { version: "1.0.1" },
-      rootDependencies,
+      dependencySpecs,
       { rootLock: { packages: {} } },
     );
-    expect(serverPkg.dependencies).toEqual(rootDependencies);
+    expect(serverPkg.dependencies).toEqual(dependencySpecs);
   });
 
   it("protects installed optional runtime packages owned by server externals", () => {
