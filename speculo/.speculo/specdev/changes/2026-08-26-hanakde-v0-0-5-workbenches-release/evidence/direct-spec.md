@@ -4,7 +4,7 @@
 - **Lead:** `root`
 - **Workspace:** current workspace / `hanakde`
 - **Implementation baseline:** `befea22f5da9c65509efe95daeeef8d35b115c7b`
-- **Status:** v0.0.5 published with 13 assets; final branch CI rerun pending after Windows path-test repair
+- **Status:** completed; v0.0.5 published with 13 assets and final branch CI passed
 
 ## Acceptance Mapping
 
@@ -46,7 +46,9 @@
 - Release digest v1/v2 validators: pass for `v0.0.5`; persistence scan remains 64 stores / 795 sites.
 - CI-equivalent main Vitest shard: pass, 1225 files / 12312 tests / 8 skipped.
 - CI isolated gates: pass, 28 + 9 + 13 + 12 + 21 tests; Todo: 30 tests.
+- Final branch CI run `32926439913`, attempt 2: pass, all 16 jobs successful at `f057b412d26b6fc5717186927940403e3073fa34`; the rerun cleared the Ubuntu React teardown error and macOS desktop E2E timeout without code or artifact changes.
 - `node speculo/workflows/specdev/common/tools/validate-specdev.mjs --stage implement ...`: pass, 0 errors / 0 warnings before publication.
+- `node speculo/workflows/specdev/common/tools/validate-specdev.mjs --stage complete ...`: pass, 0 errors / 0 warnings after completion state was written.
 
 ## Path And Risk Audit
 
@@ -57,4 +59,5 @@
 - The second pushed candidate (`80b3380d8fb5b803c8e52a12108000bb4e139dce`) proved the server packaging fix locally but exposed that declaring its workspace packages as root production dependencies made clean `npm ci` postinstall verify their not-yet-built `dist`. CI run `32923201223` and Build run `32923242517` failed consistently at that install gate; no release was created. The final design discovers these packages from the workspace manifest only for the generated server package and passes isolated clean-install plus full packaging verification.
 - The third pushed candidate (`41f38515f9503896da78b1cc1fb8d47265967f8f`) passed Build on macOS arm64, macOS x64, and Linux x64. Windows alone failed because Node 24 rejects direct `execFileSync("npm.cmd", ...)` with `EINVAL`; Build run `32924200579` therefore skipped release creation. Workspace builds now execute the already-resolved npm CLI JavaScript with `process.execPath`, matching the cross-platform invocation used elsewhere; the build-order contract and all four workspace package builds pass locally.
 - Final release commit `4ec79cf1a96b2c8aa15559f6bae9abab9d34cbea` passed all four Build matrix platforms plus the Release job in run `32924983037`. GitHub published non-draft prerelease `v0.0.5` at `https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.5` with exactly 13 expected assets.
-- Branch CI run `32924979040` passed 15 of 16 jobs and 12,283 of 12,285 Windows general tests. Its two failures were test-only forward-slash assumptions in Electron runtime and Markdown staging assertions; both now normalize or construct platform paths and pass locally. A branch-only rerun is pending; the published production artifacts are unchanged.
+- Branch CI run `32924979040` passed 15 of 16 jobs and 12,283 of 12,285 Windows general tests. Its two failures were test-only forward-slash assumptions in Electron runtime and Markdown staging assertions; both now normalize or construct platform paths.
+- Final branch CI run `32926439913` verified those repairs in the full Windows job. Its first attempt then reported an Ubuntu React scheduler teardown error after all 12,309 assertions passed and a macOS desktop E2E button-readiness timeout; failed-job rerun attempt 2 passed both jobs and completed all 16 jobs successfully. The published production artifacts remain those built from `4ec79cf1a96b2c8aa15559f6bae9abab9d34cbea`.

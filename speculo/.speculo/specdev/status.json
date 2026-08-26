@@ -4,10 +4,11 @@
   "active": [
     {
       "change": "2026-08-26-hanakde-v0-0-5-workbenches-release",
-      "current_work": "specdev/implement",
+      "current_work": null,
       "works_run": [
         "specdev/triage",
-        "specdev/spec"
+        "specdev/spec",
+        "specdev/implement"
       ]
     }
   ],
