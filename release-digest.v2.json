@@ -3,6 +3,63 @@
   "entries": [
     {
       "schemaVersion": 1,
+      "tag": "v0.0.7",
+      "version": "0.0.7",
+      "previousTag": "v0.0.6",
+      "generatedAt": "2026-08-27T08:43:28.000Z",
+      "noUserFacingChanges": false,
+      "summary": {
+        "zh": "HanaKDE v0.0.7 修复 macOS 实验包因签名 Team ID 不一致而无法启动的问题，并在发布前验证 macOS 与 Windows 原始未签名产物。",
+        "en": "HanaKDE v0.0.7 fixes a macOS launch failure caused by mismatched signing Team IDs and verifies untouched unsigned macOS and Windows packages before release."
+      },
+      "counts": {
+        "feature": 0,
+        "fix": 1,
+        "improvement": 0,
+        "migration": 0
+      },
+      "source": {
+        "owner": "NAMEWTA",
+        "repo": "HanaKDE",
+        "commitRange": "v0.0.6..0e6bfc40",
+        "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.7",
+        "releaseNotes": ""
+      },
+      "items": [
+        {
+          "id": "credential-free-desktop-launch",
+          "kind": "fix",
+          "importance": "high",
+          "title": {
+            "zh": "无证书实验包恢复启动",
+            "en": "Credential-free experimental packages launch again"
+          },
+          "summary": {
+            "zh": "macOS 桌面壳不再混用旧平台签名身份，避免 Electron Framework 因 Team ID 不一致在启动阶段被系统拒绝。",
+            "en": "The macOS desktop shell no longer mixes legacy platform signing identities, preventing Team ID mismatches from blocking Electron Framework during launch."
+          },
+          "details": [
+            {
+              "zh": "macOS 实验包保持无 Developer ID、无公证；确认来源后清除 quarantine 即可启动，内部 Seed/OTA 完整性签名继续保留。",
+              "en": "The experimental macOS package remains free of Developer ID signing and notarization; after verifying the source, users can clear quarantine to launch it, while internal Seed/OTA integrity signatures remain intact."
+            },
+            {
+              "zh": "发布流程现在会原样启动 macOS DMG，并要求 Windows 安装器与主程序的 Authenticode 状态为 NotSigned；测试不再通过重签掩盖产物问题。",
+              "en": "The release flow now launches untouched macOS DMGs and requires Windows installers and executables to report Authenticode NotSigned; tests can no longer hide package defects by re-signing them."
+            }
+          ],
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "0e6bfc40",
+              "title": "fix(release): remove platform signing from experimental builds"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "tag": "v0.0.6",
       "version": "0.0.6",
       "previousTag": "v0.0.5",
