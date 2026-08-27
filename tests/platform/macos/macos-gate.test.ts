@@ -42,6 +42,8 @@ describe("macOS blocking gate runner", () => {
   it("keeps a fail-closed platform guard in the runner", () => {
     const source = fs.readFileSync(path.resolve("scripts/platform/macos/run-gate.mjs"), "utf8");
     expect(source).toContain("blocking gate requires darwin");
+    expect(source).not.toContain("adhoc-resign");
+    expect(source).not.toContain("adhocResign");
   });
 
   it("does not create fixtures when called off macOS", async () => {

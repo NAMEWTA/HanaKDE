@@ -43,11 +43,11 @@
   机上存在展开的 `Resources/server`。
 - 先验证 seed manifest/signature、server archive、renderer archive、AnyDoc child、
   HTML child 和目标架构 secure helper，再判断 Electron UI。
-- 本地 unsigned/ad-hoc app 可能因 Electron Framework Team ID 不同而拒绝加载；可以
-  在生成物上做一次临时 ad-hoc re-sign 作为本地 smoke，但不能把它当作 release signing
-  或 notarization 证据。
-- macOS T-23 当前只证明 arm64；x64、硬件 sleep/wake、interactive Office E2E 和
-  launch-time event-bus warning 仍需平台 owner 处理。
+- macOS 发布门必须直接消费刚生成的 DMG，递归清除 quarantine 后启动；禁止在测试中
+  对 app bundle 重签。启动前后包内 SHA-256 不一致、dyld Team ID 错误或缺少
+  `main-loaded` marker 都必须阻断上传。
+- macOS arm64/x64 与 Windows `NotSigned` 安装/启动门均在 artifact upload 前运行；
+  任一平台环境缺失时不能用静态 inventory 或本地重签代替。
 
 ## Escalation rules
 

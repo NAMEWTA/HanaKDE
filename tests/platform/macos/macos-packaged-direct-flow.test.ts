@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertPackagedFlowReceipt,
   assertPackagedFlowPlatform,
+  hashAppBundleContents,
   parsePackagedFlowOptions,
   resolvePackagedPiAiPath,
 } from "../../../scripts/platform/macos/run-packaged-direct-flow.mjs";
@@ -27,15 +28,22 @@ describe("macOS packaged direct-flow runner", () => {
         dmg,
         "--version",
         "0.446.6",
-        "--adhoc-resign",
+        "--arch",
+        "x64",
+        "--launch-smoke",
       ])).toEqual({
         dmgPath: dmg,
         version: "0.446.6",
-        adhocResign: true,
+        arch: "x64",
+        fullFlow: false,
       });
+      expect(() => parsePackagedFlowOptions(["--dmg", dmg, "--adhoc-resign"]))
+        .toThrow(/unknown option/);
       expect(() => parsePackagedFlowOptions([])).toThrow(/--dmg/);
       expect(() => parsePackagedFlowOptions(["--dmg", dmg, "--version", "../escape"]))
         .toThrow(/version/);
+      expect(() => parsePackagedFlowOptions(["--dmg", dmg, "--arch", "ppc64"]))
+        .toThrow(/arch/);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -48,7 +56,13 @@ describe("macOS packaged direct-flow runner", () => {
       dmgVerified: true,
       dmgMounted: true,
       appInstalled: true,
-      launchSigningMode: "adhoc",
+      launchSigningMode: "package-untouched",
+      scope: "full",
+      quarantineSimulated: true,
+      quarantineCleared: true,
+      bundleHashBefore: "a".repeat(64),
+      bundleHashAfter: "a".repeat(64),
+      bundleBytesUnchanged: true,
       appLaunched: true,
       unsafeNoSandboxAbsent: true,
       healthReady: true,
@@ -71,6 +85,23 @@ describe("macOS packaged direct-flow runner", () => {
     const withoutDmgVerification = { ...receipt };
     delete withoutDmgVerification.dmgVerified;
     expect(() => assertPackagedFlowReceipt(withoutDmgVerification)).toThrow(/dmgVerified/);
+  });
+
+  it("hashes app bundle bytes and symlink targets without observing xattrs", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "hana-t23-bundle-hash-"));
+    try {
+      const app = path.join(root, "HanaKDE.app");
+      fs.mkdirSync(path.join(app, "Contents"), { recursive: true });
+      fs.writeFileSync(path.join(app, "Contents", "payload"), "one", "utf8");
+      fs.symlinkSync("payload", path.join(app, "Contents", "payload-link"));
+      const before = hashAppBundleContents(app);
+      expect(before).toMatch(/^[a-f0-9]{64}$/);
+      expect(hashAppBundleContents(app)).toBe(before);
+      fs.writeFileSync(path.join(app, "Contents", "payload"), "two", "utf8");
+      expect(hashAppBundleContents(app)).not.toBe(before);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("resolves the deterministic provider only inside the activated package artifact", () => {
@@ -104,7 +135,10 @@ describe("macOS packaged direct-flow runner", () => {
     expect(source).toContain("createKnowledgeWorkspaceSandbox");
     expect(source).toContain("await sandbox.dispose()");
     expect(source).toContain('execFile("hdiutil"');
-    expect(source).toContain('execFile("codesign"');
+    expect(source).not.toContain('execFile("codesign"');
+    expect(source).not.toContain("adhocResign");
+    expect(source).toContain('execFile("xattr"');
+    expect(source).toContain("hashAppBundleContents");
     expect(source).toContain("runAtSearchFlow");
   });
 

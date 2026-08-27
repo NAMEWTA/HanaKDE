@@ -218,7 +218,6 @@ HanaKDE 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端个
 | `keep-awake.cjs` | 防止系统休眠 |
 | `login-item-settings.cjs` | 开机自启 |
 | `file-text-io.cjs` | 文本文件一致性读写 |
-| `entitlements.mac.plist` | macOS 权限声明 |
 
 #### B. 原生辅助程序
 
@@ -564,13 +563,11 @@ HanaKDE 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端个
 | `dev-web.js` / `dev-web-runtime.js` | Web 开发服务器 |
 | `dev-env.js` | 开发环境变量 |
 
-#### 代码签名与公证
+#### 内部构件完整性
 
 | 脚本 | 说明 |
 |------|------|
-| `notarize.cjs` | macOS 公证（electron-builder afterSign 钩子） |
-| `sign-local.cjs` | 本地开发构建签名 |
-| `artifact-sign.mjs` / `artifact-keygen.mjs` | 构件签名逻辑和密钥生成 |
+| `artifact-sign.mjs` / `artifact-keygen.mjs` | 内部 Seed/OTA 构件签名和临时密钥生成；不用于系统发行签名 |
 | `verify-seed-kit.mjs` / `verify-standalone-server-artifact.mjs` | Seed 归档和独立 Server 包验证 |
 
 #### 发布与分发
@@ -630,7 +627,6 @@ HanaKDE 是一个基于 **Electron 42 + React 19 + Hono Server** 的桌面端个
 | `persistence-schema-fingerprint.json` | 数据库 Schema 指纹 |
 | `persistence-startup-receipt.json` | 持久化启动回执 |
 | `persistence-store-inventory.json` | 持久化存储清单 |
-| `server-macho-entitlements.plist` | macOS Server 可执行文件权限 |
 | `shell-surface-manifest.json` | Shell 表面清单 |
 
 ---

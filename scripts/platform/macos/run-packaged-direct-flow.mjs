@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile as execFileCallback, spawn } from "node:child_process";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
@@ -43,6 +43,14 @@ function optionValue(argv, name) {
 }
 
 export function parsePackagedFlowOptions(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const option = argv[index];
+    if (option === "--launch-smoke") continue;
+    if (option !== "--dmg" && option !== "--version" && option !== "--arch") {
+      throw new Error(`[macos-packaged-flow] unknown option ${option}`);
+    }
+    index += 1;
+  }
   const dmgInput = optionValue(argv, "--dmg");
   if (!dmgInput) throw new Error("[macos-packaged-flow] --dmg is required");
   const dmgPath = path.resolve(dmgInput);
@@ -53,11 +61,53 @@ export function parsePackagedFlowOptions(argv) {
   if (!VERSION_PATTERN.test(version)) {
     throw new Error("[macos-packaged-flow] version must be a semantic artifact version");
   }
+  const arch = optionValue(argv, "--arch") ?? process.arch;
+  if (!ARCH_PATTERN.test(arch)) {
+    throw new Error("[macos-packaged-flow] arch must be arm64 or x64");
+  }
   return {
     dmgPath,
     version,
-    adhocResign: argv.includes("--adhoc-resign"),
+    arch,
+    fullFlow: !argv.includes("--launch-smoke"),
   };
+}
+
+export function hashAppBundleContents(appPath) {
+  const root = path.resolve(appPath);
+  const digest = createHash("sha256");
+  const visit = (target, relativePath) => {
+    const stat = fsSync.lstatSync(target);
+    const normalizedPath = relativePath.split(path.sep).join("/");
+    if (stat.isSymbolicLink()) {
+      digest.update(`link\0${normalizedPath}\0${fsSync.readlinkSync(target)}\0`);
+      return;
+    }
+    if (stat.isDirectory()) {
+      digest.update(`dir\0${normalizedPath}\0`);
+      for (const entry of fsSync.readdirSync(target).sort()) {
+        visit(path.join(target, entry), path.join(relativePath, entry));
+      }
+      return;
+    }
+    if (!stat.isFile()) throw new Error(`[macos-packaged-flow] unsupported bundle entry: ${normalizedPath}`);
+    digest.update(`file\0${normalizedPath}\0${stat.size}\0`);
+    const descriptor = fsSync.openSync(target, "r");
+    try {
+      const chunk = Buffer.allocUnsafe(1024 * 1024);
+      let offset = 0;
+      while (offset < stat.size) {
+        const bytesRead = fsSync.readSync(descriptor, chunk, 0, Math.min(chunk.length, stat.size - offset), offset);
+        if (bytesRead <= 0) throw new Error(`[macos-packaged-flow] short read while hashing ${normalizedPath}`);
+        digest.update(chunk.subarray(0, bytesRead));
+        offset += bytesRead;
+      }
+    } finally {
+      fsSync.closeSync(descriptor);
+    }
+  };
+  visit(root, path.basename(root));
+  return digest.digest("hex");
 }
 
 export function resolvePackagedPiAiPath({
@@ -95,14 +145,12 @@ export function assertPackagedFlowReceipt(receipt) {
     ["dmgVerified", receipt?.dmgVerified],
     ["dmgMounted", receipt?.dmgMounted],
     ["appInstalled", receipt?.appInstalled],
+    ["quarantineSimulated", receipt?.quarantineSimulated],
+    ["quarantineCleared", receipt?.quarantineCleared],
+    ["bundleBytesUnchanged", receipt?.bundleBytesUnchanged],
     ["appLaunched", receipt?.appLaunched],
     ["unsafeNoSandboxAbsent", receipt?.unsafeNoSandboxAbsent],
     ["healthReady", receipt?.healthReady],
-    ["history.live", receipt?.history?.live],
-    ["history.afterReload", receipt?.history?.afterReload],
-    ["office", receipt?.office],
-    ["agent", receipt?.agent],
-    ["at", receipt?.at],
     ["cleanup.appStopped", receipt?.cleanup?.appStopped],
     ["cleanup.serverStopped", receipt?.cleanup?.serverStopped],
     ["cleanup.mountDetached", receipt?.cleanup?.mountDetached],
@@ -110,8 +158,25 @@ export function assertPackagedFlowReceipt(receipt) {
   ];
   const failed = required.find(([, value]) => value !== true);
   if (failed) throw new Error(`[macos-packaged-flow] incomplete receipt: ${failed[0]}`);
-  if (receipt?.launchSigningMode !== "adhoc" && receipt?.launchSigningMode !== "package") {
+  if (receipt?.scope !== "launch" && receipt?.scope !== "full") {
+    throw new Error("[macos-packaged-flow] incomplete receipt: scope");
+  }
+  if (receipt.scope === "full") {
+    const fullFlowFailed = [
+      ["history.live", receipt?.history?.live],
+      ["history.afterReload", receipt?.history?.afterReload],
+      ["office", receipt?.office],
+      ["agent", receipt?.agent],
+      ["at", receipt?.at],
+    ].find(([, value]) => value !== true);
+    if (fullFlowFailed) throw new Error(`[macos-packaged-flow] incomplete receipt: ${fullFlowFailed[0]}`);
+  }
+  if (receipt?.launchSigningMode !== "package-untouched") {
     throw new Error("[macos-packaged-flow] incomplete receipt: launchSigningMode");
+  }
+  if (!/^[a-f0-9]{64}$/.test(receipt?.bundleHashBefore ?? "")
+    || receipt.bundleHashBefore !== receipt?.bundleHashAfter) {
+    throw new Error("[macos-packaged-flow] incomplete receipt: bundle hashes");
   }
   return receipt;
 }
@@ -151,44 +216,16 @@ async function copyMountedApp(mountPoint, installRoot) {
   return installedApp;
 }
 
-async function adhocResignApp(appPath) {
-  const entitlements = path.resolve("desktop/entitlements.mac.plist");
-  const computerUseHelper = path.join(
-    appPath,
-    "Contents",
-    "Resources",
-    "computer-use",
-    "macos",
-    "hana-computer-use-helper",
-  );
-  if (fsSync.existsSync(computerUseHelper)) {
-    await execFile("codesign", ["--sign", "-", "--force", computerUseHelper]);
+async function simulateAndClearQuarantine(appPath) {
+  await execFile("xattr", ["-w", "com.apple.quarantine", "0081;00000000;HanaKDE Gate;", appPath]);
+  await execFile("xattr", ["-p", "com.apple.quarantine", appPath]);
+  await execFile("xattr", ["-rd", "com.apple.quarantine", appPath]);
+  try {
+    await execFile("xattr", ["-p", "com.apple.quarantine", appPath]);
+  } catch {
+    return;
   }
-  const frameworks = path.join(appPath, "Contents", "Frameworks");
-  for (const entry of await fs.readdir(frameworks)) {
-    const target = path.join(frameworks, entry);
-    if (entry.endsWith(".framework")) {
-      await execFile("codesign", ["--sign", "-", "--force", "--deep", target]);
-    } else if (entry.endsWith(".app")) {
-      await execFile("codesign", [
-        "--sign",
-        "-",
-        "--force",
-        "--entitlements",
-        entitlements,
-        target,
-      ]);
-    }
-  }
-  await execFile("codesign", [
-    "--sign",
-    "-",
-    "--force",
-    "--entitlements",
-    entitlements,
-    appPath,
-  ]);
-  await execFile("codesign", ["--verify", "--deep", "--strict", appPath]);
+  throw new Error("[macos-packaged-flow] quarantine attribute remained after recursive clear");
 }
 
 async function reservePort() {
@@ -621,11 +658,15 @@ function redactedFailure(error, output, sandboxRoot) {
 export async function runPackagedDirectFlow({
   dmgPath,
   version,
-  adhocResign = false,
+  arch = process.arch,
+  fullFlow = true,
 }) {
   assertPackagedFlowPlatform();
   if (!VERSION_PATTERN.test(version)) {
     throw new Error("[macos-packaged-flow] invalid package artifact version");
+  }
+  if (!ARCH_PATTERN.test(arch)) {
+    throw new Error("[macos-packaged-flow] invalid package artifact architecture");
   }
   const resolvedDmg = path.resolve(dmgPath);
   if (!fsSync.statSync(resolvedDmg, { throwIfNoEntry: false })?.isFile()) {
@@ -637,11 +678,17 @@ export async function runPackagedDirectFlow({
   const installRoot = path.join(sandbox.rootDir, "Applications");
   const receipt = {
     platform: process.platform,
-    arch: process.arch,
+    arch,
+    scope: fullFlow ? "full" : "launch",
     dmgVerified: false,
     dmgMounted: false,
     appInstalled: false,
-    launchSigningMode: adhocResign ? "adhoc" : "package",
+    launchSigningMode: "package-untouched",
+    quarantineSimulated: false,
+    quarantineCleared: false,
+    bundleHashBefore: null,
+    bundleHashAfter: null,
+    bundleBytesUnchanged: false,
     appLaunched: false,
     unsafeNoSandboxAbsent: false,
     healthReady: false,
@@ -675,7 +722,10 @@ export async function runPackagedDirectFlow({
     await detachDmg(mountPoint);
     mounted = false;
     receipt.cleanup.mountDetached = true;
-    if (adhocResign) await adhocResignApp(installedApp);
+    receipt.bundleHashBefore = hashAppBundleContents(installedApp);
+    await simulateAndClearQuarantine(installedApp);
+    receipt.quarantineSimulated = true;
+    receipt.quarantineCleared = true;
     const appExecutable = path.join(installedApp, "Contents", "MacOS", "HanaKDE");
     if (!fsSync.statSync(appExecutable, { throwIfNoEntry: false })?.isFile()) {
       throw new Error("[macos-packaged-flow] installed app executable is missing");
@@ -696,7 +746,7 @@ export async function runPackagedDirectFlow({
       hanaHome: sandbox.hanaHome,
       version,
       platform: process.platform,
-      arch: process.arch,
+      arch,
     })).href;
     const providerSource = await fs.readFile(providerPath, "utf8");
     if (!providerSource.includes(sourcePiAiUrl)) {
@@ -743,13 +793,20 @@ export async function runPackagedDirectFlow({
     const health = await json(await apiFetch(serverInfo, "/api/health"), "packaged health");
     receipt.healthReady = health.status === "ok" || health.ok === true;
     if (!receipt.healthReady) throw new Error("packaged runtime health was not ready");
-    browser = await connectCdp(cdpPort, child);
-    const page = await waitForMainPage(browser, child);
-    await runOfficeFlow(serverInfo, sandbox);
-    receipt.office = true;
-    receipt.history = await runHistoryFlow(serverInfo, page);
-    receipt.at = await runAtSearchFlow(serverInfo, sandbox, page);
-    receipt.agent = await runAgentHistoryFlow(serverInfo, sandbox, page);
+    receipt.bundleHashAfter = hashAppBundleContents(installedApp);
+    receipt.bundleBytesUnchanged = receipt.bundleHashAfter === receipt.bundleHashBefore;
+    if (!receipt.bundleBytesUnchanged) {
+      throw new Error("[macos-packaged-flow] app bundle bytes changed during the raw package gate");
+    }
+    if (fullFlow) {
+      browser = await connectCdp(cdpPort, child);
+      const page = await waitForMainPage(browser, child);
+      await runOfficeFlow(serverInfo, sandbox);
+      receipt.office = true;
+      receipt.history = await runHistoryFlow(serverInfo, page);
+      receipt.at = await runAtSearchFlow(serverInfo, sandbox, page);
+      receipt.agent = await runAgentHistoryFlow(serverInfo, sandbox, page);
+    }
   } catch (error) {
     primaryError = redactedFailure(error, output, sandbox.rootDir);
   } finally {

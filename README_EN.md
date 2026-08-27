@@ -68,15 +68,15 @@ As a tool, it is powerful: it remembers everything you've said, operates your co
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 
-The current package does not use Apple Developer ID signing or notarization. If macOS blocks the first launch, verify that you trust the download and run:
+The experimental package does not use Apple Developer ID signing or notarization. Clearing quarantine records your approval to launch; it does not prove the download is trustworthy. After verifying the source, run:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/HanaKDE.app
+sudo xattr -rd com.apple.quarantine /Applications/HanaKDE.app
 ```
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 
-> **Windows SmartScreen notice:** The installer is not yet code-signed. Windows Defender SmartScreen may show a warning on first run. Click **More info** → **Run anyway**. This is expected for unsigned builds.
+> **Windows SmartScreen notice:** The experimental installer's Authenticode status is `NotSigned`. After verifying the download source, click **More info** → **Run anyway** if SmartScreen blocks it. This approval does not establish publisher trust.
 
 **Linux:** download the latest `.AppImage` or `.deb` from [Releases](https://github.com/NAMEWTA/HanaKDE/releases).
 

@@ -49,7 +49,7 @@
     "build:packages": "npm run build --workspaces --if-present",
     "generate:windows-icon": "node scripts/generate-windows-icon.cjs",
     "pack": "npm run build:computer-use-helper && npm run build:client && npm run build:server && npm run verify:seed-kit && electron-builder --dir",
-    "install:local": "npm run pack && rm -rf /Applications/HanaKDE.app /Applications/HanaAgent.app /Applications/Hanako.app && cp -R dist/mac-arm64/HanaKDE.app /Applications/ && printf 'provider: github\\nowner: NAMEWTA\\nrepo: HanaKDE\\n' > /Applications/HanaKDE.app/Contents/Resources/app-update.yml && node scripts/sign-local.cjs",
+    "install:local": "npm run pack && rm -rf /Applications/HanaKDE.app /Applications/HanaAgent.app /Applications/Hanako.app && cp -R dist/mac-arm64/HanaKDE.app /Applications/ && printf 'provider: github\\nowner: NAMEWTA\\nrepo: HanaKDE\\n' > /Applications/HanaKDE.app/Contents/Resources/app-update.yml",
     "dist": "npm run build:computer-use-helper && npm run build:client && npm run build:server && npm run verify:seed-kit && electron-builder --mac dmg",
     "dist:win": "npm run build:computer-use-helper && npm run build:windows-sandbox-helper && npm run generate:windows-icon && npm run build:client && npm run build:server && npm run verify:seed-kit && npm run pack:server:standalone && npm run verify:standalone:server && electron-builder --win nsis",
     "dist:linux": "npm run build:client && npm run build:server && npm run verify:seed-kit && electron-builder --linux AppImage deb",
@@ -202,10 +202,9 @@
       "category": "public.app-category.productivity",
       "icon": "desktop/src/icon.icns",
       "artifactName": "${productName}-${version}-macOS-${arch}.${ext}",
-      "hardenedRuntime": true,
+      "identity": null,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "entitlements": "desktop/entitlements.mac.plist",
-      "entitlementsInherit": "desktop/entitlements.mac.plist",
       "extraResources": [
         {
           "from": "dist-computer-use/mac-${arch}/",

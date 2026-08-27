@@ -76,6 +76,7 @@ describe("Windows blocking gate runner", () => {
         else fs.writeFileSync(target, "fixture", "utf8");
       }
       const result = inspectWindowsPackage(root, {
+        signatureInspector: () => ({ status: "NotSigned", statusMessage: "Not signed" }),
         archiveLister: () => [
           "bundle/index.js",
           "bundle/anydoc-child.cjs",
@@ -89,6 +90,7 @@ describe("Windows blocking gate runner", () => {
         minGitRuntime: "resources/git",
         sandboxHelper: "resources/sandbox/windows/hana-win-sandbox.exe",
         secureHelper: "dist-secure-fs/win-x64/hana-secure-fs-helper.exe",
+        authenticodeStatus: "NotSigned",
       });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -138,15 +140,29 @@ describe("Windows blocking gate runner", () => {
     try {
       const installer = path.join(root, "HanaKDE-0.446.6.exe");
       writePeFixture(installer);
-      expect(inspectWindowsInstaller(installer)).toEqual({
+      expect(inspectWindowsInstaller(installer, {
+        signatureInspector: () => ({ status: "NotSigned", statusMessage: "Not signed" }),
+      })).toEqual({
         installer: "HanaKDE-0.446.6.exe",
         peHeaderVerified: true,
+        authenticodeStatus: "NotSigned",
       });
+      expect(() => inspectWindowsInstaller(installer, {
+        signatureInspector: () => ({ status: "Valid", signerCertificate: { subject: "CN=Unexpected" } }),
+      })).toThrow(/NotSigned/);
       const wrongExtension = path.join(root, "not-an-installer.zip");
       fs.writeFileSync(wrongExtension, "fixture", "utf8");
       expect(() => inspectWindowsInstaller(wrongExtension)).toThrow(/\.exe/);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("uses PowerShell Authenticode inspection and wires the packaged direct flow", () => {
+    const source = fs.readFileSync(sourcePath, "utf8");
+    expect(source).toContain("Get-AuthenticodeSignature");
+    expect(source).toContain("HANA_AUTHENTICODE_TARGET");
+    expect(source).toContain("runPackagedDirectFlow");
+    expect(source).toContain('process.argv.includes("--direct-flow")');
   });
 });

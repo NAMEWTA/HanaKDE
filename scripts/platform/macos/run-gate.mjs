@@ -102,10 +102,22 @@ export async function runMacosGate({
   rootDir,
   packageDir = null,
   directFlowOptions = null,
+  packagedOnly = false,
   cleanup = true,
 } = {}) {
   if (process.platform !== "darwin") {
     throw new Error(`[macos-gate] blocking gate requires darwin, got ${process.platform}`);
+  }
+  if (packagedOnly) {
+    if (!directFlowOptions) throw new Error("[macos-gate] packaged-only gate requires direct flow options");
+    return {
+      platform: process.platform,
+      arch: process.arch,
+      fixture: null,
+      productWorkspace: null,
+      package: null,
+      directFlow: await runPackagedDirectFlow(directFlowOptions),
+    };
   }
 
   const fixtureRoot = rootDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "hana-t23-macos-"));
@@ -220,16 +232,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const packageDir = packageIndex >= 0 ? process.argv[packageIndex + 1] : null;
   const directFlow = process.argv.includes("--direct-flow");
   const directFlowOptions = directFlow
-    ? {
+      ? {
         dmgPath: optionValue("--dmg"),
         version: optionValue("--version") ?? "0.446.6",
-        adhocResign: process.argv.includes("--adhoc-resign"),
+        arch: optionValue("--arch") ?? process.arch,
+        fullFlow: !process.argv.includes("--launch-smoke"),
       }
     : null;
   if (directFlow && !directFlowOptions.dmgPath) {
     throw new Error("[macos-gate] --direct-flow requires --dmg");
   }
-  runMacosGate({ packageDir, directFlowOptions }).then((result) => {
+  runMacosGate({
+    packageDir,
+    directFlowOptions,
+    packagedOnly: process.argv.includes("--packaged-only"),
+  }).then((result) => {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }).catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

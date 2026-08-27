@@ -133,76 +133,28 @@ export function findMachOFiles(rootDir) {
 }
 
 /**
- * 组装单个文件的 codesign 参数（纯函数，供测试逐一断言）。双模式：
- * - identity 未设/为空 → ad-hoc `--sign - --force`（本地 install:local 现状，
- *   与 scripts/sign-local.cjs 同款，一字不变）。ad-hoc 不加 hardened runtime，
- *   因此也不需要 entitlements。
- * - identity 非空 → Developer ID 正式签名：identity + `--timestamp`
- *   （secure timestamp）+ `--force`（幂等重签）；`.node` addon 不加 hardened
- *   runtime，其余 Mach-O（node 可执行、spawn-helper 等）加 `--options runtime`，
- *   并且**必须**同时加 `--entitlements <entitlementsPath>`——arm64 macOS 严格
- *   执行 W^X，hardened runtime 二进制缺 com.apple.security.cs.allow-jit 时
- *   V8 无法申请可执行内存，node 启动即死于 CodeRange 虚拟内存保留失败。
- *   历史上这里"照抄旧实证流程、不加 entitlements"，产出的箱子能过公证但
- *   在 arm64 上完全无法运行；所以现在 hardened runtime 而 entitlementsPath
- *   缺失直接硬报错，禁止静默签出一个必然崩溃的二进制。
- *   不加 `--keychain`（identity 解析走 CI 已设好的 keychain 搜索列表，
- *   见 build.yml "Setup macOS signing keychain"）。
- * @param {{identity?: string, file: string, entitlementsPath?: string}} opts
+ * 组装单个文件的 codesign 参数（纯函数，供测试逐一断言）。
+ * Apple Silicon requires a signature structure on executable Mach-O files. The
+ * seed uses a credential-free ad-hoc seal only; platform identities are not an
+ * input to this module.
+ * @param {{file: string}} opts
  * @returns {string[]} codesign 的完整参数数组
  */
-export function buildCodesignArgs({ identity, file, entitlementsPath }) {
-  if (!identity) {
-    return ["--sign", "-", "--force", file];
-  }
-  const hardenedRuntime = !file.endsWith(".node");
-  if (hardenedRuntime && !entitlementsPath) {
-    throw new Error(
-      `[build-server] refusing to sign ${file} with hardened runtime but no entitlements file. `
-        + "A runtime-flagged binary without com.apple.security.cs.allow-jit cannot start V8 on "
-        + "arm64 macOS (CodeRange OOM crash at launch); pass entitlementsPath.",
-    );
-  }
-  return [
-    "--sign", identity,
-    "--timestamp",
-    "--force",
-    ...(hardenedRuntime ? ["--options", "runtime", "--entitlements", entitlementsPath] : []),
-    file,
-  ];
+export function buildCodesignArgs({ file }) {
+  return ["--sign", "-", "--force", file];
 }
 
 /**
- * 默认 darwin 签名器：装箱前对树内每个 Mach-O 签名（顺序铁律见文件头注释）。
- * 签名模式由 `env.HANA_MACHO_SIGN_IDENTITY` 决定：CI（release workflow）由 build.yml 的
- * keychain 前置步骤导出 Developer ID 证书 identity；本地未设置 → ad-hoc，
- * 行为与之前完全一致。参数组装见 buildCodesignArgs。
+ * 默认 darwin 签名器：装箱前对树内每个 Mach-O 添加 ad-hoc seal。
  * @param {string} outDir
  * @param {(msg: string) => void} log
- * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} env
  */
-async function defaultSignMachOFiles(outDir, log, env = process.env) {
-  const identity = env.HANA_MACHO_SIGN_IDENTITY;
-  // Developer ID 模式下 hardened runtime 文件必须携带 JIT entitlements
-  //（缺了它 node 在 arm64 上启动即崩，见 buildCodesignArgs 注释）。plist
-  // 缺失必须硬报错——静默退回"无 entitlements 签名"正是当初的事故。
-  let entitlementsPath;
-  if (identity) {
-    entitlementsPath = path.join(ROOT, "build", "server-macho-entitlements.plist");
-    if (!fs.existsSync(entitlementsPath)) {
-      throw new Error(
-        `[build-server] server Mach-O entitlements plist missing: ${entitlementsPath}. `
-          + "Developer ID signing requires it (hardened runtime without allow-jit produces a "
-          + "binary that crashes at launch on arm64 macOS); refusing to sign without it.",
-      );
-    }
-  }
+async function defaultSignMachOFiles(outDir, log) {
   const machoFiles = findMachOFiles(outDir);
   for (const file of machoFiles) {
-    execFileSync("codesign", buildCodesignArgs({ identity, file, entitlementsPath }), { stdio: "pipe" });
+    execFileSync("codesign", buildCodesignArgs({ file }), { stdio: "pipe" });
   }
-  const mode = identity ? "Developer ID (HANA_MACHO_SIGN_IDENTITY)" : "ad-hoc";
-  log(`[build-server] seed: ${mode} signed ${machoFiles.length} Mach-O file(s) before packing`);
+  log(`[build-server] seed: ad-hoc sealed ${machoFiles.length} Mach-O file(s) before packing`);
 }
 
 /**
@@ -310,10 +262,9 @@ function requireSignKeyPath(env) {
  *   version: string,
  *   platform: string,
  *   arch: string,
- *   env?: NodeJS.ProcessEnv | Record<string, string | undefined>,
  *   log?: (msg: string) => void,
  *   deps?: {
- *     signMachOFiles?: (outDir: string, log: (msg: string) => void, env: NodeJS.ProcessEnv | Record<string, string | undefined>) => Promise<void>,
+ *     signMachOFiles?: (outDir: string, log: (msg: string) => void) => Promise<void>,
  *     smokeTestNodeStartup?: (outDir: string, log: (msg: string) => void) => Promise<void>,
  *     packTree?: (srcDir: string, archivePath: string) => Promise<void>,
  *     sha256File?: (filePath: string) => Promise<string>,
@@ -322,7 +273,7 @@ function requireSignKeyPath(env) {
  * }} opts
  * @returns {Promise<{archivePath: string, archiveName: string, sha256: string, size: number}>}
  */
-export async function packServerArchive({ outDir, artifactOutDir, version, platform, arch, env = process.env, log = console.log, deps = {} }) {
+export async function packServerArchive({ outDir, artifactOutDir, version, platform, arch, log = console.log, deps = {} }) {
   const {
     signMachOFiles = defaultSignMachOFiles,
     smokeTestNodeStartup = defaultSmokeTestNodeStartup,
@@ -331,12 +282,9 @@ export async function packServerArchive({ outDir, artifactOutDir, version, platf
     statSize = (filePath) => fs.statSync(filePath).size,
   } = deps;
 
-  // ── 先签名（铁律见文件头注释）：darwin 树内 Mach-O 装箱前必须带签名 ──
-  // æ­£å¼ CI 的 Developer ID 签名同样必须发生在这一行语义位置之前/之处。
-  // env 显式传参（不在签名器里抓 process.env），HANA_MACHO_SIGN_IDENTITY
-  // 决定 ad-hoc / Developer ID 双模式，见 defaultSignMachOFiles。
+  // ── 先加 ad-hoc seal（铁律见文件头注释）：darwin 树内 Mach-O 装箱前必须带签名 ──
   if (platform === "darwin") {
-    await signMachOFiles(outDir, log, env);
+    await signMachOFiles(outDir, log);
     // ── 签完立刻启动烟测：实际跑一次签好名的 node，签坏的二进制在这里
     // 就地报错中止装箱，永远到不了货架（见 defaultSmokeTestNodeStartup）──
     await smokeTestNodeStartup(outDir, log);
@@ -541,7 +489,7 @@ export function buildSeedManifest({ version, platform, arch, keyId, releasedAt, 
  *   env?: NodeJS.ProcessEnv | Record<string, string | undefined>,
  *   log?: (msg: string) => void,
  *   deps?: {
- *     signMachOFiles?: (outDir: string, log: (msg: string) => void, env: NodeJS.ProcessEnv | Record<string, string | undefined>) => Promise<void>,
+ *     signMachOFiles?: (outDir: string, log: (msg: string) => void) => Promise<void>,
  *     packTree?: (srcDir: string, archivePath: string) => Promise<void>,
  *     sha256File?: (filePath: string) => Promise<string>,
  *     statSize?: (filePath: string) => number,
@@ -583,7 +531,7 @@ export async function packDualKindSeed({
   }
 
   // ── 两个归档都打完 ──
-  const serverPack = await packServerArchive({ outDir, artifactOutDir, version, platform, arch, env, log, deps });
+  const serverPack = await packServerArchive({ outDir, artifactOutDir, version, platform, arch, log, deps });
   const rendererPackShared = prebuiltRendererArchive
     ? await usePrebuiltRendererArchive({
         archivePath: prebuiltRendererArchive,

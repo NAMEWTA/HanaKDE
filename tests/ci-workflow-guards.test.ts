@@ -212,6 +212,23 @@ describe("build.yml: early releases require no operator-managed secrets", () => 
     expect(doc.jobs).not.toHaveProperty("publish-train");
     expect(doc.jobs).not.toHaveProperty("mirror-atomgit");
   });
+
+  it("keeps the experimental desktop shell credential-free and removes local re-sign surfaces", () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+    const serverBuilder = fs.readFileSync(path.join(ROOT, "scripts", "build-server-artifact.mjs"), "utf8");
+
+    expect(pkg.build.mac.identity).toBeNull();
+    expect(pkg.build.mac.hardenedRuntime).toBe(false);
+    expect(pkg.build.mac).not.toHaveProperty("entitlements");
+    expect(pkg.build.mac).not.toHaveProperty("entitlementsInherit");
+    expect(pkg.scripts["install:local"]).not.toContain("sign-local");
+    expect(fs.existsSync(path.join(ROOT, "scripts", "sign-local.cjs"))).toBe(false);
+    expect(fs.existsSync(path.join(ROOT, "desktop", "entitlements.mac.plist"))).toBe(false);
+    expect(fs.existsSync(path.join(ROOT, "build", "server-macho-entitlements.plist"))).toBe(false);
+    expect(serverBuilder).not.toContain("HANA_MACHO_SIGN_IDENTITY");
+    expect(serverBuilder).not.toContain("Developer ID");
+    expect(serverBuilder).not.toContain("--timestamp");
+  });
 });
 
 describe("build.yml: Windows standalone server stays outside the seed/OTA boundary", () => {
@@ -266,5 +283,46 @@ describe("build.yml: Windows standalone server stays outside the seed/OTA bounda
     expect(releaseText).toContain("dist-standalone");
     expect(releaseText).toContain("HanaKDE-Core-");
     expect(releaseText).not.toContain("publish-train.mjs");
+  });
+});
+
+describe("build.yml: untouched platform packages gate artifact upload", () => {
+  const doc = loadWorkflow(BUILD_YAML_PATH);
+  const steps = doc.jobs.build?.steps ?? [];
+
+  it("runs the raw macOS DMG flow after packaging and before upload", () => {
+    const buildIndex = steps.findIndex((step) => step.name === "Build macOS (DMG + ZIP)");
+    const gateIndex = steps.findIndex((step) => step.name === "Gate untouched macOS package");
+    const uploadIndex = steps.findIndex((step) => step.name === "Upload artifacts");
+    expect(gateIndex).toBeGreaterThan(buildIndex);
+    expect(gateIndex).toBeLessThan(uploadIndex);
+    expect(steps[gateIndex]?.if).toBe("runner.os == 'macOS'");
+    expect(stepRun(steps[gateIndex])).toContain("scripts/platform/macos/run-gate.mjs");
+    expect(stepRun(steps[gateIndex])).toContain("--direct-flow");
+    expect(stepRun(steps[gateIndex])).toContain("--packaged-only");
+    expect(stepRun(steps[gateIndex])).toContain("--launch-smoke");
+    expect(stepRun(steps[gateIndex])).toContain('--arch "${{ matrix.arch }}"');
+    expect(stepRun(steps[gateIndex])).not.toContain("adhoc-resign");
+  });
+
+  it("requires NotSigned and packaged launch on Windows before upload", () => {
+    const buildIndex = steps.findIndex((step) => step.name === "Build Windows installer");
+    const gateIndex = steps.findIndex((step) => step.name === "Gate unsigned Windows package");
+    const uploadIndex = steps.findIndex((step) => step.name === "Upload artifacts");
+    expect(gateIndex).toBeGreaterThan(buildIndex);
+    expect(gateIndex).toBeLessThan(uploadIndex);
+    expect(steps[gateIndex]?.if).toBe("runner.os == 'Windows'");
+    expect(stepRun(steps[gateIndex])).toContain("scripts/platform/windows/run-gate.mjs");
+    expect(stepRun(steps[gateIndex])).toContain("--direct-flow");
+    expect(stepRun(steps[gateIndex])).toContain("--installer");
+  });
+
+  it("documents the exact user approval commands without claiming platform trust", () => {
+    const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+    const readmeEn = fs.readFileSync(path.join(ROOT, "README_EN.md"), "utf8");
+    expect(readme).toContain("sudo xattr -rd com.apple.quarantine /Applications/HanaKDE.app");
+    expect(readmeEn).toContain("sudo xattr -rd com.apple.quarantine /Applications/HanaKDE.app");
+    expect(readme).toContain("SmartScreen");
+    expect(readmeEn).toContain("SmartScreen");
   });
 });

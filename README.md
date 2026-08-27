@@ -73,15 +73,15 @@ HanaKDE 是一个更加易用的 AI agent，有记忆，有性格，会主动行
 
 **macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/NAMEWTA/HanaKDE/releases) 下载最新 `.dmg`。
 
-当前发布包不使用 Apple Developer ID 签名或公证。若 macOS 阻止首次打开，请确认下载来源可信后执行：
+当前实验发布包不使用 Apple Developer ID 签名或公证，清除 quarantine 只表示你本人允许启动，并不证明来源可信。确认下载来源后执行：
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/HanaKDE.app
+sudo xattr -rd com.apple.quarantine /Applications/HanaKDE.app
 ```
 
 **Windows**：从 [Releases](https://github.com/NAMEWTA/HanaKDE/releases) 下载最新 `.exe` 安装包。
 
-> **Windows SmartScreen 提示：** 安装包暂未经过代码签名，首次运行时 Windows Defender SmartScreen 可能会拦截，点击**更多信息** → **仍要运行**即可，未签名版本的正常现象。
+> **Windows SmartScreen 提示：** 实验版安装包的 Authenticode 状态为 `NotSigned`。Windows Defender SmartScreen 可能会拦截；确认下载来源后，点击**更多信息** → **仍要运行**。此操作不证明安装包来源可信。
 
 **Linux**：从 [Releases](https://github.com/NAMEWTA/HanaKDE/releases) 下载最新 `.AppImage` 或 `.deb`。
 
@@ -101,7 +101,7 @@ desktop/        Electron 应用 + React 前端
 shared/         跨层共享工具（config schema、error bus、模型引用等）
 plugins/        内置系统插件（随应用打包）
 skills2set/     内置技能定义
-scripts/        构建工具（server 打包、启动器、签名）
+scripts/        构建工具（server 打包、启动器、内部构件完整性签名）
 tests/          Vitest 测试
 ```
 

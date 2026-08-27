@@ -110,7 +110,7 @@ function listArchiveEntries(archivePath) {
  */
 export function inspectWindowsPackage(
   packageDir,
-  { arch = "x64", archiveLister = listArchiveEntries } = {},
+  { arch = "x64", archiveLister = listArchiveEntries, signatureInspector = null } = {},
 ) {
   if (!packageDir) throw new Error("[windows-gate] package directory is required");
   assertSupportedArch(arch);
@@ -119,6 +119,7 @@ export function inspectWindowsPackage(
   const executablePath = path.join(packageRoot, "HanaKDE.exe");
   assertFile(executablePath, "HanaKDE.exe");
   assertPortableExecutable(executablePath, "HanaKDE.exe");
+  const authenticodeStatus = inspectUnsignedAuthenticode(executablePath, signatureInspector);
 
   const resources = path.join(packageRoot, "resources");
   const seed = path.join(resources, "seed");
@@ -175,17 +176,54 @@ export function inspectWindowsPackage(
     minGitRuntime: "resources/git",
     sandboxHelper: "resources/sandbox/windows/hana-win-sandbox.exe",
     secureHelper: `dist-secure-fs/win-${arch}/hana-secure-fs-helper.exe`,
+    authenticodeStatus,
   };
 }
 
-export function inspectWindowsInstaller(installerPath) {
+function powershellAuthenticodeInspector(target) {
+  const script = [
+    "$signature = Get-AuthenticodeSignature -LiteralPath $env:HANA_AUTHENTICODE_TARGET",
+    "[pscustomobject]@{ status = [string]$signature.Status; statusMessage = $signature.StatusMessage; signer = $signature.SignerCertificate.Subject } | ConvertTo-Json -Compress",
+  ].join("; ");
+  const output = execFileSync("powershell.exe", [
+    "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script,
+  ], {
+    encoding: "utf8",
+    windowsHide: true,
+    env: { ...process.env, HANA_AUTHENTICODE_TARGET: target },
+  });
+  return JSON.parse(output.trim());
+}
+
+function inspectUnsignedAuthenticode(target, signatureInspector) {
+  const inspector = signatureInspector ?? (process.platform === "win32" ? powershellAuthenticodeInspector : null);
+  if (!inspector) return "unverified-off-platform";
+  const signature = inspector(target);
+  if (signature?.status !== "NotSigned") {
+    throw new Error(
+      `[windows-gate] expected Authenticode status NotSigned for ${path.basename(target)}, got ${signature?.status ?? "unknown"}`,
+    );
+  }
+  return signature.status;
+}
+
+export function inspectWindowsInstaller(installerPath, { signatureInspector = null } = {}) {
   if (!installerPath) throw new Error("[windows-gate] installer path is required");
   assertFile(installerPath, "NSIS installer");
   if (path.extname(installerPath).toLowerCase() !== ".exe") {
     throw new Error("[windows-gate] NSIS installer must be an .exe");
   }
   assertPortableExecutable(installerPath, "NSIS installer");
-  return { installer: path.basename(installerPath), peHeaderVerified: true };
+  return {
+    installer: path.basename(installerPath),
+    peHeaderVerified: true,
+    authenticodeStatus: inspectUnsignedAuthenticode(installerPath, signatureInspector),
+  };
+}
+
+async function runPackagedDirectFlow(options) {
+  const module = await import("./run-packaged-direct-flow.mjs");
+  return module.runPackagedDirectFlow(options);
 }
 
 async function runLockedFileProbe(workspace) {
@@ -358,6 +396,7 @@ export async function runWindowsGate({
   rootDir,
   packageDir = null,
   installerPath = null,
+  directFlowOptions = null,
   arch = "x64",
   cleanup = true,
 } = {}) {
@@ -370,12 +409,14 @@ export async function runWindowsGate({
     const fixture = await runFilesystemMatrix(fixtureRoot);
     const packageResult = packageDir ? inspectWindowsPackage(packageDir, { arch }) : null;
     const installerResult = installerPath ? inspectWindowsInstaller(installerPath) : null;
+    const directFlow = directFlowOptions ? await runPackagedDirectFlow(directFlowOptions) : null;
     return {
       platform: process.platform,
       arch: process.arch,
       fixture,
       package: packageResult,
       installer: installerResult,
+      directFlow,
     };
   } finally {
     if (cleanup) cleanupFixtureRoot(fixtureRoot);
@@ -393,7 +434,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const packageDir = optionValue("--package");
   const installerPath = optionValue("--installer");
   const arch = optionValue("--arch") || "x64";
-  runWindowsGate({ packageDir, installerPath, arch }).then((result) => {
+  const directFlow = process.argv.includes("--direct-flow");
+  const installRoot = optionValue("--install");
+  const version = optionValue("--version") || "0.446.6";
+  if (directFlow && !installRoot) throw new Error("[windows-gate] --direct-flow requires --install");
+  runWindowsGate({
+    packageDir,
+    installerPath,
+    arch,
+    directFlowOptions: directFlow ? { installRoot, version } : null,
+  }).then((result) => {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }).catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

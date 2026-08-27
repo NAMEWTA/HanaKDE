@@ -209,6 +209,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      - name: Gate untouched macOS package
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          DMG=$(find dist -maxdepth 1 -name '*-macOS-${{ matrix.arch }}.dmg' -print -quit)
+          if [ -z "$DMG" ]; then
+            echo "::error::macOS DMG for ${{ matrix.arch }} is missing"
+            exit 1
+          fi
+          VERSION=$(node -p "require('./package.json').version")
+          node scripts/platform/macos/run-gate.mjs \
+            --direct-flow \
+            --packaged-only \
+            --launch-smoke \
+            --dmg "$DMG" \
+            --arch "${{ matrix.arch }}" \
+            --version "$VERSION"
+
       # 同上：Windows job 直调 electron-builder，seed kit 校验必须单独接线。
       - name: Verify seed kit (Windows)
         if: runner.os == 'Windows'
@@ -225,6 +243,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Gate unsigned Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem -Path dist -Filter '*.exe' | Select-Object -First 1).FullName
+          if (-not $installer) { throw 'Windows installer is missing' }
+          $installRoot = Join-Path $env:RUNNER_TEMP 'HanaKDE-gate-install'
+          $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "NSIS install failed with exit code $($process.ExitCode)" }
+          $version = node -p "require('./package.json').version"
+          node scripts/platform/windows/run-gate.mjs `
+            --package $installRoot `
+            --installer $installer `
+            --arch ${{ matrix.arch }} `
+            --direct-flow `
+            --install $installRoot `
+            --version $version
 
       # 同上：Linux job 直调 electron-builder，seed kit 校验必须单独接线。
       - name: Verify seed kit (Linux)
