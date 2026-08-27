@@ -98,6 +98,13 @@ async function runPackagedDirectFlow(options) {
   return module.runPackagedDirectFlow(options);
 }
 
+function formatFailure(error) {
+  if (error instanceof AggregateError) {
+    return [error.message, ...error.errors.map((entry) => formatFailure(entry))].join("\n");
+  }
+  return error instanceof Error ? error.stack ?? error.message : String(error);
+}
+
 export async function runMacosGate({
   rootDir,
   packageDir = null,
@@ -249,7 +256,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }).then((result) => {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }).catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`${formatFailure(error)}\n`);
     process.exitCode = 1;
   });
 }

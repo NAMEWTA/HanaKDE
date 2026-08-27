@@ -185,12 +185,29 @@ function powershellAuthenticodeInspector(target) {
     "$signature = Get-AuthenticodeSignature -LiteralPath $env:HANA_AUTHENTICODE_TARGET",
     "[pscustomobject]@{ status = [string]$signature.Status; statusMessage = $signature.StatusMessage; signer = $signature.SignerCertificate.Subject } | ConvertTo-Json -Compress",
   ].join("; ");
+  // This process is launched from a pwsh workflow step. Its inherited
+  // PSModulePath can omit the Windows PowerShell 5.1 system modules, which
+  // makes Get-AuthenticodeSignature fail to autoload on hosted runners.
+  const windowsPowerShellModules = path.join(
+    process.env.SystemRoot ?? "C:\\Windows",
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "Modules",
+  );
+  const psModulePath = [windowsPowerShellModules, process.env.PSModulePath]
+    .filter(Boolean)
+    .join(path.delimiter);
   const output = execFileSync("powershell.exe", [
     "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script,
   ], {
     encoding: "utf8",
     windowsHide: true,
-    env: { ...process.env, HANA_AUTHENTICODE_TARGET: target },
+    env: {
+      ...process.env,
+      HANA_AUTHENTICODE_TARGET: target,
+      PSModulePath: psModulePath,
+    },
   });
   return JSON.parse(output.trim());
 }

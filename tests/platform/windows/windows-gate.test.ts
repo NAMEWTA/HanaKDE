@@ -162,6 +162,8 @@ describe("Windows blocking gate runner", () => {
     const source = fs.readFileSync(sourcePath, "utf8");
     expect(source).toContain("Get-AuthenticodeSignature");
     expect(source).toContain("HANA_AUTHENTICODE_TARGET");
+    expect(source).toContain("WindowsPowerShell");
+    expect(source).toContain("PSModulePath");
     expect(source).toContain("runPackagedDirectFlow");
     expect(source).toContain('process.argv.includes("--direct-flow")');
   });

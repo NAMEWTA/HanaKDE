@@ -29,6 +29,11 @@ interface WorkflowStep {
 
 interface WorkflowJob {
   steps?: WorkflowStep[];
+  strategy?: {
+    matrix?: {
+      include?: Array<Record<string, string>>;
+    };
+  };
   [key: string]: unknown;
 }
 
@@ -303,6 +308,12 @@ describe("build.yml: untouched platform packages gate artifact upload", () => {
     expect(stepRun(steps[gateIndex])).toContain("--launch-smoke");
     expect(stepRun(steps[gateIndex])).toContain('--arch "${{ matrix.arch }}"');
     expect(stepRun(steps[gateIndex])).not.toContain("adhoc-resign");
+  });
+
+  it("runs each macOS launch gate on its native architecture", () => {
+    const matrix = doc.jobs.build?.strategy?.matrix?.include ?? [];
+    expect(matrix).toContainEqual({ os: "macos-latest", target: "dmg", arch: "arm64" });
+    expect(matrix).toContainEqual({ os: "macos-15-intel", target: "dmg", arch: "x64" });
   });
 
   it("requires NotSigned and packaged launch on Windows before upload", () => {

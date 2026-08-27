@@ -57,7 +57,9 @@ jobs:
           - os: macos-latest
             target: dmg
             arch: arm64
-          - os: macos-latest
+          # Run the x64 launch gate natively. macos-latest is an arm64 image;
+          # macos-15-intel remains the supported GitHub-hosted Intel label.
+          - os: macos-15-intel
             target: dmg
             arch: x64
           - os: windows-latest
@@ -188,9 +190,8 @@ jobs:
       # 的 pack/dist/dist:win/dist:linux 脚本链），scripts/verify-seed-kit.mjs
       # 挂在那条脚本链里、这里不会自动生效，必须单独接线，否则一份陈旧/串
       # 平台的 seed 四件套能被原样装进安装包（见脚本文件头列举的三类事故）。
-      # platform/arch 显式传参，不用脚本默认的 process.platform/process.arch——
-      # macOS 矩阵的 x64 job 仍跑在 arm64 宿主机上（cross-arch 打包），默认参数
-      # 会算错要校验的 dist-server-artifact/{os}-{arch}/ 目录。
+      # platform/arch 显式传参，不用脚本默认的 process.platform/process.arch，
+      # 确保门禁始终校验矩阵声明的 dist-server-artifact/{os}-{arch}/ 目录。
       - name: Verify seed kit (macOS)
         if: runner.os == 'macOS'
         run: node scripts/verify-seed-kit.mjs darwin ${{ matrix.arch }}
