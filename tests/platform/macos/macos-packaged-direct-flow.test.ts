@@ -140,6 +140,8 @@ describe("macOS packaged direct-flow runner", () => {
     expect(source).toContain('execFile("xattr"');
     expect(source).toContain("hashAppBundleContents");
     expect(source).toContain("runAtSearchFlow");
+    expect(source).toContain("PACKAGED_SERVER_START_TIMEOUT_MS = 240_000");
+    expect(source).toContain("PACKAGED_SERVER_START_TIMEOUT_MS,");
   });
 
   it("is wired as an explicit full-flow option rather than an inventory side effect", () => {

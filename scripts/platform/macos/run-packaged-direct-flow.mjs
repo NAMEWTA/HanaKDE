@@ -24,6 +24,7 @@ const execFile = promisify(execFileCallback);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const ARCH_PATTERN = /^(?:arm64|x64)$/;
+const PACKAGED_SERVER_START_TIMEOUT_MS = 240_000;
 const childErrors = new WeakMap();
 
 export function assertPackagedFlowPlatform(platform = process.platform) {
@@ -788,7 +789,15 @@ export async function runPackagedDirectFlow({
     if (!receipt.unsafeNoSandboxAbsent) {
       throw new Error("packaged launch unexpectedly used --no-sandbox");
     }
-    const serverInfo = await waitForJson(path.join(sandbox.hanaHome, "server-info.json"), child);
+    // GitHub's hosted Intel runners can spend more than 90 seconds on the
+    // first seed extraction and server initialization. The app-launch marker
+    // keeps its stricter 90-second bound; only service readiness gets room for
+    // a valid but slower first boot.
+    const serverInfo = await waitForJson(
+      path.join(sandbox.hanaHome, "server-info.json"),
+      child,
+      PACKAGED_SERVER_START_TIMEOUT_MS,
+    );
     serverPid = serverInfo.pid;
     const health = await json(await apiFetch(serverInfo, "/api/health"), "packaged health");
     receipt.healthReady = health.status === "ok" || health.ok === true;
