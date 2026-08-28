@@ -229,7 +229,13 @@ async function runAgentFlow(serverInfo, sandbox, page) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ modelId: ENGINE_TOOL_HARNESS_MODEL_ID, provider: ENGINE_TOOL_HARNESS_PROVIDER_ID }),
   }), "Engine tool harness model selection");
-  await page.locator('[data-tab="chat"]').click();
+  // Start the chat verification from a clean renderer mount. The knowledge
+  // workspace owns async watchers whose teardown can outlive a direct tab
+  // click on slower packaged Windows runners; macOS uses the same reload
+  // boundary before its Agent flow.
+  await page.evaluate(() => window.localStorage.setItem("hana-tab", "chat"));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('button[data-tab="chat"]:visible').click();
   const editor = page.locator(PACKAGED_CHAT_EDITOR_SELECTOR).last();
   await editor.waitFor({ state: "visible", timeout: PACKAGED_CHAT_EDITOR_TIMEOUT_MS });
   await editor.fill("Create the deterministic Agent History fixture.");

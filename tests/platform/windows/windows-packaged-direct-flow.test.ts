@@ -70,6 +70,8 @@ describe("Windows packaged direct-flow runner", () => {
     expect(PACKAGED_CHAT_EDITOR_SELECTOR).toBe('#inputBox[contenteditable="true"]:visible');
     const source = fs.readFileSync(path.resolve("scripts/platform/windows/run-packaged-direct-flow.mjs"), "utf8");
     expect(source).toContain("PACKAGED_CHAT_EDITOR_TIMEOUT_MS = 90_000");
+    expect(source).toContain('window.localStorage.setItem("hana-tab", "chat")');
+    expect(source).toContain('page.reload({ waitUntil: "domcontentloaded" })');
     expect(source).not.toContain('.ProseMirror[contenteditable="true"]:visible');
   });
 });
