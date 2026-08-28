@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertPackagedFlowPlatform,
   assertPackagedFlowReceipt,
+  PACKAGED_CHAT_EDITOR_SELECTOR,
   parsePackagedFlowOptions,
   resolvePackagedPiAiPath,
 } from "../../../scripts/platform/windows/run-packaged-direct-flow.mjs";
@@ -63,5 +64,12 @@ describe("Windows packaged direct-flow runner", () => {
     expect(source).toContain("runAgentFlow");
     expect(source).toContain("runAtSearchFlow");
     expect(source).not.toContain("os.homedir");
+  });
+
+  it("targets the stable chat input identity instead of TipTap implementation classes", () => {
+    expect(PACKAGED_CHAT_EDITOR_SELECTOR).toBe('#inputBox[contenteditable="true"]:visible');
+    const source = fs.readFileSync(path.resolve("scripts/platform/windows/run-packaged-direct-flow.mjs"), "utf8");
+    expect(source).toContain("PACKAGED_CHAT_EDITOR_TIMEOUT_MS = 90_000");
+    expect(source).not.toContain('.ProseMirror[contenteditable="true"]:visible');
   });
 });

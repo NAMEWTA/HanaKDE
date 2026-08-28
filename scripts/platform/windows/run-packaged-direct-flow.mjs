@@ -26,6 +26,8 @@ const WINDOWS_CHROMIUM_SWITCHES = [
   "--disable-backgrounding-occluded-windows",
   "--disable-renderer-backgrounding",
 ];
+export const PACKAGED_CHAT_EDITOR_SELECTOR = '#inputBox[contenteditable="true"]:visible';
+const PACKAGED_CHAT_EDITOR_TIMEOUT_MS = 90_000;
 
 export function assertPackagedFlowPlatform(platform = process.platform) {
   if (platform !== "win32") {
@@ -228,8 +230,8 @@ async function runAgentFlow(serverInfo, sandbox, page) {
     body: JSON.stringify({ modelId: ENGINE_TOOL_HARNESS_MODEL_ID, provider: ENGINE_TOOL_HARNESS_PROVIDER_ID }),
   }), "Engine tool harness model selection");
   await page.locator('[data-tab="chat"]').click();
-  const editor = page.locator('.ProseMirror[contenteditable="true"]:visible').last();
-  await editor.waitFor({ state: "visible", timeout: 30_000 });
+  const editor = page.locator(PACKAGED_CHAT_EDITOR_SELECTOR).last();
+  await editor.waitFor({ state: "visible", timeout: PACKAGED_CHAT_EDITOR_TIMEOUT_MS });
   await editor.fill("Create the deterministic Agent History fixture.");
   await editor.press("Enter");
   await page.getByText(ENGINE_TOOL_HARNESS_COMPLETE, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
