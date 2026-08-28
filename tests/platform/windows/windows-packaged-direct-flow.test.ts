@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertPackagedFlowPlatform,
   assertPackagedFlowReceipt,
+  PACKAGED_CHAT_CONNECTED_SELECTOR,
   PACKAGED_CHAT_EDITOR_SELECTOR,
   parsePackagedFlowOptions,
   resolvePackagedPiAiPath,
@@ -68,8 +69,10 @@ describe("Windows packaged direct-flow runner", () => {
 
   it("targets the stable chat input identity instead of TipTap implementation classes", () => {
     expect(PACKAGED_CHAT_EDITOR_SELECTOR).toBe('#inputBox[contenteditable="true"]:visible');
+    expect(PACKAGED_CHAT_CONNECTED_SELECTOR).toBe('.connection-status.connected:visible');
     const source = fs.readFileSync(path.resolve("scripts/platform/windows/run-packaged-direct-flow.mjs"), "utf8");
     expect(source).toContain("PACKAGED_CHAT_EDITOR_TIMEOUT_MS = 90_000");
+    expect(source).toContain("page.locator(PACKAGED_CHAT_CONNECTED_SELECTOR).waitFor");
     expect(source).toContain('window.localStorage.setItem("hana-tab", "chat")');
     expect(source).toContain('page.reload({ waitUntil: "domcontentloaded" })');
     expect(source).not.toContain('.ProseMirror[contenteditable="true"]:visible');

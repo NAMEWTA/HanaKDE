@@ -27,6 +27,7 @@ const WINDOWS_CHROMIUM_SWITCHES = [
   "--disable-renderer-backgrounding",
 ];
 export const PACKAGED_CHAT_EDITOR_SELECTOR = '#inputBox[contenteditable="true"]:visible';
+export const PACKAGED_CHAT_CONNECTED_SELECTOR = '.connection-status.connected:visible';
 const PACKAGED_CHAT_EDITOR_TIMEOUT_MS = 90_000;
 
 export function assertPackagedFlowPlatform(platform = process.platform) {
@@ -236,6 +237,10 @@ async function runAgentFlow(serverInfo, sandbox, page) {
   await page.evaluate(() => window.localStorage.setItem("hana-tab", "chat"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('button[data-tab="chat"]:visible').click();
+  await page.locator(PACKAGED_CHAT_CONNECTED_SELECTOR).waitFor({
+    state: "visible",
+    timeout: PACKAGED_CHAT_EDITOR_TIMEOUT_MS,
+  });
   const editor = page.locator(PACKAGED_CHAT_EDITOR_SELECTOR).last();
   await editor.waitFor({ state: "visible", timeout: PACKAGED_CHAT_EDITOR_TIMEOUT_MS });
   await editor.fill("Create the deterministic Agent History fixture.");
