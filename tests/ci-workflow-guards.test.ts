@@ -326,6 +326,9 @@ describe("build.yml: untouched platform packages gate artifact upload", () => {
     expect(stepRun(steps[gateIndex])).toContain("scripts/platform/windows/run-gate.mjs");
     expect(stepRun(steps[gateIndex])).toContain("--direct-flow");
     expect(stepRun(steps[gateIndex])).toContain("--installer");
+    expect(stepRun(steps[gateIndex])).toContain('"HanaKDE-$version-Windows-${{ matrix.arch }}.exe"');
+    expect(stepRun(steps[gateIndex])).toContain("-notlike '*.__uninstaller.exe'");
+    expect(stepRun(steps[gateIndex])).not.toContain("-Filter '*.exe'");
   });
 
   it("documents the exact user approval commands without claiming platform trust", () => {

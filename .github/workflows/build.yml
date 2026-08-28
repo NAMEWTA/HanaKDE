@@ -249,12 +249,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $installer = (Get-ChildItem -Path dist -Filter '*.exe' | Select-Object -First 1).FullName
+          $version = node -p "require('./package.json').version"
+          $installerName = "HanaKDE-$version-Windows-${{ matrix.arch }}.exe"
+          $installer = (Get-ChildItem -Path dist -Filter $installerName -File | Where-Object { $_.Name -notlike '*.__uninstaller.exe' } | Select-Object -First 1).FullName
           if (-not $installer) { throw 'Windows installer is missing' }
           $installRoot = Join-Path $env:RUNNER_TEMP 'HanaKDE-gate-install'
           $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "NSIS install failed with exit code $($process.ExitCode)" }
-          $version = node -p "require('./package.json').version"
           node scripts/platform/windows/run-gate.mjs `
             --package $installRoot `
             --installer $installer `
