@@ -779,6 +779,22 @@ export class KnowledgeTrashOperationCoordinator {
     } catch (error) {
       if (
         record.kind === 'delete'
+        && await this.#deleteOperationHasNoRemainingBytes(record, context)
+      ) {
+        const finalized = this.#transition(record, {
+          state: 'FINALIZED',
+          items: record.items.map((item) => settleRecoveredItem(
+            item,
+            'applied',
+            this.#timestamp(),
+          )),
+          projections: appliedProjections(),
+        });
+        this.#persistResult(finalized);
+        return 'finalized';
+      }
+      if (
+        record.kind === 'delete'
         && (
           record.state === 'PREPARED'
           || await this.#deleteOperationIsUntouched(record, context)
@@ -975,6 +991,30 @@ export class KnowledgeTrashOperationCoordinator {
           ),
         ]);
         if (!original.exists || trash.exists) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async #deleteOperationHasNoRemainingBytes(
+    record: KnowledgeTrashOperationJournalRecord,
+    context: KnowledgeTrashContext,
+  ): Promise<boolean> {
+    try {
+      for (const item of record.items) {
+        const [original, trash] = await Promise.all([
+          this.#resourceIO.stat(
+            await this.#sourceRegistry.resolveAddress(item.originalAddress),
+            context,
+          ),
+          this.#resourceIO.stat(
+            await this.#sourceRegistry.resolveAddress(item.trashAddress),
+            context,
+          ),
+        ]);
+        if (original.exists || trash.exists) return false;
       }
       return true;
     } catch {

@@ -10,6 +10,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { useStore } from '../../stores';
 import {
   deskCreateFileInSubdir,
+  deskCopyTreeFiles,
   deskMkdirInSubdir,
   deskMoveTreeFiles,
   deskNativeRootDir,
@@ -168,6 +169,64 @@ const backgroundTreeRefreshTimers = new Map<string, ReturnType<typeof setTimeout
 
 function deskRootKey(basePath: string, mountId: string | null): string {
   return mountId ? `studio:${mountId}` : basePath;
+}
+
+interface DeskTreeClipboard {
+  rootKey: string;
+  intent: 'copy' | 'cut';
+  items: Array<{ sourceSubdir: string; name: string; isDirectory?: boolean }>;
+}
+
+let deskTreeClipboard: DeskTreeClipboard | null = null;
+
+function clipboardRootKey(): string {
+  const state = useStore.getState();
+  return deskRootKey(state.deskBasePath, state.deskWorkspaceMountId);
+}
+
+function copyItemsForDest(
+  items: DeskTreeClipboard['items'],
+  destSubdir: string,
+): DeskTreeClipboard['items'] {
+  const normalizedDest = destSubdir.replace(/^\/+|\/+$/g, '');
+  return items.filter((item) => {
+    if (!item.isDirectory) return true;
+    const sourcePath = treeItemSubdir(item.sourceSubdir, item.name);
+    return normalizedDest !== sourcePath && !normalizedDest.startsWith(`${sourcePath}/`);
+  });
+}
+
+export function setDeskTreeClipboard(
+  intent: DeskTreeClipboard['intent'],
+  items: DeskTreeClipboard['items'],
+): void {
+  deskTreeClipboard = {
+    rootKey: clipboardRootKey(),
+    intent,
+    items: items.map(item => ({ ...item })),
+  };
+}
+
+export function canPasteDeskTreeClipboard(destSubdir: string): boolean {
+  if (!deskTreeClipboard || deskTreeClipboard.rootKey !== clipboardRootKey()) return false;
+  const items = deskTreeClipboard.intent === 'cut'
+    ? buildMoveItemsForDest(deskTreeClipboard.items, destSubdir)
+    : copyItemsForDest(deskTreeClipboard.items, destSubdir);
+  return items.length > 0;
+}
+
+export async function pasteDeskTreeClipboard(destSubdir: string): Promise<boolean> {
+  const clipboard = deskTreeClipboard;
+  if (!clipboard || clipboard.rootKey !== clipboardRootKey()) return false;
+  const items = clipboard.intent === 'cut'
+    ? buildMoveItemsForDest(clipboard.items, destSubdir)
+    : copyItemsForDest(clipboard.items, destSubdir);
+  if (items.length === 0) return false;
+  const ok = clipboard.intent === 'cut'
+    ? await deskMoveTreeFiles(items, destSubdir)
+    : await deskCopyTreeFiles(items, destSubdir);
+  if (ok && clipboard.intent === 'cut') deskTreeClipboard = null;
+  return ok;
 }
 
 function scheduleBackgroundTreeRefresh(subdir: string, rootKey: string): void {
@@ -417,6 +476,7 @@ function TreeNode({
     const deleteLabel = actionEntries.length > 1
       ? t('desk.ctx.deleteSelected', { count: actionEntries.length })
       : t('desk.ctx.delete');
+    const pasteTarget = file.isDir ? subdir : parent;
     onShowMenu({
       position: { x: e.clientX, y: e.clientY },
       items: [
@@ -455,6 +515,32 @@ function TreeNode({
             },
           },
         ] : []),
+        { divider: true },
+        {
+          label: t('desk.ctx.copy'),
+          disabled: actionEntries.length === 0,
+          action: () => setDeskTreeClipboard('copy', actionEntries.map(entry => ({
+            sourceSubdir: entry.parent,
+            name: entry.file.name,
+            isDirectory: entry.file.isDir,
+          }))),
+        },
+        {
+          label: t('desk.ctx.cut'),
+          disabled: actionEntries.length === 0,
+          action: () => setDeskTreeClipboard('cut', actionEntries.map(entry => ({
+            sourceSubdir: entry.parent,
+            name: entry.file.name,
+            isDirectory: entry.file.isDir,
+          }))),
+        },
+        {
+          label: t('desk.ctx.paste'),
+          disabled: !canPasteDeskTreeClipboard(pasteTarget),
+          action: async () => {
+            if (!await pasteDeskTreeClipboard(pasteTarget)) dispatchDeskNotice(t('desk.pasteFailed'));
+          },
+        },
         { divider: true },
         {
           label: t('desk.ctx.rename'),
@@ -759,6 +845,33 @@ export function DeskTree({
       ? visibleEntries.filter(entry => selectedPaths.has(entry.subdir))
       : visibleEntries.filter(entry => entry.subdir === subdir);
     return compactDragEntries(entries);
+  }, [selectedPaths, visibleEntries]);
+
+  useEffect(() => {
+    const handleClipboardShortcut = (event: KeyboardEvent) => {
+      const root = treeRef.current;
+      if (!root?.contains(document.activeElement) || !(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'c' && key !== 'x' && key !== 'v') return;
+      event.preventDefault();
+      if (key === 'c' || key === 'x') {
+        const entries = compactDragEntries(visibleEntries.filter(entry => selectedPaths.has(entry.subdir)));
+        if (entries.length === 0) return;
+        setDeskTreeClipboard(key === 'c' ? 'copy' : 'cut', entries.map(entry => ({
+          sourceSubdir: entry.parent,
+          name: entry.file.name,
+          isDirectory: entry.file.isDir,
+        })));
+        return;
+      }
+      const selected = visibleEntries.find(entry => selectedPaths.has(entry.subdir));
+      const target = selected?.file.isDir ? selected.subdir : selected?.parent || '';
+      void pasteDeskTreeClipboard(target).then((ok) => {
+        if (!ok) dispatchDeskNotice(window.t?.('desk.pasteFailed') || 'desk.pasteFailed');
+      });
+    };
+    window.addEventListener('keydown', handleClipboardShortcut);
+    return () => window.removeEventListener('keydown', handleClipboardShortcut);
   }, [selectedPaths, visibleEntries]);
 
   const beginRename = useCallback((subdir: string) => {

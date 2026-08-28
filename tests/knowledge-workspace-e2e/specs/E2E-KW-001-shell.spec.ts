@@ -25,6 +25,8 @@ test("E2E-KW-001 opens a blank main Knowledge shell", async ({
   });
   await expect(resourceTree).toBeVisible();
   await expect(resourceTree).toHaveCount(1);
+  await expect(workspace.getByRole("navigation").getByRole("search"))
+    .toBeVisible();
   await expect(resourceTree.locator('[role="treeitem"][aria-level="1"]')).toHaveCount(1);
   await expect(workspace.getByRole("region", {
     name: /sources|来源|來源|ソース|소스/i,
@@ -35,6 +37,9 @@ test("E2E-KW-001 opens a blank main Knowledge shell", async ({
   await expect(workspace.getByRole("tab")).toHaveCount(0);
   await expect(page.locator("#previewPanel")).toHaveCount(0);
   await expect(page.locator("#jianSidebar")).toHaveCount(0);
+  await expect(
+    workspace.locator("[data-knowledge-current-resource-views]"),
+  ).toHaveCount(0);
 });
 
 test("E2E-KW-023 covers five locales, themes, narrow layout and accessibility", async ({

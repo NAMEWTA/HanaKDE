@@ -3046,6 +3046,9 @@
       "open": "열기",
       "openInFinder": "폴더 열기",
       "rename": "이름 변경",
+      "cut": "잘라내기",
+      "copy": "복사",
+      "paste": "붙여넣기",
       "copyPath": "경로 복사",
       "delete": "삭제",
       "deleteSelected": "{count}개 항목 삭제",
@@ -3060,6 +3063,7 @@
     "createFailed": "생성 실패",
     "renameInvalid": "파일 이름에는 경로 구분자를 사용할 수 없습니다",
     "renameFailed": "이름 변경 실패",
+    "pasteFailed": "붙여넣기 실패",
     "sort": {
       "label": "정렬",
       "mtime": "수정일",

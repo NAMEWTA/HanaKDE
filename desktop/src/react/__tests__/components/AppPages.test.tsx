@@ -134,7 +134,7 @@ describe('AppPages page ownership', () => {
     expect(screen.getByTestId('right-workspace-panel')).toBeInTheDocument();
   });
 
-  it('owns the full Knowledge page without chat preview or compact workspace companion', () => {
+  it('owns the full shared Knowledge workbench without the compact workspace companion', () => {
     useStore.setState({ currentTab: 'knowledge' } as never);
 
     render(<AppPages />);
@@ -145,7 +145,7 @@ describe('AppPages page ownership', () => {
     expect(screen.queryByTestId('right-workspace-panel')).not.toBeInTheDocument();
   });
 
-  it('keeps the visited Knowledge workspace mounted while another top-level surface is active', () => {
+  it('unmounts Knowledge while another top-level surface is active so only one editor exists', () => {
     useStore.setState({ currentTab: 'knowledge' } as never);
     render(<AppPages />);
     const workspace = screen.getByTestId('knowledge-workspace');
@@ -154,8 +154,7 @@ describe('AppPages page ownership', () => {
       useStore.setState({ currentTab: 'chat' } as never);
     });
 
-    expect(workspace).toBeInTheDocument();
-    expect(workspace.parentElement).toHaveAttribute('hidden');
+    expect(workspace).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-area')).toBeInTheDocument();
   });
 });

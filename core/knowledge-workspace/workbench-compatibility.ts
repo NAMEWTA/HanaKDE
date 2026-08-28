@@ -8,6 +8,12 @@ export type WorkbenchCompatibilityMain = {
   sessionPath: string | null;
 };
 
+export type WorkbenchCompatibilitySelector = {
+  directory?: string | null;
+  mountId?: string | null;
+  displayName?: string | null;
+};
+
 type WorkbenchCompatibilityEngine = {
   currentSessionPath?: string | null;
   getSessionWorkspaceMount?: (sessionPath: string) => {
@@ -29,7 +35,29 @@ type WorkbenchCompatibilityEngine = {
  */
 export function resolveWorkbenchCompatibilityMain(
   engine: WorkbenchCompatibilityEngine,
+  selector: WorkbenchCompatibilitySelector = {},
 ): WorkbenchCompatibilityMain {
+  const selectedMountId = firstNonEmptyString(selector.mountId);
+  const selectedDirectory = firstNonEmptyString(selector.directory);
+  const selectedDisplayName = firstNonEmptyString(selector.displayName);
+  if (selectedMountId) {
+    return {
+      sourceKey: "main",
+      displayName: selectedDisplayName || "Main",
+      role: "main",
+      root: { kind: "mount", mountId: selectedMountId, path: "" },
+      sessionPath: null,
+    };
+  }
+  if (selectedDirectory) {
+    return {
+      sourceKey: "main",
+      displayName: selectedDisplayName || "Main",
+      role: "main",
+      root: { kind: "local-file", path: selectedDirectory },
+      sessionPath: null,
+    };
+  }
   const sessionPath = typeof engine?.currentSessionPath === "string"
     && engine.currentSessionPath
     ? engine.currentSessionPath

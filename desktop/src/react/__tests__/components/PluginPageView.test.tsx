@@ -34,6 +34,8 @@ vi.mock('../../hooks/use-plugin-iframe', () => ({
     status: 'ready',
     postToIframe: vi.fn(),
     retry: vi.fn(),
+    onLoad: vi.fn(),
+    onError: vi.fn(),
   })),
 }));
 
@@ -43,7 +45,7 @@ describe('PluginPageView', () => {
     vi.mocked(usePluginIframe).mockClear();
   });
 
-  it('lets plain HTML plugin pages become visible even without an SDK ready handshake', () => {
+  it('mounts the issued plugin URL and keeps the SDK handshake strict', () => {
     const { container } = render(<PluginPageView pluginId="plain-plugin" />);
 
     expect(usePluginIframe).toHaveBeenCalledWith(
@@ -51,7 +53,6 @@ describe('PluginPageView', () => {
       expect.objectContaining({
         pluginId: 'plain-plugin',
         slot: 'page',
-        readyOnTimeout: true,
       }),
     );
     expect(container.querySelector('iframe')?.getAttribute('sandbox')).toBe(

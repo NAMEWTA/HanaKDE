@@ -110506,6 +110506,11 @@
         },
         {
           "root": "server-bootstrap",
+          "from": "server/routes/knowledge-workspace.ts",
+          "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
           "from": "server/routes/studio-workspaces.ts",
           "kind": "import-statement"
         },
@@ -110515,7 +110520,7 @@
           "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by server/routes/plugins.ts (import-statement); server/http/request-principal.ts (import-statement); server/http/capability-guard.ts (import-statement); +5 more importer(s)."
+      "reason": "Reached via esbuild source module graph, imported by server/routes/plugins.ts (import-statement); server/http/request-principal.ts (import-statement); server/http/capability-guard.ts (import-statement); +6 more importer(s)."
     },
     {
       "path": "server/http/security-audit.ts",
@@ -111246,9 +111251,14 @@
           "root": "server-bootstrap",
           "from": "server/routes/upload.ts",
           "kind": "import-statement"
+        },
+        {
+          "root": "server-bootstrap",
+          "from": "server/routes/knowledge-workspace.ts",
+          "kind": "import-statement"
         }
       ],
-      "reason": "Reached via esbuild source module graph, imported by server/routes/upload.ts (import-statement)."
+      "reason": "Reached via esbuild source module graph, imported by server/routes/upload.ts (import-statement); server/routes/knowledge-workspace.ts (import-statement)."
     },
     {
       "path": "server/utils/resolve-agent.ts",

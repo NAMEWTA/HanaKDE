@@ -1082,9 +1082,9 @@ function pruneRemovedDirectoryCache(removedSubdirs: string[]): void {
   schedulePersistCurrentWorkspaceUiState();
 }
 
-export async function deskMoveTreeFiles(items: DeskTreeMoveItem[], destSubdir: string): Promise<void> {
+export async function deskMoveTreeFiles(items: DeskTreeMoveItem[], destSubdir: string): Promise<boolean> {
   const s = useStore.getState();
-  if (items.length === 0) return;
+  if (items.length === 0) return true;
   const normalizedDest = destSubdir.replace(/^\/+|\/+$/g, '');
   const mountId = activeDeskMountId(s);
   try {
@@ -1128,8 +1128,51 @@ export async function deskMoveTreeFiles(items: DeskTreeMoveItem[], destSubdir: s
       st.setDeskFiles(data.files);
       st.setDeskTreeFiles('', data.files);
     }
+    return data.ok !== false && !data.error && !(data.results || []).some((item: { error?: string }) => item.error);
   } catch (err) {
     console.error('[jian-desk] tree move failed:', err);
+    return false;
+  }
+}
+
+export async function deskCopyTreeFiles(items: DeskTreeMoveItem[], destSubdir: string): Promise<boolean> {
+  const s = useStore.getState();
+  if (items.length === 0) return true;
+  const normalizedDest = destSubdir.replace(/^\/+|\/+$/g, '');
+  const mountId = activeDeskMountId(s);
+  try {
+    const res = await hanaFetch(mountId ? '/api/workbench/actions' : '/api/desk/files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mountId
+        ? {
+            action: 'copyPaths',
+            mountId,
+            items,
+            destSubdir: normalizedDest,
+            currentSubdir: '',
+          }
+        : {
+            ...selectedDeskAgentBody(s),
+            action: 'copyPaths',
+            dir: s.deskBasePath || undefined,
+            items,
+            destSubdir: normalizedDest,
+            currentSubdir: '',
+          }),
+    });
+    const data = await res.json();
+    const st = useStore.getState();
+    if (data.filesByPath && typeof data.filesByPath === 'object') {
+      for (const [subdir, files] of Object.entries(data.filesByPath)) {
+        st.setDeskTreeFiles(subdir, files as DeskFile[]);
+        if (normalizeSubdir(subdir) === '') st.setDeskFiles(files as DeskFile[]);
+      }
+    }
+    return data.ok !== false && !data.error && !(data.results || []).some((item: { error?: string }) => item.error);
+  } catch (err) {
+    console.error('[jian-desk] tree copy failed:', err);
+    return false;
   }
 }
 

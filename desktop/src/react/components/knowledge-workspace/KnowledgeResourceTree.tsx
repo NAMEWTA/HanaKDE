@@ -170,7 +170,7 @@ export function sortKnowledgeTreeItems(
 }
 
 function isSourceListable(source: KnowledgeSourceDto): boolean {
-  return source.availability === 'available'
+  return (source.availability === 'available' || source.availability === 'recovering')
     && source.capabilities.includes('list');
 }
 
@@ -327,7 +327,7 @@ export const KnowledgeResourceTree = forwardRef<
         return;
       }
       const visibleItems = result.items.filter(
-        (item) => !(relativePath === '' && item.name === '.trash'),
+        (item) => !item.name.startsWith('.'),
       );
       updateDirectories((state) => ({
         ...state,
@@ -460,7 +460,7 @@ export const KnowledgeResourceTree = forwardRef<
     let active = true;
     const releaseWatches = sources
       .filter((source) => (
-        source.availability === 'available'
+        (source.availability === 'available' || source.availability === 'recovering')
         && source.capabilities.includes('watch')
       ))
       .map((source) => ({ source, release: watchSource(source.sourceKey) }));
@@ -935,20 +935,26 @@ function SourceNode({
         name={source.displayName}
         selected={selected}
         trailing={(
-          <select
-            aria-label={tr('knowledge.tree.sort', { name: source.displayName })}
-            className={styles.knowledgeTreeSort}
-            onClick={(event) => event.stopPropagation()}
-            onChange={(event) => onSort(parseTreeSort(event.target.value))}
-            value={`${sort.field}:${sort.direction}`}
+          <span
+            className={styles.knowledgeTreeSortControl}
+            title={tr('knowledge.tree.sort', { name: source.displayName })}
           >
-            <option value="name:ascending">{tr('knowledge.tree.sortNameAscending')}</option>
-            <option value="name:descending">{tr('knowledge.tree.sortNameDescending')}</option>
-            <option value="modified:ascending">{tr('knowledge.tree.sortModifiedAscending')}</option>
-            <option value="modified:descending">{tr('knowledge.tree.sortModifiedDescending')}</option>
-            <option value="extension:ascending">{tr('knowledge.tree.sortExtensionAscending')}</option>
-            <option value="extension:descending">{tr('knowledge.tree.sortExtensionDescending')}</option>
-          </select>
+            <span aria-hidden="true" dangerouslySetInnerHTML={{ __html: ICONS.sort }} />
+            <select
+              aria-label={tr('knowledge.tree.sort', { name: source.displayName })}
+              className={styles.knowledgeTreeSort}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => onSort(parseTreeSort(event.target.value))}
+              value={`${sort.field}:${sort.direction}`}
+            >
+              <option value="name:ascending">{tr('knowledge.tree.sortNameAscending')}</option>
+              <option value="name:descending">{tr('knowledge.tree.sortNameDescending')}</option>
+              <option value="modified:ascending">{tr('knowledge.tree.sortModifiedAscending')}</option>
+              <option value="modified:descending">{tr('knowledge.tree.sortModifiedDescending')}</option>
+              <option value="extension:ascending">{tr('knowledge.tree.sortExtensionAscending')}</option>
+              <option value="extension:descending">{tr('knowledge.tree.sortExtensionDescending')}</option>
+            </select>
+          </span>
         )}
         data-availability={source.availability}
         data-source-key={source.sourceKey}

@@ -37,7 +37,7 @@ function Harness({
   capabilityGrants?: string[];
   readyOnTimeout?: boolean;
 }) {
-  const { iframeRef, status, postToIframe } = usePluginIframe(routeUrl, {
+  const { iframeRef, status, postToIframe, onLoad, onError } = usePluginIframe(routeUrl, {
     pluginId: 'demo-plugin',
     capabilities,
     capabilityGrants,
@@ -46,7 +46,7 @@ function Harness({
   return (
     <div>
       <div data-testid="status">{status}</div>
-      <iframe ref={iframeRef} data-testid="iframe" />
+      <iframe ref={iframeRef} data-testid="iframe" onLoad={onLoad} onError={onError} />
       <button onClick={() => postToIframe('visibility-changed', { visible: true })}>post</button>
     </div>
   );
@@ -265,7 +265,7 @@ describe('usePluginIframe', () => {
     ));
   });
 
-  it('can treat a loaded plain iframe as ready after the handshake timeout', () => {
+  it('can treat a plain iframe as ready only after its real load event', () => {
     vi.useFakeTimers();
     render(
       <Harness
@@ -277,7 +277,7 @@ describe('usePluginIframe', () => {
     expect(screen.getByTestId('status').textContent).toBe('loading');
 
     act(() => {
-      vi.advanceTimersByTime(5000);
+      fireEvent.load(screen.getByTestId('iframe'));
     });
 
     expect(screen.getByTestId('status').textContent).toBe('ready');

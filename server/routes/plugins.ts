@@ -27,6 +27,7 @@ import {
   DEFAULT_PLUGIN_ASSET_SESSION_TTL_MS,
   createPluginAssetSessionCookie,
   issuePluginAssetSession,
+  pluginAssetSessionPathPrefix,
 } from "../../core/plugin-asset-session-service.ts";
 import { issuePluginSurfaceSession } from "../../core/plugin-surface-session-service.ts";
 import { servePluginAsset } from "../http/plugin-assets.ts";
@@ -186,7 +187,7 @@ function responseNeedsPluginAssetSession(c: any, response: Response, iframeTicke
   return String(response.headers.get("content-type") || "").toLowerCase().includes("text/html");
 }
 
-function appendPluginAssetSessionCookie(c: any, engine: any, pluginId: string, response: Response, iframeTicket: any) {
+async function appendPluginAssetSessionCookie(c: any, engine: any, pluginId: string, response: Response, iframeTicket: any) {
   if (!responseNeedsPluginAssetSession(c, response, iframeTicket)) return response;
   if (!engine?.hanakoHome) return response;
   const principal = readAuthPrincipal(c);
@@ -212,7 +213,15 @@ function appendPluginAssetSessionCookie(c: any, engine: any, pluginId: string, r
     maxAgeSeconds,
     secure: new URL(c.req.url).protocol === "https:",
   } as any));
-  return new Response(response.body, {
+  let body: BodyInit | null = response.body;
+  const contentType = String(headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("text/html")) {
+    const html = await response.text();
+    const publicAssetPrefix = `/api/plugins/${encodeURIComponent(pluginId)}/assets/`;
+    body = html.split(publicAssetPrefix).join(pluginAssetSessionPathPrefix(pluginId, issued.token));
+    headers.delete("content-length");
+  }
+  return new Response(body, {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -1345,7 +1354,7 @@ export function createPluginsRoute(engine: any) {
     }
     const requestPrincipal = pluginRouteRequestPrincipal(readAuthPrincipal(c), iframeTicket, pluginId);
     const response = await proxyToPlugin(c, pluginApp, pluginId, agentId, requestPrincipal);
-    return appendPluginAssetSessionCookie(c, engine, pluginId, response, iframeTicket);
+    return await appendPluginAssetSessionCookie(c, engine, pluginId, response, iframeTicket);
   });
 
   return route;

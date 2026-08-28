@@ -327,6 +327,45 @@ describe('KnowledgeResourceTree', () => {
     expect(releases.get('main')).toHaveBeenCalledOnce();
   });
 
+  it('keeps a recovering source readable while recovery gates writes', async () => {
+    const recoveringMain: KnowledgeSourceDto = {
+      ...mainSource,
+      availability: 'recovering',
+    };
+    const list = vi.fn(async () => listResult([
+      { name: 'still-readable.md', isDirectory: false },
+    ]));
+
+    renderTree({
+      client: treeClient(list),
+      sources: [recoveringMain],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+
+    expect(await screen.findByText('still-readable.md')).toBeInTheDocument();
+    expect(screen.queryByText('Main workspace is unavailable')).not.toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: /Main workspace/ }))
+      .toHaveAttribute('data-availability', 'recovering');
+  });
+
+  it('keeps provider metadata and trash internals out of the visible tree', async () => {
+    const list = vi.fn(async () => listResult([
+      { name: '.DS_Store', isDirectory: false },
+      { name: '.trash', isDirectory: true },
+      { name: '.obsidian', isDirectory: true },
+      { name: 'notes.md', isDirectory: false },
+    ]));
+
+    renderTree({ client: treeClient(list), sources: [mainSource] });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Main workspace' }));
+
+    expect(await screen.findByText('notes.md')).toBeInTheDocument();
+    expect(screen.queryByText('.DS_Store')).not.toBeInTheDocument();
+    expect(screen.queryByText('.trash')).not.toBeInTheDocument();
+    expect(screen.queryByText('.obsidian')).not.toBeInTheDocument();
+  });
+
   it('refreshes loaded branches after existing resource events without clearing failed siblings', async () => {
     let listener: ((signal: KnowledgeResourceTreeChangeSignal) => void) | undefined;
     let revision = 0;

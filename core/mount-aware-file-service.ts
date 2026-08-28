@@ -375,6 +375,56 @@ export class MountAwareFileService {
     }, this._discloseNativeRoot);
   }
 
+  async copyPaths(rootId, body: Record<string, any> = {}, options: Record<string, any> = {}) {
+    const root = this._resolveRootInternal(rootId);
+    requireCapability(root, "read");
+    requireCapability(root, "write");
+    const items = Array.isArray(body.items) ? body.items : [];
+    const destSubdir = normalizeSubdirOrThrow(body.destSubdir || "");
+    const currentSubdir = normalizeSubdirOrThrow(body.currentSubdir || "");
+    const destStat = await this._resourceIO.stat(resourceRefForRoot(root, destSubdir));
+    if (!destStat.exists || !destStat.isDirectory) {
+      throw fileError("destSubdir is not a directory", "dest_not_directory", 400);
+    }
+
+    const touchedSubdirs = new Set([currentSubdir, destSubdir]);
+    const results = [];
+    for (const item of items) {
+      const sourceSubdir = normalizeSubdirOrThrow(item?.sourceSubdir || "");
+      const name = normalizePlainNameOrThrow(item?.name);
+      const sourceRef = resourceRefForTarget(root, this._normalizeTargetSubpath(sourceSubdir, name));
+      const sourceStat = await this._resourceIO.stat(sourceRef);
+      if (!sourceStat.exists) {
+        results.push({ name, error: "not found" });
+        continue;
+      }
+      const sourceRel = sourceSubdir ? `${sourceSubdir}/${name}` : name;
+      if (sourceStat.isDirectory && (destSubdir === sourceRel || destSubdir.startsWith(`${sourceRel}/`))) {
+        results.push({ name, error: "cannot copy folder into itself" });
+        continue;
+      }
+      try {
+        const targetName = await this._availableCopyName(root, destSubdir, name);
+        const targetRef = resourceRefForTarget(root, this._normalizeTargetSubpath(destSubdir, targetName));
+        await this._resourceIO.copy(sourceRef, targetRef, this._mutationOptions(options));
+        touchedSubdirs.add(destSubdir);
+        results.push({ name, targetName, ok: true });
+      } catch (err) {
+        results.push({ name, error: err?.code || err?.message || "copy_failed" });
+      }
+    }
+
+    const filesByPath = {};
+    for (const subdir of touchedSubdirs) {
+      filesByPath[subdir] = await this.filesForDirectory(root.id, subdir);
+    }
+    return workbenchWriteResult(root, "copyPaths", {
+      results,
+      filesByPath,
+      files: await this.filesForDirectory(root.id, currentSubdir),
+    }, this._discloseNativeRoot);
+  }
+
   async safeDelete(rootId, subdir, body: Record<string, any> = {}, options: Record<string, any> = {}) {
     const { root, dir, normalizedSubdir } = this._writeDir(rootId, subdir, options);
     const name = normalizePlainNameOrThrow(body.name);
@@ -469,6 +519,22 @@ export class MountAwareFileService {
 
   async filesForDirectory(rootId, subdir) {
     return (await this.listFiles(rootId, subdir)).files;
+  }
+
+  async _availableCopyName(root, destSubdir, name) {
+    const dot = name.lastIndexOf(".");
+    const hasExtension = dot > 0;
+    const stem = hasExtension ? name.slice(0, dot) : name;
+    const extension = hasExtension ? name.slice(dot) : "";
+    let candidate = name;
+    let ordinal = 1;
+    while ((await this._resourceIO.stat(
+      resourceRefForTarget(root, this._normalizeTargetSubpath(destSubdir, candidate)),
+    )).exists) {
+      candidate = `${stem} copy${ordinal === 1 ? "" : ` ${ordinal}`}${extension}`;
+      ordinal += 1;
+    }
+    return candidate;
   }
 
   _normalizeTargetSubpath(subdir, name) {

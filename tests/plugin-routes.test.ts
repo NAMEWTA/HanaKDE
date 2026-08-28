@@ -641,6 +641,14 @@ describe("plugin management API", () => {
         expect(cookie).toContain("SameSite=Strict");
         expect(cookie).toContain("Path=/api/plugins/demo/assets/");
 
+        const html = await pageRes.text();
+        const sessionAssetPath = html.match(/src="([^"]+\/assets\/__session__\/[^/]+\/dist\/dashboard\.js)"/)?.[1];
+        expect(sessionAssetPath).toBeTruthy();
+        const sessionAssetRes = await app.request(sessionAssetPath!);
+        expect(sessionAssetRes.status).toBe(200);
+        expect(sessionAssetRes.headers.get("cache-control")).toContain("private");
+        expect(await sessionAssetRes.text()).toBe("export const ok = true;\n");
+
         const assetRes = await app.request("/api/plugins/demo/assets/dist/dashboard.js", {
           headers: { Cookie: cookie },
         });

@@ -31,6 +31,38 @@ export type KnowledgeWorkspaceFetch = (
 
 export interface KnowledgeWorkspaceClientOptions {
   fetchImpl?: KnowledgeWorkspaceFetch;
+  workspaceSelector?: KnowledgeWorkspaceSelector;
+}
+
+export interface KnowledgeWorkspaceSelector {
+  workspaceDir?: string;
+  workspaceMountId?: string;
+  workspaceLabel?: string;
+  workspaceAgentId?: string;
+}
+
+const KNOWLEDGE_WORKSPACE_SELECTOR_KEYS = [
+  'workspaceDir',
+  'workspaceMountId',
+  'workspaceLabel',
+  'workspaceAgentId',
+] as const;
+
+export function appendKnowledgeWorkspaceSelector(
+  requestPath: string,
+  selector?: KnowledgeWorkspaceSelector,
+): string {
+  if (!selector) return requestPath;
+  const [pathWithQuery, hash = ''] = requestPath.split('#', 2);
+  const separator = pathWithQuery.includes('?') ? '&' : '?';
+  const query = new URLSearchParams();
+  for (const key of KNOWLEDGE_WORKSPACE_SELECTOR_KEYS) {
+    const value = selector[key];
+    if (typeof value === 'string' && value.trim()) query.set(key, value.trim());
+  }
+  const suffix = query.toString();
+  if (!suffix) return requestPath;
+  return `${pathWithQuery}${separator}${suffix}${hash ? `#${hash}` : ''}`;
 }
 
 export interface KnowledgeWorkspaceRequestOptions {
@@ -527,8 +559,15 @@ export class KnowledgeWorkspaceClientError extends Error {
 }
 
 export function createKnowledgeWorkspaceClient({
-  fetchImpl = hanaFetch,
+  fetchImpl: baseFetchImpl = hanaFetch,
+  workspaceSelector,
 }: KnowledgeWorkspaceClientOptions = {}): KnowledgeWorkspaceClient {
+  const fetchImpl: KnowledgeWorkspaceFetch = workspaceSelector
+    ? (requestPath, options) => baseFetchImpl(
+        appendKnowledgeWorkspaceSelector(requestPath, workspaceSelector),
+        options,
+      )
+    : baseFetchImpl;
   let lastResourceEventSequence = 0;
 
   const commitResourceEvent = (event: unknown): void => {

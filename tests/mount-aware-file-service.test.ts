@@ -243,6 +243,33 @@ describe("MountAwareFileService", () => {
     expect(resourceIO.move).not.toHaveBeenCalled();
   });
 
+  it("copies files and folders with collision-safe names", async () => {
+    const { MountAwareFileService } = await import("../core/mount-aware-file-service.ts");
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-mount-file-copy-"));
+    const defaultRoot = path.join(tmpDir, "default");
+    fs.mkdirSync(path.join(defaultRoot, "docs"), { recursive: true });
+    fs.mkdirSync(path.join(defaultRoot, "archive"), { recursive: true });
+    fs.writeFileSync(path.join(defaultRoot, "note.md"), "note", "utf-8");
+    fs.writeFileSync(path.join(defaultRoot, "docs", "nested.md"), "nested", "utf-8");
+    const service = new MountAwareFileService({ hanakoHome: tmpDir, defaultRoot });
+
+    const sameDirectory = await service.copyPaths("default", {
+      items: [{ sourceSubdir: "", name: "note.md" }],
+      destSubdir: "",
+      currentSubdir: "",
+    }, { reason: "desk.files.copy" });
+    const intoArchive = await service.copyPaths("default", {
+      items: [{ sourceSubdir: "", name: "docs", isDirectory: true }],
+      destSubdir: "archive",
+      currentSubdir: "",
+    }, { reason: "desk.files.copy" });
+
+    expect(sameDirectory.results).toEqual([{ name: "note.md", targetName: "note copy.md", ok: true }]);
+    expect(fs.readFileSync(path.join(defaultRoot, "note copy.md"), "utf-8")).toBe("note");
+    expect(intoArchive.results).toEqual([{ name: "docs", targetName: "docs", ok: true }]);
+    expect(fs.readFileSync(path.join(defaultRoot, "archive", "docs", "nested.md"), "utf-8")).toBe("nested");
+  });
+
   it("re-resolves mounted replace uploads inside transfer instead of carrying a stale-root version", async () => {
     const { upsertStudioMount } = await import("../core/studio-mounts.ts");
     const { MountAwareFileService } = await import("../core/mount-aware-file-service.ts");

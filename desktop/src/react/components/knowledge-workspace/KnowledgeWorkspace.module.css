@@ -1,15 +1,50 @@
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(15rem, 22rem) minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.workbenchExplorer,
+.workbenchEditor {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workbenchExplorer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--overlay-light);
+  background: var(--sidebar-bg, var(--bg));
+}
+
+.workbenchEditor {
+  display: flex;
+}
+
+@media (max-width: 760px) {
+  .workbench {
+    grid-template-columns: minmax(12rem, 42%) minmax(0, 1fr);
+  }
+}
+
 .workspace {
   position: relative;
   display: grid;
   grid-template-areas:
-    "tree search search"
-    "tree editor views"
-    "status status status";
+    "tree editor"
+    "status status";
   grid-template-columns:
-    minmax(14rem, 17rem)
-    minmax(20rem, 1fr)
-    minmax(14rem, 18rem);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+    minmax(16rem, 18rem)
+    minmax(20rem, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   width: 100%;
@@ -22,9 +57,9 @@
 .searchPanel {
   position: relative;
   z-index: 3;
-  grid-area: search;
+  flex: 0 0 auto;
   min-width: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-4) var(--space-8);
   border-bottom: var(--border-width, 1px) solid var(--border);
   background: var(--bg-card, var(--bg));
 }
@@ -32,19 +67,20 @@
 .searchForm {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-4);
   min-width: 0;
 }
 
 .searchInputLabel {
-  min-width: 8rem;
+  min-width: 0;
   flex: 1;
 }
 
 .searchInput {
   width: 100%;
   min-width: 0;
-  padding: var(--space-8) var(--space-12);
+  height: 1.75rem;
+  padding: var(--space-4) var(--space-8);
   border: var(--border-width, 1px) solid var(--border);
   border-radius: var(--radius-md, 0.5rem);
   outline: 0;
@@ -102,6 +138,17 @@
   font: inherit;
 }
 
+.searchSubmit {
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 1.75rem;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .searchSubmit:disabled {
   opacity: 0.5;
 }
@@ -109,8 +156,8 @@
 .searchResults {
   position: absolute;
   top: calc(100% - 1px);
-  right: var(--space-12);
-  left: var(--space-12);
+  right: var(--space-8);
+  left: var(--space-8);
   max-height: min(55vh, 34rem);
   padding: var(--space-12);
   overflow: auto;
@@ -220,11 +267,49 @@
 }
 
 .currentResourceViews {
-  grid-area: views;
+  height: 100%;
   overflow: auto;
-  border-left: var(--border-width, 1px) solid var(--border);
   background: var(--bg-card, var(--bg));
   color: var(--text);
+}
+
+.currentResourceDrawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: min(21rem, calc(100% - 3rem));
+  min-width: 0;
+  overflow: hidden;
+  border-left: var(--border-width, 1px) solid var(--border);
+  background: var(--bg-card, var(--bg));
+  box-shadow: var(--panel-card-shadow);
+}
+
+.drawerClose {
+  position: absolute;
+  top: var(--space-8);
+  right: var(--space-8);
+  z-index: 1;
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  padding: 0;
+  border: var(--border-width, 1px) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card, var(--bg));
+  color: var(--text-muted);
+  font: inherit;
+}
+
+.currentResourceDrawer .currentResourceViews {
+  padding-top: var(--space-8);
+}
+
+.currentResourceDrawer .panelHeading {
+  padding-right: 2.5rem;
 }
 
 .currentViewResource {
@@ -398,7 +483,7 @@
 .sourceError {
   display: grid;
   gap: var(--space-8);
-  margin-top: var(--space-12);
+  margin: var(--space-8);
   color: var(--text-error, var(--text));
   font-size: var(--fs-caption);
 }
@@ -438,16 +523,28 @@
   min-width: 0;
 }
 
-.knowledgeTreeSort {
+.knowledgeTreeSortControl {
+  position: relative;
+  display: inline-grid;
   width: 1.5rem;
   min-width: 1.5rem;
   height: 1.25rem;
   margin-left: auto;
-  overflow: hidden;
-  border: 0;
-  background: transparent;
+  place-items: center;
   color: var(--text-muted);
-  font: inherit;
+}
+
+.knowledgeTreeSortControl svg {
+  display: block;
+}
+
+.knowledgeTreeSort {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+  opacity: 0;
 }
 
 .treePanel [data-workspace-tree-row][aria-disabled="true"] {
@@ -1563,20 +1660,7 @@
 
 @media (max-width: 56rem) {
   .workspace {
-    grid-template-areas:
-      "search"
-      "tree"
-      "editor"
-      "views"
-      "status";
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows:
-      auto
-      minmax(10rem, 34%)
-      minmax(16rem, 1fr)
-      minmax(10rem, auto)
-      auto;
-    overflow: auto;
+    grid-template-columns: minmax(14rem, 16rem) minmax(16rem, 1fr);
   }
 
   .searchForm {
@@ -1587,19 +1671,10 @@
     flex-basis: calc(100% - 5rem);
   }
 
-  .treePanel {
-    border-right: 0;
-    border-bottom: var(--border-width, 1px) solid var(--border);
-  }
-
   .conflictVersions {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .currentResourceViews {
-    border-top: var(--border-width, 1px) solid var(--border);
-    border-left: 0;
-  }
 }
 
 @media (max-width: 38rem) {
@@ -1621,22 +1696,19 @@
 
   .workspace {
     grid-template-areas:
-      "search"
       "tree"
       "editor"
-      "views"
       "status";
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows:
-      auto
-      minmax(9rem, auto)
+      minmax(10rem, 38%)
       minmax(16rem, 1fr)
-      minmax(10rem, auto)
       auto;
   }
 
   .treePanel {
     border-right: 0;
+    border-bottom: var(--border-width, 1px) solid var(--border);
   }
 
   .editorGroup {
@@ -1677,16 +1749,15 @@
     flex-direction: column;
   }
 
-  .treeToolbar { align-items: stretch; }
-  .treeToolbar .panelHeading { width: 100%; }
   .trashView { width: 100%; }
 }
 .treeToolbar {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-  padding: 0.35rem 0.45rem;
+  gap: var(--space-4);
+  flex-wrap: nowrap;
+  padding: var(--space-4) var(--space-8);
+  overflow-x: auto;
   border-bottom: var(--border-width, 1px) solid var(--border);
 }
 
@@ -1702,9 +1773,9 @@
 }
 .treeToolbar button {
   display: inline-grid;
-  width: 1.85rem;
-  height: 1.85rem;
-  flex: 0 0 1.85rem;
+  width: 1.65rem;
+  height: 1.65rem;
+  flex: 0 0 1.65rem;
   place-items: center;
   padding: 0;
 }

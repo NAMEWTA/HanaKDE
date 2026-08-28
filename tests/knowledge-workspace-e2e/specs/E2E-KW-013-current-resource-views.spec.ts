@@ -168,6 +168,10 @@ test("E2E-KW-013 keeps live buffer views separate from saved per-source backlink
   await expect(page.locator('[aria-label="Edit Target.md"] .cm-content'))
     .toBeVisible();
 
+  await workspace.getByRole("button", {
+    name: /current resource|当前资源|目前資源|現在のリソース|현재 리소스/i,
+  }).click();
+
   const currentViews = workspace.locator(
     "[data-knowledge-current-resource-views]",
   );

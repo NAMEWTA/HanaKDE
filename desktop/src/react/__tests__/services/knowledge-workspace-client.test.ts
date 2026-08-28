@@ -38,6 +38,47 @@ async function advanceResourceCursor(
 }
 
 describe('knowledge workspace client', () => {
+  it('scopes knowledge and ResourceIO requests to the active Desk workspace', async () => {
+    const fetchImpl = vi.fn(async (path: string) => {
+      if (path.startsWith('/api/knowledge-workspace/sources')) {
+        return jsonResponse({ sources: [] });
+      }
+      if (path.startsWith('/api/resource-io/read')) {
+        return jsonResponse({ content: '# Note', encoding: 'utf-8' });
+      }
+      return jsonResponse({ stale: false, latestSequence: 0, events: [] });
+    });
+    const client = createKnowledgeWorkspaceClient({
+      fetchImpl,
+      workspaceSelector: {
+        workspaceMountId: 'workspace-docs',
+        workspaceLabel: '工作项目',
+        workspaceAgentId: 'agent-1',
+      },
+    });
+
+    await client.listSources();
+    await client.resources.read({ sourceKey: 'main', relativePath: 'README.md' });
+    await client.catchUpResourceEvents();
+
+    const suffix = 'workspaceMountId=workspace-docs&workspaceLabel=%E5%B7%A5%E4%BD%9C%E9%A1%B9%E7%9B%AE&workspaceAgentId=agent-1';
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      `/api/knowledge-workspace/sources?${suffix}`,
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      `/api/resource-io/read?${suffix}`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      `/api/resource-io/events?since=0&${suffix}`,
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('copies an editor resource through the domain endpoint and validates the result', async () => {
     const fetchImpl = vi.fn(async (
       _path: string,

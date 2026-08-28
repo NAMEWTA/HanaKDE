@@ -2008,6 +2008,28 @@ export function createDeskRoute(engine, hub) {
         });
       }
 
+      case "copyPaths": {
+        const items = body.items;
+        const destSubdir = body.destSubdir || "";
+        const currentSubdir = body.currentSubdir || "";
+        if (!Array.isArray(items) || items.length === 0) {
+          return deskRouteError(c, "workspace_file_validation_failed", "items[] required", 400);
+        }
+        if (!subdirToDir(destSubdir)) return c.json({ error: "invalid destSubdir" });
+
+        const result = await getActionFiles().copyPaths("default", {
+          items,
+          destSubdir,
+          currentSubdir,
+        }, { reason: reasonFor("copy_paths") });
+        return c.json({
+          ok: true,
+          results: result.results,
+          filesByPath: result.filesByPath,
+          files: result.files,
+        });
+      }
+
       case "remove": {
         if (!name) return deskRouteError(c, "workspace_file_validation_failed", "name required", 400);
         const result = await getActionFiles().safeDelete("default", subdirStr, { name }, { reason: reasonFor("remove") });

@@ -50,6 +50,8 @@ import type { ResourceOperationContext } from "../../lib/resource-io/types.ts";
 import {
   resolveWorkbenchCompatibilityMain,
 } from "../../core/knowledge-workspace/workbench-compatibility.ts";
+import { isLocalOwnerPrincipal } from "../http/route-security.ts";
+import { realPath } from "../utils/path-security.ts";
 import {
   queryKnowledgeIndex,
 } from "../../lib/knowledge-workspace/knowledge-query.ts";
@@ -1491,10 +1493,17 @@ async function registryFor(
   const studioId = requestContext?.studioId
     || engine.getRuntimeContext?.()?.studioId
     || "default";
-  const compatibilityMain = resolveWorkbenchCompatibilityMain(engine);
+  const compatibilityMain = resolveKnowledgeWorkspaceMainForRequest(
+    c,
+    engine,
+    requestContext,
+  );
   const sessionPath = compatibilityMain.sessionPath || "";
   const mainRoot = compatibilityMain.root;
-  const signature = JSON.stringify(mainRoot);
+  const signature = JSON.stringify({
+    root: mainRoot,
+    displayName: compatibilityMain.displayName,
+  });
   const workspaceKey = `${studioId}\0${sessionPath || "default"}`;
   if (
     registryState.current
@@ -1527,6 +1536,79 @@ async function registryFor(
     }
     throw error;
   }
+}
+
+function resolveKnowledgeWorkspaceMainForRequest(c, engine, requestContext) {
+  if (!c?.req) return resolveWorkbenchCompatibilityMain(engine);
+  const directory = normalizedQuery(c.req.query("workspaceDir"));
+  const mountId = normalizedQuery(c.req.query("workspaceMountId"));
+  const displayName = normalizedWorkspaceLabel(c.req.query("workspaceLabel"));
+  const agentId = normalizedQuery(c.req.query("workspaceAgentId"));
+  if (directory && mountId) {
+    throw createKnowledgeWorkspaceError(
+      "knowledge_operation_precondition_failed",
+      "knowledge workspace selector is ambiguous",
+      { field: "workspaceSelector" },
+    );
+  }
+  if (directory) {
+    const principal = requestContext?.authPrincipal;
+    if (principal?.kind !== "unknown" && !isLocalOwnerPrincipal(principal)) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_out_of_scope",
+        "local workspace paths require the local owner",
+      );
+    }
+    if (!path.isAbsolute(directory) || !isApprovedKnowledgeDirectory(directory, engine, agentId)) {
+      throw createKnowledgeWorkspaceError(
+        "knowledge_resource_out_of_scope",
+        "knowledge workspace directory is outside the approved Desk roots",
+      );
+    }
+  }
+  return resolveWorkbenchCompatibilityMain(engine, {
+    directory,
+    mountId,
+    displayName: displayName || (directory ? path.basename(directory) : null),
+  });
+}
+
+function normalizedQuery(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizedWorkspaceLabel(value: unknown): string | null {
+  const label = normalizedQuery(value);
+  if (!label || label.length > 160 || /[\p{Cc}]/u.test(label)) return null;
+  return label;
+}
+
+function isApprovedKnowledgeDirectory(directory: string, engine, agentId: string | null): boolean {
+  if (typeof engine.isApprovedDeskDir === "function") {
+    return engine.isApprovedDeskDir(directory, { agentId });
+  }
+  if (typeof engine.isApprovedWorkspaceDir === "function"
+    && engine.isApprovedWorkspaceDir(directory, { agentId })) {
+    return true;
+  }
+  const roots = [
+    agentId && typeof engine.getExplicitHomeCwd === "function"
+      ? engine.getExplicitHomeCwd(agentId)
+      : null,
+    agentId && typeof engine.getHomeCwd === "function"
+      ? engine.getHomeCwd(agentId)
+      : null,
+    engine.defaultDeskCwd,
+    engine.homeCwd,
+    engine.deskCwd,
+    ...(Array.isArray(engine.config?.cwd_history) ? engine.config.cwd_history : []),
+  ];
+  const resolved = realPath(directory);
+  if (!resolved) return false;
+  return roots.some((root) => {
+    const approved = typeof root === "string" ? realPath(root) : null;
+    return !!approved && (resolved === approved || resolved.startsWith(`${approved}${path.sep}`));
+  });
 }
 
 async function createRegistryEntry({
@@ -1579,11 +1661,9 @@ async function operationCoordinatorFor(
     return engine.knowledgeOperationCoordinator;
   }
   const runtime = engine.getRuntimeContext?.() || {};
-  const compatibilityMain = resolveWorkbenchCompatibilityMain(engine);
   const studioId = requestContext?.studioId || runtime.studioId || "default";
-  const sessionPath = compatibilityMain.sessionPath || "";
-  const signature = JSON.stringify(compatibilityMain.root);
-  const workspaceKey = `${studioId}\0${sessionPath || "default"}`;
+  const signature = JSON.stringify(registry.rootRef("main"));
+  const workspaceKey = `${studioId}\0${signature}`;
   const state = operationStateFor(engine);
   if (
     state.current
@@ -1626,11 +1706,9 @@ async function trashOperationCoordinatorFor(
     return engine.knowledgeTrashOperationCoordinator;
   }
   const runtime = engine.getRuntimeContext?.() || {};
-  const compatibilityMain = resolveWorkbenchCompatibilityMain(engine);
   const studioId = requestContext?.studioId || runtime.studioId || "default";
-  const sessionPath = compatibilityMain.sessionPath || "";
-  const signature = JSON.stringify(compatibilityMain.root);
-  const workspaceKey = `${studioId}\0${sessionPath || "default"}`;
+  const signature = JSON.stringify(registry.rootRef("main"));
+  const workspaceKey = `${studioId}\0${signature}`;
   const state = operationStateFor(engine);
   if (
     state.current
@@ -1673,11 +1751,9 @@ async function atomicOperationCoordinatorFor(
     return engine.knowledgeAtomicOperationCoordinator;
   }
   const runtime = engine.getRuntimeContext?.() || {};
-  const compatibilityMain = resolveWorkbenchCompatibilityMain(engine);
   const studioId = requestContext?.studioId || runtime.studioId || "default";
-  const sessionPath = compatibilityMain.sessionPath || "";
-  const signature = JSON.stringify(compatibilityMain.root);
-  const workspaceKey = `${studioId}\0${sessionPath || "default"}`;
+  const signature = JSON.stringify(registry.rootRef("main"));
+  const workspaceKey = `${studioId}\0${signature}`;
   const state = operationStateFor(engine);
   if (
     state.current

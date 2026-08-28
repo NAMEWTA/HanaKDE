@@ -51,14 +51,15 @@ export function usePluginIframe(routeUrl: string | null, options: UsePluginIfram
   const resetHandshakeTimeout = useCallback(() => {
     clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      setStatus(readyOnTimeout ? 'ready' : 'error');
+      setStatus('error');
     }, HANDSHAKE_TIMEOUT_MS);
-  }, [readyOnTimeout]);
+  }, []);
 
   useEffect(() => {
-    if (!routeUrl) return;
     setStatus('loading');
     setSize(initialSize ?? {});
+    clearTimeout(timeoutRef.current);
+    if (!routeUrl) return;
 
     const onMessage = (event: MessageEvent) => {
       if (!isTrustedPluginIframeMessage(event, iframeRef.current?.contentWindow, expectedOrigin)) return;
@@ -133,6 +134,21 @@ export function usePluginIframe(routeUrl: string | null, options: UsePluginIfram
     iframe.contentWindow.postMessage({ type, payload, seq: seqRef.current }, expectedOrigin);
   }, [expectedOrigin]);
 
+  const onLoad = useCallback(() => {
+    clearTimeout(timeoutRef.current);
+    if (!routeUrl) return;
+    if (readyOnTimeout) {
+      setStatus('ready');
+      return;
+    }
+    resetHandshakeTimeout();
+  }, [readyOnTimeout, resetHandshakeTimeout, routeUrl]);
+
+  const onError = useCallback(() => {
+    clearTimeout(timeoutRef.current);
+    setStatus('error');
+  }, []);
+
   const retry = useCallback(() => {
     clearTimeout(timeoutRef.current);
     setStatus('loading');
@@ -144,5 +160,5 @@ export function usePluginIframe(routeUrl: string | null, options: UsePluginIfram
     resetHandshakeTimeout();
   }, [routeUrl, initialSize?.width, initialSize?.height, resetHandshakeTimeout]);
 
-  return { iframeRef, status, size, postToIframe, retry };
+  return { iframeRef, status, size, postToIframe, retry, onLoad, onError };
 }

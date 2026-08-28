@@ -118,7 +118,7 @@ function sourceFindMatches(content: string, query: string): Array<{ from: number
   return matches;
 }
 
-export function PreviewPanel() {
+export function PreviewPanel({ variant = 'rail' }: { variant?: 'rail' | 'workspace' } = {}) {
   const previewOpen = useStore(s => s.previewOpen);
   const activeTabId = useStore(selectActiveTabId);
   const previewItems = useStore(selectPreviewItems);
@@ -372,9 +372,10 @@ export function PreviewPanel() {
 
   return (
     <div
-      className={`${previewStyles.previewPanel}${previewOpen ? '' : ` ${previewStyles.previewPanelCollapsed}`}`}
+      className={`${previewStyles.previewPanel}${variant === 'workspace' ? ` ${previewStyles.previewPanelWorkspace}` : ''}${previewOpen ? '' : ` ${previewStyles.previewPanelCollapsed}`}`}
       id="previewPanel"
       data-preview-open={previewOpen ? 'true' : 'false'}
+      data-preview-variant={variant}
     >
       <OpenPreviewDocumentWatchBridge />
       <div className="resize-handle resize-handle-left" id="previewResizeHandle"></div>

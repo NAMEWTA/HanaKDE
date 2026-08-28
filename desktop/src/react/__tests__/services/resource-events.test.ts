@@ -104,6 +104,38 @@ describe('resource-events', () => {
     });
   });
 
+  it('keeps Knowledge watches isolated by active Desk workspace', async () => {
+    hanaFetch.mockImplementation(async (requestPath: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => (
+        requestPath.includes('/subscribe')
+          ? { ok: true, subscriptionId: `sub-${hanaFetch.mock.calls.length}` }
+          : { ok: true, released: true }
+      ),
+    }));
+    const { retainKnowledgeSourceWatch } = await import('../../services/resource-events');
+    const selectorA = { workspaceMountId: 'mount-a', workspaceAgentId: 'agent-1' };
+    const selectorB = { workspaceMountId: 'mount-b', workspaceAgentId: 'agent-1' };
+
+    const releaseA = retainKnowledgeSourceWatch('main', selectorA);
+    const releaseB = retainKnowledgeSourceWatch('main', selectorB);
+    await releaseA.ready;
+    await releaseB.ready;
+
+    expect(hanaFetch).toHaveBeenCalledWith(
+      '/api/resource-io/subscribe?workspaceMountId=mount-a&workspaceAgentId=agent-1',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(hanaFetch).toHaveBeenCalledWith(
+      '/api/resource-io/subscribe?workspaceMountId=mount-b&workspaceAgentId=agent-1',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    releaseA();
+    releaseB();
+  });
+
   it('serializes a stale-cursor resubscribe behind the pending initial subscription', async () => {
     let subscribeCalls = 0;
     let resolveInitialSubscribe: ((response: {

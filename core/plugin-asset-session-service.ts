@@ -7,6 +7,7 @@ import { securityDirPath } from "./security-dir.ts";
 export const PLUGIN_ASSET_SESSION_KEY_FILE = "plugin-asset-session-key";
 export const PLUGIN_ASSET_SESSION_ACTION = "plugins.assets";
 export const DEFAULT_PLUGIN_ASSET_SESSION_TTL_MS = 30 * 60 * 1000;
+export const PLUGIN_ASSET_SESSION_PATH_SEGMENT = "__session__";
 
 export class PluginAssetSessionError extends Error {
   declare code: string;
@@ -29,6 +30,12 @@ export function pluginAssetSessionCookieName(pluginId: string) {
 export function pluginAssetSessionCookiePath(pluginId: string) {
   assertNonEmpty(pluginId, "pluginId");
   return `/api/plugins/${encodeURIComponent(pluginId)}/assets/`;
+}
+
+export function pluginAssetSessionPathPrefix(pluginId: string, token: string) {
+  assertNonEmpty(pluginId, "pluginId");
+  assertNonEmpty(token, "token");
+  return `/api/plugins/${encodeURIComponent(pluginId)}/assets/${PLUGIN_ASSET_SESSION_PATH_SEGMENT}/${encodeURIComponent(token)}/`;
 }
 
 export function createPluginAssetSessionCookie({

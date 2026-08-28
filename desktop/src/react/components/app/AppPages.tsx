@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useStore } from '../../stores';
 import { ActivityPanel } from '../ActivityPanel';
 import { AutomationPanel } from '../AutomationPanel';
@@ -131,27 +131,12 @@ function PluginPage({ pluginId }: { pluginId: string }) {
 export function AppPages() {
   const currentTab = useStore(s => s.currentTab);
   const isPluginTab = typeof currentTab === 'string' && currentTab.startsWith('plugin:');
-  const [knowledgeVisited, setKnowledgeVisited] = useState(
-    currentTab === 'knowledge',
-  );
-
-  useEffect(() => {
-    if (currentTab === 'knowledge') setKnowledgeVisited(true);
-  }, [currentTab]);
 
   return (
     <>
       <MainContent>
         {currentTab === 'chat' && <ChatPage />}
-        {knowledgeVisited ? (
-          <div
-            hidden={currentTab !== 'knowledge'}
-            aria-hidden={currentTab !== 'knowledge' ? 'true' : undefined}
-            style={currentTab === 'knowledge' ? { display: 'contents' } : undefined}
-          >
-            <KnowledgeWorkspace />
-          </div>
-        ) : null}
+        {currentTab === 'knowledge' && <KnowledgeWorkspace />}
         {currentTab === 'channels' && <ChannelPage />}
         {isPluginTab && <PluginPage pluginId={currentTab.slice(7)} />}
         <ActivityPanel />

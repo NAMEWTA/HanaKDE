@@ -92,16 +92,7 @@ export interface KnowledgeLayoutProps {
 function visibleSources(sources: KnowledgeSourceDto[]): KnowledgeSourceDto[] {
   const main = sources.find((source) => source.sourceKey === 'main');
   const mounted = sources.filter((source) => source.sourceKey !== 'main');
-  return [
-    main ?? {
-      sourceKey: 'main',
-      displayName: tr('knowledge.source.main'),
-      role: 'main',
-      capabilities: [],
-      availability: 'available',
-    },
-    ...mounted,
-  ];
+  return main ? [main, ...mounted] : mounted;
 }
 
 export function KnowledgeLayout({
@@ -125,13 +116,15 @@ export function KnowledgeLayout({
   }>({ sourceKey: 'main', addresses: [], targetDirectoryPath: '' });
   const [createKind, setCreateKind] = useState<'page' | 'folder' | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [currentViewsOpen, setCurrentViewsOpen] = useState(false);
   const [nativeCapabilities, setNativeCapabilities] = useState<KnowledgeNativeCapabilities | null>(null);
-  const selectedSourceWritable = renderedSources.find(
+  const selectedSource = renderedSources.find(
     source => source.sourceKey === selection.sourceKey,
-  )?.capabilities.includes('write') === true;
-  const selectedSourceCanTrash = renderedSources.find(
-    source => source.sourceKey === selection.sourceKey,
-  )?.capabilities.includes('trash') === true;
+  );
+  const selectedSourceWritable = selectedSource?.availability === 'available'
+    && selectedSource.capabilities.includes('write');
+  const selectedSourceCanTrash = selectedSource?.availability === 'available'
+    && selectedSource.capabilities.includes('trash');
   const knowledgeClipboard = useStore(state => state.knowledgeClipboard);
   const activeClipboard = knowledgeClipboard?.workspaceKey === treeWorkspaceKey
     ? knowledgeClipboard
@@ -339,21 +332,20 @@ export function KnowledgeLayout({
       aria-label={tr('knowledge.workspaceLabel')}
       data-knowledge-workspace=""
     >
-      <KnowledgeSearch
-        client={treeClient}
-        sources={renderedSources}
-        onOpen={(item, sourceName) => {
-          editorGroupsRef.current?.openResource({
-            address: item.address,
-            sourceName,
-            kind: item.kind === 'page' ? 'markdown' : 'asset',
-          });
-        }}
-      />
-
       <nav className={styles.treePanel} aria-label={tr('knowledge.tree.heading')}>
+        <KnowledgeSearch
+          client={treeClient}
+          sources={renderedSources}
+          onOpen={(item, sourceName) => {
+            editorGroupsRef.current?.openResource({
+              address: item.address,
+              sourceName,
+              kind: item.kind === 'page' ? 'markdown' : 'asset',
+            });
+          }}
+        />
         <div className={styles.treeToolbar} role="toolbar" aria-label={tr('knowledge.actions.label')}>
-          <h2 className={styles.panelHeading}>{tr('knowledge.tree.heading')}</h2>
+          <span className={styles.visuallyHidden}>{tr('knowledge.tree.heading')}</span>
           <button aria-label={tr('knowledge.action.newPage')} title={tr('knowledge.action.newPage')} disabled={selection.targetDirectoryPath === null || !selectedSourceWritable} type="button" onClick={() => setCreateKind('page')}>{toolbarIcon(ICONS.markdown)}</button>
           <button aria-label={tr('knowledge.action.newFolder')} title={tr('knowledge.action.newFolder')} disabled={selection.targetDirectoryPath === null || !selectedSourceWritable} type="button" onClick={() => setCreateKind('folder')}>{toolbarIcon(ICONS.folder)}</button>
           <button aria-label={tr('knowledge.action.import')} title={tr('knowledge.action.import')} disabled={selection.targetDirectoryPath === null || !selectedSourceWritable || nativeCapabilities?.filePicker !== true} type="button" onClick={() => void invokeKnowledgeNative({
@@ -408,6 +400,13 @@ export function KnowledgeLayout({
             markDocumentsUnavailable(result.items);
           }}>{toolbarIcon(ICONS.trash)}</button>
           <button aria-label={tr('knowledge.trash.title')} title={tr('knowledge.trash.title')} type="button" onClick={() => setTrashOpen(true)}>{toolbarIcon(ICONS.folder)}</button>
+          <button
+            aria-label={menuLabel('knowledge.currentViews.heading', 'Current resource')}
+            title={menuLabel('knowledge.currentViews.heading', 'Current resource')}
+            aria-pressed={currentViewsOpen}
+            type="button"
+            onClick={() => setCurrentViewsOpen(open => !open)}
+          >{toolbarIcon(ICONS.doc)}</button>
         </div>
         {sourcesStatus === 'loading' && (
           <p className={styles.status} role="status">
@@ -495,38 +494,49 @@ export function KnowledgeLayout({
         onLocateResource={(target) => resourceTreeRef.current?.locateResource(target)}
         onActiveTargetChange={setActiveStatusTarget}
       />
-      <KnowledgeCurrentResourceViews
-        registry={documentRegistry}
-        client={treeClient}
-        activeTarget={activeStatusTarget}
-        subscribeToChanges={treeServices?.subscribeToChanges}
-        onRevealCurrent={(viewId, offset) => {
-          editorGroupsRef.current?.revealOffset(viewId, offset);
-        }}
-        onOpenOutbound={(
-          address,
-          _sourceName,
-          groupId,
-          fragment,
-          sourceKind,
-          embedded,
-        ) => {
-          void editorGroupsRef.current?.openCurrentOutbound(
-            address,
-            groupId,
-            fragment,
-            sourceKind,
-            embedded,
-          );
-        }}
-        onOpenBacklink={(address, sourceName, groupId, offset) => {
-          editorGroupsRef.current?.openBacklink({
-            address,
-            sourceName,
-            kind: 'markdown',
-          }, groupId, offset);
-        }}
-      />
+      {currentViewsOpen && (
+        <div className={styles.currentResourceDrawer} data-knowledge-current-resource-drawer="">
+          <button
+            className={styles.drawerClose}
+            type="button"
+            aria-label={menuLabel('common.close', 'Close')}
+            title={menuLabel('common.close', 'Close')}
+            onClick={() => setCurrentViewsOpen(false)}
+          >×</button>
+          <KnowledgeCurrentResourceViews
+            registry={documentRegistry}
+            client={treeClient}
+            activeTarget={activeStatusTarget}
+            subscribeToChanges={treeServices?.subscribeToChanges}
+            onRevealCurrent={(viewId, offset) => {
+              editorGroupsRef.current?.revealOffset(viewId, offset);
+            }}
+            onOpenOutbound={(
+              address,
+              _sourceName,
+              groupId,
+              fragment,
+              sourceKind,
+              embedded,
+            ) => {
+              void editorGroupsRef.current?.openCurrentOutbound(
+                address,
+                groupId,
+                fragment,
+                sourceKind,
+                embedded,
+              );
+            }}
+            onOpenBacklink={(address, sourceName, groupId, offset) => {
+              editorGroupsRef.current?.openBacklink({
+                address,
+                sourceName,
+                kind: 'markdown',
+              }, groupId, offset);
+            }}
+          />
+        </div>
+      )}
       <KnowledgeEditorStatusBar
         registry={documentRegistry}
         activeTarget={activeStatusTarget}

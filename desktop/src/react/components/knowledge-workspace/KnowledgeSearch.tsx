@@ -230,7 +230,8 @@ export function KnowledgeSearch({
           type="submit"
           disabled={Array.from(query).length === 0 || status === 'loading'}
         >
-          {tr('knowledge.search.submit')}
+          <span aria-hidden="true">⌕</span>
+          <span className={styles.visuallyHidden}>{tr('knowledge.search.submit')}</span>
         </button>
       </form>
 

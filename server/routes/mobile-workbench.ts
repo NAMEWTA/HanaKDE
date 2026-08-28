@@ -129,6 +129,8 @@ export function createMobileWorkbenchRoute(engine) {
           return await writeActionResponse(c, engine, "mobile_workbench.move", auth, mountId, (options) => files.move(mountId, subdir, body, options));
         case "movePaths":
           return await writeActionResponse(c, engine, "mobile_workbench.move_paths", auth, mountId, (options) => files.movePaths(mountId, body, options));
+        case "copyPaths":
+          return await writeActionResponse(c, engine, "mobile_workbench.copy_paths", auth, mountId, (options) => files.copyPaths(mountId, body, options));
         case "safeDelete":
           return await writeActionResponse(c, engine, "mobile_workbench.safe_delete", auth, mountId, (options) => files.safeDelete(mountId, subdir, body, options));
         default:

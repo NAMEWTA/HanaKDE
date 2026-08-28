@@ -10,6 +10,14 @@
         "specdev/spec",
         "specdev/tickets"
       ]
+    },
+    {
+      "change": "2026-08-28-knowledge-explorer-convergence",
+      "current_work": "specdev/implement",
+      "works_run": [
+        "specdev/spec",
+        "specdev/tickets"
+      ]
     }
   ],
   "archived": [

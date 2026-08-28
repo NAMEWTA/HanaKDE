@@ -3045,6 +3045,9 @@
       "open": "Open",
       "openInFinder": "Open Folder",
       "rename": "Rename",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
       "copyPath": "Copy Path",
       "delete": "Delete",
       "deleteSelected": "Delete {count} items",
@@ -3059,6 +3062,7 @@
     "createFailed": "Create failed",
     "renameInvalid": "File names cannot contain path separators",
     "renameFailed": "Rename failed",
+    "pasteFailed": "Paste failed",
     "sort": {
       "label": "Sort",
       "mtime": "Modified",

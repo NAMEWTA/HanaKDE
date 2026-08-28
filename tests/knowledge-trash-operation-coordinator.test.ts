@@ -215,6 +215,54 @@ describe('KnowledgeTrashOperationCoordinator', () => {
     });
   });
 
+  it('finalizes a legacy delete when neither the original nor trash payload remains', async () => {
+    const hanakoHome = home();
+    const fixture = createKnowledgeTrashFixture({ 'note.md': { content: 'note' } });
+    const first = new KnowledgeTrashOperationCoordinator({
+      hanakoHome,
+      sourceRegistry: fixture.sourceRegistry,
+      resourceIO: fixture.resourceIO,
+      randomUUID: () => nextUuid(),
+    });
+    const plan = await first.planTrash([
+      { sourceKey: 'main', relativePath: 'note.md' },
+    ], OWNER);
+    const journal = new DurableKnowledgeOperationJournal({ hanakoHome });
+    const prepared = journal.readTrash(plan.operationId)!;
+    fixture.nodes.delete('note.md');
+    journal.writeTrash({
+      ...prepared,
+      state: 'RECOVERY_REQUIRED',
+      recoveryReason: 'knowledge_resource_not_found',
+      updatedAt: new Date().toISOString(),
+      items: prepared.items.map(item => ({
+        ...item,
+        state: 'recovery-required',
+        errorCode: 'knowledge_resource_not_found',
+      })),
+    });
+
+    const restarted = new KnowledgeTrashOperationCoordinator({
+      hanakoHome,
+      sourceRegistry: fixture.sourceRegistry,
+      resourceIO: fixture.resourceIO,
+      randomUUID: () => nextUuid(),
+    });
+
+    const report = await restarted.recover();
+    expect(report).toEqual({
+      scanned: 1,
+      finalized: 1,
+      rolledBack: 0,
+      recoveryRequired: 0,
+    });
+    expect(restarted.isSourceRecovering('main')).toBe(false);
+    expect(journal.readTrash(plan.operationId)).toMatchObject({
+      state: 'FINALIZED',
+      items: [{ state: 'applied' }],
+    });
+  });
+
   it('finalizes a restore after restart when the payload move beat the manifest outcome', async () => {
     const hanakoHome = home();
     const fixture = createKnowledgeTrashFixture({ 'note.md': { content: 'note' } });

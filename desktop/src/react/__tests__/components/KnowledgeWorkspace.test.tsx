@@ -11,8 +11,25 @@ import {
   type KnowledgeWorkspaceClient,
 } from '../../services/knowledge-workspace-client';
 import { useStore } from '../../stores';
-import { KnowledgeWorkspace } from '../../components/knowledge-workspace/KnowledgeWorkspace';
+import {
+  KnowledgeIndexWorkspace,
+  KnowledgeWorkspace,
+} from '../../components/knowledge-workspace/KnowledgeWorkspace';
 import { ChannelTabBar } from '../../components/channels/ChannelTabBar';
+
+vi.mock('../../components/DeskSection', () => ({
+  DeskSection: () => <section data-testid="shared-desk-section" />,
+}));
+
+vi.mock('../../components/PreviewPanel', () => ({
+  PreviewPanel: ({ variant }: { variant?: string }) => (
+    <section data-testid="shared-preview-panel" data-variant={variant} />
+  ),
+}));
+
+vi.mock('../../components/app/WorkspaceFileChangeBridge', () => ({
+  WorkspaceFileChangeBridge: () => <span data-testid="shared-workspace-watch" />,
+}));
 
 const mainSource: KnowledgeSourceDto = {
   sourceKey: 'main',
@@ -47,6 +64,7 @@ describe('KnowledgeWorkspace', () => {
       'knowledge.tree.heading': 'Resource tree',
       'knowledge.tree.empty': 'No resources opened',
       'knowledge.actions.label': 'Resource actions',
+      'knowledge.currentViews.heading': 'Current resource',
       'knowledge.action.paste': 'Paste',
       'knowledge.editor.groupLabel': 'Editor group',
       'knowledge.editor.emptyTitle': 'Open a resource',
@@ -113,7 +131,7 @@ describe('KnowledgeWorkspace', () => {
     };
     const listSources = vi.fn(async () => [mountedSource, mainSource]);
     render(
-      <KnowledgeWorkspace
+      <KnowledgeIndexWorkspace
         client={clientWithListSources(listSources)}
         treeServices={testTreeServices}
         workspaceKey="workspace-session-15"
@@ -171,7 +189,7 @@ describe('KnowledgeWorkspace', () => {
     });
     useStore.setState({ knowledgeClipboard: null } as never);
     render(
-      <KnowledgeWorkspace
+      <KnowledgeIndexWorkspace
         client={clientWithListSources(vi.fn(async () => [mainSource]))}
         treeServices={testTreeServices}
         workspaceKey="workspace-system-clipboard"
@@ -202,7 +220,7 @@ describe('KnowledgeWorkspace', () => {
       .mockResolvedValueOnce([mainSource]);
 
     render(
-      <KnowledgeWorkspace
+      <KnowledgeIndexWorkspace
         client={clientWithListSources(listSources)}
         treeServices={testTreeServices}
         workspaceKey="workspace-session-error"
@@ -210,7 +228,8 @@ describe('KnowledgeWorkspace', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sources unavailable');
-    expect(screen.getAllByText('Working directory')).toHaveLength(1);
+    expect(screen.queryByText('Working directory')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-source-key="main"]')).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Editor group' })).toBeInTheDocument();
 
     await act(async () => {
@@ -224,6 +243,24 @@ describe('KnowledgeWorkspace', () => {
     expect(listSources).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps secondary resource views out of the default Explorer layout', async () => {
+    render(
+      <KnowledgeIndexWorkspace
+        client={clientWithListSources(vi.fn(async () => [mainSource]))}
+        treeServices={testTreeServices}
+        workspaceKey="workspace-compact-shell"
+      />,
+    );
+
+    await screen.findByText('Main workspace');
+    const explorer = screen.getByRole('navigation', { name: 'Resource tree' });
+    expect(explorer).toContainElement(screen.getByRole('search'));
+    expect(document.querySelector('[data-knowledge-current-resource-views]')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Current resource' }));
+    expect(document.querySelector('[data-knowledge-current-resource-views]')).toBeInTheDocument();
+  });
+
   it('refreshes source availability after a resource change signal', async () => {
     const listeners = new Set<(event: { kind: 'resource-event' }) => void>();
     const listSources = vi.fn()
@@ -233,7 +270,7 @@ describe('KnowledgeWorkspace', () => {
         availability: 'unavailable' as const,
       }]);
     render(
-      <KnowledgeWorkspace
+      <KnowledgeIndexWorkspace
         client={clientWithListSources(listSources)}
         treeServices={{
           watchSource: () => () => {},
@@ -272,7 +309,7 @@ describe('KnowledgeWorkspace', () => {
       });
     });
     const view = render(
-      <KnowledgeWorkspace
+      <KnowledgeIndexWorkspace
         client={clientWithListSources(listSources)}
         treeServices={testTreeServices}
         workspaceKey="workspace-session-cancel"
@@ -284,5 +321,18 @@ describe('KnowledgeWorkspace', () => {
 
     expect(observedSignal?.aborted).toBe(true);
     expect(useStore.getState().knowledgeSourcesErrorCode).toBeNull();
+  });
+
+  it('uses the existing Desk and Preview workbench as the Knowledge primary surface', () => {
+    useStore.setState({ previewOpen: false } as never);
+
+    render(<KnowledgeWorkspace />);
+
+    expect(screen.getByRole('main', { name: 'Knowledge workspace' }))
+      .toHaveAttribute('data-shared-workbench');
+    expect(screen.getByTestId('shared-desk-section')).toBeInTheDocument();
+    expect(screen.getByTestId('shared-preview-panel')).toHaveAttribute('data-variant', 'workspace');
+    expect(screen.getByTestId('shared-workspace-watch')).toBeInTheDocument();
+    expect(useStore.getState().previewOpen).toBe(true);
   });
 });

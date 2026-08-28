@@ -511,6 +511,41 @@ describe("desk route", () => {
     }
   });
 
+  it("copies workspace tree items without removing the source", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-desk-route-copy-"));
+    try {
+      const cwd = path.join(tempRoot, "workspace");
+      fs.mkdirSync(path.join(cwd, "notes"), { recursive: true });
+      fs.mkdirSync(path.join(cwd, "archive"), { recursive: true });
+      fs.writeFileSync(path.join(cwd, "notes", "chapter.md"), "chapter", "utf-8");
+      const { createDeskRoute } = await import("../server/routes/desk.ts");
+      const app = new Hono();
+      app.route("/api", createDeskRoute({
+        hanakoHome: path.join(tempRoot, "hana"),
+        deskCwd: cwd,
+        homeCwd: cwd,
+      }, null));
+
+      const res = await app.request("/api/desk/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "copyPaths",
+          dir: cwd,
+          items: [{ sourceSubdir: "notes", name: "chapter.md", isDirectory: false }],
+          destSubdir: "archive",
+          currentSubdir: "",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(cwd, "notes", "chapter.md"), "utf-8")).toBe("chapter");
+      expect(fs.readFileSync(path.join(cwd, "archive", "chapter.md"), "utf-8")).toBe("chapter");
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("rejects path-like names for create, mkdir, and rename instead of truncating them", async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hana-desk-route-"));
     try {

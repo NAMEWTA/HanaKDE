@@ -93,7 +93,7 @@ function PluginWebViewCard({ card, agentId }: Props) {
   const route = isIframe && card.route ? card.route : null;
 
   const surfaceUrl = usePluginSurfaceUrl(route ? `/api/plugins/${card.pluginId}${route}` : null, agentId);
-  const { iframeRef, status: iframeStatus, size } = usePluginIframe(isIframe ? surfaceUrl.iframeSrc : null, {
+  const { iframeRef, status: iframeStatus, size, onLoad, onError } = usePluginIframe(isIframe ? surfaceUrl.iframeSrc : null, {
     pluginId: card.pluginId,
     agentId,
     slot: 'card',
@@ -110,18 +110,25 @@ function PluginWebViewCard({ card, agentId }: Props) {
 
   return (
     <div className={s.container}>
-      <iframe
-        ref={iframeRef}
-        className={s.iframe}
-        src={surfaceUrl.iframeSrc || undefined}
-        sandbox="allow-scripts allow-same-origin"
-        style={{
-          width: size.width ?? defaultW,
-          height: size.height ?? defaultH,
-          opacity: ready ? 1 : 0.3,
-        }}
-        onError={() => setError(true)}
-      />
+      {surfaceUrl.iframeSrc && (
+        <iframe
+          key={surfaceUrl.iframeSrc}
+          ref={iframeRef}
+          className={s.iframe}
+          src={surfaceUrl.iframeSrc}
+          sandbox="allow-scripts allow-same-origin"
+          style={{
+            width: size.width ?? defaultW,
+            height: size.height ?? defaultH,
+            opacity: ready ? 1 : 0.3,
+          }}
+          onLoad={onLoad}
+          onError={() => {
+            onError();
+            setError(true);
+          }}
+        />
+      )}
     </div>
   );
 }

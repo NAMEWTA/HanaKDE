@@ -63,6 +63,9 @@ describe("knowledge workspace source route", () => {
       knowledgeResourceIO: resourceIO,
       getKnowledgeResourceIO: () => resourceIO,
       _resolveActiveMainWorkspaceRoot: () => main,
+      isApprovedDeskDir: (candidate: string) => [main, research].some((root) => (
+        candidate === root || candidate.startsWith(`${root}${path.sep}`)
+      )),
       getRuntimeContext: () => ({
         serverId: "server_1",
         serverNodeId: "node_1",
@@ -148,6 +151,97 @@ describe("knowledge workspace source route", () => {
     expect(await removed.json()).toEqual({
       ok: true,
       sourceKey: "research",
+    });
+  });
+
+  it("binds main to an approved explicit Desk directory and rebuilds on switch", async () => {
+    const { app, research } = setup();
+    const selected = await app.request(
+      `/api/knowledge-workspace/sources?workspaceDir=${encodeURIComponent(research)}&workspaceLabel=Research`,
+    );
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toEqual({
+      sources: [expect.objectContaining({
+        sourceKey: "main",
+        displayName: "Research",
+        role: "main",
+      })],
+    });
+
+    const switched = await app.request(
+      "/api/knowledge-workspace/sources?workspaceLabel=Default",
+    );
+    expect(switched.status).toBe(200);
+    expect(await switched.json()).toEqual({
+      sources: [expect.objectContaining({
+        sourceKey: "main",
+        displayName: "Main",
+      })],
+    });
+  });
+
+  it("refreshes the main display name when the selected directory is unchanged", async () => {
+    const { app, research } = setup();
+    const defaultLabel = await app.request(
+      `/api/knowledge-workspace/sources?workspaceDir=${encodeURIComponent(research)}`,
+    );
+    expect(defaultLabel.status).toBe(200);
+    expect((await defaultLabel.json()).sources[0].displayName).toBe("research");
+
+    const selectedLabel = await app.request(
+      `/api/knowledge-workspace/sources?workspaceDir=${encodeURIComponent(research)}&workspaceLabel=Selected%20research`,
+    );
+    expect(selectedLabel.status).toBe(200);
+    expect((await selectedLabel.json()).sources[0].displayName)
+      .toBe("Selected research");
+  });
+
+  it("binds main to an explicit registered Desk mount", async () => {
+    const { app } = setup();
+    const response = await app.request(
+      "/api/knowledge-workspace/sources?workspaceMountId=mount_research&workspaceLabel=Mounted%20research",
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      sources: [expect.objectContaining({
+        sourceKey: "main",
+        displayName: "Mounted research",
+        role: "main",
+      })],
+    });
+  });
+
+  it("rejects explicit local Desk directories from a remote device", async () => {
+    const { engine, research } = setup();
+    const remoteApp = new Hono();
+    remoteApp.use("*", async (c, next) => {
+      (c as unknown as { set(key: string, value: unknown): void }).set(
+        "authPrincipal",
+        normalizePrincipal({
+          kind: "device",
+          userId: "user_1",
+          studioId: "studio_1",
+          serverId: "server_1",
+          serverNodeId: "node_1",
+          deviceId: "device_read_only",
+          connectionKind: "lan",
+          credentialKind: "device_credential",
+          trustState: "paired",
+          scopes: ["files.read"],
+        }),
+      );
+      await next();
+    });
+    remoteApp.route("/api", createKnowledgeWorkspaceRoute(engine));
+
+    const response = await remoteApp.request(
+      `/api/knowledge-workspace/sources?workspaceDir=${encodeURIComponent(research)}`,
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "knowledge_resource_out_of_scope",
+      httpStatus: 403,
     });
   });
 

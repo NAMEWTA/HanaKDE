@@ -1,10 +1,12 @@
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import {
+  appendKnowledgeWorkspaceSelector,
   createKnowledgeWorkspaceClient,
   knowledgeWorkspaceClient,
   type KnowledgeResourceEvent,
   type KnowledgeWorkspaceFetch,
   type KnowledgeWorkspaceClient,
+  type KnowledgeWorkspaceSelector,
 } from './knowledge-workspace-client';
 import {
   invalidateAllDeskTreePaths,
@@ -22,6 +24,7 @@ type WatchRef =
 
 type WatchEntry = {
   ref: WatchRef;
+  workspaceSelector?: KnowledgeWorkspaceSelector;
   refCount: number;
   subscriptionId: string | null;
   leaseDurationMs: number | null;
@@ -228,9 +231,13 @@ export function retainResourceWatch(ref: ResourceRef): ResourceWatchRelease {
   return retainWatch(ref);
 }
 
-function retainWatch(ref: WatchRef): ResourceWatchRelease {
+function retainWatch(
+  ref: WatchRef,
+  workspaceSelector?: KnowledgeWorkspaceSelector,
+): ResourceWatchRelease {
   const normalizedRef = normalizeResourceRef(ref);
-  const key = resourceWatchKey(normalizedRef);
+  const selectorKey = appendKnowledgeWorkspaceSelector('', workspaceSelector);
+  const key = `${selectorKey}\0${resourceWatchKey(normalizedRef)}`;
   const existing = watches.get(key);
   if (existing) {
     existing.refCount += 1;
@@ -244,6 +251,7 @@ function retainWatch(ref: WatchRef): ResourceWatchRelease {
 
   const entry: WatchEntry = {
     ref: normalizedRef,
+    workspaceSelector,
     refCount: 1,
     subscriptionId: null,
     leaseDurationMs: null,
@@ -293,7 +301,10 @@ async function subscribeEntry(entry: WatchEntry): Promise<void> {
         resources: [entry.ref],
       };
   try {
-    const response = await hanaFetch('/api/resource-io/subscribe', {
+    const response = await hanaFetch(appendKnowledgeWorkspaceSelector(
+      '/api/resource-io/subscribe',
+      entry.workspaceSelector,
+    ), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -328,8 +339,11 @@ export function retainLocalFileResourceWatch(filePath: string): ResourceWatchRel
   return retainResourceWatch({ kind: 'local-file', path: filePath });
 }
 
-export function retainKnowledgeSourceWatch(sourceKey: string): ResourceWatchRelease {
-  return retainWatch({ kind: 'knowledge-source', sourceKey });
+export function retainKnowledgeSourceWatch(
+  sourceKey: string,
+  workspaceSelector?: KnowledgeWorkspaceSelector,
+): ResourceWatchRelease {
+  return retainWatch({ kind: 'knowledge-source', sourceKey }, workspaceSelector);
 }
 
 function releaseResourceWatch(key: string): void {
@@ -364,7 +378,10 @@ async function releaseEntryWithConfirmation(entry: WatchEntry): Promise<void> {
     if (!subscriptionId) return;
     try {
       const response = await hanaFetch(
-        `/api/resource-io/subscriptions/${encodeURIComponent(subscriptionId)}`,
+        appendKnowledgeWorkspaceSelector(
+          `/api/resource-io/subscriptions/${encodeURIComponent(subscriptionId)}`,
+          entry.workspaceSelector,
+        ),
         {
           method: 'DELETE',
           throwOnHttpError: false,
@@ -497,7 +514,10 @@ async function renewEntryLease(entry: WatchEntry): Promise<void> {
   if (entry.disposed || entry.suspended || !subscriptionId) return;
   try {
     const response = await hanaFetch(
-      `/api/resource-io/subscriptions/${encodeURIComponent(subscriptionId)}/renew`,
+      appendKnowledgeWorkspaceSelector(
+        `/api/resource-io/subscriptions/${encodeURIComponent(subscriptionId)}/renew`,
+        entry.workspaceSelector,
+      ),
       {
         method: 'POST',
         throwOnHttpError: false,

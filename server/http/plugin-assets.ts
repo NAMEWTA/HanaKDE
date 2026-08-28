@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { parseCookie } from "../../core/web-session-store.ts";
 import {
+  PLUGIN_ASSET_SESSION_PATH_SEGMENT,
   PluginAssetSessionError,
   pluginAssetSessionCookieName,
   verifyPluginAssetSession,
@@ -54,7 +55,8 @@ export function verifyPluginAssetSessionForHostRequest(c, engine, { requireSessi
       code: "plugin_asset_route_invalid",
     });
   }
-  const token = parseCookie(c.req.header("cookie"), pluginAssetSessionCookieName(parsed.pluginId));
+  const token = parsed.sessionToken
+    || parseCookie(c.req.header("cookie"), pluginAssetSessionCookieName(parsed.pluginId));
   if (!token) {
     if (!requireSession) return null;
     throw new PluginAssetSessionError("plugin asset session required", {
@@ -93,7 +95,9 @@ export function servePluginAsset(c, engine, headOnly = false) {
   c.header("Cross-Origin-Resource-Policy", "same-origin");
   return serveFileContent(c, {
     filePath,
-    cacheControl: "public, max-age=31536000, immutable",
+    cacheControl: parsed.sessionToken
+      ? "private, max-age=1800, immutable"
+      : "public, max-age=31536000, immutable",
     headOnly,
   });
 }
@@ -108,12 +112,26 @@ function parsePluginAssetRoute(pathname, { validateAssetPath }) {
     return null;
   }
   const rawAssetPath = match[2] || "";
+  const sessionPrefix = `${PLUGIN_ASSET_SESSION_PATH_SEGMENT}/`;
+  let sessionToken = null;
+  let assetPath = rawAssetPath;
+  if (rawAssetPath.startsWith(sessionPrefix)) {
+    const sessionAndAsset = rawAssetPath.slice(sessionPrefix.length);
+    const slash = sessionAndAsset.indexOf("/");
+    if (slash <= 0) {
+      if (validateAssetPath) throw new PluginAssetNotFoundError();
+      return null;
+    }
+    sessionToken = decodeRouteComponent(sessionAndAsset.slice(0, slash));
+    assetPath = sessionAndAsset.slice(slash + 1);
+  }
   if (!validateAssetPath) {
-    return { pluginId, assetPath: rawAssetPath };
+    return { pluginId, assetPath, sessionToken };
   }
   return {
     pluginId,
-    assetPath: normalizePluginAssetPath(rawAssetPath),
+    assetPath: normalizePluginAssetPath(assetPath),
+    sessionToken,
   };
 }
 

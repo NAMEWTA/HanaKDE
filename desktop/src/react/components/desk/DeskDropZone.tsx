@@ -20,7 +20,11 @@ import { canUseNativeResourcePath } from '../../services/resource-access';
 import { resolveServerConnection } from '../../services/server-connection';
 import { isWebRuntime } from '../../utils/platform-runtime';
 import type { CtxMenuState } from './desk-types';
-import type { InlineCreateKind } from './DeskTree';
+import {
+  canPasteDeskTreeClipboard,
+  pasteDeskTreeClipboard,
+  type InlineCreateKind,
+} from './DeskTree';
 import s from './Desk.module.css';
 
 function currentResourceAccessContext() {
@@ -93,6 +97,18 @@ export function DeskDropZone({
       items: [
         { label: tFn('desk.ctx.newMdFile'), action: () => { void onStartCreate('', 'markdown'); } },
         { label: tFn('desk.ctx.newFolder'), action: () => { void onStartCreate('', 'folder'); } },
+        { divider: true },
+        {
+          label: tFn('desk.ctx.paste'),
+          disabled: !canPasteDeskTreeClipboard(''),
+          action: async () => {
+            if (!await pasteDeskTreeClipboard('')) {
+              window.dispatchEvent(new CustomEvent('hana-inline-notice', {
+                detail: { text: tFn('desk.pasteFailed'), type: 'error' },
+              }));
+            }
+          },
+        },
         ...(!isWebRuntime() && canUseNativePath ? [
           { label: tFn('desk.ctx.openInFinder'), action: () => { const p = deskCurrentDir(); if (p) window.platform?.showInFinder?.(p); } },
         ] : []),
