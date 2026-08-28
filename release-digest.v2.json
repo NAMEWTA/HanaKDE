@@ -3,6 +3,111 @@
   "entries": [
     {
       "schemaVersion": 1,
+      "tag": "v0.0.8",
+      "version": "0.0.8",
+      "previousTag": "v0.0.7",
+      "generatedAt": "2026-08-28T07:49:33.000Z",
+      "noUserFacingChanges": false,
+      "summary": {
+        "zh": "HanaKDE v0.0.8 让知识页直接复用完整文件工作台，恢复 Markdown 编辑和文件命令，并修复 Finance Workbench、Markdown WeChat 与 Todo 插件页面无限加载。",
+        "en": "HanaKDE v0.0.8 reuses the complete file workbench in Knowledge, restores Markdown editing and file commands, and fixes endless loading in Finance Workbench, Markdown WeChat, and Todo."
+      },
+      "counts": {
+        "feature": 0,
+        "fix": 2,
+        "improvement": 1,
+        "migration": 0
+      },
+      "source": {
+        "owner": "NAMEWTA",
+        "repo": "HanaKDE",
+        "commitRange": "v0.0.7..1b83b98b",
+        "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.8",
+        "releaseNotes": ""
+      },
+      "items": [
+        {
+          "id": "knowledge-shared-file-workbench",
+          "kind": "fix",
+          "importance": "high",
+          "title": {
+            "zh": "知识页恢复完整文件编辑",
+            "en": "Complete file editing restored in Knowledge"
+          },
+          "summary": {
+            "zh": "知识页现在直接使用聊天工作台已有的文件树、标签页和 PreviewPanel，Markdown、代码及其他受支持文件重新可以打开、编辑和保存。",
+            "en": "Knowledge now uses the existing file tree, tabs, and PreviewPanel from the chat workbench, so Markdown, code, and other supported files can be opened, edited, and saved again."
+          },
+          "details": [
+            {
+              "zh": "工作区身份、文件监控、冲突处理与标签状态共用同一套 store 和 actions，不再维护平行编辑器。",
+              "en": "Workspace identity, file watching, conflict handling, and tab state now share the same stores and actions instead of a parallel editor."
+            }
+          ],
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "1b83b98b",
+              "title": "fix(workbench): restore knowledge editing and plugin pages"
+            }
+          ]
+        },
+        {
+          "id": "desk-context-file-commands",
+          "kind": "improvement",
+          "importance": "high",
+          "title": {
+            "zh": "文件右键命令补全",
+            "en": "Complete file context commands"
+          },
+          "summary": {
+            "zh": "文件树新增复制、剪切、粘贴及对应快捷键，并继续复用既有重命名和删除链路；复制目录时会安全处理重名和自包含目标。",
+            "en": "The file tree adds copy, cut, paste, and matching shortcuts while retaining the existing rename and delete paths, with safe collision and self-descendant handling for directory copies."
+          },
+          "details": [
+            {
+              "zh": "陈旧的回收操作日志在原文件与回收载荷均不存在时会安全终结，不再永久禁用当前工作区编辑。",
+              "en": "Stale trash operation journals now finalize safely when neither the original nor trash payload remains, preventing permanent editor lockout."
+            }
+          ],
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "1b83b98b",
+              "title": "fix(workbench): restore knowledge editing and plugin pages"
+            }
+          ]
+        },
+        {
+          "id": "plugin-pages-load-in-desktop",
+          "kind": "fix",
+          "importance": "high",
+          "title": {
+            "zh": "三个内置插件页面恢复加载",
+            "en": "Three built-in plugin pages load again"
+          },
+          "summary": {
+            "zh": "Finance Workbench、Markdown WeChat 和 Todo 在桌面端可以加载真实业务界面，不再停留在空白页和旋转加载状态。",
+            "en": "Finance Workbench, Markdown WeChat, and Todo now load their real desktop interfaces instead of remaining blank with an endless spinner."
+          },
+          "details": [
+            {
+              "zh": "插件 iframe 只在真实 load/handshake 后进入 ready，并通过短时签名资源路径兼容 macOS Electron 的 file:// 宿主。",
+              "en": "Plugin iframes become ready only after a real load or handshake and use short-lived signed asset paths compatible with the macOS Electron file:// host."
+            }
+          ],
+          "sources": [
+            {
+              "type": "commit",
+              "ref": "1b83b98b",
+              "title": "fix(workbench): restore knowledge editing and plugin pages"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "tag": "v0.0.7",
       "version": "0.0.7",
       "previousTag": "v0.0.6",
