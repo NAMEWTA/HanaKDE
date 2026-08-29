@@ -10,6 +10,28 @@ function extractMacro(source, name) {
 }
 
 describe("Windows NSIS installer contract", () => {
+  it("patches the upstream assisted per-user System.dll race before packaging", () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
+    const patchSource = fs.readFileSync(
+      path.join(root, "scripts", "patch-electron-builder-nsis.cjs"),
+      "utf-8",
+    );
+    const installedTemplate = fs.readFileSync(
+      path.join(root, "node_modules", "app-builder-lib", "templates", "nsis", "multiUser.nsh"),
+      "utf-8",
+    );
+
+    expect(pkg.scripts.postinstall).toContain("patch-electron-builder-nsis.cjs");
+    expect(patchSource).toContain('verifiedVulnerableVersions = new Set(["26.8.1"])');
+    expect(patchSource).toContain("${IfNot} ${AtLeastWin8}");
+    expect(patchSource).toContain("!include WinVer.nsh");
+    expect(patchSource).toContain("multiUser.nsh no longer matches the verified template");
+    expect(installedTemplate).toContain("!include WinVer.nsh");
+    expect(installedTemplate).toMatch(
+      /\$\{IfNot\} \$\{AtLeastWin8\}[\s\S]*?System::Store S[\s\S]*?System::Store L[\s\S]*?\$\{EndIf\}/,
+    );
+  });
+
   it("does not let stale old-uninstaller failures abort a HanaKDE-owned overlay", () => {
     const source = fs.readFileSync(path.join(root, "build", "installer.nsh"), "utf-8");
     const macro = extractMacro(source, "customUnInstallCheck");
