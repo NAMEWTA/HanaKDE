@@ -189,11 +189,11 @@ describe("persistent store registry", () => {
       "plugin-data/todolist",
     ]);
     expect(pluginData.siteRules).toEqual(expect.arrayContaining([
-      expect.objectContaining({ sourceFile: "plugins/finance-workbench/src/application.js" }),
-      expect.objectContaining({ sourceFile: "plugins/finance-workbench/src/store.js" }),
-      expect.objectContaining({ sourceFile: "plugins/markdown-wechat/src/store.ts" }),
-      expect.objectContaining({ sourceFile: "plugins/markdown-wechat/tools/render.ts" }),
+      expect.objectContaining({ sourceFile: "plugins/jimeng-cli/adapters/dreamina.ts" }),
     ]));
+    expect(pluginData.siteRules.some((rule) =>
+      rule.sourceFile.includes("finance-workbench") || rule.sourceFile.includes("markdown-wechat")
+    )).toBe(false);
     // MCP config is owned by the core module in its dedicated runtime directory.
     const mcp = PERSISTENT_STORES.find((store) => store.id === "mcp-config")!;
     expect(mcp.ownerModule).toBe("core/mcp/manager.ts");

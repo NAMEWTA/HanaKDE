@@ -142,6 +142,54 @@ test("quick capture creates exactly one manual Todo and has an IME composition g
   assert.doesNotMatch(source, /name="titles"/);
 });
 
+test("Todo page inherits the Hana design contract instead of defining a private visual theme", () => {
+  const css = fs.readFileSync(path.resolve("assets/page.css"), "utf8");
+  const page = fs.readFileSync(path.resolve("src/ui/page.tsx"), "utf8");
+
+  for (const token of ["--bg", "--bg-card", "--accent", "--text", "--text-muted", "--border", "--radius-input", "--radius-card"]) {
+    assert.match(css, new RegExp(token.replaceAll("-", "\\-")), `missing host design token ${token}`);
+  }
+  assert.match(page, /HanaThemeProvider mode="inherit"/);
+  assert.match(page, /className="react-todo-host todo-theme"/);
+  assert.match(css, /--todo-radius-input:\s*var\(--radius-input, 4px\)/);
+  assert.match(css, /--todo-radius-panel:\s*var\(--radius-card, 8px\)/);
+  assert.doesNotMatch(css, /#6f5cff|--hana-color-|--hana-radius-/i);
+  assert.doesNotMatch(css, /letter-spacing:\s*-/i);
+  assert.doesNotMatch(css, /border-radius:\s*(?:9|1[0-9]|[2-9][0-9])px/i);
+});
+
+test("AI receives the complete namespaced Todo tool catalog", async () => {
+  const expected = [
+    ["automation.ts", "automation"],
+    ["capture.ts", "capture"],
+    ["complete.ts", "complete"],
+    ["create.ts", "create"],
+    ["delete-confirm.ts", "delete_confirm"],
+    ["delete-prepare.ts", "delete_prepare"],
+    ["delete.ts", "delete"],
+    ["exchange.ts", "exchange"],
+    ["get.ts", "get"],
+    ["project.ts", "project"],
+    ["query.ts", "query"],
+    ["recurrence.ts", "recurrence"],
+    ["reminder.ts", "reminder"],
+    ["reopen.ts", "reopen"],
+    ["restore.ts", "restore"],
+    ["update.ts", "update"],
+  ];
+  assert.deepEqual(fs.readdirSync(path.resolve("tools")).filter((name) => name.endsWith(".ts")).sort(), expected.map(([file]) => file));
+
+  for (const [file, name] of expected) {
+    const tool = await import(`../tools/${file}`);
+    assert.equal(tool.name, name, `${file} has the wrong public name`);
+    assert.equal(typeof tool.description, "string", `${file} must describe its AI behavior`);
+    assert.ok(tool.description.length > 20, `${file} description is too weak for AI use`);
+    assert.equal(typeof tool.parameters, "object", `${file} must publish a parameter schema`);
+    assert.equal(typeof tool.execute, "function", `${file} must publish an executor`);
+    assert.equal(typeof tool.sessionPermission, "object", `${file} must publish a permission contract`);
+  }
+});
+
 
 test("status and inline export fallback never disclose plugin-private absolute paths", async () => {
   const dir = tempDir("privacy-boundary");

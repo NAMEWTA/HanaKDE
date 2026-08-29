@@ -78,6 +78,29 @@ test("Todo page renders its shell and signals ready before initial data resolves
   }
 });
 
+test("Todo page leaves loading and offers retry when the backend does not respond", async () => {
+  const browser = installBrowser();
+  const sdk = {
+    ready() {},
+    api: { fetch: () => new Promise<Response>(() => {}) },
+    ui: { resize() {} },
+    resources: { pick: async () => ({ resources: [] }) },
+  };
+  try {
+    const root = browser.dom.window.document.getElementById("root");
+    assert.ok(root);
+    const dispose = mountTodoApp(root, sdk, { requestTimeoutMs: 10 });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    assert.equal(root.querySelector(".spinner"), null);
+    assert.match(root.querySelector(".state-error")?.textContent ?? "", /did not respond/i);
+    assert.ok(root.querySelector("[data-reload]"));
+    dispose();
+  } finally {
+    browser.restore();
+  }
+});
+
 test("Todo page routes initial API calls exclusively through the injected SDK", async () => {
   const browser = installBrowser();
   const sdkRoutes: string[] = [];

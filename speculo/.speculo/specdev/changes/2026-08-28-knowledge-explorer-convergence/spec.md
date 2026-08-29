@@ -6,6 +6,7 @@ status: ready
 ready_for_tickets: true
 sources:
   - USER-DECISION:执行已批准的 Knowledge Explorer 收敛计划
+  - USER-DECISION:移除 Finance Workbench 与 Markdown WeChat，并以 upstream 为标准清理重复实现
   - CODE:desktop/src/react/components/knowledge-workspace
   - CODE:desktop/src/react/components/desk
 ---
@@ -18,7 +19,7 @@ sources:
 
 Knowledge Renderer 知道当前 Desk 的目录或 mount，但 Knowledge HTTP/ResourceIO 请求没有携带该身份；Server 只从当前 session/engine 推断 main root。没有可推断 session 时，Desk 能显示而 Knowledge 返回来源不可用。页面同时把搜索、Explorer、编辑器和 Current Resource Views 固定为三栏，形成与 upstream 工作台明显不一致的稀疏管理台。
 
-目标用户是在 Knowledge 中浏览、编辑、整理当前工作台真实目录的桌面用户。成功状态是 Knowledge 与 Desk 指向同一工作区，并直接复用 Desk Explorer、PreviewPanel、标签页、编辑保存、文件监控和文件命令状态；Knowledge 不再维护一套平行的主工作台实现。
+目标用户是在 Knowledge 中浏览、编辑、整理当前工作台真实目录的桌面用户。成功状态是 Knowledge 与 Desk 指向同一工作区，并直接复用 Desk Explorer、PreviewPanel、标签页、编辑保存、文件监控和文件命令状态；Knowledge 不再维护一套平行的主工作台实现。已拒绝的 Finance Workbench 与 Markdown WeChat 不再作为 builtin 被扫描、加载、打包或暴露工具与页面。
 
 非目标：不替换索引或回收站数据模型；不新增插件或第三方 Tree/编辑器库；不为 Knowledge 复制一套新的文件编辑器和资源命令状态机。
 
@@ -50,7 +51,8 @@ Renderer 为全部 Knowledge 和 knowledge-address ResourceIO 请求附加规范
 | AC-009 | Desk 中可编辑的 Markdown/代码/CSV 文件 | 在 Knowledge 打开、编辑并保存 | 使用同一个 PreviewPanel 编辑器与保存链路，切回 Desk 后内容和标签状态一致 | desktop E2E |
 | AC-010 | Explorer 中选择文件或目录 | 使用右键菜单或快捷键执行文件命令 | 剪切、复制、粘贴、重命名、删除复用 DeskTree 命令；顶部工具栏不重复放置这些上下文动作 | component + desktop E2E |
 | AC-011 | 旧工作区存在 RECOVERY_REQUIRED 日志 | 打开另一个当前工作区 | 恢复状态按完整工作区身份隔离，不得因通用 sourceKey=main 禁用当前编辑 | coordinator integration test |
-| AC-012 | 打开 Finance Workbench、Markdown WeChat 或 Todo 内置插件页 | 宿主取得签名 surface URL 并加载 iframe 资源 | iframe 只在真实 load/handshake 后进入 ready；`file://` 桌面宿主可加载短时签名资源且页面不再无限转圈 | plugin route + host component + real desktop |
+| AC-012 | 启动 Server/Desktop 或构建发行包 | 枚举 builtin 插件、页面、工具、路由和任务 | Finance Workbench 与 Markdown WeChat 均不存在；Todo 与 upstream builtin 插件继续工作 | PluginManager + route/build inventory |
+| AC-013 | 对照 upstream `v0.450.0` 审计当前 fork | 检查运行代码、依赖和构建链 | upstream 已有能力由 upstream owner 实现；HanaKDE 只保留有明确产品合同的增量，历史证据不被伪装成运行代码 | diff census + focused/full verification |
 
 ## 5. 范围
 
@@ -58,7 +60,8 @@ Renderer 为全部 Knowledge 和 knowledge-address ResourceIO 请求附加规范
 
 - Knowledge workspace selector client/server contract、registry cache identity 与安全校验。
 - Knowledge 共享工作台 shell、错误退化、按需 Current Views/Trash。
-- 内置插件 iframe 生命周期与 asset-session 资源授权链路。
+- Finance Workbench 与 Markdown WeChat 源码、运行注册、构建和孤立宿主能力的移除。
+- upstream `v0.450.0` 同步及运行代码差异分类清理。
 - 相关 unit/component/route/E2E 与截图检查。
 
 ### REUSE
@@ -66,12 +69,15 @@ Renderer 为全部 Knowledge 和 knowledge-address ResourceIO 请求附加规范
 - DeskSection、DeskToolbar、DeskTree 的组件、store 和文件命令实现。
 - PreviewPanel 的标签页、Markdown/代码/CSV 编辑、保存、Watch 和冲突处理。
 - SourceRegistry、ResourceIO 与 Knowledge 索引/回收站能力作为附加功能。
+- upstream PluginManager、ResourceIO、workspace runtime 与构建链。
 
 ### OUT
 
 - **OOS-001**：不修改知识地址、索引或回收站持久化 schema。
 - **OOS-002**：不新增外部 Tree/编辑器依赖。
 - **OOS-003**：不为同一当前工作区保留两套 Explorer、剪贴板或编辑会话实现。
+- **OOS-004**：不删除 HanaKDE 品牌、内部 seed/OTA、Todo 或已确认的无系统发行签名策略。
+- **OOS-005**：不删除用户目录中的插件数据，不改写 Speculo archive 或 Git 历史证据。
 
 ## 6. 已锁定实现约束
 
@@ -81,6 +87,9 @@ Renderer 为全部 Knowledge 和 knowledge-address ResourceIO 请求附加规范
 - **DEC-004**：Explorer 和 Editor 必须复用 upstream 的真实组件、store 与 actions，不只复制结构或 CSS。
 - **DEC-005**：当前工作区的文件命令以 DeskTree/ResourceIO 为唯一 owner；Knowledge 专属状态不得阻断同一工作区的基础编辑能力。
 - **DEC-006**：操作恢复身份必须包含具体 workspace selector/root identity，禁止只按通用 sourceKey 锁定来源。
+- **DEC-007**：两个退役插件从仓库 builtin 集合完整删除，不以隐藏导航或 manifest 开关伪装停用。
+- **DEC-008**：仅服务退役插件且无其他消费者的协议、SDK、持久化登记与测试同步删除；通用插件宿主能力按真实消费者保留。
+- **DEC-009**：upstream 同步使用可审计的 named merge；产生 commit 前必须另有提交授权。
 
 ## 7. 数据、接口与兼容
 
@@ -105,9 +114,10 @@ Renderer 为全部 Knowledge 和 knowledge-address ResourceIO 请求附加规范
 | Knowledge route + ResourceIO | integration/security | AC-001—003 | `<Path>tests/knowledge-workspace-route.test.ts</Path>` | Vitest |
 | Knowledge shared workbench | component | AC-004—007/009/010 | DeskSection + PreviewPanel composition tests | Vitest |
 | operation recovery identity | integration | AC-011 | coordinator recovery fixtures | Vitest |
-| plugin surface assets | integration/component | AC-012 | plugin route + iframe host tests | Vitest |
-| real desktop shell | E2E/visual | AC-001/006—012 | Knowledge and plugin desktop flows | Playwright/CDP screenshots |
+| builtin plugin inventory | integration/build | AC-012 | PluginManager + package inventory tests | Vitest/build receipt |
+| upstream delta audit | static/integration | AC-013 | fixed baseline diff + affected suites | census/evidence |
+| real desktop shell | E2E/visual | AC-001/006—012 | Knowledge and remaining plugin desktop flows | Playwright/CDP screenshots |
 
 ## 10. 风险、假设与未决问题
 
-主要风险是旧 Knowledge 文档状态与共享 Preview 状态同时存活，或旧恢复日志继续按 `sourceKey=main` 污染新工作区。切换到共享工作台时必须卸载旧主编辑链路，并以完整 workspace identity 隔离恢复状态。无高影响未决问题。
+主要风险是旧 Knowledge 文档状态与共享 Preview 状态同时存活，或删除插件后仍残留构建/协议注册。切换到共享工作台时必须卸载旧主编辑链路，并以完整 workspace identity 隔离恢复状态。upstream merge commit 尚未授权，允许先完成删除、差异审计和可验证的工作区收敛，但不得伪造已同步拓扑。

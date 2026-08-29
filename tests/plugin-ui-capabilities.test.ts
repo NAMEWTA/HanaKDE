@@ -97,19 +97,6 @@ describe('default plugin UI capabilities', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('copy me');
   });
 
-  it('opens the requesting plugin Page without accepting a target plugin id', async () => {
-    const cap = capability(PLUGIN_UI_CAPABILITY.PLUGIN_PAGE_OPEN);
-
-    expect(cap.requiresGrant).toBe(true);
-    expect(cap.allowedSlots).toEqual(['page', 'widget']);
-    expect(cap.validatePayload({ pluginId: 'another-plugin' })).toEqual({
-      ok: false,
-      error: 'plugin.page.open does not accept a target plugin id.',
-    });
-    await expect(cap.handle(context, {})).resolves.toEqual({ opened: true, pluginId: 'demo-plugin' });
-    expect(useStore.getState().currentTab).toBe('plugin:demo-plugin');
-  });
-
   it('opens local-file resources through the platform bridge', async () => {
     const cap = capability(PLUGIN_UI_CAPABILITY.RESOURCE_OPEN);
     const payload = { resource: { kind: 'local-file', path: '/workspace/a.md' }, mode: 'preview' };

@@ -476,6 +476,10 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
   // ── 初始化 Hub（调度中枢，包装 engine） ──
   const hub = new Hub({ engine });
 
+  // Startup plugins may register and recover persisted schedules from onload,
+  // so the host task contract must exist before engine.initPlugins runs them.
+  registerTaskRegistryBusHandlers(hub.eventBus, engine.taskRegistry);
+
   // Framework Pi SDK extensions must be registered before plugin onStartup
   // lifecycles can create or resume sessions through session:send.
   const deferredResultStore = new DeferredResultStore(
@@ -729,8 +733,6 @@ export async function startServer(root: CompositionRoot = {}): Promise<void> {
   );
   engine.setActivityHub(activityHub);
 
-  // Task registry bus handlers (plugin access)
-  registerTaskRegistryBusHandlers(hub.eventBus, engine.taskRegistry);
   hub.eventBus.handle("session:get-titles", async ({ paths }) => {
     if (!Array.isArray(paths) || !paths.length) return { titles: {} };
     const coord = engine._sessionCoord;

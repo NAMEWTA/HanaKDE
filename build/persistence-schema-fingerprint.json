@@ -449,16 +449,6 @@
       "sourceFile": "core/local-user-account.ts"
     },
     {
-      "expiresOn": "2027-08-31",
-      "id": "markdown-wechat-plugin-asset-build",
-      "kinds": [
-        "mkdir"
-      ],
-      "ownerModule": "plugins/markdown-wechat/build.ts",
-      "reason": "Writes packaged plugin app.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
-      "sourceFile": "plugins/markdown-wechat/build.ts"
-    },
-    {
       "expiresOn": "2027-01-31",
       "id": "sandbox-command-output",
       "kinds": [
@@ -662,7 +652,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:cf4f9b190d8e71dbc6e324c1635fe16193da3aa4348345521a742386a5e6a4bd",
+  "payloadFingerprint": "sha256:bd2503004293e305146cb1f048d68ccc871f4204d0c11e5d0ced201786689af1",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3210,8 +3200,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Register existing Markdown WeChat and Finance Workbench plugin-scoped dataDir writes plus the Markdown source-asset build exemption; persisted schemas and DATA_EPOCH remain unchanged.",
-    "payloadFingerprint": "sha256:cf4f9b190d8e71dbc6e324c1635fe16193da3aa4348345521a742386a5e6a4bd"
+    "compatibilityReason": "Retire the Finance Workbench and Markdown WeChat builtin plugins, register Todo task handlers earlier during startup, and update guarded source contracts without changing persisted schemas, DATA_EPOCH, or existing user plugin data.",
+    "payloadFingerprint": "sha256:bd2503004293e305146cb1f048d68ccc871f4204d0c11e5d0ced201786689af1"
   },
   "schemas": [
     {
@@ -3373,7 +3363,7 @@
       "contract": "bounded base64 cover upload temporary-directory lifecycle",
       "kind": "directory-contract",
       "module": "server/routes/desk.ts",
-      "sourceHash": "sha256:d145b9d55e5e100c0b9a127c735d4e457d6ea5a74e4c2f95ea9df3004f6cb8e6",
+      "sourceHash": "sha256:5cd097ba37970a5af6672000aaf868d7e1ea3cb722671a710ea03d90ee06caca",
       "storeId": "desk-cover-upload-staging"
     },
     {
@@ -3471,7 +3461,7 @@
       "contract": "installed manifest, install receipt, backup, and source-package directory protocols",
       "kind": "directory-contract",
       "module": "core/plugin-manager.ts",
-      "sourceHash": "sha256:2d74be4dd89505c3f9c595e235ca74eaa505c547cfe621b7547435660acd41e8",
+      "sourceHash": "sha256:78098ac67519299dd169da7eab6abef5f960141551fb63a5266c3d36210d9497",
       "storeId": "installed-plugins"
     },
     {
@@ -3594,7 +3584,7 @@
       "contract": "verified plugin release ZIP naming by pluginId/version and expected sha256",
       "kind": "directory-contract",
       "module": "server/routes/plugins.ts",
-      "sourceHash": "sha256:7aca9bf305209962b8db0710cd36df12ff761c41715c85b0965b5088a6a97bac",
+      "sourceHash": "sha256:641c71e1bd3d11e13bfffca4f4f3b68b7662658d2d397fa077b3ad8649a03f57",
       "storeId": "plugin-download-cache"
     },
     {
@@ -3663,7 +3653,7 @@
       "contract": "server-info writer and desktop bootstrap reader",
       "kind": "runtime-contract",
       "module": "server/index.ts",
-      "sourceHash": "sha256:c89ceaac4d91c7f6b523af3746e0f7fc1ee1851539b964b2e2a18ee2532f1fb9",
+      "sourceHash": "sha256:d89d10c339dc71fd8525757c69dd4bdec9f2d20f5a403d6ec9de47c1d30b64fe",
       "storeId": "server-runtime-info"
     },
     {
@@ -8853,135 +8843,7 @@
       "kind": "mkdir",
       "ordinal": 0,
       "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/finance-workbench/src/application.js",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "write-file",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/finance-workbench/src/application.js",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "copy-file",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/finance-workbench/src/store.js",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "mkdir",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/finance-workbench/src/store.js",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "rename",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/finance-workbench/src/store.js",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "write-file",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/finance-workbench/src/store.js",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "mkdir",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
       "sourceFile": "plugins/jimeng-cli/adapters/dreamina.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": "markdown-wechat-plugin-asset-build",
-      "kind": "mkdir",
-      "ordinal": 0,
-      "reason": "Writes packaged plugin app.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
-      "sourceFile": "plugins/markdown-wechat/build.ts",
-      "storeId": null
-    },
-    {
-      "exemptionId": null,
-      "kind": "copy-file",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/src/store.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "mkdir",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/src/store.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "mkdir",
-      "ordinal": 1,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/src/store.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "remove-path",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/src/store.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "rename",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/src/store.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "write-file",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/src/store.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "mkdir",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/tools/render.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "remove-path",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/tools/render.ts",
-      "storeId": "plugin-runtime-data"
-    },
-    {
-      "exemptionId": null,
-      "kind": "write-file",
-      "ordinal": 0,
-      "reason": "Writes data within the active pluginId-scoped data directory.",
-      "sourceFile": "plugins/markdown-wechat/tools/render.ts",
       "storeId": "plugin-runtime-data"
     },
     {

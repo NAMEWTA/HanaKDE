@@ -44,6 +44,17 @@ describe("server transport ownership", () => {
     expect(compactionIndex).toBeLessThan(pluginInitIndex);
   });
 
+  it("registers TaskRegistry bus handlers before plugin startup lifecycles", () => {
+    const source = fs.readFileSync(path.join(root, "server", "index.ts"), "utf-8");
+
+    const taskHandlersIndex = source.indexOf("registerTaskRegistryBusHandlers(hub.eventBus, engine.taskRegistry)");
+    const pluginInitIndex = source.indexOf("await engine.initPlugins(");
+
+    expect(taskHandlersIndex).toBeGreaterThan(-1);
+    expect(pluginInitIndex).toBeGreaterThan(-1);
+    expect(taskHandlersIndex).toBeLessThan(pluginInitIndex);
+  });
+
   it("reports PORT_IN_USE with host, port, network mode, and recovery suggestions", () => {
     const source = fs.readFileSync(path.join(root, "server", "index.ts"), "utf-8");
 

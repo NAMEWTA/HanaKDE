@@ -84,10 +84,10 @@ describe('knowledge shell i18n, accessibility and visual contract', () => {
     }
   });
 
-  it('keeps semantic landmarks, visible keyboard focus and theme-responsive narrow layouts', () => {
-    const layoutSource = fs.readFileSync(
+  it('keeps semantic landmarks and a theme-responsive shared-workbench layout', () => {
+    const workspaceSource = fs.readFileSync(
       path.resolve(
-        'desktop/src/react/components/knowledge-workspace/KnowledgeLayout.tsx',
+        'desktop/src/react/components/knowledge-workspace/KnowledgeWorkspace.tsx',
       ),
       'utf8',
     );
@@ -97,30 +97,14 @@ describe('knowledge shell i18n, accessibility and visual contract', () => {
       ),
       'utf8',
     );
-    const editorGroupsSource = fs.readFileSync(
-      path.resolve(
-        'desktop/src/react/components/knowledge-workspace/KnowledgeEditorGroups.tsx',
-      ),
-      'utf8',
-    );
-    const unsavedDialogSource = fs.readFileSync(
-      path.resolve(
-        'desktop/src/react/components/knowledge-workspace/UnsavedDocumentsDialog.tsx',
-      ),
-      'utf8',
-    );
-
-    expect(layoutSource).toMatch(/role="tree"/);
-    expect(layoutSource).toMatch(/aria-(?:label|labelledby)=/);
-    expect(editorGroupsSource).toMatch(/role="group"/);
-    expect(editorGroupsSource).toMatch(/tabIndex=\{0\}/);
-    expect(editorGroupsSource).toMatch(/<KnowledgeTabBar/);
-    expect(unsavedDialogSource).toMatch(/aria-modal="true"/);
-    expect(unsavedDialogSource).toMatch(/event\.key === 'Escape'/);
-    expect(unsavedDialogSource).toMatch(/saveRef\.current\?\.focus/);
-    expect(cssSource).toMatch(/:focus-visible/);
+    expect(workspaceSource).toMatch(/<main/);
+    expect(workspaceSource).toMatch(/<aside/);
+    expect(workspaceSource).toMatch(/<section/);
+    expect(workspaceSource).toMatch(/aria-label=/);
+    expect(workspaceSource).toMatch(/<DeskSection/);
+    expect(workspaceSource).toMatch(/<PreviewPanel/);
     expect(cssSource).toMatch(/var\(--(?:bg|text|border|accent)/);
-    expect(cssSource.match(/@media\s*\(max-width:/g)).toHaveLength(2);
+    expect(cssSource.match(/@media\s*\(max-width:/g)).toHaveLength(1);
     expect(cssSource).not.toMatch(/#[0-9a-f]{3,8}\b/i);
   });
 });

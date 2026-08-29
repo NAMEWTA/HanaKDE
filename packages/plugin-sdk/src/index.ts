@@ -72,7 +72,6 @@ export interface HanaPluginSdk {
   };
   ui: {
     resize(size: HanaPluginSize): void;
-    openPage(options?: HanaPluginRequestOptions): Promise<{ opened: boolean; pluginId: string }>;
   };
   theme: {
     getSnapshot(): HanaPluginThemeSnapshot;
@@ -407,13 +406,6 @@ export function createHanaPluginSdk(options: HanaPluginSdkOptions = {}): HanaPlu
       resize(size: HanaPluginSize) {
         postEvent(PLUGIN_UI_CAPABILITY.UI_RESIZE, size);
       },
-      openPage(options?: HanaPluginRequestOptions) {
-        return request<{ opened: boolean; pluginId: string }>(
-          PLUGIN_UI_CAPABILITY.PLUGIN_PAGE_OPEN,
-          {},
-          options,
-        );
-      },
     },
     theme: {
       getSnapshot() {
@@ -500,9 +492,6 @@ export const hana: HanaPluginSdk = {
   ui: {
     resize(size: HanaPluginSize) {
       return getSingleton().ui.resize(size);
-    },
-    openPage(options?: HanaPluginRequestOptions) {
-      return getSingleton().ui.openPage(options);
     },
   },
   theme: {

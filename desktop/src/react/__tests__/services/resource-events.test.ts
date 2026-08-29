@@ -702,38 +702,6 @@ describe('resource-events', () => {
     expect(knowledgeWorkspaceClient.lastResourceEventSequence()).toBe(1);
   });
 
-  it('fans accepted ResourceIO events out to Knowledge tree projections and stops after cleanup', async () => {
-    const {
-      processResourceEventMessage,
-      subscribeKnowledgeResourceTreeChanges,
-    } = await import('../../services/resource-events');
-    const listener = vi.fn();
-    const unsubscribe = subscribeKnowledgeResourceTreeChanges(listener);
-
-    await processResourceEventMessage({
-      type: 'resource.changed',
-      changeType: 'created',
-      sequence: 1,
-      resourceKey: 'mount:docs:notes/new.md',
-      resource: { kind: 'mount', mountId: 'docs', path: 'notes/new.md' },
-      source: 'provider_watch',
-      occurredAt: '2026-07-28T00:00:01.000Z',
-    });
-
-    expect(listener).toHaveBeenCalledWith({ kind: 'resource-event' });
-    unsubscribe();
-
-    await processResourceEventMessage({
-      type: 'resource.deleted',
-      sequence: 2,
-      resourceKey: 'mount:docs:notes/new.md',
-      resource: { kind: 'mount', mountId: 'docs', path: 'notes/new.md' },
-      source: 'provider_watch',
-      occurredAt: '2026-07-28T00:00:02.000Z',
-    });
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
   it('resubscribes and performs authoritative requery before accepting a stale cursor', async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,

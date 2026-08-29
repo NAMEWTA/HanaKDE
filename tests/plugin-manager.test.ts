@@ -133,6 +133,10 @@ describe("loadAll", () => {
       // must not discover it at all.
       expect(diagnosticsById.has("mcp")).toBe(false);
       expect(pm.routeRegistry.has("mcp")).toBe(false);
+      for (const retiredId of ["finance-workbench", "markdown-wechat"]) {
+        expect(diagnosticsById.has(retiredId)).toBe(false);
+        expect(pm.routeRegistry.has(retiredId)).toBe(false);
+      }
       for (const id of ["media", "jimeng-cli", "beautify", "office"]) {
         expect(diagnosticsById.get(id)).toMatchObject({
           id,

@@ -18,6 +18,15 @@
         "specdev/spec",
         "specdev/tickets"
       ]
+    },
+    {
+      "change": "2026-08-29-todolist-backend-reliability",
+      "current_work": "specdev/implement",
+      "works_run": [
+        "specdev/diagnose-bugs",
+        "specdev/spec",
+        "specdev/tickets"
+      ]
     }
   ],
   "archived": [

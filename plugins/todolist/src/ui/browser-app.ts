@@ -107,7 +107,7 @@ const I18N = {
   },
 };
 
-export function mountTodoApp(root, hana) {
+export function mountTodoApp(root, hana, options = {}) {
   if (!root) throw new Error("Todo root element is missing");
   if (!hana || typeof hana.ready !== "function" || typeof hana.api?.fetch !== "function") {
     throw new Error("Todo page requires @hana/plugin-sdk");
@@ -126,6 +126,10 @@ export function mountTodoApp(root, hana) {
   let saveChain = Promise.resolve();
   let destroyed = false;
   let resizeObserver = null;
+  const requestTimeoutMs = Number.isFinite(options.requestTimeoutMs) && options.requestTimeoutMs > 0
+    ? options.requestTimeoutMs
+    : 10_000;
+  const pendingRequests = new Set();
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   const attr = escapeHtml;
@@ -134,8 +138,35 @@ export function mountTodoApp(root, hana) {
   const selected = () => state.items.find((item) => item.id === state.selectedId) || state.draft;
 
   async function api(route, init = {}) {
-    const options = { ...init, headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) } };
-    const response = await hana.api.fetch(route, options);
+    const controller = new AbortController();
+    const requestOptions = {
+      ...init,
+      signal: controller.signal,
+      headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) },
+    };
+    let timer;
+    let rejectPending;
+    const timeout = new Promise((_, reject) => {
+      rejectPending = reject;
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`Todo backend did not respond within ${requestTimeoutMs} ms`));
+      }, requestTimeoutMs);
+    });
+    const pendingRequest = {
+      cancel() {
+        controller.abort();
+        rejectPending(new Error("Todo page closed before the backend responded"));
+      },
+    };
+    pendingRequests.add(pendingRequest);
+    let response;
+    try {
+      response = await Promise.race([hana.api.fetch(route, requestOptions), timeout]);
+    } finally {
+      clearTimeout(timer);
+      pendingRequests.delete(pendingRequest);
+    }
     if (response && typeof response.json === "function") {
       const value = await response.json();
       if (!response.ok || value?.ok === false) {
@@ -162,9 +193,9 @@ export function mountTodoApp(root, hana) {
 
   function navItems() {
     return [
-      ["today", "◉", t("today")], ["inbox", "⌂", t("inbox")], ["upcoming", "→", t("upcoming")],
-      ["all", "≡", t("all")], ["calendar", "▦", t("calendar")], ["automation", "⚙", t("automation")],
-      ["review", "◇", t("review")], ["completed", "✓", t("completed")], ["trash", "⌫", t("trash")],
+      ["today", t("today")], ["inbox", t("inbox")], ["upcoming", t("upcoming")],
+      ["all", t("all")], ["calendar", t("calendar")], ["automation", t("automation")],
+      ["review", t("review")], ["completed", t("completed")], ["trash", t("trash")],
     ];
   }
 
@@ -178,13 +209,13 @@ export function mountTodoApp(root, hana) {
   }
 
   function sidebar() {
-    const nav = navItems().map(([view, icon, label]) => `<button class="nav-item ${state.view === view && !state.projectId ? "is-active" : ""}" data-nav="${view}" type="button"><span aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span></button>`).join("");
+    const nav = navItems().map(([view, label]) => `<button class="nav-item ${state.view === view && !state.projectId ? "is-active" : ""}" data-nav="${view}" type="button"><span>${escapeHtml(label)}</span></button>`).join("");
     const projects = state.projects.filter((project) => !project.archivedAt).map((project) => `<button class="nav-item project-item ${state.projectId === project.id ? "is-active" : ""}" data-project="${attr(project.id)}" type="button"><span class="project-dot" aria-hidden="true"></span><span>${escapeHtml(project.name)}</span></button>`).join("");
     return `<aside class="sidebar" aria-label="${attr(t("app"))}">
       <div class="brand"><span class="brand-mark" aria-hidden="true">✓</span><span>${escapeHtml(t("app"))}</span></div>
       <nav class="nav-stack">${nav}</nav>
       <section class="project-block"><div class="section-label"><span>${escapeHtml(t("projects"))}</span></div>${projects || `<p class="sidebar-empty">${escapeHtml(t("empty"))}</p>`}
-        <form class="project-create" data-project-create><input name="name" maxlength="240" placeholder="${attr(t("projectName"))}" aria-label="${attr(t("projectName"))}"><button type="submit" title="${attr(t("addProject"))}">＋</button></form>
+        <form class="project-create" data-project-create><input name="name" maxlength="240" placeholder="${attr(t("projectName"))}" aria-label="${attr(t("projectName"))}"><button class="icon-button icon-button-sm" type="submit" title="${attr(t("addProject"))}" aria-label="${attr(t("addProject"))}">＋</button></form>
       </section>
     </aside>`;
   }
@@ -202,8 +233,8 @@ export function mountTodoApp(root, hana) {
 
   function toolbar() {
     const title = state.projectId ? state.projects.find((project) => project.id === state.projectId)?.name || t("projects") : t(state.view);
-    return `<header class="content-header"><div><h1>${escapeHtml(title)}</h1><p class="view-summary">${state.items.length} Todo</p></div><div class="header-actions">
-      <label class="search"><span aria-hidden="true">⌕</span><input data-search value="${attr(state.search)}" placeholder="${attr(t("search"))}"></label>
+    return `<header class="content-header"><div class="view-title"><h1>${escapeHtml(title)}</h1><span class="view-summary">${state.items.length}</span></div><div class="header-actions">
+      <label class="search"><span class="sr-only">${escapeHtml(t("search"))}</span><input data-search type="search" value="${attr(state.search)}" placeholder="${attr(t("search"))}"></label>
       <button type="button" class="button button-quiet" data-export>${escapeHtml(t("export"))}</button>
       <button type="button" class="button button-quiet" data-import>${escapeHtml(t("import"))}</button>
       <input type="file" accept="application/json,.json" data-import-file hidden>
@@ -233,7 +264,7 @@ export function mountTodoApp(root, hana) {
   function listPanel() {
     if (state.loading) return `<div class="state-panel"><div class="spinner" aria-hidden="true"></div><p>${escapeHtml(t("loading"))}</p></div>`;
     if (state.error) return `<div class="state-panel state-error"><p>${escapeHtml(state.error)}</p><button class="button" type="button" data-reload>${escapeHtml(t("retry"))}</button></div>`;
-    if (!state.items.length) return `<div class="state-panel"><div class="empty-mark" aria-hidden="true">✓</div><p>${escapeHtml(t("empty"))}</p></div>`;
+    if (!state.items.length) return `<div class="state-panel"><p>${escapeHtml(t("empty"))}</p></div>`;
     return `<div class="todo-list" role="list">${state.items.map(todoCard).join("")}</div>`;
   }
 
@@ -295,13 +326,13 @@ export function mountTodoApp(root, hana) {
 
   function detailPanel() {
     const todo = state.draft || selected();
-    if (!todo) return `<aside class="detail detail-empty"><div class="empty-mark" aria-hidden="true">↗</div><p>${escapeHtml(t("details"))}</p></aside>`;
+    if (!todo) return `<aside class="detail detail-empty"><p>${escapeHtml(t("details"))}</p></aside>`;
     const archived = Boolean(todo.archivedAt);
     const completed = todo.status === "completed";
     const planned = datePart(todo.plannedFor);
     const deadline = datePart(todo.deadline);
     const saveLabel = state.saveState === "saving" ? t("saving") : state.saveState === "error" ? state.error || t("conflict") : state.saveState === "saved" ? t("saved") : "";
-    return `<aside class="detail ${state.narrowDetail ? "is-open" : ""}" aria-label="${attr(t("details"))}"><div class="detail-head"><h2>${escapeHtml(t("details"))}</h2><div class="save-state" data-save-state>${escapeHtml(saveLabel)}</div><button class="icon-button" type="button" data-close-detail aria-label="${attr(t("close"))}">×</button></div>
+    return `<aside class="detail ${state.narrowDetail ? "is-open" : ""}" aria-label="${attr(t("details"))}"><div class="detail-head"><h2>${escapeHtml(t("details"))}</h2><div class="save-state" data-save-state>${escapeHtml(saveLabel)}</div><button class="icon-button icon-button-sm" type="button" data-close-detail title="${attr(t("close"))}" aria-label="${attr(t("close"))}">×</button></div>
       <form class="detail-form" data-detail-form data-id="${attr(todo.id)}">
         <label class="span-2"><span>${escapeHtml(t("title"))}</span><input data-field="title" value="${attr(todo.title)}" maxlength="240" ${archived ? "disabled" : ""}></label>
         <label class="span-2"><span>${escapeHtml(t("description"))}</span><textarea data-field="description" rows="5" maxlength="12000" ${archived ? "disabled" : ""}>${escapeHtml(todo.description || "")}</textarea></label>
@@ -334,7 +365,7 @@ export function mountTodoApp(root, hana) {
     const preview = state.importPreview;
     if (!preview) return "";
     const diagnostics = (preview.preview?.diagnostics || []).map((item) => `<li class="diagnostic diagnostic-${attr(item.severity)}"><strong>${escapeHtml(item.code)}</strong><span>${escapeHtml(item.message)}</span>${item.path ? `<code>${escapeHtml(item.path)}</code>` : ""}</li>`).join("");
-    return `<div class="modal-backdrop" data-modal><section class="modal" role="dialog" aria-modal="true" aria-labelledby="import-title"><div class="modal-head"><h2 id="import-title">${escapeHtml(t("preview"))}</h2><button class="icon-button" type="button" data-import-close>×</button></div><p class="${preview.preview?.canCommit ? "success-text" : "error-text"}">${escapeHtml(preview.preview?.canCommit ? t("importReady") : t("importBlocked"))}</p><ul class="diagnostics">${diagnostics || `<li>${escapeHtml(t("importReady"))}</li>`}</ul><div class="modal-actions"><button class="button button-quiet" type="button" data-import-close>${escapeHtml(t("cancel"))}</button><button class="button button-primary" type="button" data-import-commit ${preview.preview?.canCommit ? "" : "disabled"}>${escapeHtml(t("commit"))}</button></div></section></div>`;
+    return `<div class="modal-backdrop" data-modal><section class="modal" role="dialog" aria-modal="true" aria-labelledby="import-title"><div class="modal-head"><h2 id="import-title">${escapeHtml(t("preview"))}</h2><button class="icon-button icon-button-sm" type="button" data-import-close title="${attr(t("close"))}" aria-label="${attr(t("close"))}">×</button></div><p class="${preview.preview?.canCommit ? "success-text" : "error-text"}">${escapeHtml(preview.preview?.canCommit ? t("importReady") : t("importBlocked"))}</p><ul class="diagnostics">${diagnostics || `<li>${escapeHtml(t("importReady"))}</li>`}</ul><div class="modal-actions"><button class="button button-quiet" type="button" data-import-close>${escapeHtml(t("cancel"))}</button><button class="button button-primary" type="button" data-import-commit ${preview.preview?.canCommit ? "" : "disabled"}>${escapeHtml(t("commit"))}</button></div></section></div>`;
   }
 
   function render() {
@@ -671,6 +702,8 @@ export function mountTodoApp(root, hana) {
   return () => {
     destroyed = true;
     clearTimeout(saveTimer);
+    for (const request of pendingRequests) request.cancel();
+    pendingRequests.clear();
     resizeObserver?.disconnect();
     document.removeEventListener("keydown", onKeyDown);
   };

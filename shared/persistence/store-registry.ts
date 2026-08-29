@@ -1031,11 +1031,7 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
       "core/media/task-store.ts",
       "core/media/universal-media-manager.ts",
       "core/media-adapters/agnes.ts",
-      "plugins/finance-workbench/src/application.js",
-      "plugins/finance-workbench/src/store.js",
       "plugins/jimeng-cli/adapters/dreamina.ts",
-      "plugins/markdown-wechat/src/store.ts",
-      "plugins/markdown-wechat/tools/render.ts",
     ], "Writes data within the active pluginId-scoped data directory."),
   }),
   defineStore({
@@ -1604,14 +1600,6 @@ export const PERSISTENCE_EXEMPTIONS: readonly PersistenceExemption[] = Object.fr
     "2026-10-31",
     ["mkdir", "copy-file"],
     "(?:path[.]dirname\\(dst\\)|sourcePath, dst)",
-  ),
-  exemption(
-    "markdown-wechat-plugin-asset-build",
-    "plugins/markdown-wechat/build.ts",
-    "plugins/markdown-wechat/build.ts",
-    "Writes packaged plugin app.js beside the plugin source tree; it is not a HANA_HOME persistence owner.",
-    "2027-08-31",
-    ["mkdir"],
   ),
   exemption(
     "todolist-plugin-asset-build",

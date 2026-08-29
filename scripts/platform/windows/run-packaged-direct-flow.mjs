@@ -234,7 +234,7 @@ async function runAgentFlow(serverInfo, sandbox, page) {
   // workspace owns async watchers whose teardown can outlive a direct tab
   // click on slower packaged Windows runners; macOS uses the same reload
   // boundary before its Agent flow.
-  await page.evaluate(() => window.localStorage.setItem("hana-tab", "chat"));
+  await page.evaluate(() => globalThis.localStorage.setItem("hana-tab", "chat"));
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('button[data-tab="chat"]:visible').click();
   await page.locator(PACKAGED_CHAT_CONNECTED_SELECTOR).waitFor({

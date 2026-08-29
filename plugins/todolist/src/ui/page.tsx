@@ -7,7 +7,7 @@ import { mountTodoApp } from "./browser-app.ts";
 function TodoPage(): React.ReactElement {
   const hostRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => hostRef.current ? mountTodoApp(hostRef.current, hana) : undefined, []);
-  return <HanaThemeProvider mode="inherit"><div ref={hostRef} className="react-todo-host" /></HanaThemeProvider>;
+  return <HanaThemeProvider mode="inherit"><div ref={hostRef} className="react-todo-host todo-theme" /></HanaThemeProvider>;
 }
 
 const root = document.getElementById("root");

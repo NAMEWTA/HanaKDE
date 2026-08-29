@@ -20,8 +20,6 @@ export default [
       // Built-in plugin builds emit bundled browser artifacts from their
       // source entry points. Lint the sources rather than generated output.
       'plugins/todolist/assets/page.js',
-      'plugins/markdown-wechat/assets/app.js',
-      'plugins/finance-workbench/assets/panel.js',
       '.claude/**',
       '.cache/**',
       // .docs/ 不入版本控制、CI 不可见；lint 覆盖它会造成本地/CI 语义不对称

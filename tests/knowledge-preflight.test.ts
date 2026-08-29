@@ -234,7 +234,6 @@ describe("KW-RULE-PREFLIGHT executable repository contract", () => {
 
     expect(packageContract).toMatchObject({
       name: "hanakde",
-      version: "0.0.6",
       scripts: {
         typecheck:
           "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
@@ -243,6 +242,15 @@ describe("KW-RULE-PREFLIGHT executable repository contract", () => {
         "smoke:server:open": "node scripts/smoke-open-server.mjs",
       },
     });
+    expect(packageContract.version).toMatch(/^\d+\.\d+\.\d+$/);
+    const packageLock = JSON.parse(
+      fs.readFileSync(path.join(repositoryRoot, "package-lock.json"), "utf8"),
+    ) as {
+      version?: string;
+      packages?: Record<string, { version?: string }>;
+    };
+    expect(packageLock.version).toBe(packageContract.version);
+    expect(packageLock.packages?.[""]?.version).toBe(packageContract.version);
     expect(packageContract.dependencies?.["better-sqlite3"]).toBeTruthy();
   });
 

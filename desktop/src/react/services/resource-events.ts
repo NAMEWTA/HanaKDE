@@ -88,39 +88,6 @@ type ForegroundCatchUpOptions = {
   now?: () => number;
 };
 
-export type KnowledgeResourceTreeChangeSignal =
-  | { kind: 'resource-event' }
-  | { kind: 'resync' };
-
-type KnowledgeResourceTreeChangeListener = (
-  signal: KnowledgeResourceTreeChangeSignal,
-) => void;
-
-const knowledgeResourceTreeChangeListeners = new Set<
-  KnowledgeResourceTreeChangeListener
->();
-
-export function subscribeKnowledgeResourceTreeChanges(
-  listener: KnowledgeResourceTreeChangeListener,
-): () => void {
-  knowledgeResourceTreeChangeListeners.add(listener);
-  return () => {
-    knowledgeResourceTreeChangeListeners.delete(listener);
-  };
-}
-
-function publishKnowledgeResourceTreeChange(
-  signal: KnowledgeResourceTreeChangeSignal,
-): void {
-  for (const listener of knowledgeResourceTreeChangeListeners) {
-    try {
-      listener(signal);
-    } catch (error) {
-      console.warn('[resource-events] knowledge tree listener failed:', error);
-    }
-  }
-}
-
 export function createResourceEventClient({
   fetchImpl = hanaFetch,
   applyEvent,
@@ -181,7 +148,6 @@ export function createResourceEventClient({
 
 async function recoverDeskResourcesAfterGap(): Promise<void> {
   invalidateAllDeskTreePaths();
-  publishKnowledgeResourceTreeChange({ kind: 'resync' });
   await refreshOpenPreviewDocuments(PREVIEW_DOCUMENT_CATCH_UP_REFRESH_OPTIONS);
 }
 
@@ -658,23 +624,11 @@ export function processResourceEventMessage(
   event: ResourceEvent | null | undefined,
   applyEvent?: (event: ResourceEvent) => Promise<void> | void,
 ): Promise<void> {
-  return resourceEventClient.handleEvent(event, async (safeEvent) => {
-    publishKnowledgeResourceTreeChange({
-      kind: 'resource-event',
-    });
-    await applyEvent?.(safeEvent);
-  });
+  return resourceEventClient.handleEvent(event, applyEvent);
 }
 
 export function catchUpResourceEventsAfterReconnect(applyEvent?: (event: ResourceEvent) => void): Promise<unknown> {
-  return resourceEventClient.catchUpAfterReconnect({
-    applyEvent: (safeEvent) => {
-      publishKnowledgeResourceTreeChange({
-        kind: 'resource-event',
-      });
-      applyEvent?.(safeEvent);
-    },
-  });
+  return resourceEventClient.catchUpAfterReconnect({ applyEvent });
 }
 
 export function bindResourceEventForegroundCatchUp(

@@ -9,7 +9,7 @@ planning_depth: deep
 planning_depth_reason: 跨 Renderer、HTTP、ResourceIO 与 SourceRegistry cache，并触及本地路径和 mount 授权边界
 ready: true
 risk: high
-blocked_by: []
+blocked_by: [T-00]
 contract_ids: [AC-001, AC-002, AC-003, AC-004, AC-005]
 owner: root
 expected_changes: ["<Path>core/knowledge-workspace/workbench-compatibility.ts</Path>", "<Path>server/routes/knowledge-workspace.ts</Path>", "<Path>desktop/src/react/services/knowledge-workspace-client.ts</Path>", "<Path>desktop/src/react/components/knowledge-workspace/KnowledgeWorkspace.tsx</Path>", "<Path>desktop/src/react/components/knowledge-workspace/KnowledgeLayout.tsx</Path>", "<Path>tests/knowledge-workspace-route.test.ts</Path>", "<Path>desktop/src/react/__tests__/services/knowledge-workspace-client.test.ts</Path>", "<Path>desktop/src/react/__tests__/components/KnowledgeWorkspace.test.tsx</Path>", "<Path>build/cli-runtime-closure.json</Path>"]

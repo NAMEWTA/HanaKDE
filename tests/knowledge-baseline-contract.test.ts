@@ -318,22 +318,15 @@ describe("KW-RULE-TEST fixed test-stack contract", () => {
     expect(appFixture).toContain("Desktop fixture taskkill did not terminate its target");
   });
 
-  it("bounds every Windows Web Open worker without retries", () => {
+  it("runs the current Knowledge project matrix without legacy UI story splits", () => {
     const ci = fs.readFileSync(
       path.join(repositoryRoot, ".github/workflows/ci.yml"),
       "utf8",
     );
 
-    expect(ci).toContain(
-      'if [ "$RUNNER_OS" = "Windows" ] && [ "${{ matrix.project }}" = "web-open" ]; then',
-    );
-    expect(ci).toContain("run_project --grep 'E2E-KW-006'");
-    expect(ci).toContain("run_project --grep 'E2E-KW-022'");
-    expect(ci).toContain("for shard in 1/5 2/5 3/5 4/5 5/5; do");
-    expect(ci).toContain(
-      "run_project --fully-parallel --shard=\"$shard\" --grep-invert 'E2E-KW-006|E2E-KW-022'",
-    );
-    expect(ci).toContain("This is process isolation, not a retry");
+    expect(ci).not.toContain("E2E-KW-006");
+    expect(ci).not.toContain("E2E-KW-022");
+    expect(ci).toContain("          run_project");
     expect(ci).toContain(
       "DEBUG: ${{ runner.os == 'Windows' && matrix.project == 'desktop-full' && 'pw:browser' || '' }}",
     );

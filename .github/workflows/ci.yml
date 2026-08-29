@@ -230,22 +230,7 @@ jobs:
             fi
           }
 
-          # E2E-KW-006 exercises native PDF/media preview processes, while
-          # E2E-KW-022 continuously replaces a parent directory with a Windows
-          # junction. Give both native-process boundaries a fresh one-shot
-          # Playwright worker. Split the remaining tests at test granularity so
-          # no Windows Chromium worker owns more than six browser contexts.
-          # This is process isolation, not a retry: every shard is mandatory and
-          # retries stay disabled in the config.
-          if [ "$RUNNER_OS" = "Windows" ] && [ "${{ matrix.project }}" = "web-open" ]; then
-            run_project --grep 'E2E-KW-006'
-            run_project --grep 'E2E-KW-022'
-            for shard in 1/5 2/5 3/5 4/5 5/5; do
-              run_project --fully-parallel --shard="$shard" --grep-invert 'E2E-KW-006|E2E-KW-022'
-            done
-          else
-            run_project
-          fi
+          run_project
 
       - name: Upload Knowledge Workspace E2E artifacts
         if: failure()

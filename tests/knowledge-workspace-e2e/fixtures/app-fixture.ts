@@ -70,40 +70,10 @@ function resolveElectronExecutable(): string {
   return executable;
 }
 
-/**
- * These are the same fixed applicability gates asserted in the individual
- * stories. Keeping the lightweight classification here lets Playwright mark a
- * non-applicable story as skipped before it starts an isolated server/browser
- * fixture. On Windows that avoids repeatedly launching a process pair for
- * every deliberate Web Full skip, while preserving the visible 38 pass / 34
- * fixed-skip release result.
- */
+/** Runtime gates for scenarios that must be skipped before fixture startup. */
 const runtimesByStory: Readonly<Record<string, readonly KnowledgeRuntime[]>> = {
-  "E2E-KW-001": ["desktop-full", "web-open"],
-  "E2E-KW-002": ["desktop-full", "web-open", "web-full"],
-  "E2E-KW-003": ["desktop-full", "web-open"],
-  "E2E-KW-004": ["desktop-full"],
-  "E2E-KW-005": ["desktop-full", "web-open"],
-  "E2E-KW-006": ["desktop-full", "web-open"],
-  "E2E-KW-007": ["desktop-full", "web-open"],
-  "E2E-KW-008": ["desktop-full"],
-  "E2E-KW-009": ["desktop-full", "web-open"],
-  "E2E-KW-010": ["desktop-full", "web-open"],
-  "E2E-KW-011": ["desktop-full", "web-open"],
-  "E2E-KW-012": ["desktop-full"],
-  "E2E-KW-013": ["desktop-full", "web-open"],
-  "E2E-KW-014": ["web-open"],
-  "E2E-KW-015": ["desktop-full"],
-  "E2E-KW-016": ["desktop-full", "web-open"],
-  "E2E-KW-017": ["desktop-full", "web-open"],
-  "E2E-KW-018": ["desktop-full"],
-  "E2E-KW-019": ["desktop-full", "web-open"],
-  "E2E-KW-020": ["desktop-full"],
-  "E2E-KW-021": ["web-open"],
-  "E2E-KW-022": ["web-open"],
-  "E2E-KW-023": ["desktop-full"],
-  "E2E-KW-024": ["desktop-full"],
   "E2E-KW-025": ["desktop-full"],
+  "E2E-KW-026": ["desktop-full"],
 };
 
 function isRuntimeApplicable(testInfo: { title: string }, runtime: KnowledgeRuntime): boolean {
