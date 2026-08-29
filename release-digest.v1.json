@@ -1,103 +1,129 @@
 {
   "schemaVersion": 1,
-  "tag": "v0.0.8",
-  "version": "0.0.8",
-  "previousTag": "v0.0.7",
-  "generatedAt": "2026-08-28T07:49:33.000Z",
+  "tag": "v0.0.9",
+  "version": "0.0.9",
+  "previousTag": "v0.0.8",
+  "generatedAt": "2026-08-29T04:17:33.000Z",
   "noUserFacingChanges": false,
   "summary": {
-    "zh": "HanaKDE v0.0.8 让知识页直接复用完整文件工作台，恢复 Markdown 编辑和文件命令，并修复 Finance Workbench、Markdown WeChat 与 Todo 插件页面无限加载。",
-    "en": "HanaKDE v0.0.8 reuses the complete file workbench in Knowledge, restores Markdown editing and file commands, and fixes endless loading in Finance Workbench, Markdown WeChat, and Todo."
+    "zh": "HanaKDE v0.0.9 让知识页彻底收敛到共享文件工作台，移除两个已拒绝的实验插件，并恢复 Todo 的后台、系统 UI 与 AI 工具链。",
+    "en": "HanaKDE v0.0.9 fully converges Knowledge on the shared file workbench, removes two rejected experimental plugins, and restores Todo's backend, system UI, and AI toolchain."
   },
   "counts": {
     "feature": 0,
     "fix": 2,
-    "improvement": 1,
+    "improvement": 2,
     "migration": 0
   },
   "source": {
     "owner": "NAMEWTA",
     "repo": "HanaKDE",
-    "commitRange": "v0.0.7..1b83b98b",
-    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.8",
+    "commitRange": "v0.0.8..b0c74282",
+    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.9",
     "releaseNotes": ""
   },
   "items": [
     {
-      "id": "knowledge-shared-file-workbench",
-      "kind": "fix",
-      "importance": "high",
-      "title": {
-        "zh": "知识页恢复完整文件编辑",
-        "en": "Complete file editing restored in Knowledge"
-      },
-      "summary": {
-        "zh": "知识页现在直接使用聊天工作台已有的文件树、标签页和 PreviewPanel，Markdown、代码及其他受支持文件重新可以打开、编辑和保存。",
-        "en": "Knowledge now uses the existing file tree, tabs, and PreviewPanel from the chat workbench, so Markdown, code, and other supported files can be opened, edited, and saved again."
-      },
-      "details": [
-        {
-          "zh": "工作区身份、文件监控、冲突处理与标签状态共用同一套 store 和 actions，不再维护平行编辑器。",
-          "en": "Workspace identity, file watching, conflict handling, and tab state now share the same stores and actions instead of a parallel editor."
-        }
-      ],
-      "sources": [
-        {
-          "type": "commit",
-          "ref": "1b83b98b",
-          "title": "fix(workbench): restore knowledge editing and plugin pages"
-        }
-      ]
-    },
-    {
-      "id": "desk-context-file-commands",
+      "id": "knowledge-upstream-workbench-convergence",
       "kind": "improvement",
       "importance": "high",
       "title": {
-        "zh": "文件右键命令补全",
-        "en": "Complete file context commands"
+        "zh": "知识页收敛到共享文件工作台",
+        "en": "Knowledge converges on the shared file workbench"
       },
       "summary": {
-        "zh": "文件树新增复制、剪切、粘贴及对应快捷键，并继续复用既有重命名和删除链路；复制目录时会安全处理重名和自包含目标。",
-        "en": "The file tree adds copy, cut, paste, and matching shortcuts while retaining the existing rename and delete paths, with safe collision and self-descendant handling for directory copies."
+        "zh": "知识页直接复用 DeskSection、PreviewPanel 和文件变更桥，删除平行 Explorer/Editor 实现，同时保留 Knowledge 索引、恢复和 ResourceIO 能力。",
+        "en": "Knowledge now directly reuses DeskSection, PreviewPanel, and the file-change bridge, removing its parallel Explorer/Editor implementation while preserving Knowledge indexing, recovery, and ResourceIO capabilities."
       },
       "details": [
         {
-          "zh": "陈旧的回收操作日志在原文件与回收载荷均不存在时会安全终结，不再永久禁用当前工作区编辑。",
-          "en": "Stale trash operation journals now finalize safely when neither the original nor trash payload remains, preventing permanent editor lockout."
+          "zh": "Markdown 和其他受支持文件继续沿用聊天工作台已有的打开、编辑、保存、标签与文件命令链路。",
+          "en": "Markdown and other supported files continue through the chat workbench's established open, edit, save, tab, and file-command paths."
         }
       ],
       "sources": [
         {
           "type": "commit",
-          "ref": "1b83b98b",
-          "title": "fix(workbench): restore knowledge editing and plugin pages"
+          "ref": "b0c74282",
+          "title": "refactor(workbenches): converge upstream and complete Todo"
         }
       ]
     },
     {
-      "id": "plugin-pages-load-in-desktop",
-      "kind": "fix",
+      "id": "retire-rejected-workbench-plugins",
+      "kind": "improvement",
       "importance": "high",
       "title": {
-        "zh": "三个内置插件页面恢复加载",
-        "en": "Three built-in plugin pages load again"
+        "zh": "移除已拒绝的实验工作台",
+        "en": "Rejected experimental workbenches removed"
       },
       "summary": {
-        "zh": "Finance Workbench、Markdown WeChat 和 Todo 在桌面端可以加载真实业务界面，不再停留在空白页和旋转加载状态。",
-        "en": "Finance Workbench, Markdown WeChat, and Todo now load their real desktop interfaces instead of remaining blank with an endless spinner."
+        "zh": "Finance Workbench 与 Markdown WeChat 不再随应用打包或加载，并同步删除它们独占的页面能力与持久化登记。",
+        "en": "Finance Workbench and Markdown WeChat are no longer bundled or loaded, and their exclusive page capability and persistence registrations have been removed."
       },
       "details": [
         {
-          "zh": "插件 iframe 只在真实 load/handshake 后进入 ready，并通过短时签名资源路径兼容 macOS Electron 的 file:// 宿主。",
-          "en": "Plugin iframes become ready only after a real load or handshake and use short-lived signed asset paths compatible with the macOS Electron file:// host."
+          "zh": "现有用户插件数据保持不变；Todo、其他内置插件和内部 Seed/OTA 完整性签名继续保留。",
+          "en": "Existing user plugin data remains untouched; Todo, other built-in plugins, and internal Seed/OTA integrity signatures remain in place."
         }
       ],
       "sources": [
         {
           "type": "commit",
-          "ref": "1b83b98b",
-          "title": "fix(workbench): restore knowledge editing and plugin pages"
+          "ref": "b0c74282",
+          "title": "refactor(workbenches): converge upstream and complete Todo"
+        }
+      ]
+    },
+    {
+      "id": "todo-reliable-system-workbench",
+      "kind": "fix",
+      "importance": "high",
+      "title": {
+        "zh": "Todo 后台与系统工作台恢复可用",
+        "en": "Todo backend and system workbench restored"
+      },
+      "summary": {
+        "zh": "Todo 的任务后台在插件启动前就绪，增删改查、项目、提醒和周期任务可持久化工作，页面完整继承 Hana 系统视觉与交互合同。",
+        "en": "Todo's task backend is ready before plugin startup, persisted CRUD, projects, reminders, and recurrence work end to end, and the page fully inherits Hana's system visual and interaction contract."
+      },
+      "details": [
+        {
+          "zh": "AI 获得 16 个经过权限约束的 Todo 工具；页面请求具备超时、取消、重试与真实 HTTP/磁盘 CRUD 覆盖。",
+          "en": "AI receives 16 permission-scoped Todo tools, while page requests now have timeout, cancellation, retry, and real HTTP/disk CRUD coverage."
+        }
+      ],
+      "sources": [
+        {
+          "type": "commit",
+          "ref": "b0c74282",
+          "title": "refactor(workbenches): converge upstream and complete Todo"
+        }
+      ]
+    },
+    {
+      "id": "deepseek-v4-responses-compatibility",
+      "kind": "fix",
+      "importance": "medium",
+      "title": {
+        "zh": "同步 DeepSeek V4 Responses 能力",
+        "en": "DeepSeek V4 Responses capabilities synchronized"
+      },
+      "summary": {
+        "zh": "沿用 upstream v0.450.0 的模型目录与 Responses 适配，补齐 DeepSeek V4 Flash、Pro、Vision 元数据和官方 thinking 档位。",
+        "en": "The model catalog and Responses adapter now reuse upstream v0.450.0 behavior, adding DeepSeek V4 Flash, Pro, Vision metadata and the official thinking ladder."
+      },
+      "details": [
+        {
+          "zh": "Vision 能力与 thinking level 通过模型和 provider 兼容性测试固定。",
+          "en": "Vision capability and thinking levels are pinned by model and provider compatibility tests."
+        }
+      ],
+      "sources": [
+        {
+          "type": "commit",
+          "ref": "b0c74282",
+          "title": "refactor(workbenches): converge upstream and complete Todo"
         }
       ]
     }
