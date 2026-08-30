@@ -1,129 +1,135 @@
 {
   "schemaVersion": 1,
-  "tag": "v0.0.9",
-  "version": "0.0.9",
-  "previousTag": "v0.0.8",
-  "generatedAt": "2026-08-29T04:17:33.000Z",
+  "tag": "v0.0.10",
+  "version": "0.0.10",
+  "previousTag": "v0.0.9",
+  "generatedAt": "2026-08-30T09:00:07.491Z",
   "noUserFacingChanges": false,
   "summary": {
-    "zh": "HanaKDE v0.0.9 让知识页彻底收敛到共享文件工作台，移除两个已拒绝的实验插件，并恢复 Todo 的后台、系统 UI 与 AI 工具链。",
-    "en": "HanaKDE v0.0.9 fully converges Knowledge on the shared file workbench, removes two rejected experimental plugins, and restores Todo's backend, system UI, and AI toolchain."
+    "zh": "HanaKDE v0.0.10 新增完整的档案工作台，让个人、组织和项目资料可以在当前工作区中归集、检索、恢复并便携迁移。",
+    "en": "HanaKDE v0.0.10 adds a complete Dossiers workbench for collecting, searching, recovering, and portably moving personal, organization, and project records inside the current workspace."
   },
   "counts": {
-    "feature": 0,
-    "fix": 2,
+    "feature": 1,
+    "fix": 0,
     "improvement": 2,
     "migration": 0
   },
   "source": {
     "owner": "NAMEWTA",
     "repo": "HanaKDE",
-    "commitRange": "v0.0.8..b0c74282",
-    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.9",
+    "commitRange": "v0.0.9..ec0df0b7",
+    "releaseUrl": "https://github.com/NAMEWTA/HanaKDE/releases/tag/v0.0.10",
     "releaseNotes": ""
   },
   "items": [
     {
-      "id": "knowledge-upstream-workbench-convergence",
+      "id": "dossiers-entity-workbench",
+      "kind": "feature",
+      "importance": "high",
+      "title": {
+        "zh": "新增 Hana Dossiers 档案工作台",
+        "en": "Introducing the Hana Dossiers workbench"
+      },
+      "summary": {
+        "zh": "现在可以创建个人、组织和项目档案，在统一目录中维护类型化属性、独立联系人和元数据搜索，并通过完整页面持续操作。",
+        "en": "You can now create personal, organization, and project dossiers, manage typed properties and reusable contacts, and search metadata from a dedicated full-page workbench."
+      },
+      "details": [
+        {
+          "zh": "档案保存在当前工作区固定的 Dossiers 目录中，目录清单保持可读、可复制和可迁移。",
+          "en": "Dossiers live in the current workspace's dedicated Dossiers directory, with readable manifests that remain copyable and portable."
+        },
+        {
+          "zh": "桌面和窄屏布局均支持创建、搜索、详情编辑和键盘操作。",
+          "en": "Desktop and narrow layouts both support creation, search, detail editing, and keyboard operation."
+        }
+      ],
+      "sources": [
+        {
+          "type": "commit",
+          "ref": "83ff6cc5",
+          "title": "feat(dossiers): add catalog and contacts (T-02)"
+        },
+        {
+          "type": "commit",
+          "ref": "00d8cd07",
+          "title": "feat(dossiers): compose plugin page and host e2e"
+        }
+      ]
+    },
+    {
+      "id": "dossiers-managed-documents-portability",
       "kind": "improvement",
       "importance": "high",
       "title": {
-        "zh": "知识页收敛到共享文件工作台",
-        "en": "Knowledge converges on the shared file workbench"
+        "zh": "资料归集具备冗余与便携迁移能力",
+        "en": "Managed documents gain resilient, portable intake"
       },
       "summary": {
-        "zh": "知识页直接复用 DeskSection、PreviewPanel 和文件变更桥，删除平行 Explorer/Editor 实现，同时保留 Knowledge 索引、恢复和 ResourceIO 能力。",
-        "en": "Knowledge now directly reuses DeskSection, PreviewPanel, and the file-change bridge, removing its parallel Explorer/Editor implementation while preserving Knowledge indexing, recovery, and ResourceIO capabilities."
+        "zh": "外部或工作区内文件都会复制进档案的受管目录并按分类归集，同时提供哈希去重、安全 ZIP 导入导出和整库目录迁移。",
+        "en": "Files from outside or inside the workspace are copied into managed dossier storage and classified, with hash deduplication, safe ZIP exchange, and whole-library folder migration."
       },
       "details": [
         {
-          "zh": "Markdown 和其他受支持文件继续沿用聊天工作台已有的打开、编辑、保存、标签与文件命令链路。",
-          "en": "Markdown and other supported files continue through the chat workbench's established open, edit, save, tab, and file-command paths."
+          "zh": "导入先预检路径、冲突、分类和哈希，确认后再发布权威写入，中断不会留下半成品。",
+          "en": "Import previews paths, conflicts, classification, and hashes before confirmation, and interrupted writes do not publish partial results."
+        },
+        {
+          "zh": "单档案 ZIP 包含清单、联系人快照、资料和校验信息，可在另一工作区恢复。",
+          "en": "Each dossier ZIP contains its manifest, contact snapshot, documents, and integrity metadata for restoration in another workspace."
         }
       ],
       "sources": [
         {
           "type": "commit",
-          "ref": "b0c74282",
-          "title": "refactor(workbenches): converge upstream and complete Todo"
+          "ref": "7fbffe97",
+          "title": "feat(dossiers): add managed document intake (T-03)"
+        },
+        {
+          "type": "commit",
+          "ref": "8dd7a18c",
+          "title": "feat(dossiers): add portable zip exchange (T-06)"
         }
       ]
     },
     {
-      "id": "retire-rejected-workbench-plugins",
+      "id": "dossiers-controlled-ai-recovery",
       "kind": "improvement",
       "importance": "high",
       "title": {
-        "zh": "移除已拒绝的实验工作台",
-        "en": "Rejected experimental workbenches removed"
+        "zh": "Agent 按需读取，删除与迁移可恢复",
+        "en": "On-demand Agent access with recoverable lifecycle operations"
       },
       "summary": {
-        "zh": "Finance Workbench 与 Markdown WeChat 不再随应用打包或加载，并同步删除它们独占的页面能力与持久化登记。",
-        "en": "Finance Workbench and Markdown WeChat are no longer bundled or loaded, and their exclusive page capability and persistence registrations have been removed."
+        "zh": "Agent 首次只获得档案元数据和相对引用，按任务需要读取资料；模型内容入口可关闭，删除、恢复和 schema 迁移均经过明确确认与恢复门。",
+        "en": "The Agent initially receives only dossier metadata and relative references, reading documents when a task requires them; model content access can be disabled, while deletion, recovery, and schema migration use explicit confirmation and recovery gates."
       },
       "details": [
         {
-          "zh": "现有用户插件数据保持不变；Todo、其他内置插件和内部 Seed/OTA 完整性签名继续保留。",
-          "en": "Existing user plugin data remains untouched; Todo, other built-in plugins, and internal Seed/OTA integrity signatures remain in place."
+          "zh": "插件不会在页面打开或资料导入后后台扫描正文，也不会自动把建议写入权威档案。",
+          "en": "The plugin does not scan document content in the background after opening the page or importing files, and suggestions never write authoritative data automatically."
+        },
+        {
+          "zh": "回收站、保留期、审计日志、迁移备份与 journal 共同保护工作区权威数据。",
+          "en": "Trash retention, audit records, migration backups, and journals protect authoritative workspace data."
         }
       ],
       "sources": [
         {
           "type": "commit",
-          "ref": "b0c74282",
-          "title": "refactor(workbenches): converge upstream and complete Todo"
-        }
-      ]
-    },
-    {
-      "id": "todo-reliable-system-workbench",
-      "kind": "fix",
-      "importance": "high",
-      "title": {
-        "zh": "Todo 后台与系统工作台恢复可用",
-        "en": "Todo backend and system workbench restored"
-      },
-      "summary": {
-        "zh": "Todo 的任务后台在插件启动前就绪，增删改查、项目、提醒和周期任务可持久化工作，页面完整继承 Hana 系统视觉与交互合同。",
-        "en": "Todo's task backend is ready before plugin startup, persisted CRUD, projects, reminders, and recurrence work end to end, and the page fully inherits Hana's system visual and interaction contract."
-      },
-      "details": [
-        {
-          "zh": "AI 获得 16 个经过权限约束的 Todo 工具；页面请求具备超时、取消、重试与真实 HTTP/磁盘 CRUD 覆盖。",
-          "en": "AI receives 16 permission-scoped Todo tools, while page requests now have timeout, cancellation, retry, and real HTTP/disk CRUD coverage."
-        }
-      ],
-      "sources": [
+          "ref": "5dd3a069",
+          "title": "feat(dossiers): add agent tools and model boundary (T-04)"
+        },
         {
           "type": "commit",
-          "ref": "b0c74282",
-          "title": "refactor(workbenches): converge upstream and complete Todo"
-        }
-      ]
-    },
-    {
-      "id": "deepseek-v4-responses-compatibility",
-      "kind": "fix",
-      "importance": "medium",
-      "title": {
-        "zh": "同步 DeepSeek V4 Responses 能力",
-        "en": "DeepSeek V4 Responses capabilities synchronized"
-      },
-      "summary": {
-        "zh": "沿用 upstream v0.450.0 的模型目录与 Responses 适配，补齐 DeepSeek V4 Flash、Pro、Vision 元数据和官方 thinking 档位。",
-        "en": "The model catalog and Responses adapter now reuse upstream v0.450.0 behavior, adding DeepSeek V4 Flash, Pro, Vision metadata and the official thinking ladder."
-      },
-      "details": [
-        {
-          "zh": "Vision 能力与 thinking level 通过模型和 provider 兼容性测试固定。",
-          "en": "Vision capability and thinking levels are pinned by model and provider compatibility tests."
-        }
-      ],
-      "sources": [
+          "ref": "6b4b9456",
+          "title": "feat(dossiers): add trash recovery and audit retention (T-05)"
+        },
         {
           "type": "commit",
-          "ref": "b0c74282",
-          "title": "refactor(workbenches): converge upstream and complete Todo"
+          "ref": "3e517da0",
+          "title": "feat(dossiers): add recoverable schema migration (T-08)"
         }
       ]
     }
