@@ -6,7 +6,6 @@ import { build } from "esbuild";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const assets = path.join(root, "assets");
-fs.mkdirSync(assets, { recursive: true });
 
 await build({
   entryPoints: [path.join(root, "src/ui/page.tsx")],

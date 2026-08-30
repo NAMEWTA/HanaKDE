@@ -1031,6 +1031,7 @@ export const PERSISTENT_STORES: readonly StoreDescriptor[] = Object.freeze([
       "core/media/task-store.ts",
       "core/media/universal-media-manager.ts",
       "core/media-adapters/agnes.ts",
+      "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
       "plugins/jimeng-cli/adapters/dreamina.ts",
     ], "Writes data within the active pluginId-scoped data directory."),
   }),

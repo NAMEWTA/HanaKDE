@@ -6,11 +6,11 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test:core": "node --experimental-strip-types --test tests/foundation/*.test.ts tests/catalog/*.test.ts tests/documents/*.test.ts tests/index/*.test.ts tests/agent/*.test.ts tests/lifecycle/*.test.ts tests/exchange/*.test.ts tests/migration/*.test.ts",
+    "test:core": "node --experimental-strip-types --test tests/foundation/*.node-test.ts tests/catalog/*.node-test.ts tests/documents/*.node-test.ts tests/index/*.node-test.ts tests/agent/*.node-test.ts tests/lifecycle/*.node-test.ts tests/exchange/*.node-test.ts tests/migration/*.node-test.ts",
     "test:ui": "vitest run --root ../.. plugins/dossiers/tests/ui/catalog/catalog-feature.test.tsx plugins/dossiers/tests/ui/operations/operations-feature.test.tsx plugins/dossiers/tests/e2e/page-host.test.tsx",
     "test": "npm run test:core && npm run test:ui",
     "build": "node --experimental-strip-types build.ts",
-    "verify:package": "node --experimental-strip-types scripts/verify-package.mjs",
+    "verify:package": "node --experimental-strip-types tests/package/verify-package.mjs",
     "verify": "npm run typecheck && npm test && npm run build && node --check assets/page.js && npm run verify:package",
     "test:e2e": "playwright test --config tests/e2e/playwright.config.ts"
   },

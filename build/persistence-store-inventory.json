@@ -8190,6 +8190,123 @@
       "ordinal": 0
     },
     {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "database-open",
+      "excerpt": "new DatabaseClass(temporaryPath)",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "database-open",
+      "excerpt": "new DatabaseClass(this.path)",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "database-open",
+      "excerpt": "new DatabaseClass(this.path)",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 1
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "mkdir",
+      "excerpt": "mkdirSync(dirname(this.path), { recursive: true })",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "remove-path",
+      "excerpt": "rmSync(`${temporaryPath}${suffix}`, { force: true })",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "remove-path",
+      "excerpt": "rmSync(`${temporaryPath}${suffix}`, { force: true })",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 1
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "remove-path",
+      "excerpt": "rmSync(`${temporaryPath}${suffix}`, { force: true })",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 2
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "remove-path",
+      "excerpt": "rmSync(`${this.path}${suffix}`, { force: true })",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "remove-path",
+      "excerpt": "rmSync(previousPath, { force: true })",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "remove-path",
+      "excerpt": "rmSync(previousPath, { force: true })",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 1
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "rename",
+      "excerpt": "renameSync(previousPath, this.path)",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "rename",
+      "excerpt": "renameSync(temporaryPath, this.path)",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "kind": "rename",
+      "excerpt": "renameSync(this.path, previousPath)",
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "storeId": "plugin-runtime-data",
+      "exemptionId": null,
+      "ordinal": 0
+    },
+    {
       "sourceFile": "plugins/jimeng-cli/adapters/dreamina.ts",
       "kind": "mkdir",
       "excerpt": "fs.mkdirSync(resolved, { recursive: true })",

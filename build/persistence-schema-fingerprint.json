@@ -652,7 +652,7 @@
     ],
     "version": 3
   },
-  "payloadFingerprint": "sha256:bd2503004293e305146cb1f048d68ccc871f4204d0c11e5d0ced201786689af1",
+  "payloadFingerprint": "sha256:f943c8f0b66c792df249d2c0a0bf9d5355d30f0dda3154fa678b56c0149e0740",
   "registry": [
     {
       "affectedByEpochMigration": true,
@@ -3200,8 +3200,8 @@
   ],
   "review": {
     "classification": "compatible",
-    "compatibilityReason": "Retire the Finance Workbench and Markdown WeChat builtin plugins, register Todo task handlers earlier during startup, and update guarded source contracts without changing persisted schemas, DATA_EPOCH, or existing user plugin data.",
-    "payloadFingerprint": "sha256:bd2503004293e305146cb1f048d68ccc871f4204d0c11e5d0ced201786689af1"
+    "compatibilityReason": "Register the new Dossiers plugin's regenerable metadata index under the existing plugin-runtime-data contract without changing DATA_EPOCH or any existing plugin schema.",
+    "payloadFingerprint": "sha256:f943c8f0b66c792df249d2c0a0bf9d5355d30f0dda3154fa678b56c0149e0740"
   },
   "schemas": [
     {
@@ -8837,6 +8837,110 @@
       "reason": "Copies a generated cover beside an explicitly selected workspace Markdown file and atomically updates that external file.",
       "sourceFile": "plugins/beautify/lib/markdown-cover-service.ts",
       "storeId": null
+    },
+    {
+      "exemptionId": null,
+      "kind": "database-open",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "database-open",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "database-open",
+      "ordinal": 1,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "mkdir",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 1,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 1,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "remove-path",
+      "ordinal": 2,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
+    },
+    {
+      "exemptionId": null,
+      "kind": "rename",
+      "ordinal": 0,
+      "reason": "Writes data within the active pluginId-scoped data directory.",
+      "sourceFile": "plugins/dossiers/src/infrastructure/index/metadata-index-repository.ts",
+      "storeId": "plugin-runtime-data"
     },
     {
       "exemptionId": null,

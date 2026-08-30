@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { build } from "esbuild";
 
-const root = path.resolve(import.meta.dirname, "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 const stageParent = fs.mkdtempSync(path.join(os.tmpdir(), "hana-dossiers-package-"));
 const stage = path.join(stageParent, "dossiers");
 

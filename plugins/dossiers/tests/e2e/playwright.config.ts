@@ -5,7 +5,7 @@ if (!pageUrl) throw new Error("HANA_DOSSIERS_E2E_URL must point to the real load
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "real-host.spec.ts",
+  testMatch: "real-host.pw.ts",
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
