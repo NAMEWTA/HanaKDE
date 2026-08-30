@@ -1,0 +1,35 @@
+{
+  "manifestVersion": 1,
+  "id": "dossiers",
+  "name": "Hana Dossiers",
+  "version": "0.1.0",
+  "description": "Portable entity dossiers with contacts, managed documents, recovery, and Agent-safe references.",
+  "trust": "full-access",
+  "minAppVersion": "0.0.9",
+  "activationEvents": [
+    "onStartup",
+    "onPageOpen",
+    "onToolCall"
+  ],
+  "contributes": {
+    "page": {
+      "title": {
+        "zh-CN": "档案",
+        "zh-TW": "檔案",
+        "en": "Dossiers"
+      },
+      "route": "/page",
+      "icon": "archive"
+    }
+  },
+  "capabilities": [
+    "resource.read",
+    "resource.search",
+    "resource.write"
+  ],
+  "ui": {
+    "hostCapabilities": [
+      "resource.pick"
+    ]
+  }
+}
