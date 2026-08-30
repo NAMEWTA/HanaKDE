@@ -6,12 +6,14 @@ import {
   readJson,
   type HonoAppLike,
 } from "../src/interfaces/catalog/http.ts";
+import { lifecycleApplication, lifecycleInvocation, type LifecyclePluginContextLike } from "../src/interfaces/routes/lifecycle/context.ts";
+import { asyncRoute as lifecycleAsyncRoute, readJson as readLifecycleJson, revision as lifecycleRevision } from "../src/interfaces/routes/lifecycle/http.ts";
 
 function queryWorkspace(context: { req: { query(name: string): string | undefined } }): string | undefined {
   return context.req.query("workspaceMountId");
 }
 
-export default function register(app: HonoAppLike, ctx: CatalogPluginContextLike): void {
+export default function register(app: HonoAppLike, ctx: CatalogPluginContextLike & LifecyclePluginContextLike): void {
   app.post("/catalog/open", asyncRoute(async (c) => {
     const input = await readJson(c);
     return c.json(await catalogApplication(ctx, input.workspaceMountId).initialize());
@@ -94,8 +96,8 @@ export default function register(app: HonoAppLike, ctx: CatalogPluginContextLike
     const { expectedRevision, ...patch } = inputWithoutWorkspace(input);
     return c.json({ value: await catalogApplication(ctx, input.workspaceMountId).updateContact(c.req.param("id"), positiveNumber(expectedRevision), patch as never) });
   }));
-  app.delete("/catalog/contacts/:id", asyncRoute(async (c) => {
-    const input = await readJson(c);
-    return c.json(await catalogApplication(ctx, input.workspaceMountId).deleteContact(c.req.param("id"), positiveNumber(input.expectedRevision)));
+  app.delete("/catalog/contacts/:id", lifecycleAsyncRoute(async (c) => {
+    const input = await readLifecycleJson(c);
+    return c.json(await lifecycleApplication(ctx, input.workspaceMountId).deleteContact(c.req.param("id"), lifecycleRevision(input.expectedRevision, "expectedRevision"), lifecycleInvocation(ctx, "user-action")));
   }));
 }

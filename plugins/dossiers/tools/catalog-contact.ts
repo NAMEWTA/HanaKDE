@@ -1,4 +1,5 @@
-import { requiredRevision, toolExecute, workspaceWritePermission, type ToolContextLike, type ToolInput } from "../src/interfaces/catalog/tool.ts";
+import { requiredRevision, toolExecute, type ToolContextLike, type ToolInput } from "../src/interfaces/catalog/tool.ts";
+import { toolExecute as lifecycleToolExecute, workspaceWritePermission } from "../src/interfaces/routes/lifecycle/tool.ts";
 
 export const name = "catalog_contact";
 export const description = "Link, unlink, or safely delete one reusable contact while preserving dossier-specific relationship roles.";
@@ -13,8 +14,10 @@ export const parameters = {
 };
 
 export async function execute(input: ToolInput, ctx: ToolContextLike) {
+  if (input.action === "delete") {
+    return lifecycleToolExecute(input, ctx, true, (application, actor) => application.deleteContact(String(input.contactId), requiredRevision(input.expectedRevision), actor!));
+  }
   return toolExecute(input, ctx, async (application) => {
-    if (input.action === "delete") return application.deleteContact(String(input.contactId), requiredRevision(input.expectedRevision));
     if (input.action === "unlink") return { value: await application.unlinkContact(String(input.dossierId), requiredRevision(input.expectedRevision), String(input.contactId)) };
     if (input.action === "update_role") return { value: await application.updateContactRole(String(input.dossierId), requiredRevision(input.expectedRevision), String(input.contactId), String(input.role ?? "")) };
     if (input.action === "link") return { value: await application.linkContact(String(input.dossierId), requiredRevision(input.expectedRevision), { contactId: String(input.contactId), role: String(input.role ?? "") }) };
