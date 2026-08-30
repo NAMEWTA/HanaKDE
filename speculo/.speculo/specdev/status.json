@@ -1,7 +1,19 @@
 {
   "schema_version": 5,
   "workflow": "specdev",
-  "active": [],
+  "active": [
+    {
+      "change": "2026-08-30-entity-dossier-plugin",
+      "current_work": null,
+      "works_run": [
+        "specdev/grill-with-docs",
+        "specdev/spec",
+        "specdev/tickets",
+        "specdev/goal-plan",
+        "specdev/implement"
+      ]
+    }
+  ],
   "archived": [
     "2026-07-24-openhanako-knowledge-workspace",
     "2026-08-09-openhanako-v0-446-6-integration",

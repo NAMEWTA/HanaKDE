@@ -1,0 +1,247 @@
+{
+  "schema_version": 6,
+  "artifact": "change-status",
+  "change": "2026-08-30-entity-dossier-plugin",
+  "change_status": "completed",
+  "current_work": null,
+  "works_run": ["specdev/grill-with-docs", "specdev/spec", "specdev/tickets", "specdev/goal-plan", "specdev/implement"],
+  "claimed_investigations": [],
+  "execution_authorization": {
+    "implementation_commit": {
+      "status": "authorized",
+      "source": "USER-CONFIRMATION:2026-08-30 G0 three-item authorization",
+      "granted_at": "2026-08-30T11:21:17+08:00",
+      "scope": "Ticket implementation commits"
+    },
+    "local_candidate_integration": {
+      "status": "authorized",
+      "source": "USER-CONFIRMATION:2026-08-30 G0 three-item authorization",
+      "granted_at": "2026-08-30T11:21:17+08:00",
+      "scope": "Lead-owned local direct-parent or candidate integration and parent update"
+    },
+    "source_cleanup": {
+      "status": "not-authorized",
+      "source": null,
+      "granted_at": null,
+      "scope": "Source worktree and branch cleanup"
+    }
+  },
+  "leadership": {
+    "current": "root",
+    "epoch": 1,
+    "assigned_at": "2026-08-30T10:10:42+08:00",
+    "history": []
+  },
+  "created_at": "2026-08-30T10:10:42+08:00",
+  "updated_at": "2026-08-30T16:47:00+08:00",
+  "completed_at": "2026-08-30T16:47:00+08:00",
+  "archived": false,
+  "archive_path": null,
+  "blockers": [],
+  "deviations": [],
+  "worktrees": [
+    {
+      "ticket_id": "T-01",
+      "owner": "root",
+      "implementation_owner": "root",
+      "integration_owner": "root",
+      "provider": "git",
+      "base_sha": "80ebb6d93f019891c89f90c2fd0e95d19f2f7921",
+      "parent_branch": "hanakde",
+      "branch": "hanakde",
+      "workspace_ref": "current",
+      "source_checkpoint": "d642c3ef2b16f7eadf0e3864e49931cb4ff1e4b7",
+      "integration": {
+        "status": "passed",
+        "parent_ref": "refs/heads/hanakde",
+        "parent_before_sha": "80ebb6d93f019891c89f90c2fd0e95d19f2f7921",
+        "source_sha": "d642c3ef2b16f7eadf0e3864e49931cb4ff1e4b7",
+        "candidate_sha": null,
+        "candidate_tree_sha": null,
+        "candidate_branch": null,
+        "candidate_workspace_ref": null,
+        "result_sha": "d642c3ef2b16f7eadf0e3864e49931cb4ff1e4b7",
+        "method": "direct-parent",
+        "conflict_paths": [],
+        "verification": "passed",
+        "full_suite": {
+          "required": true,
+          "status": "passed",
+          "reason": "G1 requires foundation tests, type checks, path audit, and direct-parent regression.",
+          "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-01.md</Path>"
+        },
+        "e2e": {
+          "required": false,
+          "status": "not-required",
+          "reason": "T-01 has no Page or host contribution; real-host coverage is owned by T-11.",
+          "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-01.md</Path>"
+        },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-01.md</Path>",
+        "attempts": 1,
+        "promotion_status": "applied"
+      },
+      "status": "integrated",
+      "updated_at": "2026-08-30T11:57:45+08:00"
+    },
+    {
+      "ticket_id": "T-02",
+      "owner": "root",
+      "implementation_owner": "root",
+      "integration_owner": "root",
+      "provider": "git",
+      "base_sha": "d642c3ef2b16f7eadf0e3864e49931cb4ff1e4b7",
+      "parent_branch": "hanakde",
+      "branch": "hanakde",
+      "workspace_ref": "current",
+      "source_checkpoint": "83ff6cc5796d20c15b93ce0dfd370384c185b599",
+      "integration": {
+        "status": "passed",
+        "parent_ref": "refs/heads/hanakde",
+        "parent_before_sha": "d642c3ef2b16f7eadf0e3864e49931cb4ff1e4b7",
+        "source_sha": "83ff6cc5796d20c15b93ce0dfd370384c185b599",
+        "candidate_sha": null,
+        "candidate_tree_sha": null,
+        "candidate_branch": null,
+        "candidate_workspace_ref": null,
+        "result_sha": "83ff6cc5796d20c15b93ce0dfd370384c185b599",
+        "method": "direct-parent",
+        "conflict_paths": [],
+        "verification": "passed",
+        "full_suite": {
+          "required": true,
+          "status": "passed",
+          "reason": "G2 requires catalog, typed-field, contact, reference, T-01 regression, type and path checks.",
+          "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-02.md</Path>"
+        },
+        "e2e": {
+          "required": false,
+          "status": "not-required",
+          "reason": "T-02 is a contract-layer Ticket; Page and real-host coverage are owned by T-11.",
+          "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-02.md</Path>"
+        },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-02.md</Path>",
+        "attempts": 1,
+        "promotion_status": "applied"
+      },
+      "status": "integrated",
+      "updated_at": "2026-08-30T12:34:05+08:00"
+    },
+    {
+      "ticket_id": "T-03", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "83ff6cc5796d20c15b93ce0dfd370384c185b599", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "7fbffe97f5c84d56d8f56c5eda01cffe33278808",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "83ff6cc5796d20c15b93ce0dfd370384c185b599", "source_sha": "7fbffe97f5c84d56d8f56c5eda01cffe33278808",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "7fbffe97f5c84d56d8f56c5eda01cffe33278808", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G3 requires managed-document and T-01/T-02 regression checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-03.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-03 is verified through deterministic ResourceIO integration; real host picker behavior remains required in T-11.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-03.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-03.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T12:56:19+08:00"
+    },
+    {
+      "ticket_id": "T-04", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "552a29320618a190f07e9d44fcbdb28b45da920b", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "5dd3a069f209de089c78943fa6059229d8e2a133",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "552a29320618a190f07e9d44fcbdb28b45da920b", "source_sha": "5dd3a069f209de089c78943fa6059229d8e2a133",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "5dd3a069f209de089c78943fa6059229d8e2a133", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G4 requires Agent tool, permission, model-boundary and privacy checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-04.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-04 is verified through deterministic application/tool/permission seams; real host Agent discovery and invocation remain required in T-11.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-04.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-04.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T13:35:10+08:00"
+    },
+    {
+      "ticket_id": "T-05", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "5dd3a069f209de089c78943fa6059229d8e2a133", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "6b4b94566ef6903dc1aa3f25a08a590e7dfe7c08",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "5dd3a069f209de089c78943fa6059229d8e2a133", "source_sha": "6b4b94566ef6903dc1aa3f25a08a590e7dfe7c08",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "6b4b94566ef6903dc1aa3f25a08a590e7dfe7c08", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G4 requires trash, restore, retention, audit and redaction checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-05.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-05 is verified through deterministic lifecycle seams; real host restart remains required in T-11.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-05.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-05.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T14:05:56+08:00"
+    },
+    {
+      "ticket_id": "T-06", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "6b4b94566ef6903dc1aa3f25a08a590e7dfe7c08", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "8dd7a18c07cdb10076fe5d5d5778117922bbd15d",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "6b4b94566ef6903dc1aa3f25a08a590e7dfe7c08", "source_sha": "8dd7a18c07cdb10076fe5d5d5778117922bbd15d",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "8dd7a18c07cdb10076fe5d5d5778117922bbd15d", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G4 requires hostile ZIP, round-trip, limit and rollback checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-06.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-06 is verified through deterministic ResourceIO and ZIP seams; real host picker and exchange behavior remains required in T-11.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-06.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-06.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T14:43:00+08:00"
+    },
+    {
+      "ticket_id": "T-07", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "7fbffe97f5c84d56d8f56c5eda01cffe33278808", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "552a29320618a190f07e9d44fcbdb28b45da920b",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "7fbffe97f5c84d56d8f56c5eda01cffe33278808", "source_sha": "552a29320618a190f07e9d44fcbdb28b45da920b",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "552a29320618a190f07e9d44fcbdb28b45da920b", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G3 requires index integrity, rebuild, no-content and scale checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-07.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-07 is verified through integration and benchmark seams.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-07.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-07.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T13:17:00+08:00"
+    },
+    {
+      "ticket_id": "T-08", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "369be56dfbf720e789f1dab2d5fe7f21a74cce71", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "3e517da00c0a1d51b7e81c4a366cdc9fefcffa1a",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "369be56dfbf720e789f1dab2d5fe7f21a74cce71", "source_sha": "3e517da00c0a1d51b7e81c4a366cdc9fefcffa1a",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "3e517da00c0a1d51b7e81c4a366cdc9fefcffa1a", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G5 requires migration, backup, journal, restart and future-schema checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-08.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-08 direct-parent uses deterministic restart seams; real host startup and restart migration remains required in T-11.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-08.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-08.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T15:24:44+08:00"
+    },
+    {
+      "ticket_id": "T-09", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "8dd7a18c07cdb10076fe5d5d5778117922bbd15d", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "369be56dfbf720e789f1dab2d5fe7f21a74cce71",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "8dd7a18c07cdb10076fe5d5d5778117922bbd15d", "source_sha": "369be56dfbf720e789f1dab2d5fe7f21a74cce71",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "369be56dfbf720e789f1dab2d5fe7f21a74cce71", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G4 requires catalog UI, accessibility and viewport component checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-09.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-09 is a component-layer Ticket; real Page behavior is owned by T-11.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-09.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-09.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T15:00:48+08:00"
+    },
+    {
+      "ticket_id": "T-10", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "3e517da00c0a1d51b7e81c4a366cdc9fefcffa1a", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "034eb8ece16e057f2cfa41fc9e3d6a3e358d65a8",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "3e517da00c0a1d51b7e81c4a366cdc9fefcffa1a", "source_sha": "034eb8ece16e057f2cfa41fc9e3d6a3e358d65a8",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "034eb8ece16e057f2cfa41fc9e3d6a3e358d65a8", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G6 requires operations UI, accessibility, viewport and upstream DTO checks.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-10.md</Path>" },
+        "e2e": { "required": false, "status": "not-required", "reason": "T-10 is a component-layer Ticket; real Page behavior is owned by T-11.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-10.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-10.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T15:45:43+08:00"
+    },
+    {
+      "ticket_id": "T-11", "owner": "root", "implementation_owner": "root", "integration_owner": "root", "provider": "git",
+      "base_sha": "034eb8ece16e057f2cfa41fc9e3d6a3e358d65a8", "parent_branch": "hanakde", "branch": "hanakde", "workspace_ref": "current", "source_checkpoint": "00d8cd071654913f4654b8fc5a81569a6f1b6448",
+      "integration": {
+        "status": "passed", "parent_ref": "refs/heads/hanakde", "parent_before_sha": "034eb8ece16e057f2cfa41fc9e3d6a3e358d65a8", "source_sha": "00d8cd071654913f4654b8fc5a81569a6f1b6448",
+        "candidate_sha": null, "candidate_tree_sha": null, "candidate_branch": null, "candidate_workspace_ref": null,
+        "result_sha": "00d8cd071654913f4654b8fc5a81569a6f1b6448", "method": "direct-parent", "conflict_paths": [], "verification": "passed",
+        "full_suite": { "required": true, "status": "passed", "reason": "G7 manifest, SDK, type, core/UI regression, production build, package, standalone and boundary checks passed.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-11.md</Path>" },
+        "e2e": { "required": true, "status": "passed", "reason": "Real Hana host desktop/narrow complete journey and restart persistence passed in the Lead current workspace.", "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-11.md</Path>" },
+        "evidence": "<Path>{roots.state}/specdev/changes/2026-08-30-entity-dossier-plugin/evidence/T-11.md</Path>", "attempts": 1, "promotion_status": "applied"
+      },
+      "status": "integrated", "updated_at": "2026-08-30T16:47:00+08:00"
+    }
+  ]
+}
