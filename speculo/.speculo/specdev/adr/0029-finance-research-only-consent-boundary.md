@@ -1,6 +1,8 @@
+> **Superseded by [ADR-0030](./0030-retire-rejected-workbench-plugins.md)**：Finance Workbench 已从现役 bundled/runtime 产品退役；本记录仅保留历史设计。
+
 # ADR-0029: 金融工作台永久限定为研究用途并按运行授权敏感能力
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-08-26
 - Source: `<Path>{roots.state}/specdev/archive/2026-08/2026-08-13-personal-quant-finance-workbench/ADR.md</Path>` (`ADR-002`)
 
